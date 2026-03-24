@@ -196,6 +196,56 @@ const AgentFAB: React.FC = () => {
   );
 };
 
+/* ==================== Demo Token Auto-Login ==================== */
+
+const DemoTokenHandler: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const demoToken = params.get('demo_token');
+    if (!demoToken) { setReady(true); return; }
+
+    // Exchange demo_token for JWT via API
+    (async () => {
+      try {
+        const res = await fetch('/api/demo/demo-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ demo_token: demoToken }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          // Store for AuthProvider to pick up
+          localStorage.setItem('demo_employee', JSON.stringify({
+            id: data.employee.id,
+            name: data.employee.name,
+            role: data.employee.role,
+            active: true,
+            permissions: [],
+            token: data.employee_token,
+          }));
+          if (data.owner_token) {
+            localStorage.setItem('owner_token', data.owner_token);
+          }
+        }
+      } catch { /* proceed to login screen */ }
+      // Strip demo_token from URL and reload to let AuthProvider read localStorage
+      window.location.replace(window.location.pathname + '#/pos');
+    })();
+  }, []);
+
+  if (!ready) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-neutral-950">
+        <div className="text-xl text-brand-600 font-bold animate-pulse">Setting up your account...</div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+};
+
 /* ==================== App Content ==================== */
 
 const AppContent: React.FC = () => {
@@ -217,18 +267,20 @@ const AppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <BrandingProvider>
-        <PlanProvider>
-          <ToastProvider>
-            <AuthProvider>
-              <SyncProvider>
-                <AppContent />
-              </SyncProvider>
-            </AuthProvider>
-          </ToastProvider>
-        </PlanProvider>
-      </BrandingProvider>
-    </ThemeProvider>
+    <DemoTokenHandler>
+      <ThemeProvider>
+        <BrandingProvider>
+          <PlanProvider>
+            <ToastProvider>
+              <AuthProvider>
+                <SyncProvider>
+                  <AppContent />
+                </SyncProvider>
+              </AuthProvider>
+            </ToastProvider>
+          </PlanProvider>
+        </BrandingProvider>
+      </ThemeProvider>
+    </DemoTokenHandler>
   );
 }

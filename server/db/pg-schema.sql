@@ -716,5 +716,33 @@ BEGIN
 END;
 $$;
 
+-- ===================== Demo / Lead Tables =====================
+
+CREATE TABLE IF NOT EXISTS demo_tokens (
+  token UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  employee_id INTEGER NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS leads (
+  id SERIAL PRIMARY KEY,
+  restaurant_name TEXT,
+  name TEXT,
+  email TEXT UNIQUE,
+  phone TEXT,
+  source TEXT DEFAULT 'unknown',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS stress_test_runs (
+  id SERIAL PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  config JSONB DEFAULT '{}',
+  summary JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user;
