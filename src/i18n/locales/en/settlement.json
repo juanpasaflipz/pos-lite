@@ -1,0 +1,110 @@
+{
+  "title": "Settlements",
+  "summary": {
+    "title": "Settlement Summary",
+    "pending": "Pending Amount",
+    "nextDisbursement": "Next Disbursement",
+    "lastDisbursement": "Last Disbursement",
+    "monthFees": "This Month's Fees",
+    "platformFee": "Platform Fee",
+    "processorFee": "Processor Fee",
+    "holdback": "MCA Holdback",
+    "noPending": "No pending settlements"
+  },
+  "history": {
+    "title": "Disbursement History",
+    "date": "Date",
+    "gross": "Gross",
+    "fees": "Fees",
+    "holdback": "Holdback",
+    "net": "Net Disbursement",
+    "status": "Status",
+    "reference": "Reference",
+    "noHistory": "No disbursements yet"
+  },
+  "statement": {
+    "title": "Monthly Statement",
+    "download": "Download CSV",
+    "month": "Month",
+    "transactions": "Transactions",
+    "totalGross": "Total Gross",
+    "totalNet": "Total Net"
+  },
+  "status": {
+    "pending": "Pending",
+    "processing": "Processing",
+    "completed": "Completed",
+    "held": "Held",
+    "failed": "Failed"
+  },
+  "bankAccounts": {
+    "title": "Bank Accounts",
+    "addAccount": "Add Bank Account",
+    "clabe": "CLABE",
+    "bankName": "Bank",
+    "beneficiary": "Beneficiary Name",
+    "alias": "Alias (optional)",
+    "primary": "Primary",
+    "verified": "Verified",
+    "unverified": "Pending Verification",
+    "setPrimary": "Set as Primary",
+    "delete": "Remove",
+    "verify": "Request Verification",
+    "noAccounts": "No bank accounts added yet",
+    "clabeHelp": "18-digit CLABE number for SPEI transfers",
+    "deleteConfirm": "Are you sure you want to remove this bank account?"
+  },
+  "advance": {
+    "title": "Active Advance",
+    "amount": "Advance Amount",
+    "totalRepayment": "Total Repayment",
+    "repaid": "Repaid",
+    "remaining": "Remaining",
+    "holdbackPercent": "Holdback Rate",
+    "estimatedCompletion": "Estimated Completion",
+    "progress": "Repayment Progress",
+    "noAdvance": "No active advance",
+    "riskStatus": "Risk Status",
+    "disbursedAt": "Disbursed",
+    "factorRate": "Factor Rate"
+  },
+  "risk": {
+    "healthy": "Healthy",
+    "watch": "Watch",
+    "warning": "Warning",
+    "critical": "Critical"
+  },
+  "tabs": {
+    "myMoney": "My Money",
+    "bankAccounts": "Bank Accounts"
+  },
+  "admin": {
+    "title": "Settlement Dashboard",
+    "holdingBalance": "Holding Balance",
+    "pendingDisbursements": "Pending Disbursements",
+    "platformFees": "Platform Fees (MTD)",
+    "processorFees": "Processor Fees (MTD)",
+    "batches": "Settlement Batches",
+    "batchDetail": "Batch Detail",
+    "disbursementQueue": "Disbursement Queue",
+    "approve": "Approve",
+    "hold": "Hold",
+    "processDisbursements": "Process Disbursements",
+    "ledger": "Holding Account Ledger",
+    "mcaPortfolio": "MCA Portfolio",
+    "activeAdvances": "Active Advances",
+    "completedAdvances": "Completed Advances",
+    "totalOutstanding": "Total Outstanding",
+    "totalRepaid": "Total Repaid",
+    "capitalPool": "Capital Pool",
+    "totalCapital": "Total Capital",
+    "deployed": "Deployed",
+    "available": "Available",
+    "returned": "Returned",
+    "addCapital": "Add Capital",
+    "withdrawCapital": "Withdraw Capital",
+    "pause": "Pause Holdback",
+    "resume": "Resume Holdback",
+    "adjustHoldback": "Adjust Holdback %"
+  }
+}

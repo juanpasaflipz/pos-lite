@@ -1,0 +1,110 @@
+{
+  "title": "Liquidaciones",
+  "summary": {
+    "title": "Resumen de Liquidaciones",
+    "pending": "Monto Pendiente",
+    "nextDisbursement": "Siguiente Liquidación",
+    "lastDisbursement": "Última Liquidación",
+    "monthFees": "Comisiones del Mes",
+    "platformFee": "Comisión Plataforma",
+    "processorFee": "Comisión Procesador",
+    "holdback": "Retención MCA",
+    "noPending": "Sin liquidaciones pendientes"
+  },
+  "history": {
+    "title": "Historial de Liquidaciones",
+    "date": "Fecha",
+    "gross": "Bruto",
+    "fees": "Comisiones",
+    "holdback": "Retención",
+    "net": "Liquidación Neta",
+    "status": "Estado",
+    "reference": "Referencia",
+    "noHistory": "Sin liquidaciones aún"
+  },
+  "statement": {
+    "title": "Estado de Cuenta Mensual",
+    "download": "Descargar CSV",
+    "month": "Mes",
+    "transactions": "Transacciones",
+    "totalGross": "Total Bruto",
+    "totalNet": "Total Neto"
+  },
+  "status": {
+    "pending": "Pendiente",
+    "processing": "Procesando",
+    "completed": "Completado",
+    "held": "Retenido",
+    "failed": "Fallido"
+  },
+  "bankAccounts": {
+    "title": "Cuentas Bancarias",
+    "addAccount": "Agregar Cuenta Bancaria",
+    "clabe": "CLABE",
+    "bankName": "Banco",
+    "beneficiary": "Nombre del Beneficiario",
+    "alias": "Alias (opcional)",
+    "primary": "Principal",
+    "verified": "Verificada",
+    "unverified": "Verificación Pendiente",
+    "setPrimary": "Establecer como Principal",
+    "delete": "Eliminar",
+    "verify": "Solicitar Verificación",
+    "noAccounts": "No hay cuentas bancarias registradas",
+    "clabeHelp": "Número CLABE de 18 dígitos para transferencias SPEI",
+    "deleteConfirm": "¿Estás seguro de que deseas eliminar esta cuenta bancaria?"
+  },
+  "advance": {
+    "title": "Adelanto Activo",
+    "amount": "Monto del Adelanto",
+    "totalRepayment": "Pago Total",
+    "repaid": "Pagado",
+    "remaining": "Restante",
+    "holdbackPercent": "Tasa de Retención",
+    "estimatedCompletion": "Fecha Estimada de Liquidación",
+    "progress": "Progreso de Pago",
+    "noAdvance": "Sin adelanto activo",
+    "riskStatus": "Estado de Riesgo",
+    "disbursedAt": "Desembolsado",
+    "factorRate": "Factor"
+  },
+  "risk": {
+    "healthy": "Saludable",
+    "watch": "Vigilancia",
+    "warning": "Advertencia",
+    "critical": "Crítico"
+  },
+  "tabs": {
+    "myMoney": "Mi Dinero",
+    "bankAccounts": "Cuentas Bancarias"
+  },
+  "admin": {
+    "title": "Panel de Liquidaciones",
+    "holdingBalance": "Saldo en Custodia",
+    "pendingDisbursements": "Liquidaciones Pendientes",
+    "platformFees": "Comisiones Plataforma (Mes)",
+    "processorFees": "Comisiones Procesador (Mes)",
+    "batches": "Lotes de Liquidación",
+    "batchDetail": "Detalle del Lote",
+    "disbursementQueue": "Cola de Liquidaciones",
+    "approve": "Aprobar",
+    "hold": "Retener",
+    "processDisbursements": "Procesar Liquidaciones",
+    "ledger": "Libro Mayor de Custodia",
+    "mcaPortfolio": "Portafolio MCA",
+    "activeAdvances": "Adelantos Activos",
+    "completedAdvances": "Adelantos Completados",
+    "totalOutstanding": "Total Pendiente",
+    "totalRepaid": "Total Pagado",
+    "capitalPool": "Fondo de Capital",
+    "totalCapital": "Capital Total",
+    "deployed": "Desplegado",
+    "available": "Disponible",
+    "returned": "Retornado",
+    "addCapital": "Agregar Capital",
+    "withdrawCapital": "Retirar Capital",
+    "pause": "Pausar Retención",
+    "resume": "Reanudar Retención",
+    "adjustHoldback": "Ajustar % Retención"
+  }
+}

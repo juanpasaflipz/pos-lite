@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Desktop Kitchen POS" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <title>Desktop Kitchen</title>
+    <script>
+      // Prevent flash of wrong theme — runs before first paint
+      (function(){var t=localStorage.getItem('dk-theme');if(t==='light')document.documentElement.classList.add('light');})();
+    </script>
+  </head>
+  <body class="bg-gray-100 overscroll-none" style="touch-action: pan-x pan-y; -webkit-touch-callout: none; overflow: hidden; position: fixed; width: 100%; height: 100%; margin: 0;">
+    <div id="root" style="width: 100%; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch;"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

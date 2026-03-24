@@ -1,0 +1,215 @@
+{
+  "nav": {
+    "title": "Financiamiento",
+    "desc": "Financiamiento basado en ingresos para tu restaurante"
+  },
+  "consent": {
+    "headline": "Obtén Financiamiento para tu Restaurante",
+    "subheadline": "Accede a capital basado en tus ventas diarias — sin consulta de crédito, sin garantías",
+    "benefits": {
+      "noCreditCheck": "Sin Consulta de Crédito",
+      "noCreditCheckDesc": "Evaluamos el rendimiento de tus ventas, no tu historial crediticio personal",
+      "autoRepayment": "Pago Automático",
+      "autoRepaymentDesc": "Se retiene un pequeño porcentaje de tus ventas diarias — pagas conforme ganas",
+      "fastAccess": "Acceso Rápido",
+      "fastAccessDesc": "Fondos depositados en 1-2 días hábiles después de aceptar"
+    },
+    "howItWorks": {
+      "title": "Cómo Funciona",
+      "step1": "Otorga consentimiento para analizar tus datos de ventas",
+      "step2": "Calculamos tu perfil financiero automáticamente",
+      "step3": "Si eres elegible, recibes una oferta personalizada",
+      "step4": "Acepta la oferta y recibe los fondos"
+    },
+    "dataConsent": {
+      "title": "Consentimiento de Datos",
+      "description": "Analizamos tu volumen de pedidos, ingresos, métodos de pago y tasas de devolución para determinar la elegibilidad. Tus datos nunca se comparten con terceros.",
+      "viewTerms": "Ver Términos Completos",
+      "checkbox": "Doy mi consentimiento para el análisis de mis datos de ventas con fines de financiamiento",
+      "button": "Comenzar",
+      "submitting": "Enviando..."
+    },
+    "terms": {
+      "loading": "Cargando términos...",
+      "loadError": "No se pudieron cargar los términos. Intenta de nuevo.",
+      "version": "Versión de consentimiento: {{version}}"
+    },
+    "trust": "Tus datos están encriptados y se procesan de forma segura. Puedes revocar el consentimiento en cualquier momento."
+  },
+  "profile": {
+    "title": "Perfil Financiero",
+    "lastUpdated": "Última actualización {{date}}",
+    "score": {
+      "excellent": "Excelente",
+      "good": "Bueno",
+      "building": "En Construcción",
+      "needsImprovement": "Necesita Mejorar"
+    },
+    "metrics": {
+      "monthlyRevenue": "Ingreso Mensual Prom.",
+      "dailyOrders": "Pedidos Diarios Prom.",
+      "cardPayment": "% Pago con Tarjeta",
+      "refundRate": "Tasa de Devolución"
+    },
+    "trend": {
+      "up": "subió {{value}}%",
+      "down": "bajó {{value}}%"
+    },
+    "calculating": "Tu perfil financiero se está calculando. Esto puede tomar unos minutos.",
+    "revokeConsent": "Revocar Consentimiento",
+    "revokeConfirm": "¿Estás seguro? Esto eliminará tu perfil financiero y cualquier oferta activa."
+  },
+  "offer": {
+    "title": "Oferta de Financiamiento",
+    "available": "Disponible",
+    "amount": "Monto de la Oferta",
+    "totalRepayment": "Total a Pagar",
+    "holdback": "Retención Diaria",
+    "estimatedDuration": "Duración Estimada",
+    "days": "{{count}} días",
+    "expires": "Vence {{date}}",
+    "accept": "Aceptar Oferta",
+    "decline": "Rechazar",
+    "accepting": "Procesando...",
+    "confirmTitle": "Confirmar Aceptación",
+    "confirmMessage": "Al aceptar, aceptas pagar {{total}} mediante una retención diaria del {{percent}}% sobre tus ventas. Esto es una señal de intención — no se cobra ningún pago ahora.",
+    "confirmButton": "Confirmar y Aceptar",
+    "cancel": "Cancelar",
+    "declineReason": "Razón (opcional)",
+    "declined": "Oferta Rechazada",
+    "accepted": "Oferta Aceptada",
+    "acceptedMessage": "Nuestro equipo se pondrá en contacto en 1-2 días hábiles para finalizar los detalles."
+  },
+  "preEligible": {
+    "title": "Casi Listo",
+    "subtitle": "Estás construyendo tu perfil financiero. ¡Sigue así!",
+    "daysProgress": "Días Operando",
+    "revenueProgress": "Ingreso Mensual",
+    "daysOf": "{{current}} de {{required}} días",
+    "revenueOf": "{{current}} de {{required}}",
+    "tips": {
+      "title": "Consejos para Calificar Más Rápido",
+      "tip1": "Acepta más pagos con tarjeta para aumentar tu porcentaje",
+      "tip2": "Mantén un volumen de pedidos diario constante",
+      "tip3": "Mantén baja tu tasa de devoluciones"
+    }
+  },
+  "ineligible": {
+    "title": "Aún No Elegible",
+    "subtitle": "Tu perfil no cumple los requisitos actualmente, pero puedes mejorarlo.",
+    "tips": {
+      "title": "Cómo Mejorar",
+      "tip1": "Aumenta tu ingreso mensual",
+      "tip2": "Acepta más pagos con tarjeta",
+      "tip3": "Reduce las tasas de devolución",
+      "tip4": "Continúa operando de manera constante"
+    }
+  },
+  "upgrade": {
+    "message": "El financiamiento basado en ingresos está disponible en el plan Pro. Actualiza para acceder a capital para tu restaurante."
+  },
+  "banner": {
+    "available": "{{amount}} MXN de financiamiento disponible",
+    "viewOffer": "Ver Oferta",
+    "dismiss": "Cerrar"
+  },
+  "admin": {
+    "title": "Financiamiento",
+    "overview": {
+      "consented": "Con Consentimiento",
+      "eligible": "Elegibles",
+      "preEligible": "Pre-Elegibles",
+      "activeOffers": "Ofertas Activas",
+      "capitalOffered": "Capital Ofrecido",
+      "capitalAccepted": "Capital Aceptado",
+      "acceptanceRate": "Tasa de Aceptación"
+    },
+    "scoreDistribution": "Distribución de Puntajes",
+    "profiles": {
+      "title": "Perfiles Financieros",
+      "name": "Restaurante",
+      "plan": "Plan",
+      "score": "Puntaje",
+      "revenue": "Ingreso Mensual",
+      "cardPercent": "% Tarjeta",
+      "eligibility": "Elegibilidad",
+      "lastCalculated": "Último Cálculo",
+      "recalculate": "Recalcular",
+      "recalculating": "Recalculando...",
+      "filterAll": "Todos",
+      "filterEligible": "Elegible",
+      "filterPreEligible": "Pre-Elegible",
+      "filterIneligible": "No Elegible"
+    },
+    "offers": {
+      "title": "Ofertas",
+      "restaurant": "Restaurante",
+      "amount": "Monto",
+      "factorRate": "Tasa",
+      "holdback": "% Retención",
+      "status": "Estado",
+      "created": "Creada",
+      "expires": "Vence",
+      "edit": "Editar Oferta",
+      "withdraw": "Retirar",
+      "notes": "Notas",
+      "save": "Guardar Cambios",
+      "filterAll": "Todas",
+      "filterAvailable": "Disponibles",
+      "filterAccepted": "Aceptadas",
+      "filterDeclined": "Rechazadas",
+      "filterExpired": "Expiradas"
+    },
+    "events": {
+      "title": "Registro de Eventos",
+      "timestamp": "Fecha/Hora",
+      "tenant": "Restaurante",
+      "type": "Tipo de Evento",
+      "details": "Detalles",
+      "filterAll": "Todos los Tipos"
+    },
+    "activity": {
+      "title": "Feed de Actividad",
+      "noActivity": "Sin actividad reciente",
+      "filterAll": "Todos los Eventos"
+    }
+  },
+  "privacy": {
+    "title": "Datos y Privacidad",
+    "financialDataAnalysis": "Análisis de Datos Financieros",
+    "consented": "Consentimiento otorgado",
+    "notConsented": "Sin consentimiento",
+    "version": "Versión {{version}}",
+    "viewTerms": "Ver Términos Completos",
+    "downloadData": "Descargar Mis Datos",
+    "exporting": "Exportando...",
+    "revokeConsent": "Revocar Consentimiento",
+    "revokeTitle": "Revocar Consentimiento de Datos",
+    "revokeWarning": "¿Estás seguro? Esto hará lo siguiente:",
+    "revokeEffect1": "Dejar de analizar tus datos de transacciones",
+    "revokeEffect2": "Eliminar cualquier oferta de financiamiento activa",
+    "revokeEffect3": "Puedes volver a activarlo en cualquier momento",
+    "revokeRetention": "Los datos históricos se conservan por cumplimiento regulatorio.",
+    "revoking": "Revocando...",
+    "cancel": "Cancelar",
+    "termsTitle": "Términos de Procesamiento de Datos"
+  },
+  "errors": {
+    "failedLoad": "Error al cargar datos de financiamiento",
+    "failedSubmitConsent": "Error al enviar consentimiento",
+    "failedAcceptOffer": "Error al aceptar oferta",
+    "failedDeclineOffer": "Error al rechazar oferta",
+    "failedRevokeConsent": "Error al revocar consentimiento"
+  },
+  "eligibility": {
+    "eligible": "Elegible",
+    "preEligible": "Pre-Elegible",
+    "ineligible": "No Elegible",
+    "new": "Nuevo"
+  },
+  "registration": {
+    "consentHeadline": "¿Quieres acceso a capital de trabajo?",
+    "consentDescription": "Permítenos analizar tus datos de ventas para determinar tu elegibilidad para financiamiento.",
+    "consentCheckbox": "Acepto el análisis de datos para elegibilidad de financiamiento"
+  }
+}

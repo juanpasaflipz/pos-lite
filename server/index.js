@@ -1,0 +1,282 @@
+import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import crypto from 'crypto';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { initDb, adminSql, shutdown as shutdownDb } from './db/index.js';
+import { initMigrations, runMigrations } from './db/migrate.js';
+import { tenantMiddleware } from './middleware/tenant.js';
+
+// ==================== Route Imports (Lean POS) ====================
+
+// Core
+import menuRoutes from './routes/menu.js';
+import ordersRoutes from './routes/orders.js';
+import paymentsRoutes, { mpOAuthCallback, mpWebhook, conektaWebhook } from './routes/payments.js';
+import inventoryRoutes from './routes/inventory.js';
+import employeesRoutes from './routes/employees.js';
+import reportsRoutes from './routes/reports.js';
+import modifiersRoutes from './routes/modifiers.js';
+import combosRoutes from './routes/combos.js';
+import printersRoutes from './routes/printers.js';
+import orderTemplatesRoutes from './routes/order-templates.js';
+import wasteRoutes from './routes/waste.js';
+import expensesRoutes from './routes/expenses.js';
+import purchaseOrdersRoutes from './routes/purchase-orders.js';
+import loyaltyRoutes from './routes/loyalty.js';
+
+// Delivery
+import deliveryRoutes from './routes/delivery.js';
+import deliveryIntelRoutes from './routes/delivery-intelligence.js';
+import getnetRoutes from './routes/getnet.js';
+import getnetWebhook from './routes/getnetWebhook.js';
+
+// Auth & Account
+import authRoutes from './routes/auth.js';
+import accountRoutes from './routes/account.js';
+import brandingRoutes from './routes/branding.js';
+import credentialsRoutes from './routes/credentials.js';
+import onboardingRoutes from './routes/onboarding.js';
+
+// Billing & Admin
+import billingRoutes, { stripeWebhook, promoValidateHandler } from './routes/billing.js';
+import adminRoutes from './routes/admin.js';
+import demoDataRoutes from './routes/demo-data.js';
+import demoProvisionRoutes from './routes/demo-provision.js';
+
+// Invoicing (CFDI)
+import cfdiRoutes from './routes/cfdi.js';
+import cfdiPublicRoutes from './routes/cfdi-public.js';
+
+// Customer-facing
+import customerOrderRoutes from './routes/customer-order.js';
+
+// AI Agent
+import agentRoutes from './agent/route.js';
+
+// ==================== App Setup ====================
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+app.set('trust proxy', 1);
+
+// Security headers
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
+
+// Request ID for tracing
+app.use((req, _res, next) => {
+  req.id = req.headers['x-request-id'] || crypto.randomUUID();
+  next();
+});
+
+// CORS
+const CORS_ORIGIN_REGEX = /^(https?:\/\/(.*\.desktop\.kitchen|localhost(:\d+)?)|capacitor:\/\/localhost)$/;
+app.use(cors({
+  origin(origin, cb) {
+    if (!origin || CORS_ORIGIN_REGEX.test(origin)) return cb(null, true);
+    cb(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+}));
+
+// Stripe webhook needs raw body (before express.json)
+app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), stripeWebhook);
+
+// Capture raw body for delivery webhook signature verification
+app.use(express.json({
+  limit: '2mb',
+  verify: (req, _res, buf) => {
+    if (req.url?.startsWith('/api/delivery/webhook')) {
+      req.rawBody = buf;
+    }
+  },
+}));
+
+app.use(express.static(path.join(__dirname, '../dist')));
+app.use('/uploads', express.static(path.join(__dirname, '../data/uploads')));
+
+// ==================== Health Check ====================
+
+app.get('/health', async (_req, res) => {
+  try {
+    await adminSql`SELECT 1`;
+    res.json({ status: 'ok', db: 'connected' });
+  } catch {
+    res.status(503).json({ status: 'degraded', db: 'unreachable' });
+  }
+});
+
+app.get('/api/health', async (_req, res) => {
+  try {
+    await adminSql`SELECT 1`;
+    res.json({ ok: true, db: 'connected' });
+  } catch {
+    res.status(503).json({ ok: false, db: 'unreachable' });
+  }
+});
+
+// ==================== Rate Limiting ====================
+
+const globalApiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please try again later.' },
+});
+app.use('/api', globalApiLimiter);
+app.use('/admin', globalApiLimiter);
+
+// ==================== Pre-Tenant Routes ====================
+
+// Admin (uses admin pool, not tenant-scoped)
+app.use('/admin', adminRoutes);
+
+// Auth (uses admin pool for registration/login)
+app.use('/api/auth', authRoutes);
+
+// CFDI public self-service (token-based, no auth)
+app.use('/api/cfdi-public', cfdiPublicRoutes);
+
+// Payment webhooks (before tenant middleware — cross-tenant)
+app.get('/api/payments/mp/callback', mpOAuthCallback);
+app.post('/api/payments/mp/webhook', mpWebhook);
+app.post('/api/payments/conekta/webhook', conektaWebhook);
+app.use('/webhooks/getnet', getnetWebhook);
+
+// Promo code validation (public)
+app.get('/api/billing/promo/validate', promoValidateHandler);
+
+// Demo provisioning (public)
+app.use('/api/demo', demoProvisionRoutes);
+app.post('/api/auth/demo-login', (req, res, next) => {
+  req.url = '/demo-login';
+  demoProvisionRoutes(req, res, next);
+});
+
+// ==================== Tenant Middleware ====================
+
+app.use('/api', tenantMiddleware);
+
+// ==================== Tenant-Scoped Routes ====================
+
+// Customer-facing (public, QR code)
+app.use('/api/customer-order', customerOrderRoutes);
+
+// Core POS
+app.use('/api/menu', menuRoutes);
+app.use('/api/orders', ordersRoutes);
+app.use('/api/payments', paymentsRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/employees', employeesRoutes);
+app.use('/api/reports', reportsRoutes);
+app.use('/api/modifiers', modifiersRoutes);
+app.use('/api/combos', combosRoutes);
+app.use('/api/printers', printersRoutes);
+app.use('/api/order-templates', orderTemplatesRoutes);
+app.use('/api/waste', wasteRoutes);
+app.use('/api/expenses', expensesRoutes);
+app.use('/api/purchase-orders', purchaseOrdersRoutes);
+app.use('/api/loyalty', loyaltyRoutes);
+
+// Delivery
+app.use('/api/delivery', deliveryRoutes);
+app.use('/api/delivery-intel', deliveryIntelRoutes);
+app.use('/api/getnet', getnetRoutes);
+
+// Account & Settings
+app.use('/api/branding', brandingRoutes);
+app.use('/api/billing', billingRoutes);
+app.use('/api/account', accountRoutes);
+app.use('/api/credentials', credentialsRoutes);
+app.use('/api/onboarding', onboardingRoutes);
+app.use('/api/demo-data', demoDataRoutes);
+
+// Invoicing
+app.use('/api/cfdi', cfdiRoutes);
+
+// AI Agent
+app.use('/api/agent', agentRoutes);
+
+// ==================== SPA Fallback ====================
+
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(__dirname, '../dist/index.html'));
+});
+
+// ==================== Error Handler ====================
+
+app.use((err, req, res, _next) => {
+  console.error(`[${req.id}] ${req.method} ${req.path} tenant=${req.tenant?.id || 'none'}:`, err.message || err);
+  if (err.stack) console.error(`[${req.id}] Stack:`, err.stack);
+  res.status(err.status || err.statusCode || 500).json({
+    error: err.expose ? err.message : 'Internal server error',
+  });
+});
+
+// ==================== Startup Validation ====================
+
+if (process.env.NODE_ENV === 'production') {
+  const required = ['JWT_SECRET', 'ADMIN_SECRET', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'];
+  const missing = required.filter(k => !process.env[k]);
+  if (missing.length > 0) {
+    console.error(`FATAL: Missing required environment variables: ${missing.join(', ')}`);
+    process.exit(1);
+  }
+}
+
+// ==================== Graceful Shutdown ====================
+
+let server;
+let shuttingDown = false;
+
+async function gracefulShutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`\n[Shutdown] ${signal} received — shutting down...`);
+
+  if (server) {
+    server.close(() => console.log('[Shutdown] HTTP server closed'));
+  }
+
+  await shutdownDb();
+  console.log('[Shutdown] Database pools closed');
+  process.exit(0);
+}
+
+function shutdownWithTimeout(signal) {
+  const timer = setTimeout(() => {
+    console.error('[Shutdown] Timed out — forcing exit');
+    process.exit(1);
+  }, 10_000);
+  timer.unref();
+  gracefulShutdown(signal);
+}
+
+process.on('SIGTERM', () => shutdownWithTimeout('SIGTERM'));
+process.on('SIGINT', () => shutdownWithTimeout('SIGINT'));
+
+// ==================== Start ====================
+
+(async () => {
+  try {
+    await initDb();
+    await initMigrations();
+    await runMigrations('default');
+
+    server = app.listen(PORT, '0.0.0.0', () => {
+      console.log(`POS Lite server running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error('Failed to initialize:', error);
+    process.exit(1);
+  }
+})();

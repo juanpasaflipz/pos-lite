@@ -1,0 +1,215 @@
+{
+  "nav": {
+    "title": "Financing",
+    "desc": "Revenue-based financing for your restaurant"
+  },
+  "consent": {
+    "headline": "Get Financing for Your Restaurant",
+    "subheadline": "Access capital based on your daily sales — no credit checks, no collateral",
+    "benefits": {
+      "noCreditCheck": "No Credit Check",
+      "noCreditCheckDesc": "We evaluate your sales performance, not your personal credit score",
+      "autoRepayment": "Automatic Repayment",
+      "autoRepaymentDesc": "A small percentage of daily sales is held back — you pay as you earn",
+      "fastAccess": "Fast Access",
+      "fastAccessDesc": "Funds deposited within 1-2 business days after acceptance"
+    },
+    "howItWorks": {
+      "title": "How It Works",
+      "step1": "Grant consent to analyze your sales data",
+      "step2": "We calculate your financial profile automatically",
+      "step3": "If eligible, receive a tailored financing offer",
+      "step4": "Accept the offer and receive funds"
+    },
+    "dataConsent": {
+      "title": "Data Consent",
+      "description": "We analyze your order volume, revenue, payment methods, and refund rates to determine eligibility. Your data is never shared with third parties.",
+      "viewTerms": "View Full Terms",
+      "checkbox": "I consent to the analysis of my sales data for financing purposes",
+      "button": "Get Started",
+      "submitting": "Submitting..."
+    },
+    "terms": {
+      "loading": "Loading terms...",
+      "loadError": "Could not load terms. Please try again.",
+      "version": "Consent version: {{version}}"
+    },
+    "trust": "Your data is encrypted and processed securely. You can revoke consent at any time."
+  },
+  "profile": {
+    "title": "Financial Profile",
+    "lastUpdated": "Last updated {{date}}",
+    "score": {
+      "excellent": "Excellent",
+      "good": "Good",
+      "building": "Building",
+      "needsImprovement": "Needs Improvement"
+    },
+    "metrics": {
+      "monthlyRevenue": "Monthly Avg Revenue",
+      "dailyOrders": "Avg Daily Orders",
+      "cardPayment": "Card Payment %",
+      "refundRate": "Refund Rate"
+    },
+    "trend": {
+      "up": "up {{value}}%",
+      "down": "down {{value}}%"
+    },
+    "calculating": "Your financial profile is being calculated. This may take a few minutes.",
+    "revokeConsent": "Revoke Consent",
+    "revokeConfirm": "Are you sure? This will remove your financial profile and any active offers."
+  },
+  "offer": {
+    "title": "Financing Offer",
+    "available": "Available",
+    "amount": "Offer Amount",
+    "totalRepayment": "Total to Repay",
+    "holdback": "Daily Holdback",
+    "estimatedDuration": "Estimated Duration",
+    "days": "{{count}} days",
+    "expires": "Expires {{date}}",
+    "accept": "Accept Offer",
+    "decline": "Decline",
+    "accepting": "Processing...",
+    "confirmTitle": "Confirm Acceptance",
+    "confirmMessage": "By accepting, you agree to repay {{total}} through a {{percent}}% daily holdback on your sales. This is a signal of intent — no payment is collected now.",
+    "confirmButton": "Confirm & Accept",
+    "cancel": "Cancel",
+    "declineReason": "Reason (optional)",
+    "declined": "Offer Declined",
+    "accepted": "Offer Accepted",
+    "acceptedMessage": "Our team will be in touch within 1-2 business days to finalize the details."
+  },
+  "preEligible": {
+    "title": "Almost There",
+    "subtitle": "You're building your financial profile. Keep going!",
+    "daysProgress": "Operating Days",
+    "revenueProgress": "Monthly Revenue",
+    "daysOf": "{{current}} of {{required}} days",
+    "revenueOf": "{{current}} of {{required}}",
+    "tips": {
+      "title": "Tips to Qualify Faster",
+      "tip1": "Accept more card payments to increase your card payment ratio",
+      "tip2": "Maintain consistent daily order volume",
+      "tip3": "Keep your refund rate low"
+    }
+  },
+  "ineligible": {
+    "title": "Not Yet Eligible",
+    "subtitle": "Your profile doesn't currently meet the requirements, but you can improve it.",
+    "tips": {
+      "title": "How to Improve",
+      "tip1": "Increase your monthly revenue",
+      "tip2": "Accept more card payments",
+      "tip3": "Reduce refund rates",
+      "tip4": "Continue operating consistently"
+    }
+  },
+  "upgrade": {
+    "message": "Revenue-based financing is available on the Pro plan. Upgrade to access capital for your restaurant."
+  },
+  "banner": {
+    "available": "{{amount}} MXN financing available",
+    "viewOffer": "View Offer",
+    "dismiss": "Dismiss"
+  },
+  "admin": {
+    "title": "Financing",
+    "overview": {
+      "consented": "Consented",
+      "eligible": "Eligible",
+      "preEligible": "Pre-Eligible",
+      "activeOffers": "Active Offers",
+      "capitalOffered": "Capital Offered",
+      "capitalAccepted": "Capital Accepted",
+      "acceptanceRate": "Acceptance Rate"
+    },
+    "scoreDistribution": "Score Distribution",
+    "profiles": {
+      "title": "Financial Profiles",
+      "name": "Restaurant",
+      "plan": "Plan",
+      "score": "Score",
+      "revenue": "Monthly Revenue",
+      "cardPercent": "Card %",
+      "eligibility": "Eligibility",
+      "lastCalculated": "Last Calculated",
+      "recalculate": "Recalculate",
+      "recalculating": "Recalculating...",
+      "filterAll": "All",
+      "filterEligible": "Eligible",
+      "filterPreEligible": "Pre-Eligible",
+      "filterIneligible": "Ineligible"
+    },
+    "offers": {
+      "title": "Offers",
+      "restaurant": "Restaurant",
+      "amount": "Amount",
+      "factorRate": "Factor Rate",
+      "holdback": "Holdback %",
+      "status": "Status",
+      "created": "Created",
+      "expires": "Expires",
+      "edit": "Edit Offer",
+      "withdraw": "Withdraw",
+      "notes": "Notes",
+      "save": "Save Changes",
+      "filterAll": "All",
+      "filterAvailable": "Available",
+      "filterAccepted": "Accepted",
+      "filterDeclined": "Declined",
+      "filterExpired": "Expired"
+    },
+    "events": {
+      "title": "Event Log",
+      "timestamp": "Timestamp",
+      "tenant": "Restaurant",
+      "type": "Event Type",
+      "details": "Details",
+      "filterAll": "All Types"
+    },
+    "activity": {
+      "title": "Activity Feed",
+      "noActivity": "No recent activity",
+      "filterAll": "All Events"
+    }
+  },
+  "privacy": {
+    "title": "Data & Privacy",
+    "financialDataAnalysis": "Financial Data Analysis",
+    "consented": "Consented",
+    "notConsented": "Not consented",
+    "version": "Version {{version}}",
+    "viewTerms": "View Full Terms",
+    "downloadData": "Download My Data",
+    "exporting": "Exporting...",
+    "revokeConsent": "Revoke Consent",
+    "revokeTitle": "Revoke Data Consent",
+    "revokeWarning": "Are you sure? This will:",
+    "revokeEffect1": "Stop analyzing your transaction data",
+    "revokeEffect2": "Remove any active financing offers",
+    "revokeEffect3": "You can re-enable this at any time",
+    "revokeRetention": "Historical data is retained for regulatory compliance.",
+    "revoking": "Revoking...",
+    "cancel": "Cancel",
+    "termsTitle": "Data Processing Terms"
+  },
+  "errors": {
+    "failedLoad": "Failed to load financing data",
+    "failedSubmitConsent": "Failed to submit consent",
+    "failedAcceptOffer": "Failed to accept offer",
+    "failedDeclineOffer": "Failed to decline offer",
+    "failedRevokeConsent": "Failed to revoke consent"
+  },
+  "eligibility": {
+    "eligible": "Eligible",
+    "preEligible": "Pre-Eligible",
+    "ineligible": "Ineligible",
+    "new": "New"
+  },
+  "registration": {
+    "consentHeadline": "Want access to working capital?",
+    "consentDescription": "Let us analyze your sales data to determine eligibility for funding.",
+    "consentCheckbox": "I agree to data analysis for financing eligibility"
+  }
+}

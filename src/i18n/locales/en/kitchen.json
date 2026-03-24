@@ -1,0 +1,41 @@
+{
+  "header": {
+    "title": "KITCHEN DISPLAY",
+    "back": "Back",
+    "all": "All",
+    "kitchen": "Kitchen",
+    "bar": "Bar",
+    "fullscreen": "Fullscreen"
+  },
+  "orders": {
+    "loadingOrders": "Loading orders...",
+    "allClear": "All clear",
+    "noPending": "No pending orders",
+    "noItems": "No items",
+    "orderId": "Order ID: {{id}}",
+    "combo": "Combo"
+  },
+  "status": {
+    "pending": "PENDING",
+    "preparing": "PREPARING",
+    "urgent": "URGENT"
+  },
+  "actions": {
+    "start": "Start",
+    "starting": "Starting...",
+    "readyForPickup": "Ready for Pickup",
+    "markingReady": "Marking Ready...",
+    "clickStartFirst": "Click \"Start\" First"
+  },
+  "time": {
+    "secondsAgo": "{{count}}s ago",
+    "minuteAgo": "{{count}} min ago",
+    "minutesAgo": "{{count}} mins ago",
+    "hoursMinutesAgo": "{{hours}}h {{minutes}}m ago"
+  },
+  "errors": {
+    "fetchFailed": "Failed to fetch orders",
+    "startFailed": "Failed to start order",
+    "readyFailed": "Failed to mark order as ready"
+  }
+}

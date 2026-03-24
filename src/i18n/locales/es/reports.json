@@ -1,0 +1,399 @@
+{
+  "sales": {
+    "title": "Reportes de Ventas",
+    "exportCsv": "Exportar CSV",
+    "periods": {
+      "today": "Hoy",
+      "week": "Esta Semana",
+      "month": "Este Mes"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "cashCard": "Efectivo/Tarjeta",
+      "cogs": "Costos",
+      "categories": "Categorías",
+      "margin": "Margen",
+      "delivery": "Delivery",
+      "fees": "Comisiones",
+      "refunds": "Reembolsos",
+      "financials": "Finanzas",
+      "menuEngineering": "Ingeniería de Menú"
+    },
+    "csvHeaders": {
+      "metric": "Métrica",
+      "value": "Valor",
+      "period": "Período",
+      "totalRevenue": "Ventas Totales",
+      "orderCount": "Cantidad de Órdenes",
+      "avgTicket": "Ticket Promedio",
+      "totalTips": "Propinas Totales"
+    },
+    "kpi": {
+      "totalRevenue": "Ventas Totales",
+      "orderCount": "Cantidad de Órdenes",
+      "avgTicket": "Ticket Promedio",
+      "totalTips": "Propinas Totales",
+      "totalOrders": "Total de Órdenes"
+    },
+    "overview": {
+      "hourlySales": "Desglose de Ventas por Hora",
+      "revenue": "Ventas",
+      "orders": "Órdenes",
+      "topSelling": "Productos Más Vendidos",
+      "employeePerformance": "Rendimiento de Empleados",
+      "columns": {
+        "employee": "Empleado",
+        "orders": "Órdenes",
+        "totalSales": "Ventas Totales",
+        "avgTicket": "Ticket Prom.",
+        "tips": "Propinas"
+      }
+    },
+    "cashCard": {
+      "paymentSplit": "División de Pagos",
+      "cash": "Efectivo",
+      "card": "Tarjeta",
+      "tips": "Propinas:",
+      "revenueByMethod": "Ventas por Método de Pago",
+      "breakdownDetails": "Detalle del Desglose",
+      "ordersCount": "{{count}} órdenes ({{percent}}%)"
+    },
+    "cogs": {
+      "totalCogs": "Costo Total",
+      "grossMargin": "Margen Bruto",
+      "marginPercent": "Margen %",
+      "perItemCogs": "Costos y Margen por Producto",
+      "columns": {
+        "item": "Producto",
+        "qty": "Cant.",
+        "revenue": "Ventas",
+        "cogs": "Costo",
+        "margin": "Margen",
+        "marginPercent": "Margen %"
+      }
+    },
+    "categories": {
+      "revenueVsCogs": "Ventas vs Costos por Categoría",
+      "categoryDetails": "Detalle por Categoría",
+      "revenue": "Ventas",
+      "cogs": "Costos",
+      "margin": "Margen",
+      "marginPercent": "Margen %",
+      "itemsSold": "Productos Vendidos"
+    },
+    "margin": {
+      "dailyContribution": "Margen de Contribución Diario",
+      "dailyBreakdown": "Desglose Diario",
+      "date": "Fecha",
+      "contributionMargin": "Margen de Contribución"
+    },
+    "deliveryTab": {
+      "channelComparison": "Comparación de Canales",
+      "platformMargins": "Márgenes por Plataforma de Delivery",
+      "commission": "Comisión",
+      "netRevenue": "Venta Neta",
+      "noDeliveryOrders": "Sin órdenes de delivery en este período",
+      "commissionWithPercent": "Comisión ({{percent}}%)"
+    },
+    "fees": {
+      "dailyFeeBreakdown": "Desglose Diario de Comisiones",
+      "totalFees": "Comisiones Totales",
+      "netRevenue": "Venta Neta",
+      "feePercent": "% Comisión",
+      "chartRevenue": "Ventas",
+      "chartFees": "Comisiones"
+    },
+    "refunds": {
+      "totalRefunds": "Total de Reembolsos",
+      "totalRefunded": "Total Reembolsado",
+      "byReason": "Reembolsos por Razón",
+      "byEmployee": "Reembolsos por Empleado",
+      "dailyTrend": "Tendencia Diaria de Reembolsos",
+      "amount": "Monto",
+      "count": "Cantidad",
+      "refundsCount": "{{count}} reembolsos"
+    },
+    "financials": {
+      "editTargets": "Editar Metas",
+      "saveTargets": "Guardar Metas",
+      "saving": "Guardando...",
+      "netProfitActual": "Utilidad Neta (Real)",
+      "netProfitTarget": "Utilidad Neta (Meta)",
+      "planVsActuals": "Plan vs Real —",
+      "columns": {
+        "category": "Categoría",
+        "targetPercent": "Meta %",
+        "targetDollar": "Meta $",
+        "actualDollar": "Real $",
+        "diffDollar": "Dif $",
+        "diffPercent": "Dif %"
+      },
+      "netProfit": "Utilidad Neta",
+      "auto": "auto",
+      "revenueSubtotal": "Ventas (Subtotal)",
+      "noFinancialData": "No hay datos financieros disponibles"
+    },
+    "noData": "No hay datos disponibles para este período",
+    "chartLegend": {
+      "revenue": "Ventas",
+      "orders": "Órdenes",
+      "cogs": "Costos",
+      "margin": "Margen",
+      "contributionMargin": "Margen de Contribución",
+      "fees": "Comisiones",
+      "amount": "Monto",
+      "count": "Cantidad"
+    }
+  },
+  "dashboard": {
+    "title": "DASHBOARD EN VIVO",
+    "updated": "Actualizado",
+    "loading": "Cargando dashboard...",
+    "kpi": {
+      "revenue": "Ventas",
+      "orders": "Órdenes",
+      "avgTicket": "Ticket Prom.",
+      "tips": "Propinas"
+    },
+    "sections": {
+      "hourlyRevenue": "Ventas por Hora",
+      "paymentMethods": "Métodos de Pago",
+      "card": "Tarjeta",
+      "cash": "Efectivo",
+      "orders": "órdenes",
+      "topItems": "Top Productos de Hoy",
+      "orderSources": "Fuentes de Órdenes",
+      "inStore": "En Tienda (POS)",
+      "uberEats": "Uber Eats",
+      "rappi": "Rappi",
+      "didiFood": "DiDi Food",
+      "sold": "{{qty}} vendidos"
+    },
+    "empty": {
+      "noPayments": "Sin pagos hoy aún",
+      "noOrders": "Sin órdenes hoy aún"
+    }
+  },
+  "ai": {
+    "title": "Inteligencia IA",
+    "tabs": {
+      "dashboard": "Dashboard",
+      "upsell": "Venta Sugerida",
+      "inventoryAi": "Inventario IA",
+      "pricing": "Precios",
+      "config": "Config"
+    },
+    "kpi": {
+      "suggestionAcceptance": "Aceptación de Sugerencias",
+      "totalEvents": "eventos totales",
+      "itemsToPush": "Productos a Promover",
+      "pushDesc": "Alternativas con buen stock",
+      "itemsToAvoid": "Productos a Evitar",
+      "avoidDesc": "Productos con ingredientes bajos",
+      "grokApi": "Grok API",
+      "active": "Activo",
+      "off": "Inactivo",
+      "callsPerHour": "llamadas/hr"
+    },
+    "upsell": {
+      "aiDrivenRevenue": "Ingresos Impulsados por IA",
+      "aiSuggestedSold": "Productos Sugeridos por IA Vendidos",
+      "revenueFromSuggestions": "Ingresos por Sugerencias de IA",
+      "frequentlyTogether": "Frecuentemente Ordenados Juntos",
+      "together": "juntos",
+      "grokAnalysis": "Análisis con Grok IA",
+      "runAnalysis": "Ejecutar Análisis",
+      "analyzing": "Analizando...",
+      "enableGrok": "Activa Grok API en la pestaña Config y configura XAI_API_KEY para usar el análisis de IA.",
+      "upsellPatterns": "Patrones de Venta Sugerida",
+      "recommendations": "Recomendaciones:",
+      "analysisRanAt": "Análisis ejecutado a las",
+      "noSuggestionData": "Sin datos de sugerencias aún. Las sugerencias aparecerán conforme los cajeros interactúen con el POS.",
+      "noData": "Sin datos"
+    },
+    "inventoryAi": {
+      "inventoryForecast": "Pronóstico de Inventario",
+      "noDataYet": "No hay suficientes datos para pronósticos. Continúa tomando órdenes para generar datos de velocidad.",
+      "daysLeft": "días restantes",
+      "suggestedReorder": "Reorden sugerido:",
+      "inventoryTrends": "Tendencias de Inventario",
+      "supplyChainForecast": "Pronóstico de Cadena de Suministro",
+      "urgentActions": "Acciones Urgentes:"
+    },
+    "pricing": {
+      "dynamicPricing": "Sugerencias de Precios Dinámicos",
+      "noPricing": "Sin sugerencias de precios por ahora. Activa precios dinámicos en Config y las sugerencias aparecerán en horas pico/lentas.",
+      "approve": "Aprobar"
+    },
+    "config": {
+      "backgroundJobs": "Tareas en Segundo Plano",
+      "every": "Cada",
+      "min": "min",
+      "runs": "Ejecuciones:",
+      "active": "Activo",
+      "pending": "Pendiente",
+      "suggestionPerformance": "Rendimiento de Sugerencias",
+      "columns": {
+        "rule": "Regla",
+        "action": "Acción",
+        "count": "Cantidad"
+      },
+      "accepted": "aceptada",
+      "categoryRoleMapping": "Mapeo de Roles por Categoría",
+      "roles": {
+        "main": "Principal",
+        "side": "Acompañamiento",
+        "drink": "Bebida",
+        "combo": "Combo",
+        "dessert": "Postre",
+        "addon": "Extra"
+      },
+      "aiSettings": "Configuración de IA",
+      "on": "ON",
+      "off": "OFF",
+      "exportConfig": "Exportar Config",
+      "importConfig": "Importar Config"
+    }
+  },
+  "loyalty": {
+    "title": "Lealtad y CRM",
+    "tabs": {
+      "customers": "Clientes",
+      "analytics": "Analíticas",
+      "referrals": "Referidos",
+      "settings": "Configuración"
+    },
+    "customers": {
+      "columns": {
+        "customer": "Cliente",
+        "phone": "Teléfono",
+        "stamps": "Sellos",
+        "orders": "Órdenes",
+        "spent": "Gastado",
+        "lastVisit": "Última Visita"
+      },
+      "searchPlaceholder": "Buscar por nombre o teléfono...",
+      "noCustomers": "No se encontraron clientes",
+      "customersTotal": "clientes en total",
+      "prev": "Anterior",
+      "page": "Página",
+      "next": "Siguiente",
+      "addStamp": "Agregar Sello Manual",
+      "detail": {
+        "referralCode": "Código de Referido",
+        "totalStamps": "Total de Sellos",
+        "smsOptIn": "SMS Activado",
+        "yes": "Sí",
+        "no": "No",
+        "stampCards": "Tarjetas de Sellos",
+        "ready": "Lista",
+        "redeemed": "Canjeada",
+        "active": "Activa",
+        "recentActivity": "Actividad Reciente",
+        "stamps": "sellos",
+        "stamp": "sello"
+      }
+    },
+    "analytics": {
+      "loading": "Cargando analíticas...",
+      "failedToLoad": "Error al cargar analíticas",
+      "kpi": {
+        "totalMembers": "Total de Miembros",
+        "newThisMonth": "Nuevos Este Mes",
+        "activeCards": "Tarjetas Activas",
+        "redemptionRate": "Tasa de Canje"
+      },
+      "signupsOverTime": "Registros a lo Largo del Tiempo",
+      "topCustomers": "Top 10 Clientes",
+      "orders": "órdenes"
+    },
+    "referrals": {
+      "loading": "Cargando referidos...",
+      "failedToLoad": "Error al cargar referidos",
+      "totalReferrals": "Total de Referidos",
+      "leaderboard": "Tabla de Referidos",
+      "code": "Código:",
+      "referralCount": "referidos",
+      "bonusStamps": "sellos de bono",
+      "recentReferrals": "Referidos Recientes",
+      "referred": "refirió a",
+      "stampsEach": "sellos cada uno",
+      "noReferrals": "Sin referidos aún"
+    },
+    "settings": {
+      "loading": "Cargando configuración...",
+      "failedToLoad": "Error al cargar configuración",
+      "stampsRequired": "Sellos Requeridos",
+      "rewardDescription": "Descripción de Recompensa",
+      "referralBonusStamps": "Sellos de Bono por Referido",
+      "smsNotifications": "Notificaciones SMS"
+    }
+  },
+  "menuEngineering": {
+    "classifications": {
+      "star": "Estrella",
+      "workhorse": "Caballo",
+      "puzzle": "Rompecabezas",
+      "dog": "Perro"
+    },
+    "tooltip": {
+      "price": "Precio:",
+      "cost": "Costo:",
+      "margin": "Margen:",
+      "sold": "Vendidos:",
+      "popularity": "Popularidad:",
+      "classification": "Clasificación:"
+    },
+    "summary": {
+      "totalRevenue": "Ingreso total:",
+      "totalContribution": "Contribución total:",
+      "avgMargin": "Margen promedio:",
+      "itemsAnalyzed": "Productos analizados:"
+    },
+    "matrixTitle": "Matriz de Ingeniería de Menú",
+    "matrixDesc": "Cada punto representa un producto. Eje X = popularidad, Eje Y = margen de contribución.",
+    "popularityLabel": "Popularidad (%)",
+    "marginLabel": "Margen (MXN)",
+    "popularityThreshold": "Umbral popularidad",
+    "marginThreshold": "Umbral margen",
+    "recommendations": "Recomendaciones",
+    "detailTitle": "Detalle por Producto",
+    "filtering": "filtrando:",
+    "sortBy": "Ordenar:",
+    "sortOptions": {
+      "totalContribution": "Contribución total",
+      "unitMargin": "Margen unitario",
+      "popularity": "Popularidad",
+      "unitsSold": "Unidades vendidas"
+    },
+    "columns": {
+      "product": "Producto",
+      "category": "Categoría",
+      "classification": "Clasificación",
+      "price": "Precio",
+      "cost": "Costo",
+      "margin": "Margen",
+      "marginPercent": "Margen %",
+      "sold": "Vendidos",
+      "popularity": "Popularidad",
+      "contribution": "Contribución"
+    },
+    "ofMenu": "del menú"
+  },
+  "errors": {
+    "fetchReports": "Error al cargar reportes",
+    "loadPermissions": "Error al cargar permisos",
+    "saveTargets": "Error al guardar metas",
+    "saveActual": "Error al guardar valores reales",
+    "fetchData": "Error al cargar datos",
+    "updateConfig": "Error al actualizar configuración",
+    "applyPricing": "Error al aplicar precios",
+    "updateRole": "Error al actualizar rol",
+    "runAnalysis": "Error al ejecutar análisis",
+    "exportConfig": "Error al exportar configuración",
+    "importConfig": "Error al importar configuración",
+    "loadAnalytics": "Error al cargar analíticas",
+    "loadReferrals": "Error al cargar referidos",
+    "loadSettings": "Error al cargar configuración"
+  }
+}

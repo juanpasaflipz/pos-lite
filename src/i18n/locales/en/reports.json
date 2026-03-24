@@ -1,0 +1,399 @@
+{
+  "sales": {
+    "title": "Sales Reports",
+    "exportCsv": "Export CSV",
+    "periods": {
+      "today": "Today",
+      "week": "This Week",
+      "month": "This Month"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "cashCard": "Cash/Card",
+      "cogs": "COGS",
+      "categories": "Categories",
+      "margin": "Margin",
+      "delivery": "Delivery",
+      "fees": "Fees",
+      "refunds": "Refunds",
+      "financials": "Financials",
+      "menuEngineering": "Menu Engineering"
+    },
+    "csvHeaders": {
+      "metric": "Metric",
+      "value": "Value",
+      "period": "Period",
+      "totalRevenue": "Total Revenue",
+      "orderCount": "Order Count",
+      "avgTicket": "Avg Ticket",
+      "totalTips": "Total Tips"
+    },
+    "kpi": {
+      "totalRevenue": "Total Revenue",
+      "orderCount": "Order Count",
+      "avgTicket": "Avg Ticket",
+      "totalTips": "Total Tips",
+      "totalOrders": "Total Orders"
+    },
+    "overview": {
+      "hourlySales": "Hourly Sales Breakdown",
+      "revenue": "Revenue",
+      "orders": "Orders",
+      "topSelling": "Top Selling Items",
+      "employeePerformance": "Employee Performance",
+      "columns": {
+        "employee": "Employee",
+        "orders": "Orders",
+        "totalSales": "Total Sales",
+        "avgTicket": "Avg Ticket",
+        "tips": "Tips"
+      }
+    },
+    "cashCard": {
+      "paymentSplit": "Payment Split",
+      "cash": "Cash",
+      "card": "Card",
+      "tips": "Tips:",
+      "revenueByMethod": "Revenue by Payment Method",
+      "breakdownDetails": "Breakdown Details",
+      "ordersCount": "{{count}} orders ({{percent}}%)"
+    },
+    "cogs": {
+      "totalCogs": "Total COGS",
+      "grossMargin": "Gross Margin",
+      "marginPercent": "Margin %",
+      "perItemCogs": "Per-Item COGS & Margin",
+      "columns": {
+        "item": "Item",
+        "qty": "Qty",
+        "revenue": "Revenue",
+        "cogs": "COGS",
+        "margin": "Margin",
+        "marginPercent": "Margin %"
+      }
+    },
+    "categories": {
+      "revenueVsCogs": "Category Revenue vs COGS",
+      "categoryDetails": "Category Details",
+      "revenue": "Revenue",
+      "cogs": "COGS",
+      "margin": "Margin",
+      "marginPercent": "Margin %",
+      "itemsSold": "Items Sold"
+    },
+    "margin": {
+      "dailyContribution": "Daily Contribution Margin",
+      "dailyBreakdown": "Daily Breakdown",
+      "date": "Date",
+      "contributionMargin": "Contribution Margin"
+    },
+    "deliveryTab": {
+      "channelComparison": "Channel Comparison",
+      "platformMargins": "Delivery Platform Margins",
+      "commission": "Commission",
+      "netRevenue": "Net Revenue",
+      "noDeliveryOrders": "No delivery orders in this period",
+      "commissionWithPercent": "Commission ({{percent}}%)"
+    },
+    "fees": {
+      "dailyFeeBreakdown": "Daily Fee Breakdown",
+      "totalFees": "Total Fees",
+      "netRevenue": "Net Revenue",
+      "feePercent": "Fee %",
+      "chartRevenue": "Revenue",
+      "chartFees": "Fees"
+    },
+    "refunds": {
+      "totalRefunds": "Total Refunds",
+      "totalRefunded": "Total Refunded",
+      "byReason": "Refunds by Reason",
+      "byEmployee": "Refunds by Employee",
+      "dailyTrend": "Daily Refund Trend",
+      "amount": "Amount",
+      "count": "Count",
+      "refundsCount": "{{count}} refunds"
+    },
+    "financials": {
+      "editTargets": "Edit Targets",
+      "saveTargets": "Save Targets",
+      "saving": "Saving...",
+      "netProfitActual": "Net Profit (Actual)",
+      "netProfitTarget": "Net Profit (Target)",
+      "planVsActuals": "Plan vs Actuals —",
+      "columns": {
+        "category": "Category",
+        "targetPercent": "Target %",
+        "targetDollar": "Target $",
+        "actualDollar": "Actual $",
+        "diffDollar": "Diff $",
+        "diffPercent": "Diff %"
+      },
+      "netProfit": "Net Profit",
+      "auto": "auto",
+      "revenueSubtotal": "Revenue (Subtotal)",
+      "noFinancialData": "No financial data available"
+    },
+    "noData": "No data available for this period",
+    "chartLegend": {
+      "revenue": "Revenue",
+      "orders": "Orders",
+      "cogs": "COGS",
+      "margin": "Margin",
+      "contributionMargin": "Contribution Margin",
+      "fees": "Fees",
+      "amount": "Amount",
+      "count": "Count"
+    }
+  },
+  "dashboard": {
+    "title": "LIVE DASHBOARD",
+    "updated": "Updated",
+    "loading": "Loading dashboard...",
+    "kpi": {
+      "revenue": "Revenue",
+      "orders": "Orders",
+      "avgTicket": "Avg Ticket",
+      "tips": "Tips"
+    },
+    "sections": {
+      "hourlyRevenue": "Hourly Revenue",
+      "paymentMethods": "Payment Methods",
+      "card": "Card",
+      "cash": "Cash",
+      "orders": "orders",
+      "topItems": "Top Items Today",
+      "orderSources": "Order Sources",
+      "inStore": "In-Store (POS)",
+      "uberEats": "Uber Eats",
+      "rappi": "Rappi",
+      "didiFood": "DiDi Food",
+      "sold": "{{qty}} sold"
+    },
+    "empty": {
+      "noPayments": "No payments yet today",
+      "noOrders": "No orders yet today"
+    }
+  },
+  "ai": {
+    "title": "AI Intelligence",
+    "tabs": {
+      "dashboard": "Dashboard",
+      "upsell": "Upsell",
+      "inventoryAi": "Inventory AI",
+      "pricing": "Pricing",
+      "config": "Config"
+    },
+    "kpi": {
+      "suggestionAcceptance": "Suggestion Acceptance",
+      "totalEvents": "total events",
+      "itemsToPush": "Items to Push",
+      "pushDesc": "Good stock alternatives",
+      "itemsToAvoid": "Items to Avoid",
+      "avoidDesc": "Low ingredient items",
+      "grokApi": "Grok API",
+      "active": "Active",
+      "off": "Off",
+      "callsPerHour": "calls/hr"
+    },
+    "upsell": {
+      "aiDrivenRevenue": "AI-Driven Revenue",
+      "aiSuggestedSold": "AI-Suggested Items Sold",
+      "revenueFromSuggestions": "Revenue from AI Suggestions",
+      "frequentlyTogether": "Frequently Ordered Together",
+      "together": "together",
+      "grokAnalysis": "Grok AI Analysis",
+      "runAnalysis": "Run Analysis",
+      "analyzing": "Analyzing...",
+      "enableGrok": "Enable Grok API in the Config tab and set XAI_API_KEY to use AI analysis.",
+      "upsellPatterns": "Upsell Patterns",
+      "recommendations": "Recommendations:",
+      "analysisRanAt": "Analysis ran at",
+      "noSuggestionData": "No suggestion data yet. Suggestions will appear as cashiers interact with the POS.",
+      "noData": "No data"
+    },
+    "inventoryAi": {
+      "inventoryForecast": "Inventory Forecast",
+      "noDataYet": "Not enough data for forecasts yet. Continue taking orders to build velocity data.",
+      "daysLeft": "days left",
+      "suggestedReorder": "Suggested reorder:",
+      "inventoryTrends": "Inventory Trends",
+      "supplyChainForecast": "Supply Chain Forecast",
+      "urgentActions": "Urgent Actions:"
+    },
+    "pricing": {
+      "dynamicPricing": "Dynamic Pricing Suggestions",
+      "noPricing": "No pricing suggestions right now. Enable dynamic pricing in Config and suggestions will appear during rush/slow periods.",
+      "approve": "Approve"
+    },
+    "config": {
+      "backgroundJobs": "Background Jobs",
+      "every": "Every",
+      "min": "min",
+      "runs": "Runs:",
+      "active": "Active",
+      "pending": "Pending",
+      "suggestionPerformance": "Suggestion Performance",
+      "columns": {
+        "rule": "Rule",
+        "action": "Action",
+        "count": "Count"
+      },
+      "accepted": "accepted",
+      "categoryRoleMapping": "Category Role Mapping",
+      "roles": {
+        "main": "Main",
+        "side": "Side",
+        "drink": "Drink",
+        "combo": "Combo",
+        "dessert": "Dessert",
+        "addon": "Add-on"
+      },
+      "aiSettings": "AI Settings",
+      "on": "ON",
+      "off": "OFF",
+      "exportConfig": "Export Config",
+      "importConfig": "Import Config"
+    }
+  },
+  "loyalty": {
+    "title": "Loyalty & CRM",
+    "tabs": {
+      "customers": "Customers",
+      "analytics": "Analytics",
+      "referrals": "Referrals",
+      "settings": "Settings"
+    },
+    "customers": {
+      "columns": {
+        "customer": "Customer",
+        "phone": "Phone",
+        "stamps": "Stamps",
+        "orders": "Orders",
+        "spent": "Spent",
+        "lastVisit": "Last Visit"
+      },
+      "searchPlaceholder": "Search by name or phone...",
+      "noCustomers": "No customers found",
+      "customersTotal": "customers total",
+      "prev": "Prev",
+      "page": "Page",
+      "next": "Next",
+      "addStamp": "Add Manual Stamp",
+      "detail": {
+        "referralCode": "Referral Code",
+        "totalStamps": "Total Stamps",
+        "smsOptIn": "SMS Opt-in",
+        "yes": "Yes",
+        "no": "No",
+        "stampCards": "Stamp Cards",
+        "ready": "Ready",
+        "redeemed": "Redeemed",
+        "active": "Active",
+        "recentActivity": "Recent Activity",
+        "stamps": "stamps",
+        "stamp": "stamp"
+      }
+    },
+    "analytics": {
+      "loading": "Loading analytics...",
+      "failedToLoad": "Failed to load analytics",
+      "kpi": {
+        "totalMembers": "Total Members",
+        "newThisMonth": "New This Month",
+        "activeCards": "Active Cards",
+        "redemptionRate": "Redemption Rate"
+      },
+      "signupsOverTime": "Signups Over Time",
+      "topCustomers": "Top 10 Customers",
+      "orders": "orders"
+    },
+    "referrals": {
+      "loading": "Loading referrals...",
+      "failedToLoad": "Failed to load referrals",
+      "totalReferrals": "Total Referrals",
+      "leaderboard": "Referral Leaderboard",
+      "code": "Code:",
+      "referralCount": "referrals",
+      "bonusStamps": "bonus stamps",
+      "recentReferrals": "Recent Referrals",
+      "referred": "referred",
+      "stampsEach": "stamps each",
+      "noReferrals": "No referrals yet"
+    },
+    "settings": {
+      "loading": "Loading settings...",
+      "failedToLoad": "Failed to load settings",
+      "stampsRequired": "Stamps Required",
+      "rewardDescription": "Reward Description",
+      "referralBonusStamps": "Referral Bonus Stamps",
+      "smsNotifications": "SMS Notifications"
+    }
+  },
+  "menuEngineering": {
+    "classifications": {
+      "star": "Star",
+      "workhorse": "Workhorse",
+      "puzzle": "Puzzle",
+      "dog": "Dog"
+    },
+    "tooltip": {
+      "price": "Price:",
+      "cost": "Cost:",
+      "margin": "Margin:",
+      "sold": "Sold:",
+      "popularity": "Popularity:",
+      "classification": "Classification:"
+    },
+    "summary": {
+      "totalRevenue": "Total Revenue:",
+      "totalContribution": "Total Contribution:",
+      "avgMargin": "Avg Margin:",
+      "itemsAnalyzed": "Items Analyzed:"
+    },
+    "matrixTitle": "Menu Engineering Matrix",
+    "matrixDesc": "Each dot represents a product. X axis = popularity, Y axis = contribution margin.",
+    "popularityLabel": "Popularity (%)",
+    "marginLabel": "Margin (MXN)",
+    "popularityThreshold": "Popularity threshold",
+    "marginThreshold": "Margin threshold",
+    "recommendations": "Recommendations",
+    "detailTitle": "Detail by Product",
+    "filtering": "filtering:",
+    "sortBy": "Sort:",
+    "sortOptions": {
+      "totalContribution": "Total Contribution",
+      "unitMargin": "Unit Margin",
+      "popularity": "Popularity",
+      "unitsSold": "Units Sold"
+    },
+    "columns": {
+      "product": "Product",
+      "category": "Category",
+      "classification": "Classification",
+      "price": "Price",
+      "cost": "Cost",
+      "margin": "Margin",
+      "marginPercent": "Margin %",
+      "sold": "Sold",
+      "popularity": "Popularity",
+      "contribution": "Contribution"
+    },
+    "ofMenu": "of menu"
+  },
+  "errors": {
+    "fetchReports": "Failed to fetch reports",
+    "loadPermissions": "Failed to load permissions",
+    "saveTargets": "Failed to save targets",
+    "saveActual": "Failed to save actual",
+    "fetchData": "Failed to fetch data",
+    "updateConfig": "Failed to update config",
+    "applyPricing": "Failed to apply pricing",
+    "updateRole": "Failed to update role",
+    "runAnalysis": "Failed to run analysis",
+    "exportConfig": "Failed to export config",
+    "importConfig": "Failed to import config",
+    "loadAnalytics": "Failed to load analytics",
+    "loadReferrals": "Failed to load referrals",
+    "loadSettings": "Failed to load settings"
+  }
+}

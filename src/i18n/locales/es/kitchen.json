@@ -1,0 +1,41 @@
+{
+  "header": {
+    "title": "PANTALLA DE COCINA",
+    "back": "Atrás",
+    "all": "Todo",
+    "kitchen": "Cocina",
+    "bar": "Bar",
+    "fullscreen": "Pantalla Completa"
+  },
+  "orders": {
+    "loadingOrders": "Cargando órdenes...",
+    "allClear": "Todo listo",
+    "noPending": "Sin órdenes pendientes",
+    "noItems": "Sin productos",
+    "orderId": "ID de Orden: {{id}}",
+    "combo": "Combo"
+  },
+  "status": {
+    "pending": "PENDIENTE",
+    "preparing": "PREPARANDO",
+    "urgent": "URGENTE"
+  },
+  "actions": {
+    "start": "Iniciar",
+    "starting": "Iniciando...",
+    "readyForPickup": "Listo para Entregar",
+    "markingReady": "Marcando Listo...",
+    "clickStartFirst": "Presiona \"Iniciar\" Primero"
+  },
+  "time": {
+    "secondsAgo": "hace {{count}}s",
+    "minuteAgo": "hace {{count}} min",
+    "minutesAgo": "hace {{count}} min",
+    "hoursMinutesAgo": "hace {{hours}}h {{minutes}}m"
+  },
+  "errors": {
+    "fetchFailed": "Error al cargar órdenes",
+    "startFailed": "Error al iniciar orden",
+    "readyFailed": "Error al marcar orden como lista"
+  }
+}

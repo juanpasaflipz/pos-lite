@@ -1,0 +1,262 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==================== Theme: Neutral Palette ==================== */
+/* CSS variables that Tailwind's neutral-* classes reference.
+   Dark is the default; html.light flips to light values. */
+
+:root {
+  --n-50:  250 250 250;
+  --n-100: 245 245 245;
+  --n-200: 229 229 229;
+  --n-300: 212 212 212;
+  --n-400: 163 163 163;
+  --n-500: 115 115 115;
+  --n-600: 82  82  82;
+  --n-700: 64  64  64;
+  --n-800: 38  38  38;
+  --n-900: 23  23  23;
+  --n-950: 10  10  10;
+}
+
+html.light {
+  --n-50:  23  23  23;
+  --n-100: 38  38  38;
+  --n-200: 64  64  64;
+  --n-300: 82  82  82;
+  --n-400: 115 115 115;
+  --n-500: 163 163 163;
+  --n-600: 212 212 212;
+  --n-700: 229 229 229;
+  --n-800: 245 245 245;
+  --n-900: 255 255 255;
+  --n-950: 250 250 250;
+}
+
+/* ==================== Theme: Text Color Overrides ==================== */
+/* In light mode, text-white (used for primary text on dark bg) flips to dark.
+   Exceptions: preserve white text on colored backgrounds (buttons, badges). */
+
+html.light .text-white {
+  --tw-text-opacity: 1;
+  color: rgb(23 23 23 / var(--tw-text-opacity));
+}
+
+/* Keep white text on brand/colored backgrounds — same element */
+html.light [class*="bg-brand"].text-white,
+html.light [class*="bg-red-"].text-white,
+html.light [class*="bg-green-"].text-white,
+html.light [class*="bg-emerald-"].text-white,
+html.light [class*="bg-blue-"].text-white,
+html.light [class*="bg-yellow-"].text-white,
+html.light [class*="bg-orange-"].text-white,
+html.light [class*="bg-purple-"].text-white,
+html.light [class*="bg-pink-"].text-white,
+html.light [class*="bg-teal-"].text-white,
+html.light [class*="bg-cyan-"].text-white,
+html.light [class*="bg-indigo-"].text-white {
+  color: rgb(255 255 255 / var(--tw-text-opacity, 1));
+}
+
+/* Keep white text on colored backgrounds — descendant */
+html.light [class*="bg-brand"] .text-white,
+html.light [class*="bg-red-"] .text-white,
+html.light [class*="bg-green-"] .text-white,
+html.light [class*="bg-emerald-"] .text-white,
+html.light [class*="bg-blue-"] .text-white {
+  color: rgb(255 255 255 / var(--tw-text-opacity, 1));
+}
+
+/* ==================== Theme: Body Defaults ==================== */
+
+body {
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: rgb(var(--n-950));
+  color: #ffffff;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+html.light body {
+  color: #171717;
+}
+
+/* ==================== Utilities ==================== */
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Prevent double-tap zoom on buttons */
+button,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(128, 128, 128, 0.1);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.45);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(128, 128, 128, 0.3) rgba(128, 128, 128, 0.1);
+}
+
+/* POS Grid Layout */
+.pos-grid {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  height: 100vh;
+  gap: 0;
+}
+
+/* Smooth transitions for interactive elements */
+button,
+a,
+input {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Receipt styles for printing */
+@media print {
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Courier New', monospace;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .receipt {
+    width: 80mm;
+    font-size: 12px;
+    line-height: 1.4;
+    margin: 0;
+    padding: 10px;
+  }
+
+  .receipt-header {
+    text-align: center;
+    font-weight: bold;
+    margin-bottom: 10px;
+    border-bottom: 1px dashed #000;
+    padding-bottom: 10px;
+  }
+
+  .receipt-items {
+    margin: 10px 0;
+    border-bottom: 1px dashed #000;
+    padding-bottom: 10px;
+  }
+
+  .receipt-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    margin: 3px 0;
+  }
+
+  .receipt-total {
+    text-align: right;
+    font-weight: bold;
+    margin-top: 10px;
+  }
+
+  .receipt-footer {
+    text-align: center;
+    font-size: 10px;
+    margin-top: 10px;
+    color: #666;
+  }
+
+  @page {
+    width: 80mm;
+    height: auto;
+    margin: 0;
+    padding: 0;
+  }
+}
+
+/* Tablet-specific optimizations */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+    padding-top: max(12px, env(safe-area-inset-top));
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+}
+
+/* Disable zoom on input focus */
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Loading animation */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Pulse animation */
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
