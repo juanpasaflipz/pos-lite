@@ -162,6 +162,35 @@ app.post('/api/auth/demo-login', (req, res, next) => {
   demoProvisionRoutes(req, res, next);
 });
 
+// Lead capture (public — used by marketing landing pages)
+app.post('/api/leads', async (req, res) => {
+  try {
+    const { restaurant_name, name, email, phone, promo_code, source } = req.body;
+    if (!email) return res.status(400).json({ error: 'email is required' });
+    const cleanEmail = email.trim().toLowerCase();
+    const existing = await adminSql`SELECT id FROM leads WHERE email = ${cleanEmail}`;
+    if (existing.length > 0) {
+      await adminSql`
+        UPDATE leads SET
+          restaurant_name = COALESCE(${restaurant_name || null}, restaurant_name),
+          name = COALESCE(${name || null}, leads.name),
+          phone = COALESCE(${phone || null}, phone),
+          source = COALESCE(${source || null}, source)
+        WHERE email = ${cleanEmail}
+      `;
+      return res.json({ ok: true, existing: true });
+    }
+    await adminSql`
+      INSERT INTO leads (restaurant_name, name, email, phone, source)
+      VALUES (${restaurant_name || null}, ${name || null}, ${cleanEmail}, ${phone || null}, ${source || 'landing'})
+    `;
+    res.status(201).json({ ok: true });
+  } catch (err) {
+    console.error('[Leads] Error:', err.message);
+    res.status(500).json({ error: 'Failed to save lead' });
+  }
+});
+
 // ==================== Tenant Middleware ====================
 
 app.use('/api', tenantMiddleware);
