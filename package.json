@@ -14,6 +14,7 @@
     "cap:ios": "npx cap open ios"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.83",
     "@capacitor/haptics": "^8.0.1",
     "@capacitor/keyboard": "^8.0.1",
     "@capacitor/splash-screen": "^8.0.1",
@@ -34,6 +35,7 @@
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.564.0",
     "multer": "^2.0.2",
+    "node-cron": "^4.2.1",
     "papaparse": "^5.5.3",
     "postgres": "^3.4.8",
     "qrcode.react": "^4.2.0",
@@ -43,7 +45,8 @@
     "react-router-dom": "^6.21.0",
     "recharts": "^2.10.3",
     "stripe": "^14.0.0",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@capacitor/android": "^8.2.0",

@@ -57,6 +57,7 @@ import customerOrderRoutes from './routes/customer-order.js';
 
 // AI Agent
 import agentRoutes from './agent/route.js';
+import { initAgentScheduler } from './agent/scheduler.js';
 
 // ==================== App Setup ====================
 
@@ -302,6 +303,7 @@ process.on('SIGINT', () => shutdownWithTimeout('SIGINT'));
     await initDb();
     await initMigrations();
     await runMigrations('default');
+    initAgentScheduler();
 
     server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`POS Lite server running on port ${PORT}`);

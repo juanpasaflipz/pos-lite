@@ -169,6 +169,7 @@ const NUMERIC_FIELDS = new Set([
   'unit_cost', 'total_amount', 'line_total', 'total_spent', 'refund_total',
   'quantity_used', 'quantity_received',
   'gross_amount', 'deductions', 'bonuses', 'net_amount', 'wage_rate', 'hours_worked',
+  'cost_usd', 'total_cost', 'avg_duration_ms',
 ]);
 
 function coerceNumerics(data: unknown): unknown {
@@ -2886,4 +2887,36 @@ export async function exportPayroll(params?: { from?: string; to?: string }): Pr
   const response = await fetch(`${base}/payroll/export${query}`, { headers });
   if (!response.ok) throw new Error('Failed to export payroll');
   return response.blob();
+}
+
+/* ==================== Agent Reports & Usage ==================== */
+
+export async function fetchAgentReports(limit = 30): Promise<any> {
+  return apiRequest(`/agent/reports?limit=${limit}`);
+}
+
+export async function fetchAgentReport(id: number): Promise<any> {
+  return apiRequest(`/agent/reports/${id}`);
+}
+
+export async function fetchAgentReportConfig(): Promise<any> {
+  return apiRequest('/agent/reports/config');
+}
+
+export async function updateAgentReportConfig(config: {
+  enabled?: boolean;
+  report_hour?: number;
+  timezone?: string;
+  delivery_method?: string;
+  custom_prompt?: string;
+}): Promise<any> {
+  return apiRequest('/agent/reports/config', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+}
+
+export async function fetchAgentUsage(): Promise<any> {
+  return apiRequest('/agent/usage');
 }

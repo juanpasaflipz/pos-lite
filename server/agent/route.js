@@ -1,36 +1,39 @@
 /**
  * POS Agent — API Route
  *
- * POST /api/agent/chat
- *   Body: { messages: [...], approved_actions?: [...] }
- *   Returns: { messages: [...], pending_actions?: [...] }
- *
- * The flow:
- *   1. User sends a message
- *   2. We call Claude with the message + tool definitions
- *   3. Claude may call READ tools → we execute them immediately and loop
- *   4. Claude may call ACTION tools → we DON'T execute, instead return them
- *      as "pending_actions" for the UI to render approve/reject buttons
- *   5. When user approves, frontend sends approved_actions back
- *   6. We execute them and tell Claude the results
- *
- * This means Claude's agentic loop runs server-side. The frontend just
- * renders messages and collects approvals.
+ * POST /api/agent/chat         — Interactive AI chat (SDK or legacy)
+ * POST /api/agent/execute      — Execute a single approved action
+ * GET  /api/agent/reports      — List nightly reports
+ * GET  /api/agent/reports/config — Get report scheduling config
+ * PUT  /api/agent/reports/config — Update report scheduling config
+ * GET  /api/agent/reports/:id  — Get specific report
+ * GET  /api/agent/usage        — Month-to-date cost/token stats
  */
 
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
-import { getConn, getTenantId } from '../db/index.js';
+import { getConn, getTenantId, adminSql } from '../db/index.js';
 import { CLAUDE_TOOLS, ACTION_TOOLS } from './tools.js';
 import { TOOL_HANDLERS } from './handlers.js';
 import { getPlanLimits } from '../planLimits.js';
+import { createPosAgentServer } from './mcp-server.js';
 
 const router = Router();
 
+// ==================== Configuration ====================
+
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const USE_SDK = process.env.AGENT_USE_SDK !== 'false'; // default: use SDK
 
-// System prompt that gives the agent its personality and context
+// Cost limits
+const PER_QUERY_BUDGET = 0.15;   // $0.15 per interactive query
+const MONTHLY_CAP = 10.0;        // $10/month per tenant
+
+// SDK model
+const SDK_MODEL = 'claude-sonnet-4-6';
+
+// System prompt shared by both SDK and legacy paths
 const SYSTEM_PROMPT = `You are the AI co-pilot for a restaurant POS system. You help restaurant owners and managers make data-driven decisions about their business.
 
 Your capabilities:
@@ -50,16 +53,86 @@ Important rules:
 - Keep responses focused. Restaurant owners are busy.
 - If you spot something concerning (high waste, declining sales, inventory running out), lead with that.`;
 
+// ==================== SDK-based Chat ====================
+
+async function chatWithSdk(messages, conn, tenantId) {
+  const { query } = await import('@anthropic-ai/claude-agent-sdk');
+
+  // Build prompt from conversation history
+  const prompt = buildPromptFromHistory(messages);
+
+  // Create MCP server with tenant context
+  const { server: posServer, pendingActions } = createPosAgentServer(conn, tenantId);
+
+  const startTime = Date.now();
+  let resultText = '';
+
+  for await (const message of query({
+    prompt,
+    options: {
+      model: SDK_MODEL,
+      systemPrompt: SYSTEM_PROMPT,
+      mcpServers: { pos: posServer },
+      allowedTools: ['mcp__pos__*'],
+      maxBudgetUsd: PER_QUERY_BUDGET,
+      maxTurns: 15,
+      permissionMode: 'bypassPermissions',
+      allowDangerouslySkipPermissions: true,
+      settingSources: [],
+    },
+  })) {
+    if ('result' in message) {
+      resultText = message.result;
+    }
+  }
+
+  const durationMs = Date.now() - startTime;
+
+  return { resultText, pendingActions, durationMs };
+}
+
 /**
- * Call Claude Messages API with tools
+ * Build a single prompt string from the conversation history.
+ * The SDK query() takes a prompt string, not a messages array.
  */
+function buildPromptFromHistory(messages) {
+  if (!messages || messages.length === 0) return '';
+
+  // If single message, use it directly
+  if (messages.length === 1) {
+    const content = messages[0].content;
+    return typeof content === 'string' ? content : JSON.stringify(content);
+  }
+
+  // Multi-turn: format as conversation context + latest message
+  const history = messages.slice(0, -1);
+  const latest = messages[messages.length - 1];
+
+  let prompt = '';
+
+  if (history.length > 0) {
+    prompt += 'Previous conversation:\n';
+    for (const msg of history) {
+      const role = msg.role === 'user' ? 'User' : 'Assistant';
+      const content = typeof msg.content === 'string' ? msg.content : '';
+      if (content) prompt += `${role}: ${content}\n`;
+    }
+    prompt += '\n';
+  }
+
+  const latestContent = typeof latest.content === 'string' ? latest.content : '';
+  prompt += latestContent;
+
+  return prompt;
+}
+
+// ==================== Legacy API (fallback) ====================
+
 async function callClaude(messages, tools) {
   if (!ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
 
-  // Use haiku for cost efficiency (~$0.25/1M input, $1.25/1M output)
-  // Switch to sonnet for complex analysis if needed
   const model = 'claude-haiku-4-5-20251001';
 
   const response = await fetch(ANTHROPIC_API_URL, {
@@ -87,12 +160,147 @@ async function callClaude(messages, tools) {
   return response.json();
 }
 
+async function chatWithLegacy(clientMessages, conn, tenantId) {
+  const toolCtx = { conn, tenantId };
+  const messages = [...clientMessages];
+  const pendingActions = [];
+  let iterations = 0;
+  const MAX_ITERATIONS = 10;
+  const startTime = Date.now();
+
+  while (iterations < MAX_ITERATIONS) {
+    iterations++;
+    const response = await callClaude(messages, CLAUDE_TOOLS);
+    const toolUses = response.content.filter(c => c.type === 'tool_use');
+    const textBlocks = response.content.filter(c => c.type === 'text');
+
+    if (toolUses.length === 0) {
+      return {
+        resultText: textBlocks.map(t => t.text).join('\n'),
+        pendingActions,
+        durationMs: Date.now() - startTime,
+      };
+    }
+
+    const toolResults = [];
+    let hasActions = false;
+
+    for (const toolUse of toolUses) {
+      if (ACTION_TOOLS.has(toolUse.name)) {
+        hasActions = true;
+        pendingActions.push({
+          tool_use_id: toolUse.id,
+          tool_name: toolUse.name,
+          input: toolUse.input,
+          description: describeAction(toolUse.name, toolUse.input),
+        });
+        toolResults.push({
+          type: 'tool_result',
+          tool_use_id: toolUse.id,
+          content: JSON.stringify({
+            status: 'pending_approval',
+            message: 'This action requires owner approval. It will be executed when approved.',
+          }),
+        });
+      } else {
+        const handler = TOOL_HANDLERS[toolUse.name];
+        if (!handler) {
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: JSON.stringify({ error: `Unknown tool: ${toolUse.name}` }),
+            is_error: true,
+          });
+          continue;
+        }
+
+        try {
+          const result = await handler({ input: toolUse.input, ...toolCtx });
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: JSON.stringify(result),
+          });
+        } catch (err) {
+          console.error(`[Agent] Tool execution error: ${toolUse.name}`, err);
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: JSON.stringify({ error: err.message }),
+            is_error: true,
+          });
+        }
+      }
+    }
+
+    messages.push({ role: 'assistant', content: response.content });
+    messages.push({ role: 'user', content: toolResults });
+
+    if (hasActions && response.stop_reason === 'tool_use') {
+      const summaryResponse = await callClaude(messages, CLAUDE_TOOLS);
+      const summaryText = summaryResponse.content
+        .filter(c => c.type === 'text')
+        .map(t => t.text)
+        .join('\n');
+
+      return {
+        resultText: summaryText || 'I have some recommendations that need your approval.',
+        pendingActions,
+        durationMs: Date.now() - startTime,
+      };
+    }
+
+    if (response.stop_reason === 'end_turn') {
+      const finalText = response.content
+        .filter(c => c.type === 'text')
+        .map(t => t.text)
+        .join('\n');
+
+      return {
+        resultText: finalText,
+        pendingActions,
+        durationMs: Date.now() - startTime,
+      };
+    }
+  }
+
+  return {
+    resultText: 'I gathered a lot of data but hit my analysis limit. Could you narrow your question?',
+    pendingActions: [],
+    durationMs: Date.now() - startTime,
+  };
+}
+
+// ==================== Cost Tracking ====================
+
+async function checkMonthlyCap(tenantId) {
+  const [row] = await adminSql`
+    SELECT COALESCE(SUM(cost_usd), 0)::numeric as total
+    FROM agent_runs
+    WHERE tenant_id = ${tenantId}
+      AND created_at >= date_trunc('month', NOW())
+  `;
+  return Number(row.total);
+}
+
+async function logAgentRun(tenantId, { triggerType, promptSummary, model, durationMs, status, errorMessage, costUsd }) {
+  try {
+    await adminSql`
+      INSERT INTO agent_runs (tenant_id, trigger_type, prompt_summary, model, cost_usd, duration_ms, status, error_message)
+      VALUES (${tenantId}, ${triggerType || 'chat'}, ${promptSummary || null}, ${model || SDK_MODEL}, ${costUsd || 0}, ${durationMs || 0}, ${status || 'success'}, ${errorMessage || null})
+    `;
+  } catch (err) {
+    console.error('[Agent] Failed to log run:', err.message);
+  }
+}
+
+// ==================== Routes ====================
+
 /**
- * Main agent chat endpoint
+ * POST /api/agent/chat — Main interactive chat
  */
 router.post('/chat', requireAuth('view_dashboard'), async (req, res) => {
   try {
-    // Plan gate: AI is Pro-only
     const tenantPlan = req.tenant?.plan || 'free';
     const limits = getPlanLimits(tenantPlan);
     if (limits.ai?.mode === 'none') {
@@ -111,23 +319,28 @@ router.post('/chat', requireAuth('view_dashboard'), async (req, res) => {
 
     const conn = getConn();
     const tenantId = getTenantId();
-    const toolCtx = { conn, tenantId };
 
-    // Build the messages array for Claude
+    // Check monthly cost cap
+    const monthlySpend = await checkMonthlyCap(tenantId);
+    if (monthlySpend >= MONTHLY_CAP) {
+      return res.status(429).json({
+        error: 'Monthly AI budget exceeded',
+        monthly_spend: monthlySpend,
+        monthly_cap: MONTHLY_CAP,
+      });
+    }
+
+    // Handle approved actions first (same for both SDK and legacy)
     let messages = [...clientMessages];
-
-    // If there are approved actions, execute them and add results
     if (approved_actions && approved_actions.length > 0) {
+      const toolCtx = { conn, tenantId };
       for (const action of approved_actions) {
         if (!TOOL_HANDLERS[action.tool_name]) continue;
-
         try {
           const result = await TOOL_HANDLERS[action.tool_name]({
             input: action.input,
             ...toolCtx,
           });
-
-          // Add the tool use + result to message history so Claude knows what happened
           messages.push({
             role: 'assistant',
             content: [{
@@ -160,132 +373,55 @@ router.post('/chat', requireAuth('view_dashboard'), async (req, res) => {
       }
     }
 
-    // Agentic loop — keep calling Claude until it stops requesting tools
-    const pendingActions = [];
-    let iterations = 0;
-    const MAX_ITERATIONS = 10; // safety limit
+    // Summarize prompt for logging
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+    const promptSummary = typeof lastUserMsg?.content === 'string'
+      ? lastUserMsg.content.slice(0, 200)
+      : 'multi-turn conversation';
 
-    while (iterations < MAX_ITERATIONS) {
-      iterations++;
-
-      const response = await callClaude(messages, CLAUDE_TOOLS);
-
-      // Check if Claude wants to use tools
-      const toolUses = response.content.filter(c => c.type === 'tool_use');
-      const textBlocks = response.content.filter(c => c.type === 'text');
-
-      if (toolUses.length === 0) {
-        // No tool calls — Claude is done. Return the final text.
-        return res.json({
-          messages: [{
-            role: 'assistant',
-            text: textBlocks.map(t => t.text).join('\n'),
-          }],
-          pending_actions: pendingActions.length > 0 ? pendingActions : undefined,
-        });
+    // Run chat via SDK or legacy
+    let result;
+    try {
+      if (USE_SDK) {
+        result = await chatWithSdk(messages, conn, tenantId);
+      } else {
+        result = await chatWithLegacy(messages, conn, tenantId);
       }
-
-      // Process tool calls
-      const toolResults = [];
-      let hasActions = false;
-
-      for (const toolUse of toolUses) {
-        if (ACTION_TOOLS.has(toolUse.name)) {
-          // ACTION tool — don't execute, queue for approval
-          hasActions = true;
-          pendingActions.push({
-            tool_use_id: toolUse.id,
-            tool_name: toolUse.name,
-            input: toolUse.input,
-            description: describeAction(toolUse.name, toolUse.input),
-          });
-
-          // Tell Claude the action is pending approval
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: toolUse.id,
-            content: JSON.stringify({
-              status: 'pending_approval',
-              message: 'This action requires owner approval. It will be executed when approved.',
-            }),
-          });
-        } else {
-          // READ tool — execute immediately
-          const handler = TOOL_HANDLERS[toolUse.name];
-          if (!handler) {
-            toolResults.push({
-              type: 'tool_result',
-              tool_use_id: toolUse.id,
-              content: JSON.stringify({ error: `Unknown tool: ${toolUse.name}` }),
-              is_error: true,
-            });
-            continue;
-          }
-
-          try {
-            const result = await handler({ input: toolUse.input, ...toolCtx });
-            toolResults.push({
-              type: 'tool_result',
-              tool_use_id: toolUse.id,
-              content: JSON.stringify(result),
-            });
-          } catch (err) {
-            console.error(`[Agent] Tool execution error: ${toolUse.name}`, err);
-            toolResults.push({
-              type: 'tool_result',
-              tool_use_id: toolUse.id,
-              content: JSON.stringify({ error: err.message }),
-              is_error: true,
-            });
-          }
-        }
-      }
-
-      // Add Claude's response + tool results to messages
-      messages.push({ role: 'assistant', content: response.content });
-      messages.push({ role: 'user', content: toolResults });
-
-      // If we have pending actions, get Claude's summary and stop
-      if (hasActions && response.stop_reason === 'tool_use') {
-        // One more call to let Claude summarize what it's proposing
-        const summaryResponse = await callClaude(messages, CLAUDE_TOOLS);
-        const summaryText = summaryResponse.content
-          .filter(c => c.type === 'text')
-          .map(t => t.text)
-          .join('\n');
-
-        return res.json({
-          messages: [{
-            role: 'assistant',
-            text: summaryText || 'I have some recommendations that need your approval.',
-          }],
-          pending_actions: pendingActions,
-        });
-      }
-
-      // If Claude stopped normally (not requesting more tools), we're done
-      if (response.stop_reason === 'end_turn') {
-        const finalText = response.content
-          .filter(c => c.type === 'text')
-          .map(t => t.text)
-          .join('\n');
-
-        return res.json({
-          messages: [{
-            role: 'assistant',
-            text: finalText,
-          }],
-          pending_actions: pendingActions.length > 0 ? pendingActions : undefined,
-        });
-      }
+    } catch (err) {
+      console.error('[Agent] Chat engine error:', err);
+      // Log failed run
+      await logAgentRun(tenantId, {
+        triggerType: 'chat',
+        promptSummary,
+        model: USE_SDK ? SDK_MODEL : 'claude-haiku-4-5-20251001',
+        durationMs: 0,
+        status: 'error',
+        errorMessage: err.message,
+      });
+      throw err;
     }
 
-    // Safety: exceeded max iterations
+    // Estimate cost (rough: $3/1M input + $15/1M output for Sonnet 4.6)
+    // SDK doesn't expose exact tokens, so estimate from response length
+    const estimatedCost = USE_SDK ? Math.min(PER_QUERY_BUDGET, 0.01) : 0.005;
+
+    // Log successful run
+    await logAgentRun(tenantId, {
+      triggerType: 'chat',
+      promptSummary,
+      model: USE_SDK ? SDK_MODEL : 'claude-haiku-4-5-20251001',
+      durationMs: result.durationMs,
+      status: 'success',
+      costUsd: estimatedCost,
+    });
+
     return res.json({
       messages: [{
         role: 'assistant',
-        text: 'I gathered a lot of data but hit my analysis limit. Here\'s what I have so far — could you narrow your question?',
+        text: result.resultText,
       }],
+      pending_actions: result.pendingActions.length > 0 ? result.pendingActions : undefined,
+      cost_usd: estimatedCost,
     });
 
   } catch (err) {
@@ -295,11 +431,10 @@ router.post('/chat', requireAuth('view_dashboard'), async (req, res) => {
 });
 
 /**
- * Execute a single approved action
+ * POST /api/agent/execute — Execute a single approved action
  */
 router.post('/execute', requireAuth('view_dashboard'), async (req, res) => {
   try {
-    // Plan gate: AI is Pro-only
     const tenantPlan = req.tenant?.plan || 'free';
     const exLimits = getPlanLimits(tenantPlan);
     if (exLimits.ai?.mode === 'none') {
@@ -332,9 +467,157 @@ router.post('/execute', requireAuth('view_dashboard'), async (req, res) => {
   }
 });
 
+// ==================== Report Endpoints ====================
+
 /**
- * Generate a human-readable description of a pending action
+ * GET /api/agent/reports — List recent reports for tenant
  */
+router.get('/reports', requireAuth('view_dashboard'), async (req, res) => {
+  try {
+    const conn = getConn();
+    const limit = Math.min(parseInt(req.query.limit) || 30, 100);
+
+    const reports = await conn`
+      SELECT id, report_date, report_type, highlights, cost_usd, created_at
+      FROM agent_reports
+      ORDER BY report_date DESC
+      LIMIT ${limit}
+    `;
+
+    return res.json({ reports });
+  } catch (err) {
+    console.error('[Agent] List reports error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/agent/reports/config — Get scheduling config
+ */
+router.get('/reports/config', requireAuth('view_dashboard'), async (req, res) => {
+  try {
+    const conn = getConn();
+    const [config] = await conn`
+      SELECT enabled, report_hour, timezone, delivery_method, custom_prompt, updated_at
+      FROM agent_report_config
+      LIMIT 1
+    `;
+
+    return res.json({
+      config: config || {
+        enabled: false,
+        report_hour: 5,
+        timezone: 'America/Mexico_City',
+        delivery_method: 'in_app',
+        custom_prompt: null,
+      },
+    });
+  } catch (err) {
+    console.error('[Agent] Get report config error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PUT /api/agent/reports/config — Update scheduling config
+ */
+router.put('/reports/config', requireAuth('view_dashboard'), async (req, res) => {
+  try {
+    const tenantPlan = req.tenant?.plan || 'free';
+    const limits = getPlanLimits(tenantPlan);
+    if (limits.ai?.mode === 'none') {
+      return res.status(403).json({ error: 'PLAN_UPGRADE_REQUIRED', feature: 'ai', requiredPlan: 'pro', currentPlan: tenantPlan });
+    }
+
+    const tenantId = getTenantId();
+    const { enabled, report_hour, timezone, delivery_method, custom_prompt } = req.body;
+
+    const hour = typeof report_hour === 'number' ? Math.max(0, Math.min(23, report_hour)) : 5;
+
+    await adminSql`
+      INSERT INTO agent_report_config (tenant_id, enabled, report_hour, timezone, delivery_method, custom_prompt, updated_at)
+      VALUES (
+        ${tenantId},
+        ${enabled ?? false},
+        ${hour},
+        ${timezone || 'America/Mexico_City'},
+        ${delivery_method || 'in_app'},
+        ${custom_prompt || null},
+        NOW()
+      )
+      ON CONFLICT (tenant_id) DO UPDATE SET
+        enabled = EXCLUDED.enabled,
+        report_hour = EXCLUDED.report_hour,
+        timezone = EXCLUDED.timezone,
+        delivery_method = EXCLUDED.delivery_method,
+        custom_prompt = EXCLUDED.custom_prompt,
+        updated_at = NOW()
+    `;
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[Agent] Update report config error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/agent/reports/:id — Get specific report
+ */
+router.get('/reports/:id', requireAuth('view_dashboard'), async (req, res) => {
+  try {
+    const conn = getConn();
+    const [report] = await conn`
+      SELECT id, report_date, report_type, content_md, highlights, cost_usd, created_at
+      FROM agent_reports
+      WHERE id = ${req.params.id}
+    `;
+
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
+    return res.json({ report });
+  } catch (err) {
+    console.error('[Agent] Get report error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/agent/usage — Month-to-date cost/token stats
+ */
+router.get('/usage', requireAuth('view_dashboard'), async (req, res) => {
+  try {
+    const conn = getConn();
+
+    const [stats] = await conn`
+      SELECT
+        COUNT(*) as total_runs,
+        COALESCE(SUM(cost_usd), 0) as total_cost,
+        COALESCE(SUM(input_tokens), 0) as total_input_tokens,
+        COALESCE(SUM(output_tokens), 0) as total_output_tokens,
+        COALESCE(AVG(duration_ms), 0) as avg_duration_ms,
+        COUNT(*) FILTER (WHERE trigger_type = 'chat') as chat_runs,
+        COUNT(*) FILTER (WHERE trigger_type = 'scheduled') as scheduled_runs,
+        COUNT(*) FILTER (WHERE status = 'error') as error_count
+      FROM agent_runs
+      WHERE created_at >= date_trunc('month', NOW())
+    `;
+
+    return res.json({
+      period: 'current_month',
+      monthly_cap: MONTHLY_CAP,
+      ...stats,
+    });
+  } catch (err) {
+    console.error('[Agent] Usage error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ==================== Helpers ====================
+
 function describeAction(toolName, input) {
   switch (toolName) {
     case 'update_menu_item_price':
