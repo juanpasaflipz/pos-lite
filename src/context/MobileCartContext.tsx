@@ -166,7 +166,7 @@ export const MobileCartProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     items: [],
     tip: 0,
     tipPercent: null,
-    quickMode: localStorage.getItem('mobileQuickMode') === '1',
+    quickMode: localStorage.getItem('mobileQuickMode') !== '0',
   });
 
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();

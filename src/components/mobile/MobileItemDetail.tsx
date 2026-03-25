@@ -5,6 +5,7 @@ import { getModifierGroupsForItem } from '../../api';
 import type { MenuItem, ModifierGroup } from '../../types';
 import { formatPrice } from '../../utils/currency';
 import { tapFeedback } from '../../lib/haptics';
+import { getGroupIcon } from '../../lib/categoryIcons';
 
 interface Props {
   item: MenuItem;
@@ -153,7 +154,7 @@ const MobileItemDetail: React.FC<Props> = ({ item, onAdd, onClose }) => {
               {groups.map((group) => (
                 <div key={group.id}>
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-base font-bold text-white">{group.name}</h3>
+                    <h3 className="text-base font-bold text-white">{getGroupIcon(group.name) ? `${getGroupIcon(group.name)} ` : ''}{group.name}</h3>
                     <span className="text-xs text-neutral-400">
                       {group.required ? t('modifier.required') : t('modifier.optional')}
                       {group.selection_type === 'multi' && ` (${t('modifier.upTo', { max: group.max_selections })})`}

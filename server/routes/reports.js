@@ -791,7 +791,7 @@ router.get('/refund-summary', requireAuth('view_reports'), async (req, res) => {
 
 const COST_CATEGORIES = [
   { key: 'food_cost', label: 'Food Cost', auto: true },
-  { key: 'labor', label: 'Labor', auto: false },
+  { key: 'labor', label: 'Labor', auto: true },
   { key: 'rent', label: 'Rent', auto: false },
   { key: 'utilities', label: 'Utilities', auto: false },
   { key: 'stripe_fees', label: 'Stripe Fees', auto: true },
@@ -874,8 +874,16 @@ router.get('/financial-projection', requireAuth('view_reports'), async (req, res
     `, [startDate, endDate]);
     const deliveryCommissions = Math.round((delRow?.total || 0) * 100) / 100;
 
+    // Auto-calculate labor from payroll payments
+    const laborRow = await get(`
+      SELECT COALESCE(SUM(net_amount), 0) as total
+      FROM payroll_payments
+      WHERE payment_date >= $1 AND payment_date <= $2
+    `, [startDate, endDate]);
+    const laborCost = Math.round((laborRow?.total || 0) * 100) / 100;
+
     // Cache auto-calculated values (only if not manually overridden)
-    const autoValues = { food_cost: foodCost, stripe_fees: stripeFees, delivery_commissions: deliveryCommissions };
+    const autoValues = { food_cost: foodCost, stripe_fees: stripeFees, delivery_commissions: deliveryCommissions, labor: laborCost };
     for (const [cat, amount] of Object.entries(autoValues)) {
       // Check if a manual override exists
       const existing = await get(`SELECT auto_calculated FROM financial_actuals WHERE category = $1 AND period = $2`, [cat, month]);

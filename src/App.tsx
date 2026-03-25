@@ -41,6 +41,7 @@ const ResetPasswordScreen = React.lazy(() => import('./screens/ResetPasswordScre
 const AccountScreen = React.lazy(() => import('./screens/AccountScreen').then(m => ({ default: m.default || (() => <div>Account</div>) })));
 const IntegrationsScreen = React.lazy(() => import('./screens/IntegrationsScreen').then(m => ({ default: m.default || (() => <div>Integrations</div>) })));
 const ExpensesScreen = React.lazy(() => import('./screens/ExpensesScreen').then(m => ({ default: m.default || (() => <div>Expenses</div>) })));
+const PayrollScreen = React.lazy(() => import('./screens/PayrollScreen').then(m => ({ default: m.default || (() => <div>Payroll</div>) })));
 const AdminDashboard = React.lazy(() => import('./screens/AdminDashboard').then(m => ({ default: m.default || (() => <div>Admin</div>) })));
 
 // AI Agent
@@ -144,6 +145,7 @@ const TenantRoutes: React.FC = () => {
       <Route path="/admin/purchase-orders" element={<ProtectedRoute element={<PurchaseOrderScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/loyalty" element={<ProtectedRoute element={<LoyaltyScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/expenses" element={<ProtectedRoute element={<ExpensesScreen />} requiredRole={['manager', 'admin']} />} />
+      <Route path="/admin/payroll" element={<ProtectedRoute element={<PayrollScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/branding" element={<ProtectedRoute element={<BrandingSettingsScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/invoicing" element={<ProtectedRoute element={<InvoicingScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/integrations" element={<ProtectedRoute element={<IntegrationsScreen />} requiredRole={['manager', 'admin']} />} />

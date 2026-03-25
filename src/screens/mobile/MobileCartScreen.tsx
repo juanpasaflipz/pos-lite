@@ -16,10 +16,8 @@ import { formatPrice, TAX_LABEL } from '../../utils/currency';
 import { tapFeedback, successFeedback, errorFeedback } from '../../lib/haptics';
 import type { Order } from '../../types';
 
-import MobileTipSelector from '../../components/mobile/MobileTipSelector';
 import MobileCashPayment from '../../components/mobile/MobileCashPayment';
 import MobileCardPayment from '../../components/mobile/MobileCardPayment';
-import MobileReceiptShare from '../../components/mobile/MobileReceiptShare';
 
 const MobileCartScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -115,14 +113,26 @@ const MobileCartScreen: React.FC = () => {
     navigate('/m/pos');
   }, [navigate]);
 
-  /* ==================== Receipt view ==================== */
+  /* ==================== Minimal success view ==================== */
   if (completedOrder) {
     return (
-      <MobileReceiptShare
-        order={completedOrder}
-        onNewOrder={handleNewOrder}
-        onDone={handleDone}
-      />
+      <div className="flex flex-col items-center justify-center h-full px-6 text-center">
+        <div className="w-20 h-20 rounded-full bg-green-600/20 flex items-center justify-center mb-4">
+          <svg className="w-10 h-10 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-1">{t('mobilePOS.orderComplete')}</h2>
+        <p className="text-neutral-400 text-sm mb-6">
+          {t('mobilePOS.orderNumber', { number: completedOrder.id })}
+        </p>
+        <button
+          onClick={handleNewOrder}
+          className="w-full max-w-xs py-4 bg-brand-600 text-white font-bold rounded-2xl text-base active:bg-brand-700 touch-manipulation"
+        >
+          {t('mobilePOS.newOrder')}
+        </button>
+      </div>
     );
   }
 
@@ -193,12 +203,6 @@ const MobileCartScreen: React.FC = () => {
       {/* Order summary + Payment */}
       {cart.items.length > 0 && (
         <div className="border-t border-neutral-800 bg-neutral-900 px-4 pt-4 pb-4" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 5rem)' }}>
-          {/* Tip selector */}
-          <div className="mb-3">
-            <p className="text-neutral-400 text-sm font-semibold mb-2">{t('mobilePOS.tipLabel')}</p>
-            <MobileTipSelector selected={cart.tipPercent} onSelect={cart.setTip} />
-          </div>
-
           {/* Totals */}
           <div className="space-y-1 mb-4">
             <div className="flex justify-between text-sm">
@@ -209,33 +213,28 @@ const MobileCartScreen: React.FC = () => {
               <span className="text-neutral-400">{t('mobilePOS.taxIncluded')}</span>
               <span className="text-neutral-300">{formatPrice(cart.tax)}</span>
             </div>
-            {cart.tip > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-neutral-400">{t('mobilePOS.tipLabel')}</span>
-                <span className="text-neutral-300">{formatPrice(cart.tip)}</span>
-              </div>
-            )}
             <div className="flex justify-between text-base font-bold pt-1">
-              <span className="text-white">{cart.tip > 0 ? t('mobilePOS.totalWithTip') : t('mobilePOS.total')}</span>
-              <span className="text-white">{formatPrice(cart.totalWithTip)}</span>
+              <span className="text-white">{t('mobilePOS.total')}</span>
+              <span className="text-white">{formatPrice(cart.total)}</span>
             </div>
           </div>
 
-          {/* Payment buttons */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Payment buttons — Cash primary, Card only if online */}
+          <div className="flex flex-col gap-3">
             <button
               onClick={() => { tapFeedback(); setShowCash(true); }}
-              className="py-3.5 bg-green-600 text-white font-semibold rounded-2xl text-sm active:bg-green-700 touch-manipulation"
+              className="w-full py-4 bg-green-600 text-white font-bold rounded-2xl text-base active:bg-green-700 touch-manipulation"
             >
               {t('mobilePOS.payWithCash')}
             </button>
-            <button
-              onClick={() => { tapFeedback(); handleCardPayment(); }}
-              disabled={!isOnline}
-              className="py-3.5 bg-brand-600 text-white font-semibold rounded-2xl text-sm active:bg-brand-700 disabled:bg-neutral-700 disabled:text-neutral-500 touch-manipulation"
-            >
-              {t('mobilePOS.payWithCard')}
-            </button>
+            {isOnline && (
+              <button
+                onClick={() => { tapFeedback(); handleCardPayment(); }}
+                className="w-full py-3 bg-neutral-800 text-neutral-300 font-semibold rounded-2xl text-sm active:bg-neutral-700 border border-neutral-700 touch-manipulation"
+              >
+                {t('mobilePOS.payWithCard')}
+              </button>
+            )}
           </div>
           {!isOnline && (
             <p className="text-amber-400 text-xs text-center mt-2">{t('offline.cashOnly')}</p>

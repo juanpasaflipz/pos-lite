@@ -25,6 +25,7 @@ import printersRoutes from './routes/printers.js';
 import orderTemplatesRoutes from './routes/order-templates.js';
 import wasteRoutes from './routes/waste.js';
 import expensesRoutes from './routes/expenses.js';
+import payrollRoutes from './routes/payroll.js';
 import purchaseOrdersRoutes from './routes/purchase-orders.js';
 import loyaltyRoutes from './routes/loyalty.js';
 
@@ -213,6 +214,7 @@ app.use('/api/printers', printersRoutes);
 app.use('/api/order-templates', orderTemplatesRoutes);
 app.use('/api/waste', wasteRoutes);
 app.use('/api/expenses', expensesRoutes);
+app.use('/api/payroll', payrollRoutes);
 app.use('/api/purchase-orders', purchaseOrdersRoutes);
 app.use('/api/loyalty', loyaltyRoutes);
 

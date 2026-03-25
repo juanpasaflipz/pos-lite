@@ -81,7 +81,7 @@ async function seedTenantDefaults(tenantId) {
     'manage_inventory', 'manage_employees', 'manage_printers', 'manage_delivery',
     'manage_modifiers', 'manage_ai', 'process_refunds', 'void_orders',
     'apply_discounts', 'view_dashboard', 'manage_permissions', 'manage_purchase_orders',
-    'manage_loyalty', 'manage_branding', 'manage_invoicing',
+    'manage_loyalty', 'manage_branding', 'manage_invoicing', 'manage_payroll',
   ];
 
   const roleDefaults = {

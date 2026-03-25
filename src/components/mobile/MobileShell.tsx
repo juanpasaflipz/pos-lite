@@ -2,7 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { Store, ShoppingBag, ChefHat, ScanBarcode, User } from 'lucide-react';
+import { Store, ChefHat, User } from 'lucide-react';
 
 interface Tab {
   path: string;
@@ -13,9 +13,7 @@ interface Tab {
 
 const tabs: Tab[] = [
   { path: '/m/pos', labelKey: 'mobile.tabPOS', icon: <Store className="w-5 h-5" /> },
-  { path: '/m/orders', labelKey: 'mobile.tabOrders', icon: <ShoppingBag className="w-5 h-5" /> },
   { path: '/m/kitchen', labelKey: 'mobile.tabKitchen', icon: <ChefHat className="w-5 h-5" /> },
-  { path: '/m/scan', labelKey: 'mobile.tabScan', icon: <ScanBarcode className="w-5 h-5" />, roles: ['manager', 'admin'] },
   { path: '/m/profile', labelKey: 'mobile.tabProfile', icon: <User className="w-5 h-5" /> },
 ];
 

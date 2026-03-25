@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { MenuCategory } from '../../types';
+import { getCategoryIcon } from '../../lib/categoryIcons';
 
 interface Props {
   categories: MenuCategory[];
@@ -21,7 +22,7 @@ const MobileCategoryTabs: React.FC<Props> = ({ categories, selected, onSelect })
             : 'bg-neutral-800 text-neutral-400'
         }`}
       >
-        {t('mobilePOS.allCategories')}
+        ⭐ {t('mobilePOS.allCategories')}
       </button>
       {categories.map((cat) => (
         <button
@@ -33,7 +34,7 @@ const MobileCategoryTabs: React.FC<Props> = ({ categories, selected, onSelect })
               : 'bg-neutral-800 text-neutral-400'
           }`}
         >
-          {cat.name}
+          {getCategoryIcon(cat.name)} {cat.name}
         </button>
       ))}
     </div>

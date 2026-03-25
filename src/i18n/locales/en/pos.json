@@ -361,7 +361,10 @@
     "hasModifiers": "Has options",
     "amountReceived": "Amount Received",
     "orderSentToKitchen": "Order sent to kitchen!",
-    "offlineOrderSaved": "Order saved offline"
+    "offlineOrderSaved": "Order saved offline",
+    "showMenu": "Show Menu",
+    "backToPOS": "Back to POS",
+    "menuDisplay": "Menu Display"
   },
   "invoice": {
     "title": "Invoice Order #{{number}}",

@@ -8,6 +8,10 @@ export interface Employee {
   created_at: string;
   permissions?: string[];
   token?: string;
+  wage_type?: 'hourly' | 'salary';
+  wage_rate?: number;
+  pay_frequency?: 'weekly' | 'biweekly' | 'monthly';
+  hire_date?: string;
 }
 
 export interface RolePermission {
@@ -1415,6 +1419,46 @@ export interface SettlementOverview {
     total_repaid: number;
   };
   capital_pool: CapitalPool | null;
+}
+
+/* Payroll Types */
+export interface PayrollPayment {
+  id: number;
+  tenant_id: string;
+  employee_id: number;
+  employee_name?: string;
+  pay_period_start: string;
+  pay_period_end: string;
+  hours_worked: number | null;
+  gross_amount: number;
+  deductions: number;
+  bonuses: number;
+  net_amount: number;
+  payment_method: 'cash' | 'transfer' | 'check';
+  payment_date: string;
+  notes?: string;
+  created_by: number | null;
+  created_by_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PayrollSummary {
+  total_gross: number;
+  total_deductions: number;
+  total_bonuses: number;
+  total_net: number;
+  employees_paid: number;
+}
+
+export interface PayrollEmployeeWage {
+  id: number;
+  name: string;
+  role: string;
+  wage_type: 'hourly' | 'salary';
+  wage_rate: number;
+  pay_frequency: 'weekly' | 'biweekly' | 'monthly';
+  hire_date: string | null;
 }
 
 /* API Response Types */

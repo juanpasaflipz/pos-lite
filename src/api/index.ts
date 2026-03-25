@@ -83,6 +83,9 @@ import {
   MerchantBankAccount,
   MerchantAdvance,
   MCARepayment,
+  PayrollPayment,
+  PayrollSummary,
+  PayrollEmployeeWage,
 } from '../types';
 
 // Employee ID for display/sync use - set after login
@@ -165,6 +168,7 @@ const NUMERIC_FIELDS = new Set([
   'delivery_fee', 'platform_commission', 'custom_price', 'price_amount',
   'unit_cost', 'total_amount', 'line_total', 'total_spent', 'refund_total',
   'quantity_used', 'quantity_received',
+  'gross_amount', 'deductions', 'bonuses', 'net_amount', 'wage_rate', 'hours_worked',
 ]);
 
 function coerceNumerics(data: unknown): unknown {
@@ -2817,3 +2821,69 @@ export async function exportExpenses(params?: { from?: string; to?: string }): P
   return response.blob();
 }
 
+// ==================== Payroll ====================
+
+export async function getPayrollPayments(params?: { from?: string; to?: string; employee_id?: number }): Promise<PayrollPayment[]> {
+  const qs = new URLSearchParams();
+  if (params?.from) qs.set('from', params.from);
+  if (params?.to) qs.set('to', params.to);
+  if (params?.employee_id) qs.set('employee_id', String(params.employee_id));
+  const query = qs.toString() ? `?${qs}` : '';
+  return apiRequest(`/payroll${query}`);
+}
+
+export async function getPayrollSummary(params?: { from?: string; to?: string }): Promise<PayrollSummary> {
+  const qs = new URLSearchParams();
+  if (params?.from) qs.set('from', params.from);
+  if (params?.to) qs.set('to', params.to);
+  const query = qs.toString() ? `?${qs}` : '';
+  return apiRequest(`/payroll/summary${query}`);
+}
+
+export async function getPayrollEmployees(): Promise<PayrollEmployeeWage[]> {
+  return apiRequest('/payroll/employees');
+}
+
+export async function createPayrollPayment(data: Partial<PayrollPayment>): Promise<PayrollPayment> {
+  return apiRequest('/payroll', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updatePayrollPayment(id: number, data: Partial<PayrollPayment>): Promise<PayrollPayment> {
+  return apiRequest(`/payroll/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deletePayrollPayment(id: number): Promise<{ success: boolean }> {
+  return apiRequest(`/payroll/${id}`, { method: 'DELETE' });
+}
+
+export async function updateEmployeeWage(id: number, data: Partial<PayrollEmployeeWage>): Promise<PayrollEmployeeWage> {
+  return apiRequest(`/payroll/employee-wage/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function exportPayroll(params?: { from?: string; to?: string }): Promise<Blob> {
+  const qs = new URLSearchParams();
+  if (params?.from) qs.set('from', params.from);
+  if (params?.to) qs.set('to', params.to);
+  const query = qs.toString() ? `?${qs}` : '';
+  const base = FALLBACK_URLS.length ? await resolveBaseUrl() : activeBaseUrl;
+  const headers: Record<string, string> = {};
+  if (currentEmployeeToken) {
+    headers['Authorization'] = `Bearer ${currentEmployeeToken}`;
+  }
+  if (!isCapacitor && window.location.hostname === 'localhost') {
+    const tenantId = localStorage.getItem('tenant_id');
+    if (tenantId) headers['X-Tenant-ID'] = tenantId;
+  }
+  const response = await fetch(`${base}/payroll/export${query}`, { headers });
+  if (!response.ok) throw new Error('Failed to export payroll');
+  return response.blob();
+}

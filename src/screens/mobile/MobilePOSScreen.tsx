@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Zap, ZapOff } from 'lucide-react';
+import { Zap, ZapOff, Eye } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useMobileCart } from '../../context/MobileCartContext';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
@@ -19,6 +19,7 @@ import MobileCategoryTabs from '../../components/mobile/MobileCategoryTabs';
 import MobileMenuGrid from '../../components/mobile/MobileMenuGrid';
 import MobileCartBar from '../../components/mobile/MobileCartBar';
 import MobileItemDetail from '../../components/mobile/MobileItemDetail';
+import MobileMenuDisplay from '../../components/mobile/MobileMenuDisplay';
 
 const MobilePOSScreen: React.FC = () => {
   const { currentEmployee } = useAuth();
@@ -33,6 +34,7 @@ const MobilePOSScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [detailItem, setDetailItem] = useState<MenuItem | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [menuDisplayMode, setMenuDisplayMode] = useState(false);
 
   // Load menu data
   useEffect(() => {
@@ -122,17 +124,26 @@ const MobilePOSScreen: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-3 pb-1">
         <h1 className="text-lg font-bold text-white">{t('mobilePOS.title')}</h1>
-        <button
-          onClick={() => { tapFeedback(); cart.toggleQuickMode(); }}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors touch-manipulation ${
-            cart.quickMode
-              ? 'bg-green-600/20 text-green-400 border border-green-600/40'
-              : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
-          }`}
-        >
-          {cart.quickMode ? <Zap className="w-3.5 h-3.5" /> : <ZapOff className="w-3.5 h-3.5" />}
-          {t('mobilePOS.quickMode')}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { tapFeedback(); setMenuDisplayMode(true); }}
+            className="p-2 rounded-full bg-neutral-800 text-neutral-400 border border-neutral-700 touch-manipulation"
+            title={t('mobilePOS.showMenu')}
+          >
+            <Eye className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => { tapFeedback(); cart.toggleQuickMode(); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors touch-manipulation ${
+              cart.quickMode
+                ? 'bg-green-600/20 text-green-400 border border-green-600/40'
+                : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
+            }`}
+          >
+            {cart.quickMode ? <Zap className="w-3.5 h-3.5" /> : <ZapOff className="w-3.5 h-3.5" />}
+            {t('mobilePOS.quickMode')}
+          </button>
+        </div>
       </div>
 
       {/* Offline indicator */}
@@ -182,6 +193,11 @@ const MobilePOSScreen: React.FC = () => {
         <div className="fixed top-16 left-4 right-4 z-50 bg-neutral-800 text-white text-sm font-semibold py-3 px-4 rounded-2xl text-center shadow-lg">
           {toast}
         </div>
+      )}
+
+      {/* Menu Display Mode overlay */}
+      {menuDisplayMode && (
+        <MobileMenuDisplay onClose={() => setMenuDisplayMode(false)} />
       )}
     </div>
   );

@@ -361,7 +361,10 @@
     "hasModifiers": "Tiene opciones",
     "amountReceived": "Monto Recibido",
     "orderSentToKitchen": "¡Orden enviada a cocina!",
-    "offlineOrderSaved": "Orden guardada sin conexión"
+    "offlineOrderSaved": "Orden guardada sin conexión",
+    "showMenu": "Mostrar Menú",
+    "backToPOS": "Volver al POS",
+    "menuDisplay": "Mostrar Menú"
   },
   "invoice": {
     "title": "Facturar Orden #{{number}}",
