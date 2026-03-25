@@ -13,10 +13,14 @@ import { adminSql, tenantSql } from '../db/index.js';
 import { AGENT_TOOLS } from './tools.js';
 import { TOOL_HANDLERS } from './handlers.js';
 
-const REPORT_BUDGET = 0.05; // $0.05 per scheduled report
+const REPORT_BUDGET = 0.05; // $0.05 per scheduled report (direct API)
+const BATCH_REPORT_BUDGET = 0.025; // $0.025 per batch report (50% off)
 const REPORT_MODEL = 'claude-sonnet-4-6';
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+const ANTHROPIC_BATCHES_URL = 'https://api.anthropic.com/v1/messages/batches';
 const MAX_ITERATIONS = 12;
+const BATCH_POLL_INTERVAL_MS = 30_000; // 30s between polls
+const BATCH_TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2h max wait
 
 // Read-only tools only (no action tools in scheduled reports)
 const READ_ONLY_TOOLS = AGENT_TOOLS
@@ -24,6 +28,8 @@ const READ_ONLY_TOOLS = AGENT_TOOLS
   .map(({ category, ...tool }) => tool);
 
 const REPORT_SYSTEM_PROMPT = 'You are a restaurant business analyst. Generate clear, data-driven reports for restaurant owners. Always call data tools before writing the report — never guess at numbers.';
+
+const BATCH_REPORT_SYSTEM_PROMPT = 'You are a restaurant business analyst. Generate a concise daily business report from the provided data. All numbers are pre-fetched and accurate — do not ask for more data.';
 
 const NIGHTLY_REPORT_PROMPT = `Generate a concise daily business report for yesterday. Include:
 1. Revenue summary vs same day last week
@@ -68,6 +74,181 @@ function getYesterdayInTimezone(tz) {
     const yesterday = new Date(Date.now() - 86400000);
     return yesterday.toISOString().slice(0, 10);
   }
+}
+
+/**
+ * Pre-fetch all report data from the DB in parallel.
+ * Returns a single JSON snapshot that can be stuffed into the prompt.
+ */
+async function prefetchReportData(conn, tenantId, yesterday) {
+  const lastWeekDate = new Date(new Date(yesterday).getTime() - 7 * 86400000)
+    .toISOString().slice(0, 10);
+
+  const [sales, inventory, waste, menu, expenses, lastWeekSales] = await Promise.all([
+    TOOL_HANDLERS.get_sales_summary({ input: { start_date: yesterday, end_date: yesterday }, conn }),
+    TOOL_HANDLERS.get_inventory_status({ input: { only_low_stock: false }, conn }),
+    TOOL_HANDLERS.get_waste_analysis({ input: { days: 1 }, conn }),
+    TOOL_HANDLERS.get_menu_performance({ input: { days: 1 }, conn }),
+    TOOL_HANDLERS.get_expense_summary({ input: { start_date: yesterday, end_date: yesterday }, conn }),
+    TOOL_HANDLERS.get_sales_summary({ input: { start_date: lastWeekDate, end_date: lastWeekDate }, conn }),
+  ]);
+
+  return { yesterday, sales, last_week_sales: lastWeekSales, inventory, waste, menu, expenses };
+}
+
+/**
+ * Build the batch prompt with pre-fetched data inline.
+ */
+function buildBatchPrompt(prefetchedData, customPrompt) {
+  const dataBlock = JSON.stringify(prefetchedData);
+  const instructions = customPrompt || `Write a report covering:
+1. Revenue summary vs same day last week
+2. Top 5 selling items and notable changes
+3. Inventory alerts (low stock, trending toward stockout)
+4. Waste summary if any was logged
+5. One actionable recommendation for today
+
+Be concise. Use bullet points. Lead with the most important insight. Format in markdown.`;
+
+  return `Here is yesterday's data (pre-fetched, all numbers are accurate):
+
+<data>
+${dataBlock}
+</data>
+
+${instructions}`;
+}
+
+/**
+ * Submit a batch of report requests to the Anthropic Batches API.
+ */
+async function submitReportBatch(batchRequests) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured');
+
+  const response = await fetch(ANTHROPIC_BATCHES_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({ requests: batchRequests }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Batch API error: ${response.status} — ${error.slice(0, 300)}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Poll a batch until processing_status === 'ended' or timeout.
+ */
+async function pollBatchCompletion(batchId) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < BATCH_TIMEOUT_MS) {
+    await new Promise(r => setTimeout(r, BATCH_POLL_INTERVAL_MS));
+
+    const response = await fetch(`${ANTHROPIC_BATCHES_URL}/${batchId}`, {
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Batch poll error: ${response.status} — ${error.slice(0, 200)}`);
+    }
+
+    const batch = await response.json();
+    if (batch.processing_status === 'ended') return batch;
+
+    console.log(`[Scheduler] Batch ${batchId}: ${batch.request_counts?.processing ?? '?'} processing, ${batch.request_counts?.succeeded ?? 0} succeeded`);
+  }
+
+  throw new Error(`Batch ${batchId} timed out after ${BATCH_TIMEOUT_MS / 60000} minutes`);
+}
+
+/**
+ * Stream batch results (JSONL) and store each report.
+ * tenantMap: { custom_id → { tenant_id, yesterday, startTime } }
+ */
+async function processBatchResults(batchId, tenantMap) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+
+  const response = await fetch(`${ANTHROPIC_BATCHES_URL}/${batchId}/results`, {
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Batch results error: ${response.status} — ${error.slice(0, 200)}`);
+  }
+
+  const text = await response.text();
+  const lines = text.split('\n').filter(l => l.trim());
+
+  let successCount = 0;
+  let errorCount = 0;
+
+  for (const line of lines) {
+    try {
+      const result = JSON.parse(line);
+      const meta = tenantMap[result.custom_id];
+      if (!meta) {
+        console.error(`[Scheduler] Unknown custom_id in batch result: ${result.custom_id}`);
+        continue;
+      }
+
+      const durationMs = Date.now() - meta.startTime;
+
+      if (result.result?.type === 'succeeded') {
+        const message = result.result.message;
+        const reportText = message.content
+          .filter(c => c.type === 'text')
+          .map(c => c.text)
+          .join('\n');
+
+        if (reportText) {
+          await adminSql`
+            INSERT INTO agent_reports (tenant_id, report_date, report_type, content_md, cost_usd)
+            VALUES (${meta.tenant_id}, ${meta.yesterday}::date, 'nightly', ${reportText}, ${BATCH_REPORT_BUDGET})
+            ON CONFLICT (tenant_id, report_date, report_type) DO NOTHING
+          `;
+
+          await adminSql`
+            INSERT INTO agent_runs (tenant_id, trigger_type, prompt_summary, model, cost_usd, duration_ms, status)
+            VALUES (${meta.tenant_id}, 'scheduled', 'Nightly report (batch)', ${REPORT_MODEL}, ${BATCH_REPORT_BUDGET}, ${durationMs}, 'success')
+          `;
+
+          successCount++;
+          console.log(`[Scheduler] Batch report stored for tenant ${meta.tenant_id}`);
+        }
+      } else {
+        const errorMsg = result.result?.error?.message || result.result?.type || 'Unknown batch error';
+        await adminSql`
+          INSERT INTO agent_runs (tenant_id, trigger_type, prompt_summary, model, duration_ms, status, error_message)
+          VALUES (${meta.tenant_id}, 'scheduled', 'Nightly report (batch)', ${REPORT_MODEL}, ${durationMs}, 'error', ${errorMsg})
+        `;
+        errorCount++;
+        console.error(`[Scheduler] Batch report failed for tenant ${meta.tenant_id}: ${errorMsg}`);
+      }
+    } catch (parseErr) {
+      console.error(`[Scheduler] Failed to parse batch result line:`, parseErr.message);
+      errorCount++;
+    }
+  }
+
+  return { successCount, errorCount };
 }
 
 /**
@@ -179,6 +360,9 @@ async function generateReport(tenantId, customPrompt) {
  * Main scheduler tick — runs every hour.
  * Finds tenants whose report_hour matches the current hour in their timezone
  * and generates reports for them.
+ *
+ * For 1 tenant: uses direct API (faster, no batch overhead).
+ * For 2+ tenants: pre-fetches data and submits a single batch (50% cheaper).
  */
 async function schedulerTick() {
   try {
@@ -193,16 +377,15 @@ async function schedulerTick() {
 
     if (configs.length === 0) return;
 
+    // Filter to tenants eligible right now (correct hour, no existing report)
+    const eligible = [];
     for (const config of configs) {
       try {
         const currentHour = getCurrentHourInTimezone(config.timezone);
-
-        // Skip if not the right hour
         if (currentHour !== config.report_hour) continue;
 
         const yesterday = getYesterdayInTimezone(config.timezone);
 
-        // Check if report already exists for yesterday
         const [existing] = await adminSql`
           SELECT id FROM agent_reports
           WHERE tenant_id = ${config.tenant_id}
@@ -210,42 +393,106 @@ async function schedulerTick() {
             AND report_type = 'nightly'
         `;
 
-        if (existing) continue; // Already generated
+        if (existing) continue;
 
-        console.log(`[Scheduler] Generating nightly report for tenant ${config.tenant_id} (${yesterday})`);
-
-        const { resultText, durationMs, error } = await generateReport(
-          config.tenant_id,
-          config.custom_prompt,
-        );
-
-        if (resultText) {
-          // Store the report
-          await adminSql`
-            INSERT INTO agent_reports (tenant_id, report_date, report_type, content_md, cost_usd)
-            VALUES (${config.tenant_id}, ${yesterday}::date, 'nightly', ${resultText}, ${REPORT_BUDGET})
-            ON CONFLICT (tenant_id, report_date, report_type) DO NOTHING
-          `;
-
-          // Log successful run
-          await adminSql`
-            INSERT INTO agent_runs (tenant_id, trigger_type, prompt_summary, model, cost_usd, duration_ms, status)
-            VALUES (${config.tenant_id}, 'scheduled', 'Nightly report', ${REPORT_MODEL}, ${REPORT_BUDGET}, ${durationMs}, 'success')
-          `;
-
-          console.log(`[Scheduler] Report generated for tenant ${config.tenant_id} in ${durationMs}ms`);
-        } else {
-          // Log failed run
-          await adminSql`
-            INSERT INTO agent_runs (tenant_id, trigger_type, prompt_summary, model, duration_ms, status, error_message)
-            VALUES (${config.tenant_id}, 'scheduled', 'Nightly report', ${REPORT_MODEL}, ${durationMs}, 'error', ${error || 'Empty result'})
-          `;
-        }
+        eligible.push({ ...config, yesterday });
       } catch (err) {
-        console.error(`[Scheduler] Error processing tenant ${config.tenant_id}:`, err.message);
-        // Continue to next tenant — don't let one failure stop others
+        console.error(`[Scheduler] Error checking tenant ${config.tenant_id}:`, err.message);
       }
     }
+
+    if (eligible.length === 0) return;
+
+    // Single tenant — use direct API for speed (batches have minimum latency)
+    if (eligible.length === 1) {
+      const config = eligible[0];
+      console.log(`[Scheduler] Generating nightly report for tenant ${config.tenant_id} (${config.yesterday}) — direct API`);
+
+      const { resultText, durationMs, error } = await generateReport(
+        config.tenant_id,
+        config.custom_prompt,
+      );
+
+      if (resultText) {
+        await adminSql`
+          INSERT INTO agent_reports (tenant_id, report_date, report_type, content_md, cost_usd)
+          VALUES (${config.tenant_id}, ${config.yesterday}::date, 'nightly', ${resultText}, ${REPORT_BUDGET})
+          ON CONFLICT (tenant_id, report_date, report_type) DO NOTHING
+        `;
+        await adminSql`
+          INSERT INTO agent_runs (tenant_id, trigger_type, prompt_summary, model, cost_usd, duration_ms, status)
+          VALUES (${config.tenant_id}, 'scheduled', 'Nightly report', ${REPORT_MODEL}, ${REPORT_BUDGET}, ${durationMs}, 'success')
+        `;
+        console.log(`[Scheduler] Report generated for tenant ${config.tenant_id} in ${durationMs}ms`);
+      } else {
+        await adminSql`
+          INSERT INTO agent_runs (tenant_id, trigger_type, prompt_summary, model, duration_ms, status, error_message)
+          VALUES (${config.tenant_id}, 'scheduled', 'Nightly report', ${REPORT_MODEL}, ${durationMs}, 'error', ${error || 'Empty result'})
+        `;
+      }
+      return;
+    }
+
+    // Multiple tenants — batch flow (50% cheaper)
+    console.log(`[Scheduler] Batch report generation for ${eligible.length} tenants`);
+    const startTime = Date.now();
+    const batchRequests = [];
+    const tenantMap = {}; // custom_id → metadata
+
+    for (const config of eligible) {
+      let conn;
+      try {
+        conn = await tenantSql.reserve();
+        await conn`SELECT set_config('app.tenant_id', ${config.tenant_id}, true)`;
+
+        const data = await prefetchReportData(conn, config.tenant_id, config.yesterday);
+        const prompt = buildBatchPrompt(data, config.custom_prompt);
+        const customId = `tenant_${config.tenant_id}`;
+
+        batchRequests.push({
+          custom_id: customId,
+          params: {
+            model: REPORT_MODEL,
+            max_tokens: 4096,
+            system: BATCH_REPORT_SYSTEM_PROMPT,
+            messages: [{ role: 'user', content: prompt }],
+          },
+        });
+
+        tenantMap[customId] = {
+          tenant_id: config.tenant_id,
+          yesterday: config.yesterday,
+          startTime,
+        };
+
+        console.log(`[Scheduler] Pre-fetched data for tenant ${config.tenant_id}`);
+      } catch (err) {
+        console.error(`[Scheduler] Pre-fetch failed for tenant ${config.tenant_id}:`, err.message);
+        await adminSql`
+          INSERT INTO agent_runs (tenant_id, trigger_type, prompt_summary, model, duration_ms, status, error_message)
+          VALUES (${config.tenant_id}, 'scheduled', 'Nightly report (batch)', ${REPORT_MODEL}, ${Date.now() - startTime}, 'error', ${`Pre-fetch failed: ${err.message}`})
+        `;
+      } finally {
+        if (conn) await conn.release();
+      }
+    }
+
+    if (batchRequests.length === 0) {
+      console.log('[Scheduler] No batch requests to submit (all pre-fetches failed)');
+      return;
+    }
+
+    // Submit batch
+    const batch = await submitReportBatch(batchRequests);
+    console.log(`[Scheduler] Batch submitted: ${batch.id} (${batchRequests.length} requests)`);
+
+    // Poll until complete
+    const completedBatch = await pollBatchCompletion(batch.id);
+    console.log(`[Scheduler] Batch ${batch.id} completed: ${completedBatch.request_counts?.succeeded ?? 0} succeeded, ${completedBatch.request_counts?.errored ?? 0} errored`);
+
+    // Process results
+    const { successCount, errorCount } = await processBatchResults(batch.id, tenantMap);
+    console.log(`[Scheduler] Batch results processed: ${successCount} reports stored, ${errorCount} errors`);
   } catch (err) {
     console.error('[Scheduler] Tick error:', err.message);
   }
