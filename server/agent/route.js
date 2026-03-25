@@ -1,7 +1,7 @@
 /**
  * POS Agent — API Route
  *
- * POST /api/agent/chat         — Interactive AI chat (SDK or legacy)
+ * POST /api/agent/chat         — Interactive AI chat (Haiku for chat, Sonnet for reports)
  * POST /api/agent/execute      — Execute a single approved action
  * GET  /api/agent/reports      — List nightly reports
  * GET  /api/agent/reports/config — Get report scheduling config
@@ -23,11 +23,11 @@ const router = Router();
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const CHAT_MODEL = 'claude-sonnet-4-6';
+const CHAT_MODEL = 'claude-haiku-4-5-20251001'; // Haiku for interactive chat (fast + cheap)
 
 // Cost limits
-const PER_QUERY_BUDGET = 0.15;   // $0.15 per interactive query
-const MONTHLY_CAP = 10.0;        // $10/month per tenant
+const PER_QUERY_BUDGET = 0.05;   // $0.05 per interactive query
+const MONTHLY_CAP = 5.0;         // $5/month per tenant
 
 // System prompt shared by both SDK and legacy paths
 const SYSTEM_PROMPT = `You are the AI co-pilot for a restaurant POS system. You help restaurant owners and managers make data-driven decisions about their business.
@@ -210,7 +210,7 @@ async function logAgentRun(tenantId, { triggerType, promptSummary, model, durati
   try {
     await adminSql`
       INSERT INTO agent_runs (tenant_id, trigger_type, prompt_summary, model, cost_usd, duration_ms, status, error_message)
-      VALUES (${tenantId}, ${triggerType || 'chat'}, ${promptSummary || null}, ${model || SDK_MODEL}, ${costUsd || 0}, ${durationMs || 0}, ${status || 'success'}, ${errorMessage || null})
+      VALUES (${tenantId}, ${triggerType || 'chat'}, ${promptSummary || null}, ${model || CHAT_MODEL}, ${costUsd || 0}, ${durationMs || 0}, ${status || 'success'}, ${errorMessage || null})
     `;
   } catch (err) {
     console.error('[Agent] Failed to log run:', err.message);
@@ -319,8 +319,8 @@ router.post('/chat', requireAuth('view_dashboard'), async (req, res) => {
       throw err;
     }
 
-    // Estimate cost (rough: $3/1M input + $15/1M output for Sonnet 4.6)
-    const estimatedCost = 0.01;
+    // Estimate cost (rough: $1/1M input + $5/1M output for Haiku 4.5)
+    const estimatedCost = 0.002;
 
     // Log successful run
     await logAgentRun(tenantId, {
@@ -332,6 +332,8 @@ router.post('/chat', requireAuth('view_dashboard'), async (req, res) => {
       costUsd: estimatedCost,
     });
 
+    const updatedSpend = monthlySpend + estimatedCost;
+
     return res.json({
       messages: [{
         role: 'assistant',
@@ -339,6 +341,12 @@ router.post('/chat', requireAuth('view_dashboard'), async (req, res) => {
       }],
       pending_actions: result.pendingActions.length > 0 ? result.pendingActions : undefined,
       cost_usd: estimatedCost,
+      usage: {
+        monthly_spend: updatedSpend,
+        monthly_cap: MONTHLY_CAP,
+        monthly_remaining: Math.max(0, MONTHLY_CAP - updatedSpend),
+        queries_used: Math.round(updatedSpend / estimatedCost),
+      },
     });
 
   } catch (err) {
@@ -522,9 +530,14 @@ router.get('/usage', requireAuth('view_dashboard'), async (req, res) => {
       WHERE created_at >= date_trunc('month', NOW())
     `;
 
+    const totalCost = Number(stats.total_cost) || 0;
+    const remaining = Math.max(0, MONTHLY_CAP - totalCost);
+
     return res.json({
       period: 'current_month',
       monthly_cap: MONTHLY_CAP,
+      monthly_spend: totalCost,
+      monthly_remaining: remaining,
       ...stats,
     });
   } catch (err) {

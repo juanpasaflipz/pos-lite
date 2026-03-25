@@ -2,9 +2,10 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   MessageSquare, Send, X, Bot, User, CheckCircle, XCircle,
-  Loader2, Sparkles, ChevronDown, AlertTriangle, FileText
+  Loader2, Sparkles, ChevronDown, AlertTriangle, FileText, Zap
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { fetchAgentUsage } from '../../api/index';
 
 const AgentReports = React.lazy(() => import('./AgentReports'));
 
@@ -23,6 +24,13 @@ interface ChatMessage {
   cost_usd?: number;
   pending_actions?: PendingAction[];
   action_results?: { tool_name: string; success: boolean; message: string }[];
+}
+
+interface UsageInfo {
+  monthly_spend: number;
+  monthly_cap: number;
+  monthly_remaining: number;
+  queries_used: number;
 }
 
 interface AgentChatProps {
@@ -50,6 +58,7 @@ export default function AgentChat({ isOpen, onClose }: AgentChatProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [conversationHistory, setConversationHistory] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'chat' | 'reports'>('chat');
+  const [usage, setUsage] = useState<UsageInfo | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -64,6 +73,20 @@ export default function AgentChat({ isOpen, onClose }: AgentChatProps) {
       setTimeout(() => inputRef.current?.focus(), 200);
     }
   }, [isOpen, activeTab]);
+
+  // Fetch usage on mount
+  useEffect(() => {
+    if (isOpen) {
+      fetchAgentUsage()
+        .then((data) => setUsage({
+          monthly_spend: Number(data.monthly_spend) || 0,
+          monthly_cap: Number(data.monthly_cap) || 5,
+          monthly_remaining: Number(data.monthly_remaining) || 5,
+          queries_used: Number(data.chat_runs) || 0,
+        }))
+        .catch(() => {});
+    }
+  }, [isOpen]);
 
   // ==================== API Calls ====================
 
@@ -117,6 +140,16 @@ export default function AgentChat({ isOpen, onClose }: AgentChatProps) {
         // Update conversation history
         newHistory.push({ role: 'assistant', content: data.messages[0].text });
         setConversationHistory(newHistory);
+
+        // Update usage from response
+        if (data.usage) {
+          setUsage({
+            monthly_spend: data.usage.monthly_spend,
+            monthly_cap: data.usage.monthly_cap,
+            monthly_remaining: data.usage.monthly_remaining,
+            queries_used: data.usage.queries_used,
+          });
+        }
       }
     } catch (err: any) {
       setMessages(prev => [...prev, {
@@ -381,6 +414,30 @@ export default function AgentChat({ isOpen, onClose }: AgentChatProps) {
 
           {/* Input */}
           <div className="border-t border-neutral-700 p-3 bg-neutral-800">
+            {/* Usage bar */}
+            {usage && (
+              <div className="mb-2 px-1">
+                <div className="flex items-center justify-between text-[10px] text-neutral-500 mb-1">
+                  <span className="flex items-center gap-1">
+                    <Zap className="w-3 h-3" />
+                    {usage.queries_used} queries this month
+                  </span>
+                  <span>${usage.monthly_spend.toFixed(2)} / ${usage.monthly_cap.toFixed(2)}</span>
+                </div>
+                <div className="h-1 bg-neutral-700 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      usage.monthly_spend / usage.monthly_cap > 0.8
+                        ? 'bg-red-500'
+                        : usage.monthly_spend / usage.monthly_cap > 0.5
+                        ? 'bg-yellow-500'
+                        : 'bg-brand-500'
+                    }`}
+                    style={{ width: `${Math.min(100, (usage.monthly_spend / usage.monthly_cap) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
             <form
               onSubmit={(e) => { e.preventDefault(); sendMessage(input); }}
               className="flex gap-2"
