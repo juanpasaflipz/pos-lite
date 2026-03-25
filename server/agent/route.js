@@ -16,7 +16,6 @@ import { getConn, getTenantId, adminSql } from '../db/index.js';
 import { CLAUDE_TOOLS, ACTION_TOOLS } from './tools.js';
 import { TOOL_HANDLERS } from './handlers.js';
 import { getPlanLimits } from '../planLimits.js';
-import { createPosAgentServer } from './mcp-server.js';
 
 const router = Router();
 
@@ -24,14 +23,11 @@ const router = Router();
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const USE_SDK = process.env.AGENT_USE_SDK !== 'false'; // default: use SDK
+const CHAT_MODEL = 'claude-sonnet-4-6';
 
 // Cost limits
 const PER_QUERY_BUDGET = 0.15;   // $0.15 per interactive query
 const MONTHLY_CAP = 10.0;        // $10/month per tenant
-
-// SDK model
-const SDK_MODEL = 'claude-sonnet-4-6';
 
 // System prompt shared by both SDK and legacy paths
 const SYSTEM_PROMPT = `You are the AI co-pilot for a restaurant POS system. You help restaurant owners and managers make data-driven decisions about their business.
@@ -53,87 +49,14 @@ Important rules:
 - Keep responses focused. Restaurant owners are busy.
 - If you spot something concerning (high waste, declining sales, inventory running out), lead with that.`;
 
-// ==================== SDK-based Chat ====================
-
-async function chatWithSdk(messages, conn, tenantId) {
-  const { query } = await import('@anthropic-ai/claude-agent-sdk');
-
-  // Build prompt from conversation history
-  const prompt = buildPromptFromHistory(messages);
-
-  // Create MCP server with tenant context
-  const { server: posServer, pendingActions } = createPosAgentServer(conn, tenantId);
-
-  const startTime = Date.now();
-  let resultText = '';
-
-  for await (const message of query({
-    prompt,
-    options: {
-      model: SDK_MODEL,
-      systemPrompt: SYSTEM_PROMPT,
-      mcpServers: { pos: posServer },
-      allowedTools: ['mcp__pos__*'],
-      maxBudgetUsd: PER_QUERY_BUDGET,
-      maxTurns: 15,
-      permissionMode: 'bypassPermissions',
-      allowDangerouslySkipPermissions: true,
-      settingSources: [],
-    },
-  })) {
-    if ('result' in message) {
-      resultText = message.result;
-    }
-  }
-
-  const durationMs = Date.now() - startTime;
-
-  return { resultText, pendingActions, durationMs };
-}
-
-/**
- * Build a single prompt string from the conversation history.
- * The SDK query() takes a prompt string, not a messages array.
- */
-function buildPromptFromHistory(messages) {
-  if (!messages || messages.length === 0) return '';
-
-  // If single message, use it directly
-  if (messages.length === 1) {
-    const content = messages[0].content;
-    return typeof content === 'string' ? content : JSON.stringify(content);
-  }
-
-  // Multi-turn: format as conversation context + latest message
-  const history = messages.slice(0, -1);
-  const latest = messages[messages.length - 1];
-
-  let prompt = '';
-
-  if (history.length > 0) {
-    prompt += 'Previous conversation:\n';
-    for (const msg of history) {
-      const role = msg.role === 'user' ? 'User' : 'Assistant';
-      const content = typeof msg.content === 'string' ? msg.content : '';
-      if (content) prompt += `${role}: ${content}\n`;
-    }
-    prompt += '\n';
-  }
-
-  const latestContent = typeof latest.content === 'string' ? latest.content : '';
-  prompt += latestContent;
-
-  return prompt;
-}
-
-// ==================== Legacy API (fallback) ====================
+// ==================== Claude API ====================
 
 async function callClaude(messages, tools) {
   if (!ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
 
-  const model = 'claude-haiku-4-5-20251001';
+  const model = CHAT_MODEL;
 
   const response = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
@@ -160,7 +83,7 @@ async function callClaude(messages, tools) {
   return response.json();
 }
 
-async function chatWithLegacy(clientMessages, conn, tenantId) {
+async function chatWithClaude(clientMessages, conn, tenantId) {
   const toolCtx = { conn, tenantId };
   const messages = [...clientMessages];
   const pendingActions = [];
@@ -379,21 +302,16 @@ router.post('/chat', requireAuth('view_dashboard'), async (req, res) => {
       ? lastUserMsg.content.slice(0, 200)
       : 'multi-turn conversation';
 
-    // Run chat via SDK or legacy
+    // Run chat
     let result;
     try {
-      if (USE_SDK) {
-        result = await chatWithSdk(messages, conn, tenantId);
-      } else {
-        result = await chatWithLegacy(messages, conn, tenantId);
-      }
+      result = await chatWithClaude(messages, conn, tenantId);
     } catch (err) {
       console.error('[Agent] Chat engine error:', err);
-      // Log failed run
       await logAgentRun(tenantId, {
         triggerType: 'chat',
         promptSummary,
-        model: USE_SDK ? SDK_MODEL : 'claude-haiku-4-5-20251001',
+        model: CHAT_MODEL,
         durationMs: 0,
         status: 'error',
         errorMessage: err.message,
@@ -402,14 +320,13 @@ router.post('/chat', requireAuth('view_dashboard'), async (req, res) => {
     }
 
     // Estimate cost (rough: $3/1M input + $15/1M output for Sonnet 4.6)
-    // SDK doesn't expose exact tokens, so estimate from response length
-    const estimatedCost = USE_SDK ? Math.min(PER_QUERY_BUDGET, 0.01) : 0.005;
+    const estimatedCost = 0.01;
 
     // Log successful run
     await logAgentRun(tenantId, {
       triggerType: 'chat',
       promptSummary,
-      model: USE_SDK ? SDK_MODEL : 'claude-haiku-4-5-20251001',
+      model: CHAT_MODEL,
       durationMs: result.durationMs,
       status: 'success',
       costUsd: estimatedCost,

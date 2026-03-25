@@ -4,16 +4,26 @@
  * Runs every hour via node-cron. For each eligible tenant:
  *   1. Check if current hour matches their configured report_hour in their timezone
  *   2. Check if a report already exists for yesterday
- *   3. Generate a read-only agent report using the SDK
+ *   3. Generate a read-only agent report using the Anthropic API
  *   4. Store in agent_reports table, log to agent_runs
  */
 
 import cron from 'node-cron';
-import { adminSql, tenantSql, tenantContext } from '../db/index.js';
-import { createReadOnlyPosServer } from './mcp-server.js';
+import { adminSql, tenantSql } from '../db/index.js';
+import { AGENT_TOOLS } from './tools.js';
+import { TOOL_HANDLERS } from './handlers.js';
 
 const REPORT_BUDGET = 0.05; // $0.05 per scheduled report
 const REPORT_MODEL = 'claude-sonnet-4-6';
+const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+const MAX_ITERATIONS = 12;
+
+// Read-only tools only (no action tools in scheduled reports)
+const READ_ONLY_TOOLS = AGENT_TOOLS
+  .filter(t => t.category === 'read')
+  .map(({ category, ...tool }) => tool);
+
+const REPORT_SYSTEM_PROMPT = 'You are a restaurant business analyst. Generate clear, data-driven reports for restaurant owners. Always call data tools before writing the report — never guess at numbers.';
 
 const NIGHTLY_REPORT_PROMPT = `Generate a concise daily business report for yesterday. Include:
 1. Revenue summary vs same day last week
@@ -61,7 +71,38 @@ function getYesterdayInTimezone(tz) {
 }
 
 /**
- * Generate a nightly report for a single tenant.
+ * Call Claude API directly (no Agent SDK — works in any environment).
+ */
+async function callClaudeForReport(messages) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured');
+
+  const response = await fetch(ANTHROPIC_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: REPORT_MODEL,
+      max_tokens: 4096,
+      system: REPORT_SYSTEM_PROMPT,
+      tools: READ_ONLY_TOOLS,
+      messages,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Claude API error: ${response.status} — ${error.slice(0, 200)}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Generate a nightly report for a single tenant using raw API with tool loop.
  */
 async function generateReport(tenantId, customPrompt) {
   const startTime = Date.now();
@@ -72,35 +113,59 @@ async function generateReport(tenantId, customPrompt) {
     try {
       await conn`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
 
-      const { server: posServer } = createReadOnlyPosServer(conn, tenantId);
-
+      const toolCtx = { conn, tenantId };
       const prompt = customPrompt || NIGHTLY_REPORT_PROMPT;
-      let resultText = '';
+      const messages = [{ role: 'user', content: prompt }];
+      let iterations = 0;
 
-      const { query } = await import('@anthropic-ai/claude-agent-sdk');
+      while (iterations < MAX_ITERATIONS) {
+        iterations++;
+        const response = await callClaudeForReport(messages);
+        const toolUses = response.content.filter(c => c.type === 'tool_use');
+        const textBlocks = response.content.filter(c => c.type === 'text');
 
-      for await (const message of query({
-        prompt,
-        options: {
-          model: REPORT_MODEL,
-          systemPrompt: 'You are a restaurant business analyst. Generate clear, data-driven reports for restaurant owners. Always call data tools before writing the report — never guess at numbers.',
-          mcpServers: { pos: posServer },
-          allowedTools: ['mcp__pos__*'],
-          maxBudgetUsd: REPORT_BUDGET,
-          maxTurns: 12,
-          permissionMode: 'bypassPermissions',
-          allowDangerouslySkipPermissions: true,
-          settingSources: [],
-        },
-      })) {
-        if ('result' in message) {
-          resultText = message.result;
+        // No tool calls — we have the final report
+        if (toolUses.length === 0 || response.stop_reason === 'end_turn') {
+          const resultText = textBlocks.map(t => t.text).join('\n');
+          return { resultText, durationMs: Date.now() - startTime, error: null };
         }
+
+        // Execute read-only tools and feed results back
+        const toolResults = [];
+        for (const toolUse of toolUses) {
+          const handler = TOOL_HANDLERS[toolUse.name];
+          if (!handler) {
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: toolUse.id,
+              content: JSON.stringify({ error: `Unknown tool: ${toolUse.name}` }),
+              is_error: true,
+            });
+            continue;
+          }
+
+          try {
+            const result = await handler({ input: toolUse.input, ...toolCtx });
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: toolUse.id,
+              content: JSON.stringify(result),
+            });
+          } catch (err) {
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: toolUse.id,
+              content: JSON.stringify({ error: err.message }),
+              is_error: true,
+            });
+          }
+        }
+
+        messages.push({ role: 'assistant', content: response.content });
+        messages.push({ role: 'user', content: toolResults });
       }
 
-      const durationMs = Date.now() - startTime;
-
-      return { resultText, durationMs, error: null };
+      return { resultText: 'Report generation hit iteration limit.', durationMs: Date.now() - startTime, error: null };
     } finally {
       await conn.release();
     }
