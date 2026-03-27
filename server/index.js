@@ -59,6 +59,13 @@ import customerOrderRoutes from './routes/customer-order.js';
 import agentRoutes from './agent/route.js';
 import { initAgentScheduler } from './agent/scheduler.js';
 
+// Sales CRM
+import salesAuthRoutes from './routes/sales-auth.js';
+import salesApiRoutes from './routes/sales-api.js';
+import salesOnboardRoutes from './routes/sales-onboard.js';
+import salesDemoRoutes from './routes/sales-demo.js';
+import adminAgentRoutes from './routes/admin-agent.js';
+
 // ==================== App Setup ====================
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -141,6 +148,14 @@ app.use('/admin', globalApiLimiter);
 
 // Admin (uses admin pool, not tenant-scoped)
 app.use('/admin', adminRoutes);
+app.use('/admin/agent', adminAgentRoutes);
+app.use('/admin/demo-tenant', salesDemoRoutes);
+
+// Sales CRM (uses admin pool, not tenant-scoped)
+app.use('/api/sales/auth', salesAuthRoutes);
+app.use('/api/sales/onboard', salesOnboardRoutes);
+app.use('/api/sales/demo', salesDemoRoutes);
+app.use('/api/sales', salesApiRoutes);
 
 // Auth (uses admin pool for registration/login)
 app.use('/api/auth', authRoutes);

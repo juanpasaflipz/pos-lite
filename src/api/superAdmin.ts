@@ -586,3 +586,129 @@ export function updateCapitalPool(action: 'add' | 'withdraw', amount: number) {
     body: JSON.stringify({ action, amount }),
   });
 }
+
+// ==================== Sales Reps (Admin) ====================
+
+export interface SalesRepAdmin {
+  id: number;
+  email: string;
+  name: string;
+  phone: string | null;
+  role: string;
+  active: boolean;
+  created_at: string;
+  conversions?: number;
+  active_clients?: number;
+}
+
+export function getSalesReps() {
+  return adminRequest<SalesRepAdmin[]>('/agent/sales-reps');
+}
+
+// ==================== Demo Config ====================
+
+export interface DemoConfigData {
+  id: number;
+  tenant_id: string;
+  tenant_name: string;
+  reset_schedule: string;
+  last_reset_at: string | null;
+  data_volume: string;
+  active: boolean;
+}
+
+export function getDemoConfigs() {
+  return adminRequest<DemoConfigData[]>('/agent/demo-config');
+}
+
+export function setupDemoTenant(data: { tenant_id?: string; data_volume?: string }) {
+  return adminRequest<{ ok: boolean; tenant_id: string; message: string }>('/demo-tenant/setup', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function resetDemoTenant() {
+  return adminRequest<{ ok: boolean; message: string }>('/demo-tenant/reset', {
+    method: 'POST',
+  });
+}
+
+export function getDemoTenantStatus() {
+  return adminRequest<any>('/demo-tenant/status');
+}
+
+// ==================== Agent Monitoring ====================
+
+export interface AgentMonitorRule {
+  id: number;
+  name: string;
+  metric: string;
+  condition: string;
+  threshold: number;
+  severity: string;
+  auto_action: string | null;
+  cooldown_hours: number;
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface AgentAlert {
+  id: number;
+  alert_type: string;
+  severity: string;
+  tenant_id: string | null;
+  title: string;
+  message: string;
+  metadata: any;
+  auto_action_taken: string | null;
+  acknowledged: boolean;
+  acknowledged_at: string | null;
+  created_at: string;
+}
+
+export function getAgentMonitorRules() {
+  return adminRequest<AgentMonitorRule[]>('/agent/monitor/rules');
+}
+
+export function createAgentMonitorRule(data: Partial<AgentMonitorRule>) {
+  return adminRequest<AgentMonitorRule>('/agent/monitor/rules', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateAgentMonitorRule(id: number, data: Partial<AgentMonitorRule>) {
+  return adminRequest<AgentMonitorRule>(`/agent/monitor/rules/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteAgentMonitorRule(id: number) {
+  return adminRequest<{ ok: boolean }>(`/agent/monitor/rules/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export function getAgentAlerts(params?: { severity?: string; acknowledged?: string; limit?: number; offset?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.severity) qs.set('severity', params.severity);
+  if (params?.acknowledged !== undefined) qs.set('acknowledged', params.acknowledged);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  const s = qs.toString();
+  return adminRequest<AgentAlert[]>(`/agent/alerts${s ? `?${s}` : ''}`);
+}
+
+export function acknowledgeAgentAlert(id: number) {
+  return adminRequest<AgentAlert>(`/agent/alerts/${id}/acknowledge`, {
+    method: 'PATCH',
+  });
+}
+
+export function runPlatformMonitoring() {
+  return adminRequest<{ ok: boolean; alerts_created: number }>('/agent/monitor/run', {
+    method: 'POST',
+  });
+}

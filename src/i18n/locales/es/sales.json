@@ -1,0 +1,143 @@
+{
+  "login": {
+    "title": "Portal de Ventas",
+    "subtitle": "Desktop Kitchen CRM",
+    "email": "Correo",
+    "password": "Contraseña",
+    "signIn": "Iniciar Sesión",
+    "invalidCredentials": "Correo o contraseña incorrectos"
+  },
+  "nav": {
+    "dashboard": "Panel",
+    "leads": "Prospectos",
+    "clients": "Clientes",
+    "onboard": "Registrar",
+    "commissions": "Comisiones",
+    "leaderboard": "Ranking",
+    "team": "Equipo",
+    "demo": "Acceso Demo",
+    "logout": "Cerrar Sesión"
+  },
+  "dashboard": {
+    "title": "Panel de Ventas",
+    "newLeads": "Nuevos",
+    "contacted": "Contactados",
+    "demoScheduled": "Demo Agendado",
+    "negotiating": "Negociando",
+    "converted": "Convertidos",
+    "lost": "Perdidos",
+    "activeClients": "Clientes Activos",
+    "pendingCommissions": "Comisiones Pendientes",
+    "paidCommissions": "Comisiones Pagadas",
+    "recentLeads": "Prospectos Recientes",
+    "teamPerformance": "Rendimiento del Equipo"
+  },
+  "leads": {
+    "title": "Prospectos",
+    "createLead": "Nuevo Prospecto",
+    "noLeads": "Sin prospectos aún",
+    "restaurant": "Restaurante",
+    "contact": "Contacto",
+    "status": "Estado",
+    "assigned": "Asignado A",
+    "lastContact": "Último Contacto",
+    "statuses": {
+      "new": "Nuevo",
+      "contacted": "Contactado",
+      "demo_scheduled": "Demo Agendado",
+      "negotiating": "Negociando",
+      "converted": "Convertido",
+      "lost": "Perdido"
+    },
+    "activity": {
+      "title": "Registro de Actividad",
+      "logActivity": "Registrar Actividad",
+      "types": {
+        "call": "Llamada",
+        "email": "Correo",
+        "meeting": "Reunión",
+        "demo": "Demo",
+        "note": "Nota",
+        "follow_up": "Seguimiento"
+      }
+    }
+  },
+  "clients": {
+    "title": "Clientes",
+    "noClients": "Sin clientes aún",
+    "orders30d": "Pedidos (30d)",
+    "plan": "Plan",
+    "commission": "Comisión",
+    "health": "Salud del Cliente",
+    "totalOrders": "Total Pedidos",
+    "totalRevenue": "Ingresos Totales",
+    "employees": "Empleados",
+    "menuItems": "Productos",
+    "lastOrder": "Último Pedido"
+  },
+  "onboard": {
+    "title": "Registrar Nuevo Cliente",
+    "steps": {
+      "info": "Información",
+      "plan": "Plan",
+      "branding": "Marca",
+      "review": "Revisar",
+      "success": "Éxito"
+    },
+    "restaurantName": "Nombre del Restaurante",
+    "ownerName": "Nombre del Dueño",
+    "ownerEmail": "Correo del Dueño",
+    "ownerPhone": "Teléfono",
+    "subdomain": "Subdominio",
+    "selectPlan": "Seleccionar Plan",
+    "primaryColor": "Color Principal",
+    "generateDemoData": "Generar datos de demo",
+    "review": "Revisar y Crear",
+    "creating": "Creando cuenta...",
+    "success": "¡Cliente registrado exitosamente!",
+    "loginUrl": "URL de Acceso",
+    "pin": "PIN de Empleado",
+    "copyLink": "Copiar Enlace",
+    "financingConsent": "Acepto que Desktop Kitchen analice los datos de transacciones para evaluar elegibilidad de financiamiento",
+    "financingConsentNote": "Opcional. Permite que el cliente califique para capital de trabajo basado en su historial de ventas."
+  },
+  "commissions": {
+    "title": "Comisiones",
+    "summary": "Resumen",
+    "pending": "Pendientes",
+    "paid": "Pagadas",
+    "total": "Total",
+    "period": "Periodo",
+    "tenant": "Cliente",
+    "amount": "Monto",
+    "status": "Estado",
+    "markPaid": "Marcar Pagada",
+    "activeDeals": "Comisiones Activas"
+  },
+  "leaderboard": {
+    "title": "Ranking",
+    "rank": "Pos",
+    "name": "Nombre",
+    "conversions": "Conversiones",
+    "clients": "Clientes",
+    "earned": "Total Ganado"
+  },
+  "team": {
+    "title": "Gestión del Equipo",
+    "addRep": "Agregar Vendedor",
+    "name": "Nombre",
+    "email": "Correo",
+    "phone": "Teléfono",
+    "role": "Rol",
+    "active": "Activo",
+    "resetPassword": "Restablecer Contraseña"
+  },
+  "demo": {
+    "title": "Acceso Demo",
+    "generateLink": "Generar Enlace Demo",
+    "linkReady": "¡Enlace demo listo!",
+    "expiresIn": "Expira en 2 horas",
+    "copyUrl": "Copiar URL",
+    "noDemo": "No hay demo configurado"
+  }
+}

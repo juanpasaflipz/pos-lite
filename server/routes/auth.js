@@ -151,6 +151,7 @@ router.post('/register', registerLimiter, async (req, res) => {
         await adminSql`
           INSERT INTO data_processing_consent (tenant_id, consent_type, accepted, accepted_at, ip_address, user_agent, consent_version)
           VALUES (${slug}, ${consentType}, true, NOW(), ${ip}, ${userAgent}, ${CONSENT_VERSION})
+          ON CONFLICT (tenant_id, consent_type) DO UPDATE SET accepted = true, accepted_at = NOW()
         `;
       }
 

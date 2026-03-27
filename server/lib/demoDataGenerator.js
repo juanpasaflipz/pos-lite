@@ -7,6 +7,7 @@
  * non-order tables for clean deletion.
  */
 
+import crypto from 'crypto';
 import { tenantContext } from '../db/index.js';
 // AI modules removed in lean POS — stub the functions
 const detectShrinkagePatterns = () => {};
@@ -217,7 +218,7 @@ function getCategoryRole(categoryName) {
 
 export async function generateDemoData(adminSql, {
   tenantId,
-  batchId,
+  batchId = crypto.randomUUID(),
   volume = 'medium',
   dateRangeDays = 30,
   includeDelivery = true,
@@ -229,6 +230,15 @@ export async function generateDemoData(adminSql, {
 
   // ─── Idempotent schema additions ──────────────────────────
   const schemaAdditions = [
+    'ALTER TABLE loyalty_customers ADD COLUMN IF NOT EXISTS demo_batch_id UUID',
+    'ALTER TABLE stamp_cards ADD COLUMN IF NOT EXISTS demo_batch_id UUID',
+    'ALTER TABLE stamp_events ADD COLUMN IF NOT EXISTS demo_batch_id UUID',
+    'ALTER TABLE referral_events ADD COLUMN IF NOT EXISTS demo_batch_id UUID',
+    'ALTER TABLE orders ADD COLUMN IF NOT EXISTS demo_batch_id UUID',
+    'ALTER TABLE financial_actuals ADD COLUMN IF NOT EXISTS demo_batch_id UUID',
+    'ALTER TABLE waste_log ADD COLUMN IF NOT EXISTS demo_batch_id UUID',
+    'ALTER TABLE delivery_orders ADD COLUMN IF NOT EXISTS demo_batch_id UUID',
+    'ALTER TABLE refunds ADD COLUMN IF NOT EXISTS demo_batch_id UUID',
     'ALTER TABLE inventory_counts ADD COLUMN IF NOT EXISTS demo_batch_id UUID',
     'ALTER TABLE shrinkage_alerts ADD COLUMN IF NOT EXISTS demo_batch_id UUID',
     'ALTER TABLE delivery_markup_rules ADD COLUMN IF NOT EXISTS demo_batch_id UUID',
@@ -244,9 +254,10 @@ export async function generateDemoData(adminSql, {
     'ALTER TABLE delivery_recapture ADD COLUMN IF NOT EXISTS demo_batch_id UUID',
     'ALTER TABLE tenant_credentials ADD COLUMN IF NOT EXISTS demo_batch_id UUID',
     'ALTER TABLE ai_suggestion_events ADD COLUMN IF NOT EXISTS demo_batch_id UUID',
+    'CREATE TABLE IF NOT EXISTS daily_order_counter (tenant_id TEXT NOT NULL, date_key DATE NOT NULL, last_seq INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (tenant_id, date_key))',
   ];
   for (const ddl of schemaAdditions) {
-    await adminSql.unsafe(ddl);
+    try { await adminSql.unsafe(ddl); } catch { /* table may not exist in lean POS */ }
   }
 
   // ─── Fetch tenant data ──────────────────────────────────────
@@ -588,9 +599,9 @@ export async function generateDemoData(adminSql, {
     }
   }
 
-  // ─── 4. Generate AI Analytics ────────────────────────────
+  // ─── 4. Generate AI Analytics (may not exist in lean POS) ──
 
-  if (includeAi) {
+  try { if (includeAi) {
     // Aggregate orders by hour for ai_hourly_snapshots
     const hourlyMap = new Map();
     for (const order of generatedOrders) {
@@ -777,7 +788,7 @@ export async function generateDemoData(adminSql, {
         summary.ai_category_roles++;
       }
     }
-  }
+  } } catch (aiErr) { console.warn('[DemoData] AI analytics skipped (tables may not exist):', aiErr.message); }
 
   // ─── 5. Generate Financial Data ──────────────────────────
 
@@ -1073,6 +1084,9 @@ export async function generateDemoData(adminSql, {
       }
     }
   }
+
+  // ─── 11-19. Optional sections (may reference tables not in lean POS) ──
+  try {
 
   // ─── 11. Delivery Recapture ─────────────────────────────
 
@@ -1478,6 +1492,10 @@ export async function generateDemoData(adminSql, {
         `, [newQty, item.id, tenantId]);
       }
     }
+  }
+
+  } catch (optionalErr) {
+    console.warn('[DemoData] Optional sections (11-20) partially failed (non-fatal):', optionalErr.message);
   }
 
   // ─── 21. Auto-Trigger AI Pipeline ─────────────────────────

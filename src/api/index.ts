@@ -170,6 +170,7 @@ const NUMERIC_FIELDS = new Set([
   'quantity_used', 'quantity_received',
   'gross_amount', 'deductions', 'bonuses', 'net_amount', 'wage_rate', 'hours_worked',
   'cost_usd', 'total_cost', 'avg_duration_ms',
+  'commission_percent', 'commission_amount', 'mrr_amount', 'threshold',
 ]);
 
 function coerceNumerics(data: unknown): unknown {

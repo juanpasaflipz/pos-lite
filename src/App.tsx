@@ -47,6 +47,10 @@ const AdminDashboard = React.lazy(() => import('./screens/AdminDashboard').then(
 // AI Agent
 const AgentChat = React.lazy(() => import('./components/agent/AgentChat').then(m => ({ default: m.default })));
 
+// Sales & Super Admin portals
+const SalesPortal = React.lazy(() => import('./screens/sales/SalesPortal'));
+const SuperAdminPortal = React.lazy(() => import('./screens/super-admin/SuperAdminPortal'));
+
 // Mobile
 const MobileShell = React.lazy(() => import('./components/mobile/MobileShell').then(m => ({ default: m.default })));
 const MobileOrdersScreen = React.lazy(() => import('./screens/mobile/MobileOrdersScreen').then(m => ({ default: m.default })));
@@ -230,6 +234,9 @@ const DemoTokenHandler: React.FC<{ children: React.ReactNode }> = ({ children })
           if (data.owner_token) {
             localStorage.setItem('owner_token', data.owner_token);
           }
+          if (data.tenant?.id) {
+            localStorage.setItem('tenant_id', data.tenant.id);
+          }
         }
       } catch { /* proceed to login screen */ }
       // Strip demo_token from URL and reload to let AuthProvider read localStorage
@@ -258,7 +265,11 @@ const AppContent: React.FC = () => {
       <Router>
         <ErrorBoundary>
           <React.Suspense fallback={<LoadingFallback />}>
-            <TenantRoutes />
+            <Routes>
+              <Route path="/sales/*" element={<SalesPortal />} />
+              <Route path="/super-admin/*" element={<SuperAdminPortal />} />
+              <Route path="*" element={<TenantRoutes />} />
+            </Routes>
           </React.Suspense>
         </ErrorBoundary>
         <AgentFAB />

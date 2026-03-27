@@ -498,23 +498,110 @@ async function schedulerTick() {
   }
 }
 
+// ==================== Demo Reset (daily 4am UTC) ====================
+
+async function resetDemoTenant() {
+  try {
+    const configs = await adminSql`SELECT * FROM demo_config WHERE active = true`;
+    if (configs.length === 0) return;
+
+    // Dynamic import to avoid circular dependency
+    const { resetDemoTenantData } = await import('../routes/sales-demo.js');
+
+    for (const config of configs) {
+      try {
+        await resetDemoTenantData(config.tenant_id, config.data_volume);
+        await adminSql`UPDATE demo_config SET last_reset_at = NOW() WHERE tenant_id = ${config.tenant_id}`;
+        console.log(`[Scheduler] Demo tenant ${config.tenant_id} reset successfully`);
+      } catch (err) {
+        console.error(`[Scheduler] Demo reset failed for ${config.tenant_id}:`, err.message);
+      }
+    }
+  } catch (err) {
+    console.error('[Scheduler] Demo reset tick error:', err.message);
+  }
+}
+
+// ==================== Commission Calculation (monthly, 1st at 2am UTC) ====================
+
+const PLAN_PRICES = { pro: 350 }; // MXN per month
+
+async function calculateMonthlyCommissions() {
+  try {
+    const now = new Date();
+    const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    const activeCommissions = await adminSql`
+      SELECT sc.*, t.plan
+      FROM sales_commissions sc
+      JOIN tenants t ON t.id = sc.tenant_id
+      WHERE sc.active = true AND t.active = true AND t.plan = 'pro'
+        AND (sc.end_date IS NULL OR sc.end_date >= CURRENT_DATE)
+    `;
+
+    let count = 0;
+    for (const sc of activeCommissions) {
+      const mrrAmount = PLAN_PRICES[sc.plan] || PLAN_PRICES.pro;
+      const commissionAmount = (mrrAmount * Number(sc.commission_percent)) / 100;
+
+      try {
+        await adminSql`
+          INSERT INTO commission_payouts (rep_id, commission_id, tenant_id, period, mrr_amount, commission_amount, status)
+          VALUES (${sc.rep_id}, ${sc.id}, ${sc.tenant_id}, ${period}, ${mrrAmount}, ${commissionAmount}, 'earned')
+          ON CONFLICT (commission_id, period) DO NOTHING
+        `;
+        count++;
+      } catch (err) {
+        console.error(`[Scheduler] Commission calc failed for sc.id=${sc.id}:`, err.message);
+      }
+    }
+
+    if (count > 0) {
+      console.log(`[Scheduler] Calculated ${count} commission payouts for period ${period}`);
+    }
+  } catch (err) {
+    console.error('[Scheduler] Commission calc tick error:', err.message);
+  }
+}
+
+// ==================== Platform Monitoring (every 6h) ====================
+
+async function platformMonitoringTick() {
+  try {
+    const { runPlatformMonitoring } = await import('../routes/admin-agent.js');
+    const alertCount = await runPlatformMonitoring();
+    if (alertCount > 0) {
+      console.log(`[Scheduler] Platform monitoring created ${alertCount} alert(s)`);
+    }
+  } catch (err) {
+    console.error('[Scheduler] Platform monitoring tick error:', err.message);
+  }
+}
+
 /**
  * Initialize the scheduler. Call once at server startup.
  * Runs every hour at minute 0.
  */
 export function initAgentScheduler() {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.log('[Scheduler] ANTHROPIC_API_KEY not set — agent scheduler disabled');
-    return;
+  // Nightly reports (requires ANTHROPIC_API_KEY)
+  if (process.env.ANTHROPIC_API_KEY) {
+    cron.schedule('0 * * * *', schedulerTick, { timezone: 'UTC' });
+    console.log('[Scheduler] Agent report scheduler initialized (runs hourly)');
+  } else {
+    console.log('[Scheduler] ANTHROPIC_API_KEY not set — agent reports disabled');
   }
 
-  // Run every hour at minute 0
-  cron.schedule('0 * * * *', schedulerTick, {
-    timezone: 'UTC',
-  });
+  // Demo tenant reset — daily at 4am UTC
+  cron.schedule('0 4 * * *', resetDemoTenant, { timezone: 'UTC' });
 
-  console.log('[Scheduler] Agent report scheduler initialized (runs hourly)');
+  // Monthly commission calculation — 1st of month at 2am UTC
+  cron.schedule('0 2 1 * *', calculateMonthlyCommissions, { timezone: 'UTC' });
+
+  // Platform monitoring — every 6 hours
+  cron.schedule('0 */6 * * *', platformMonitoringTick, { timezone: 'UTC' });
+
+  console.log('[Scheduler] Sales schedulers initialized (demo reset, commissions, monitoring)');
 }
 
 // Export for manual triggering (testing)
-export { schedulerTick, generateReport };
+export { schedulerTick, generateReport, resetDemoTenant, calculateMonthlyCommissions };

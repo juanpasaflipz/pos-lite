@@ -14,5 +14,7 @@ export const JWT_EMPLOYEE_EXPIRY = '24h';
 
 export const JWT_OWNER_EXPIRY = '7d';
 
+export const JWT_SALES_EXPIRY = '12h';
+
 export const MAX_PAGE_LIMIT = 200;
 

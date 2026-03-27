@@ -1,0 +1,143 @@
+{
+  "login": {
+    "title": "Sales Portal",
+    "subtitle": "Desktop Kitchen CRM",
+    "email": "Email",
+    "password": "Password",
+    "signIn": "Sign In",
+    "invalidCredentials": "Invalid email or password"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "leads": "Leads",
+    "clients": "Clients",
+    "onboard": "Onboard",
+    "commissions": "Commissions",
+    "leaderboard": "Leaderboard",
+    "team": "Team",
+    "demo": "Demo Access",
+    "logout": "Logout"
+  },
+  "dashboard": {
+    "title": "Sales Dashboard",
+    "newLeads": "New Leads",
+    "contacted": "Contacted",
+    "demoScheduled": "Demo Scheduled",
+    "negotiating": "Negotiating",
+    "converted": "Converted",
+    "lost": "Lost",
+    "activeClients": "Active Clients",
+    "pendingCommissions": "Pending Commissions",
+    "paidCommissions": "Paid Commissions",
+    "recentLeads": "Recent Leads",
+    "teamPerformance": "Team Performance"
+  },
+  "leads": {
+    "title": "Leads",
+    "createLead": "New Lead",
+    "noLeads": "No leads yet",
+    "restaurant": "Restaurant",
+    "contact": "Contact",
+    "status": "Status",
+    "assigned": "Assigned To",
+    "lastContact": "Last Contact",
+    "statuses": {
+      "new": "New",
+      "contacted": "Contacted",
+      "demo_scheduled": "Demo Scheduled",
+      "negotiating": "Negotiating",
+      "converted": "Converted",
+      "lost": "Lost"
+    },
+    "activity": {
+      "title": "Activity Log",
+      "logActivity": "Log Activity",
+      "types": {
+        "call": "Call",
+        "email": "Email",
+        "meeting": "Meeting",
+        "demo": "Demo",
+        "note": "Note",
+        "follow_up": "Follow Up"
+      }
+    }
+  },
+  "clients": {
+    "title": "Clients",
+    "noClients": "No clients yet",
+    "orders30d": "Orders (30d)",
+    "plan": "Plan",
+    "commission": "Commission",
+    "health": "Client Health",
+    "totalOrders": "Total Orders",
+    "totalRevenue": "Total Revenue",
+    "employees": "Employees",
+    "menuItems": "Menu Items",
+    "lastOrder": "Last Order"
+  },
+  "onboard": {
+    "title": "Onboard New Client",
+    "steps": {
+      "info": "Business Info",
+      "plan": "Plan",
+      "branding": "Branding",
+      "review": "Review",
+      "success": "Success"
+    },
+    "restaurantName": "Restaurant Name",
+    "ownerName": "Owner Name",
+    "ownerEmail": "Owner Email",
+    "ownerPhone": "Phone",
+    "subdomain": "Subdomain",
+    "selectPlan": "Select Plan",
+    "primaryColor": "Primary Color",
+    "generateDemoData": "Generate demo data",
+    "review": "Review & Create",
+    "creating": "Creating tenant...",
+    "success": "Client onboarded successfully!",
+    "loginUrl": "Login URL",
+    "pin": "Employee PIN",
+    "copyLink": "Copy Link",
+    "financingConsent": "I consent to Desktop Kitchen analyzing transaction data to evaluate financing eligibility",
+    "financingConsentNote": "Optional. Enables the client to qualify for working capital based on their sales history."
+  },
+  "commissions": {
+    "title": "Commissions",
+    "summary": "Summary",
+    "pending": "Pending",
+    "paid": "Paid",
+    "total": "Total",
+    "period": "Period",
+    "tenant": "Client",
+    "amount": "Amount",
+    "status": "Status",
+    "markPaid": "Mark as Paid",
+    "activeDeals": "Active Commission Deals"
+  },
+  "leaderboard": {
+    "title": "Leaderboard",
+    "rank": "Rank",
+    "name": "Name",
+    "conversions": "Conversions",
+    "clients": "Clients",
+    "earned": "Total Earned"
+  },
+  "team": {
+    "title": "Team Management",
+    "addRep": "Add Rep",
+    "name": "Name",
+    "email": "Email",
+    "phone": "Phone",
+    "role": "Role",
+    "active": "Active",
+    "resetPassword": "Reset Password"
+  },
+  "demo": {
+    "title": "Demo Access",
+    "generateLink": "Generate Demo Link",
+    "linkReady": "Demo link ready!",
+    "expiresIn": "Expires in 2 hours",
+    "copyUrl": "Copy URL",
+    "noDemo": "No demo tenant configured"
+  }
+}
