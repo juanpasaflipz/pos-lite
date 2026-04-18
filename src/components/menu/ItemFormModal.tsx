@@ -9,6 +9,7 @@ interface FormData {
   description: string;
   category_id: string;
   image_url: string;
+  active: boolean;
 }
 
 type ModalMode = 'add' | 'edit' | null;
@@ -16,7 +17,7 @@ type ModalMode = 'add' | 'edit' | null;
 interface ItemFormModalProps {
   modalMode: ModalMode;
   formData: FormData;
-  formErrors: Partial<FormData>;
+  formErrors: Partial<Record<keyof FormData, string>>;
   actionLoading: boolean;
   categories: MenuCategory[];
   allModifierGroups: ModifierGroup[];
@@ -160,6 +161,37 @@ export default function ItemFormModal({
                 />
               </div>
             )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-neutral-300 mb-2">
+              {t('menu.form.visibility')}
+            </label>
+            <div className="flex bg-neutral-800 border border-neutral-700 rounded-lg p-1">
+              <button
+                type="button"
+                onClick={() => onFormData({ ...formData, active: true })}
+                className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors min-h-[40px] ${
+                  formData.active
+                    ? 'bg-green-600 text-white'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                {t('menu.liveMenu')}
+              </button>
+              <button
+                type="button"
+                onClick={() => onFormData({ ...formData, active: false })}
+                className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors min-h-[40px] ${
+                  !formData.active
+                    ? 'bg-amber-600 text-white'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                {t('menu.preMenu')}
+              </button>
+            </div>
+            <p className="text-neutral-500 text-xs mt-1">{t('menu.form.visibilityHint')}</p>
           </div>
 
           {/* Modifier Groups Assignment */}

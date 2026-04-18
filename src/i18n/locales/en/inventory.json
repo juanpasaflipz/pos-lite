@@ -249,7 +249,9 @@
       "pricePositive": "Price must be greater than 0",
       "categoryRequired": "Category is required",
       "modifierGroups": "Modifier Groups",
-      "noModifiersHint": "Select modifier groups to let cashiers add extras like guac, sour cream, etc."
+      "noModifiersHint": "Select modifier groups to let cashiers add extras like guac, sour cream, etc.",
+      "visibility": "Menu Visibility",
+      "visibilityHint": "Live items show on the POS. Pre-Menu items are staged and hidden from customers."
     },
     "categoryForm": {
       "namePlaceholder": "Category name",

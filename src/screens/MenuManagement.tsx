@@ -39,6 +39,7 @@ interface FormData {
   description: string;
   category_id: string;
   image_url: string;
+  active: boolean;
 }
 
 interface CategoryFormData {
@@ -59,9 +60,9 @@ export default function MenuManagement() {
   const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState<FormData>({
-    name: '', price: '', description: '', category_id: '', image_url: '',
+    name: '', price: '', description: '', category_id: '', image_url: '', active: true,
   });
-  const [formErrors, setFormErrors] = useState<Partial<FormData>>({});
+  const [formErrors, setFormErrors] = useState<Partial<Record<keyof FormData, string>>>({});
   const [actionLoading, setActionLoading] = useState(false);
 
   // Modifier assignment state
@@ -110,7 +111,7 @@ export default function MenuManagement() {
   const preMenuItems = menuItems.filter(i => !i.active);
 
   const validateForm = (): boolean => {
-    const errors: Partial<FormData> = {};
+    const errors: Partial<Record<keyof FormData, string>> = {};
     if (!formData.name.trim()) errors.name = t('menu.form.itemNameRequired');
     if (!formData.price) errors.price = t('menu.form.priceRequired');
     else if (isNaN(parseFloat(formData.price)) || parseFloat(formData.price) <= 0) errors.price = t('menu.form.pricePositive');
@@ -145,6 +146,7 @@ export default function MenuManagement() {
         price: parseFloat(formData.price),
         description: formData.description.trim() || undefined,
         image_url: formData.image_url.trim() || undefined,
+        active: formData.active,
       });
       if (assignedGroupIds.size > 0 && newItem?.id) {
         await Promise.all(Array.from(assignedGroupIds).map(gId => assignModifierGroupToItem(newItem.id, gId).catch(() => {})));
@@ -153,6 +155,7 @@ export default function MenuManagement() {
       const targetCategory = parseInt(formData.category_id);
       if (targetCategory === selectedCategory) await fetchMenuItems(targetCategory);
       else setSelectedCategory(targetCategory);
+      setItemSubTab(formData.active ? 'live' : 'pre-menu');
       closeModal();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errors.addItem'));
@@ -172,11 +175,13 @@ export default function MenuManagement() {
         price: parseFloat(formData.price),
         description: formData.description.trim() || undefined,
         image_url: formData.image_url.trim() || undefined,
+        active: formData.active,
       });
       await invalidateMenuCache();
       const targetCategory = parseInt(formData.category_id);
       if (selectedCategory) await fetchMenuItems(selectedCategory);
       if (targetCategory !== selectedCategory) setSelectedCategory(targetCategory);
+      setItemSubTab(formData.active ? 'live' : 'pre-menu');
       closeModal();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errors.editItem'));
@@ -198,7 +203,7 @@ export default function MenuManagement() {
   };
 
   const openAddModal = async () => {
-    setFormData({ name: '', price: '', description: '', category_id: selectedCategory ? String(selectedCategory) : '', image_url: '' });
+    setFormData({ name: '', price: '', description: '', category_id: selectedCategory ? String(selectedCategory) : '', image_url: '', active: itemSubTab === 'live' });
     setFormErrors({});
     setEditingId(null);
     setAssignedGroupIds(new Set());
@@ -210,7 +215,7 @@ export default function MenuManagement() {
   };
 
   const openEditModal = async (item: MenuItem) => {
-    setFormData({ name: item.name, price: item.price.toString(), description: item.description || '', category_id: String(item.category_id), image_url: item.image_url || '' });
+    setFormData({ name: item.name, price: item.price.toString(), description: item.description || '', category_id: String(item.category_id), image_url: item.image_url || '', active: item.active });
     setFormErrors({});
     setEditingId(item.id);
     setModalMode('edit');
@@ -228,7 +233,7 @@ export default function MenuManagement() {
   const closeModal = () => {
     setModalMode(null);
     setEditingId(null);
-    setFormData({ name: '', price: '', description: '', category_id: '', image_url: '' });
+    setFormData({ name: '', price: '', description: '', category_id: '', image_url: '', active: true });
     setFormErrors({});
     setAllModifierGroups([]);
     setAssignedGroupIds(new Set());

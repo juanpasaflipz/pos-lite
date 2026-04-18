@@ -249,7 +249,9 @@
       "pricePositive": "El precio debe ser mayor a 0",
       "categoryRequired": "La categoría es obligatoria",
       "modifierGroups": "Grupos de Modificadores",
-      "noModifiersHint": "Selecciona grupos de modificadores para que los cajeros agreguen extras como guacamole, crema, etc."
+      "noModifiersHint": "Selecciona grupos de modificadores para que los cajeros agreguen extras como guacamole, crema, etc.",
+      "visibility": "Visibilidad en el Menú",
+      "visibilityHint": "Los productos en Menú Activo aparecen en el POS. Los de Pre-Menú quedan preparados y ocultos de los clientes."
     },
     "categoryForm": {
       "namePlaceholder": "Nombre de categoría",

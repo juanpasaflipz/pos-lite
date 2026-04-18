@@ -237,25 +237,29 @@ router.get('/items/:id', async (req, res) => {
 // POST /api/menu/items - create item (admin)
 router.post('/items', requireAuth('manage_menu'), async (req, res) => {
   try {
-    const { category_id, name, price, description, image_url, prep_time_minutes } = req.body;
+    const { category_id, name, price, description, image_url, prep_time_minutes, active } = req.body;
 
     if (!category_id || !name || price === undefined) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Plan limit check
-    const plan = req.tenant?.plan || 'free';
-    const { cnt } = await get('SELECT COUNT(*) as cnt FROM menu_items WHERE active = true') || { cnt: 0 };
-    const check = checkLimit(plan, 'menuItems', cnt);
-    if (!check.allowed) {
-      return res.status(403).json(planUpgradeError('menuItems', plan, { limit: check.limit, current: check.current }));
+    const isActive = active === undefined ? true : !!active;
+
+    // Plan limit check — only count against limit if creating as active
+    if (isActive) {
+      const plan = req.tenant?.plan || 'free';
+      const { cnt } = await get('SELECT COUNT(*) as cnt FROM menu_items WHERE active = true') || { cnt: 0 };
+      const check = checkLimit(plan, 'menuItems', cnt);
+      if (!check.allowed) {
+        return res.status(403).json(planUpgradeError('menuItems', plan, { limit: check.limit, current: check.current }));
+      }
     }
 
     const tid = getTenantId();
     const result = await run(`
       INSERT INTO menu_items (tenant_id, category_id, name, price, description, image_url, active, prep_time_minutes)
-      VALUES ($1, $2, $3, $4, $5, $6, true, $7)
-    `, [tid, category_id, name, price, description || null, image_url || null, prep_time_minutes || 5]);
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `, [tid, category_id, name, price, description || null, image_url || null, isActive, prep_time_minutes || 5]);
 
     audit({
       tenantId: req.tenant?.id || 'default',
@@ -285,7 +289,7 @@ router.post('/items', requireAuth('manage_menu'), async (req, res) => {
 router.put('/items/:id', requireAuth('manage_menu'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { category_id, name, price, description, image_url, prep_time_minutes } = req.body;
+    const { category_id, name, price, description, image_url, prep_time_minutes, active } = req.body;
 
     // Check if item exists
     const item = await get('SELECT id FROM menu_items WHERE id = $1', [id]);
@@ -319,6 +323,10 @@ router.put('/items/:id', requireAuth('manage_menu'), async (req, res) => {
     if (prep_time_minutes !== undefined) {
       updates.push(`prep_time_minutes = $${values.length + 1}`);
       values.push(prep_time_minutes);
+    }
+    if (active !== undefined) {
+      updates.push(`active = $${values.length + 1}`);
+      values.push(!!active);
     }
 
     if (updates.length === 0) {
