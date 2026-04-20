@@ -34,14 +34,18 @@ const PurchaseOrderScreen = React.lazy(() => import('./screens/PurchaseOrderScre
 const LoyaltyScreen = React.lazy(() => import('./screens/LoyaltyScreen').then(m => ({ default: m.default || (() => <div>Loyalty</div>) })));
 const OnboardingScreen = React.lazy(() => import('./screens/OnboardingScreen').then(m => ({ default: m.default || (() => <div>Onboarding</div>) })));
 const CustomerOrderScreen = React.lazy(() => import('./screens/CustomerOrderScreen').then(m => ({ default: m.default || (() => <div>Order</div>) })));
+const MenuBoardScreen = React.lazy(() => import('./screens/MenuBoardScreen').then(m => ({ default: m.default || (() => <div>Menu Board</div>) })));
 const BrandingSettingsScreen = React.lazy(() => import('./screens/BrandingSettingsScreen').then(m => ({ default: m.default || (() => <div>Branding</div>) })));
+const DisplayMenuScreen = React.lazy(() => import('./screens/DisplayMenuScreen').then(m => ({ default: m.default || (() => <div>Display Menu</div>) })));
 const InvoicingScreen = React.lazy(() => import('./screens/InvoicingScreen').then(m => ({ default: m.default || (() => <div>Invoicing</div>) })));
 const PublicInvoiceScreen = React.lazy(() => import('./screens/PublicInvoiceScreen').then(m => ({ default: m.default || (() => <div>Invoice</div>) })));
 const ResetPasswordScreen = React.lazy(() => import('./screens/ResetPasswordScreen').then(m => ({ default: m.default || (() => <div>Reset Password</div>) })));
 const AccountScreen = React.lazy(() => import('./screens/AccountScreen').then(m => ({ default: m.default || (() => <div>Account</div>) })));
 const IntegrationsScreen = React.lazy(() => import('./screens/IntegrationsScreen').then(m => ({ default: m.default || (() => <div>Integrations</div>) })));
 const ExpensesScreen = React.lazy(() => import('./screens/ExpensesScreen').then(m => ({ default: m.default || (() => <div>Expenses</div>) })));
+const RecipeManagementScreen = React.lazy(() => import('./screens/RecipeManagementScreen').then(m => ({ default: m.default || (() => <div>Recipes</div>) })));
 const AdminDashboard = React.lazy(() => import('./screens/AdminDashboard').then(m => ({ default: m.default || (() => <div>Admin</div>) })));
+const SuperAdmin = React.lazy(() => import('./screens/SuperAdmin').then(m => ({ default: m.default })));
 
 // AI Agent
 const AgentChat = React.lazy(() => import('./components/agent/AgentChat').then(m => ({ default: m.default })));
@@ -92,7 +96,7 @@ const LoadingFallback: React.FC = () => {
 
 /* ==================== Tenant Routes ==================== */
 
-const PUBLIC_PATHS = ['/order', '/invoice/'];
+const PUBLIC_PATHS = ['/order', '/invoice/', '/menu-board'];
 
 const TenantRoutes: React.FC = () => {
   const { currentEmployee } = useAuth();
@@ -134,6 +138,7 @@ const TenantRoutes: React.FC = () => {
       {/* Admin */}
       <Route path="/admin" element={<ProtectedRoute element={<AdminDashboard />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/menu" element={<ProtectedRoute element={<MenuManagement />} requiredRole={['manager', 'admin']} />} />
+      <Route path="/admin/recipes" element={<ProtectedRoute element={<RecipeManagementScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/modifiers" element={<ProtectedRoute element={<ModifierManagement />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/inventory" element={<ProtectedRoute element={<InventoryScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/employees" element={<ProtectedRoute element={<EmployeeScreen />} requiredRole={['admin']} />} />
@@ -145,12 +150,17 @@ const TenantRoutes: React.FC = () => {
       <Route path="/admin/loyalty" element={<ProtectedRoute element={<LoyaltyScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/expenses" element={<ProtectedRoute element={<ExpensesScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/branding" element={<ProtectedRoute element={<BrandingSettingsScreen />} requiredRole={['manager', 'admin']} />} />
+      <Route path="/admin/display-menu" element={<ProtectedRoute element={<DisplayMenuScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/invoicing" element={<ProtectedRoute element={<InvoicingScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/integrations" element={<ProtectedRoute element={<IntegrationsScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/account" element={<ProtectedRoute element={<AccountScreen />} />} />
 
+      {/* Super Admin (platform owner only — gated by ADMIN_SECRET) */}
+      <Route path="/super-admin" element={<SuperAdmin />} />
+
       {/* Public */}
       <Route path="/order" element={<CustomerOrderScreen />} />
+      <Route path="/menu-board" element={<MenuBoardScreen />} />
       <Route path="/invoice/:token" element={<PublicInvoiceScreen />} />
 
       {/* Fallback */}

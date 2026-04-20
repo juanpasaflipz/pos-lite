@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS menu_items (
   price NUMERIC(10,2) NOT NULL,
   description TEXT,
   image_url TEXT,
+  sort_order INTEGER DEFAULT 0,
   active BOOLEAN DEFAULT true,
   prep_time_minutes INTEGER DEFAULT 5,
   is_example BOOLEAN DEFAULT false
@@ -305,6 +306,20 @@ CREATE TABLE IF NOT EXISTS virtual_brand_items (
   active BOOLEAN DEFAULT true,
   show_image BOOLEAN DEFAULT true,
   UNIQUE(tenant_id, virtual_brand_id, menu_item_id)
+);
+
+CREATE TABLE IF NOT EXISTS display_assets (
+  id SERIAL PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
+  kind TEXT NOT NULL,
+  title TEXT,
+  body TEXT,
+  image_url TEXT,
+  sort_order INTEGER DEFAULT 0,
+  active BOOLEAN DEFAULT true,
+  starts_at TIMESTAMPTZ,
+  ends_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Permissions
@@ -633,6 +648,7 @@ CREATE INDEX IF NOT EXISTS idx_employees_tenant ON employees(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_menu_categories_tenant ON menu_categories(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_menu_items_tenant ON menu_items(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_menu_items_category ON menu_items(tenant_id, category_id);
+CREATE INDEX IF NOT EXISTS idx_menu_items_category_sort ON menu_items(tenant_id, category_id, sort_order, id);
 CREATE INDEX IF NOT EXISTS idx_orders_tenant ON orders(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(tenant_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(tenant_id, status);
@@ -679,6 +695,7 @@ CREATE INDEX IF NOT EXISTS idx_tenant_credentials_tenant ON tenant_credentials(t
 CREATE INDEX IF NOT EXISTS idx_audit_log_tenant ON audit_log(tenant_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_log_resource ON audit_log(tenant_id, resource, resource_id);
 CREATE INDEX IF NOT EXISTS idx_expenses_tenant ON expenses(tenant_id, expense_date DESC);
+CREATE INDEX IF NOT EXISTS idx_display_assets_tenant ON display_assets(tenant_id, active, sort_order, id);
 
 -- ==================== Row-Level Security ====================
 
@@ -695,6 +712,7 @@ BEGIN
       'printers', 'category_printer_routes',
       'delivery_platforms', 'delivery_orders', 'delivery_markup_rules',
       'virtual_brands', 'virtual_brand_items',
+      'display_assets',
       'role_permissions', 'refunds',
       'inventory_counts', 'shrinkage_alerts', 'vendors', 'vendor_items',
       'purchase_orders', 'purchase_order_items', 'financial_targets', 'financial_actuals',

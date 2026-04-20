@@ -31,6 +31,7 @@ export interface MenuItem {
   price: number;
   description?: string;
   image_url?: string;
+  sort_order?: number;
   active: boolean;
   prep_time_minutes?: number;
   is_example?: boolean;

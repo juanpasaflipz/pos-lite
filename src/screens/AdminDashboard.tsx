@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft,
+  ChefHat,
   UtensilsCrossed,
   SlidersHorizontal,
   Package,
@@ -15,6 +16,7 @@ import {
   Heart,
   DollarSign,
   Palette,
+  MonitorPlay,
   FileText,
   Plug,
   User,
@@ -32,6 +34,7 @@ interface AdminLink {
 
 const ADMIN_LINKS: AdminLink[] = [
   { to: '/admin/menu', icon: <UtensilsCrossed size={24} />, label: 'Menu', description: 'Manage items & categories' },
+  { to: '/admin/recipes', icon: <ChefHat size={24} />, label: 'Recipes', description: 'Manage ingredients and costs per item' },
   { to: '/admin/modifiers', icon: <SlidersHorizontal size={24} />, label: 'Modifiers', description: 'Extras, sizes & add-ons' },
   { to: '/admin/inventory', icon: <Package size={24} />, label: 'Inventory', description: 'Stock levels & alerts' },
   { to: '/admin/employees', icon: <Users size={24} />, label: 'Employees', description: 'Staff & PINs', adminOnly: true },
@@ -41,18 +44,24 @@ const ADMIN_LINKS: AdminLink[] = [
   { to: '/admin/permissions', icon: <Shield size={24} />, label: 'Permissions', description: 'Role access control', adminOnly: true },
   { to: '/admin/purchase-orders', icon: <ClipboardList size={24} />, label: 'Purchase Orders', description: 'Supplier orders' },
   { to: '/admin/loyalty', icon: <Heart size={24} />, label: 'Loyalty', description: 'Rewards & stamp cards' },
-  { to: '/admin/expenses', icon: <DollarSign size={24} />, label: 'Expenses', description: 'Track business expenses' },
+  { to: '/admin/expenses', icon: <DollarSign size={24} />, label: 'Expenses', description: 'Track expenses and suppliers' },
   { to: '/admin/branding', icon: <Palette size={24} />, label: 'Branding', description: 'Colors, logo & name' },
+  { to: '/admin/display-menu', icon: <MonitorPlay size={24} />, label: 'Display Menu', description: 'TV menu board and atmosphere panel' },
   { to: '/admin/invoicing', icon: <FileText size={24} />, label: 'Invoicing', description: 'CFDI & invoices' },
   { to: '/admin/integrations', icon: <Plug size={24} />, label: 'Integrations', description: 'Payments & services' },
   { to: '/admin/account', icon: <User size={24} />, label: 'Account', description: 'Plan & billing' },
 ];
 
 export default function AdminDashboard() {
+  const { t } = useTranslation('admin');
   const { currentEmployee } = useAuth();
   const isAdmin = currentEmployee?.role === 'admin';
 
-  const links = isAdmin ? ADMIN_LINKS : ADMIN_LINKS.filter(l => !l.adminOnly);
+  const links = (isAdmin ? ADMIN_LINKS : ADMIN_LINKS.filter(l => !l.adminOnly)).map((link) => (
+    link.to === '/admin/recipes'
+      ? { ...link, label: t('cards.recipes'), description: t('cards.recipesDesc') }
+      : link
+  ));
 
   return (
     <div className="min-h-screen bg-neutral-950">

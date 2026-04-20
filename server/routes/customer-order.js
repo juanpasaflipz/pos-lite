@@ -88,7 +88,8 @@ router.get('/menu', async (req, res) => {
           COALESCE(vbi.show_image, true) as show_image,
           mi.category_id,
           mc.name as category_name,
-          mc.sort_order as category_sort
+          mc.sort_order as category_sort,
+          mi.sort_order as item_sort
         FROM virtual_brand_items vbi
         JOIN menu_items mi ON mi.id = vbi.menu_item_id
         JOIN menu_categories mc ON mc.id = mi.category_id
@@ -96,7 +97,7 @@ router.get('/menu', async (req, res) => {
           AND vbi.active = true
           AND mi.active = true
           AND mc.active = true
-        ORDER BY mc.sort_order, mi.id
+        ORDER BY mc.sort_order, mi.sort_order ASC NULLS LAST, mi.id
       `, brandIds);
 
       const brandMap = new Map();
@@ -145,10 +146,10 @@ router.get('/menu', async (req, res) => {
     }
 
     const items = await all(`
-      SELECT id, category_id, name, price, description, image_url
+      SELECT id, category_id, name, price, description, image_url, sort_order
       FROM menu_items
       WHERE active = true
-      ORDER BY name
+      ORDER BY category_id ASC, sort_order ASC NULLS LAST, id ASC
     `);
 
     const catMap = new Map();

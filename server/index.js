@@ -53,6 +53,8 @@ import cfdiPublicRoutes from './routes/cfdi-public.js';
 
 // Customer-facing
 import customerOrderRoutes from './routes/customer-order.js';
+import menuBoardRoutes from './routes/menu-board.js';
+import displayAssetsRoutes from './routes/display-assets.js';
 
 // AI Agent
 import agentRoutes from './agent/route.js';
@@ -199,6 +201,7 @@ app.use('/api', tenantMiddleware);
 
 // Customer-facing (public, QR code)
 app.use('/api/customer-order', customerOrderRoutes);
+app.use('/api/menu-board', menuBoardRoutes);
 
 // Core POS
 app.use('/api/menu', menuRoutes);
@@ -223,6 +226,7 @@ app.use('/api/getnet', getnetRoutes);
 
 // Account & Settings
 app.use('/api/branding', brandingRoutes);
+app.use('/api/display-assets', displayAssetsRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/account', accountRoutes);
 app.use('/api/credentials', credentialsRoutes);

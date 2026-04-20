@@ -84,6 +84,7 @@ import {
   MerchantAdvance,
   MCARepayment,
 } from '../types';
+import type { DisplayAsset, DisplayMenuSettings, MenuBoardDataResponse } from '../types/menu-board';
 
 // Employee ID for display/sync use - set after login
 let currentEmployeeId: number | null = null;
@@ -420,6 +421,7 @@ export async function createMenuItem(data: {
   price: number;
   description?: string;
   image_url?: string;
+  sort_order?: number;
   active?: boolean;
 }): Promise<MenuItem> {
   return apiRequest<MenuItem>('/menu/items', {
@@ -434,6 +436,7 @@ export async function updateMenuItem(id: number, data: {
   price?: number;
   description?: string;
   image_url?: string;
+  sort_order?: number;
   active?: boolean;
 }): Promise<any> {
   return apiRequest(`/menu/items/${id}`, {
@@ -1586,8 +1589,43 @@ export async function markRecaptureConverted(id: number): Promise<any> {
 
 /* ==================== Menu Board Endpoints ==================== */
 
-export async function getMenuBoardData(): Promise<any> {
-  return apiRequest('/menu-board/data');
+export async function getMenuBoardData(): Promise<MenuBoardDataResponse> {
+  return apiRequest<MenuBoardDataResponse>('/menu-board/data');
+}
+
+export async function getDisplayMenuSettings(): Promise<DisplayMenuSettings> {
+  return apiRequest<DisplayMenuSettings>('/branding/display-menu');
+}
+
+export async function updateDisplayMenuSettings(data: Partial<DisplayMenuSettings>): Promise<DisplayMenuSettings> {
+  return apiRequest<DisplayMenuSettings>('/branding/display-menu', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getDisplayAssets(): Promise<DisplayAsset[]> {
+  return apiRequest<DisplayAsset[]>('/display-assets');
+}
+
+export async function createDisplayAsset(data: Partial<DisplayAsset>): Promise<DisplayAsset> {
+  return apiRequest<DisplayAsset>('/display-assets', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateDisplayAsset(id: number, data: Partial<DisplayAsset>): Promise<DisplayAsset> {
+  return apiRequest<DisplayAsset>(`/display-assets/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteDisplayAsset(id: number): Promise<{ success: boolean }> {
+  return apiRequest<{ success: boolean }>(`/display-assets/${id}`, {
+    method: 'DELETE',
+  });
 }
 
 /* ==================== Onboarding ==================== */
@@ -2711,6 +2749,18 @@ export interface Expense {
   updated_at: string;
 }
 
+export interface ExpenseSupplier {
+  id: number;
+  name: string;
+  contact_name?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  notes?: string;
+  active: boolean;
+  created_at: string;
+}
+
 export interface ReceiptScanResult {
   image_url: string;
   parsed: {
@@ -2732,6 +2782,17 @@ export async function getExpenses(params?: { from?: string; to?: string }): Prom
   if (params?.to) qs.set('to', params.to);
   const query = qs.toString() ? `?${qs}` : '';
   return apiRequest(`/expenses${query}`);
+}
+
+export async function getExpenseSuppliers(): Promise<ExpenseSupplier[]> {
+  return apiRequest<ExpenseSupplier[]>('/expenses/suppliers');
+}
+
+export async function createExpenseSupplier(data: Partial<ExpenseSupplier>): Promise<ExpenseSupplier> {
+  return apiRequest<ExpenseSupplier>('/expenses/suppliers', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 }
 
 export async function createExpense(data: Partial<Expense> & { inventory_matches?: InventoryMatch[] }): Promise<Expense> {
@@ -2818,4 +2879,3 @@ export async function exportExpenses(params?: { from?: string; to?: string }): P
   if (!response.ok) throw new Error('Failed to export expenses');
   return response.blob();
 }
-

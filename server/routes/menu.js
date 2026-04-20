@@ -198,12 +198,12 @@ router.get('/items', async (req, res) => {
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     let query = `
-      SELECT id, category_id, name, price, description, image_url, active, prep_time_minutes, is_example
+      SELECT id, category_id, name, price, description, image_url, sort_order, active, prep_time_minutes, is_example
       FROM menu_items
       ${whereClause}
     `;
 
-    query += ' ORDER BY name ASC';
+    query += ' ORDER BY sort_order ASC NULLS LAST, id ASC';
 
     const items = await all(query, params);
     res.json(items);
@@ -218,7 +218,7 @@ router.get('/items/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const item = await get(`
-      SELECT id, category_id, name, price, description, image_url
+      SELECT id, category_id, name, price, description, image_url, sort_order
       FROM menu_items
       WHERE id = $1 AND active = true
     `, [id]);
@@ -237,7 +237,7 @@ router.get('/items/:id', async (req, res) => {
 // POST /api/menu/items - create item (admin)
 router.post('/items', requireAuth('manage_menu'), async (req, res) => {
   try {
-    const { category_id, name, price, description, image_url, prep_time_minutes, active } = req.body;
+    const { category_id, name, price, description, image_url, sort_order, prep_time_minutes, active } = req.body;
 
     if (!category_id || !name || price === undefined) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -256,10 +256,15 @@ router.post('/items', requireAuth('manage_menu'), async (req, res) => {
     }
 
     const tid = getTenantId();
+    const explicitSortOrder = Number.isFinite(Number(sort_order)) ? Number(sort_order) : null;
+    const maxSort = explicitSortOrder === null
+      ? await get('SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM menu_items WHERE category_id = $1', [category_id])
+      : null;
+    const resolvedSortOrder = explicitSortOrder ?? ((Number(maxSort?.max_sort) || 0) + 1);
     const result = await run(`
-      INSERT INTO menu_items (tenant_id, category_id, name, price, description, image_url, active, prep_time_minutes)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    `, [tid, category_id, name, price, description || null, image_url || null, isActive, prep_time_minutes || 5]);
+      INSERT INTO menu_items (tenant_id, category_id, name, price, description, image_url, sort_order, active, prep_time_minutes)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `, [tid, category_id, name, price, description || null, image_url || null, resolvedSortOrder, isActive, prep_time_minutes || 5]);
 
     audit({
       tenantId: req.tenant?.id || 'default',
@@ -278,6 +283,7 @@ router.post('/items', requireAuth('manage_menu'), async (req, res) => {
       price,
       description,
       image_url,
+      sort_order: resolvedSortOrder,
     });
   } catch (error) {
     console.error('Error creating item:', error);
@@ -289,7 +295,7 @@ router.post('/items', requireAuth('manage_menu'), async (req, res) => {
 router.put('/items/:id', requireAuth('manage_menu'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { category_id, name, price, description, image_url, prep_time_minutes, active } = req.body;
+    const { category_id, name, price, description, image_url, sort_order, prep_time_minutes, active } = req.body;
 
     // Check if item exists
     const item = await get('SELECT id FROM menu_items WHERE id = $1', [id]);
@@ -319,6 +325,10 @@ router.put('/items/:id', requireAuth('manage_menu'), async (req, res) => {
     if (image_url !== undefined) {
       updates.push(`image_url = $${values.length + 1}`);
       values.push(image_url);
+    }
+    if (sort_order !== undefined) {
+      updates.push(`sort_order = $${values.length + 1}`);
+      values.push(Number.isFinite(Number(sort_order)) ? Number(sort_order) : 0);
     }
     if (prep_time_minutes !== undefined) {
       updates.push(`prep_time_minutes = $${values.length + 1}`);
@@ -467,7 +477,7 @@ router.get('/recipes/summary', async (req, res) => {
       LEFT JOIN menu_item_ingredients mii ON mii.menu_item_id = mi.id
       LEFT JOIN inventory_items ii ON mii.inventory_item_id = ii.id
       GROUP BY mi.id, mi.name, mi.price, mi.category_id, mi.active, mc.name, mc.sort_order
-      ORDER BY mc.sort_order ASC, mi.name ASC
+      ORDER BY mc.sort_order ASC, mi.sort_order ASC NULLS LAST, mi.id ASC
     `);
 
     // Coerce Postgres numeric strings

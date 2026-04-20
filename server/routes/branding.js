@@ -9,9 +9,11 @@ import { updateTenant, getTenant } from '../tenants.js';
 import { getPlanLimits, planUpgradeError } from '../planLimits.js';
 import { isConektaConfigured } from '../conekta.js';
 import { isGetnetConfigured } from '../services/getnet/auth.js';
+import { getDisplayMenuSettings, setDisplayMenuSettings } from '../lib/displayMenu.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.join(__dirname, '../../data/uploads');
+const brandingPath = path.join(__dirname, '../../data/branding.json');
 
 // Ensure uploads directory exists
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -42,6 +44,18 @@ const upload = multer({
 
 const router = Router();
 
+function readLocalBranding() {
+  try {
+    return JSON.parse(fs.readFileSync(brandingPath, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+function writeLocalBranding(data) {
+  fs.writeFileSync(brandingPath, JSON.stringify(data, null, 2));
+}
+
 /**
  * GET /api/branding — public branding for current tenant
  * Returns primaryColor, logoUrl, restaurantName, tagline for CSS theming.
@@ -52,9 +66,7 @@ router.get('/', async (req, res) => {
 
   // No tenant resolved — check branding.json for default mode
   if (!tenant) {
-    const brandingPath = path.join(__dirname, '../../data/branding.json');
-    let saved = {};
-    try { saved = JSON.parse(fs.readFileSync(brandingPath, 'utf8')); } catch {}
+    const saved = readLocalBranding();
 
     return res.json({
       primaryColor: saved.primaryColor || '#0d9488',
@@ -140,10 +152,7 @@ router.put('/settings', requireAuth('manage_branding'), async (req, res) => {
 
     // For non-tenant (default DB) — update a local branding file
     if (!tenantId) {
-      // Store in a simple JSON file for default/single-tenant mode
-      const brandingPath = path.join(__dirname, '../../data/branding.json');
-      let existing = {};
-      try { existing = JSON.parse(fs.readFileSync(brandingPath, 'utf8')); } catch {}
+      const existing = readLocalBranding();
 
       const updated = {
         ...existing,
@@ -153,7 +162,7 @@ router.put('/settings', requireAuth('manage_branding'), async (req, res) => {
         ...(address !== undefined && { address }),
       };
 
-      fs.writeFileSync(brandingPath, JSON.stringify(updated, null, 2));
+      writeLocalBranding(updated);
 
       return res.json({
         primaryColor: updated.primaryColor || '#0d9488',
@@ -202,6 +211,47 @@ router.put('/settings', requireAuth('manage_branding'), async (req, res) => {
   }
 });
 
+router.get('/display-menu', requireAuth('manage_branding'), async (req, res) => {
+  try {
+    if (!req.tenant?.id) {
+      const branding = readLocalBranding();
+      return res.json(getDisplayMenuSettings(branding));
+    }
+
+    res.json(getDisplayMenuSettings(req.tenant.branding));
+  } catch (error) {
+    console.error('Display menu settings fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch display menu settings' });
+  }
+});
+
+router.put('/display-menu', requireAuth('manage_branding'), async (req, res) => {
+  try {
+    const tenantId = req.tenant?.id;
+
+    if (!tenantId) {
+      const branding = readLocalBranding();
+      const updated = setDisplayMenuSettings(branding, req.body);
+      writeLocalBranding(updated);
+      return res.json(updated.displayMenu);
+    }
+
+    const tenant = await getTenant(tenantId);
+    if (!tenant) {
+      return res.status(404).json({ error: 'Tenant not found' });
+    }
+
+    const existing = tenant.branding_json ? JSON.parse(tenant.branding_json) : {};
+    const updated = setDisplayMenuSettings(existing, req.body);
+    await updateTenant(tenantId, { branding_json: JSON.stringify(updated) });
+
+    res.json(updated.displayMenu);
+  } catch (error) {
+    console.error('Display menu settings update error:', error);
+    res.status(500).json({ error: 'Failed to update display menu settings' });
+  }
+});
+
 /**
  * POST /api/branding/logo — upload logo via employee auth
  * Accepts multipart form with 'logo' file field
@@ -228,9 +278,7 @@ router.post('/logo', requireAuth('manage_branding'), (req, res) => {
 
       if (!tenantId) {
         // Default/single-tenant mode — use branding.json
-        const brandingPath = path.join(__dirname, '../../data/branding.json');
-        let existing = {};
-        try { existing = JSON.parse(fs.readFileSync(brandingPath, 'utf8')); } catch {}
+        const existing = readLocalBranding();
 
         // Delete previous uploaded logo
         if (existing.logoUrl && existing.logoUrl.startsWith('/uploads/')) {
@@ -239,7 +287,7 @@ router.post('/logo', requireAuth('manage_branding'), (req, res) => {
         }
 
         existing.logoUrl = logoUrl;
-        fs.writeFileSync(brandingPath, JSON.stringify(existing, null, 2));
+        writeLocalBranding(existing);
 
         return res.json({
           logoUrl,
