@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -89,6 +89,7 @@ export default function AccountScreen() {
 
   // Billing
   const [billingLoading, setBillingLoading] = useState<string | null>(null);
+  const [billingBanner, setBillingBanner] = useState<{ type: 'success' | 'info' | 'error'; text: string } | null>(null);
 
   // Promo code
   const [promoState, setPromoState] = useState<PromoState>('idle');
@@ -117,7 +118,7 @@ export default function AccountScreen() {
   const [revokeLoading, setRevokeLoading] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
 
-  const { plan, limits } = usePlan();
+  const { plan, limits, refresh } = usePlan();
   const isBankingPlan = plan === 'pro';
   const maxBankConns = limits.maxBankConnections || 0;
 
@@ -147,27 +148,81 @@ export default function AccountScreen() {
     setBankLoading(false);
   };
 
+  const loadAccount = useCallback(async () => {
+    const data = await getAccount();
+    setAccount(data);
+    setEditName(data.name);
+    setEditEmail(data.email);
+    if (data.plan === 'pro') {
+      loadBankData();
+    }
+    getFinancingConsent()
+      .then(cs => setConsentStatus({ consented: cs.has_consent, consent_at: cs.consented_at, consent_version: cs.consent_version }))
+      .catch(() => {});
+    return data;
+  }, []);
+
   useEffect(() => {
     setLoading(true);
-    getAccount()
-      .then(data => {
-        setAccount(data);
-        setEditName(data.name);
-        setEditEmail(data.email);
-        // Load banking data for pro+ plans
-        if (data.plan === 'pro') {
-          loadBankData();
-        }
-        // Load consent status
-        getFinancingConsent()
-          .then(cs => setConsentStatus({ consented: cs.has_consent, consent_at: cs.consented_at, consent_version: cs.consent_version }))
-          .catch(() => {});
-      })
+    loadAccount()
       .catch((err: any) => {
         setError(err.message || t('account.failedLoadAccount'));
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [loadAccount, t]);
+
+  useEffect(() => {
+    const billingResult = new URLSearchParams(window.location.hash.split('?')[1] || '').get('billing');
+    if (!billingResult) return;
+
+    const clearBillingParam = () => {
+      const [path] = window.location.hash.split('?');
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${path}`);
+    };
+
+    if (billingResult === 'cancelled') {
+      setBillingBanner({ type: 'info', text: t('account.billingCancelled') });
+      clearBillingParam();
+      return;
+    }
+
+    if (billingResult !== 'success') return;
+
+    let cancelled = false;
+    const pollForUpgrade = async () => {
+      setBillingBanner({ type: 'info', text: t('account.billingPending') });
+
+      for (let attempt = 0; attempt < 6 && !cancelled; attempt += 1) {
+        try {
+          const data = await loadAccount();
+          await refresh();
+          if (data.plan === 'pro') {
+            if (!cancelled) {
+              setBillingBanner({ type: 'success', text: t('account.billingSuccess') });
+              clearBillingParam();
+            }
+            return;
+          }
+        } catch {
+          // keep retrying
+        }
+
+        if (attempt < 5) {
+          await new Promise(resolve => setTimeout(resolve, 2500));
+        }
+      }
+
+      if (!cancelled) {
+        setBillingBanner({ type: 'error', text: t('account.billingRefreshError') });
+        clearBillingParam();
+      }
+    };
+
+    pollForUpgrade();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadAccount, refresh, t]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -272,6 +327,17 @@ export default function AccountScreen() {
       </div>
 
       <div className="max-w-3xl mx-auto p-6 space-y-6">
+        {billingBanner && (
+          <div className={`border rounded-lg p-4 ${
+            billingBanner.type === 'success'
+              ? 'bg-green-900/20 border-green-800 text-green-300'
+              : billingBanner.type === 'error'
+                ? 'bg-amber-900/20 border-amber-800 text-amber-200'
+                : 'bg-brand-900/20 border-brand-800 text-brand-200'
+          }`}>
+            <p>{billingBanner.text}</p>
+          </div>
+        )}
         {loading ? (
           <div className="space-y-4">
             {[1, 2, 3].map(i => (

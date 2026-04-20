@@ -153,8 +153,8 @@ router.post('/checkout', requireOwner, async (req, res) => {
       mode: 'subscription',
       currency: 'mxn',
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${BASE_URL}/#/admin?billing=success`,
-      cancel_url: `${BASE_URL}/#/admin?billing=cancelled`,
+      success_url: `${BASE_URL}/#/admin/account?billing=success`,
+      cancel_url: `${BASE_URL}/#/admin/account?billing=cancelled`,
       metadata: { tenant_id: tenant.id, plan, promo_code: codeToApply || '' },
     };
 
