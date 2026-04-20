@@ -44,6 +44,83 @@ const router = Router();
 const VALID_CATEGORIES = ['food_cost', 'supplies', 'utilities', 'rent', 'marketing', 'other'];
 const VALID_PAYMENT_METHODS = ['cash', 'card', 'transfer'];
 
+// GET /api/expenses/suppliers — list active suppliers for expense entry
+router.get('/suppliers', requireAuth('view_reports'), async (_req, res) => {
+  try {
+    const suppliers = await all(
+      'SELECT * FROM vendors WHERE active = true ORDER BY name ASC'
+    );
+    res.json(suppliers);
+  } catch (err) {
+    console.error('[Expenses] Suppliers list error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch suppliers' });
+  }
+});
+
+// POST /api/expenses/suppliers — create supplier for expense entry
+router.post('/suppliers', requireAuth('manage_inventory'), async (req, res) => {
+  try {
+    const { name, contact_name, phone, email, address, notes } = req.body;
+
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: 'Supplier name is required' });
+    }
+
+    const supplierName = String(name).trim();
+    const existing = await get(
+      'SELECT * FROM vendors WHERE LOWER(name) = LOWER($1) ORDER BY id ASC LIMIT 1',
+      [supplierName]
+    );
+
+    if (existing) {
+      if (!existing.active) {
+        const reactivated = await get(
+          `UPDATE vendors
+           SET active = true,
+               contact_name = COALESCE($1, contact_name),
+               phone = COALESCE($2, phone),
+               email = COALESCE($3, email),
+               address = COALESCE($4, address),
+               notes = COALESCE($5, notes)
+           WHERE id = $6
+           RETURNING *`,
+          [
+            contact_name || null,
+            phone || null,
+            email || null,
+            address || null,
+            notes || null,
+            existing.id,
+          ]
+        );
+        return res.json(reactivated);
+      }
+      return res.json(existing);
+    }
+
+    const tenantId = getTenantId();
+    const result = await get(
+      `INSERT INTO vendors (tenant_id, name, contact_name, phone, email, address, notes, active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true)
+       RETURNING *`,
+      [
+        tenantId,
+        supplierName,
+        contact_name || null,
+        phone || null,
+        email || null,
+        address || null,
+        notes || null,
+      ]
+    );
+
+    res.status(201).json(result);
+  } catch (err) {
+    console.error('[Expenses] Supplier create error:', err.message);
+    res.status(500).json({ error: 'Failed to create supplier' });
+  }
+});
+
 // GET /api/expenses — list expenses with optional date range
 router.get('/', requireAuth('view_reports'), async (req, res) => {
   try {
