@@ -6,13 +6,35 @@ import { checkLimit, planUpgradeError } from '../planLimits.js';
 const logRestockEvent = () => {};
 
 const router = Router();
+let inventoryColumnsPromise = null;
+
+async function getInventoryColumns() {
+  if (!inventoryColumnsPromise) {
+    inventoryColumnsPromise = all(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'inventory_items'
+    `).then(rows => new Set(rows.map(row => row.column_name)));
+  }
+
+  return inventoryColumnsPromise;
+}
+
+function selectColumn(columns, columnName) {
+  return columns.has(columnName) ? columnName : `NULL AS ${columnName}`;
+}
 
 // GET /api/inventory - list all inventory items
 router.get('/', async (req, res) => {
   try {
+    const columns = await getInventoryColumns();
     const items = await all(`
       SELECT id, name, quantity, unit, low_stock_threshold, category, cost_price,
-             last_counted_at, sku, barcode, expiry_date, lot_number
+             ${selectColumn(columns, 'last_counted_at')},
+             ${selectColumn(columns, 'sku')},
+             ${selectColumn(columns, 'barcode')},
+             ${selectColumn(columns, 'expiry_date')},
+             ${selectColumn(columns, 'lot_number')}
       FROM inventory_items
       ORDER BY category ASC, name ASC
     `);
@@ -50,17 +72,29 @@ router.get('/search', async (req, res) => {
 // GET /api/inventory/lookup - look up item by barcode or sku
 router.get('/lookup', async (req, res) => {
   try {
+    const columns = await getInventoryColumns();
     const { barcode, sku } = req.query;
     if (!barcode && !sku) {
       return res.status(400).json({ error: 'barcode or sku query parameter required' });
     }
 
     const value = barcode || sku;
+    const lookups = [];
+    if (columns.has('barcode')) lookups.push('barcode = $1');
+    if (columns.has('sku')) lookups.push('sku = $1');
+
+    if (lookups.length === 0) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
     const item = await get(`
       SELECT id, name, quantity, unit, cost_price, low_stock_threshold,
-             category, sku, barcode, expiry_date
+             category,
+             ${selectColumn(columns, 'sku')},
+             ${selectColumn(columns, 'barcode')},
+             ${selectColumn(columns, 'expiry_date')}
       FROM inventory_items
-      WHERE barcode = $1 OR sku = $1
+      WHERE ${lookups.join(' OR ')}
     `, [value]);
 
     if (!item) {
@@ -203,6 +237,7 @@ router.put('/shrinkage-alerts/:id/acknowledge', requireAuth('manage_inventory'),
 // POST /api/inventory/scan-restock - restock by barcode/sku scan
 router.post('/scan-restock', requireAuth('manage_inventory'), async (req, res) => {
   try {
+    const columns = await getInventoryColumns();
     const { barcode, sku, quantity, cost_price } = req.body;
 
     if (!barcode && !sku) {
@@ -213,10 +248,18 @@ router.post('/scan-restock', requireAuth('manage_inventory'), async (req, res) =
     }
 
     const value = barcode || sku;
+    const lookups = [];
+    if (columns.has('barcode')) lookups.push('barcode = $1');
+    if (columns.has('sku')) lookups.push('sku = $1');
+
+    if (lookups.length === 0) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
     const item = await get(`
       SELECT id, name, quantity, unit, cost_price
       FROM inventory_items
-      WHERE barcode = $1 OR sku = $1
+      WHERE ${lookups.join(' OR ')}
     `, [value]);
 
     if (!item) {
@@ -322,6 +365,7 @@ router.post('/:id/count', requireAuth('manage_inventory'), async (req, res) => {
 // PUT /api/inventory/:id - update item fields
 router.put('/:id', requireAuth('manage_inventory'), async (req, res) => {
   try {
+    const columns = await getInventoryColumns();
     const { id } = req.params;
     const { quantity, low_stock_threshold, sku, barcode, expiry_date, lot_number, cost_price } = req.body;
 
@@ -343,19 +387,19 @@ router.put('/:id', requireAuth('manage_inventory'), async (req, res) => {
       sets.push(`low_stock_threshold = $${paramIdx++}`);
       params.push(low_stock_threshold);
     }
-    if (sku !== undefined) {
+    if (sku !== undefined && columns.has('sku')) {
       sets.push(`sku = $${paramIdx++}`);
       params.push(sku || null);
     }
-    if (barcode !== undefined) {
+    if (barcode !== undefined && columns.has('barcode')) {
       sets.push(`barcode = $${paramIdx++}`);
       params.push(barcode || null);
     }
-    if (expiry_date !== undefined) {
+    if (expiry_date !== undefined && columns.has('expiry_date')) {
       sets.push(`expiry_date = $${paramIdx++}`);
       params.push(expiry_date || null);
     }
-    if (lot_number !== undefined) {
+    if (lot_number !== undefined && columns.has('lot_number')) {
       sets.push(`lot_number = $${paramIdx++}`);
       params.push(lot_number || null);
     }
@@ -381,6 +425,7 @@ router.put('/:id', requireAuth('manage_inventory'), async (req, res) => {
 // POST /api/inventory - create inventory item
 router.post('/', requireAuth('manage_inventory'), async (req, res) => {
   try {
+    const columns = await getInventoryColumns();
     const { name, quantity, unit, low_stock_threshold, category, cost_price, sku, barcode, expiry_date, lot_number } = req.body;
 
     if (!name) {
@@ -396,22 +441,31 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
     }
 
     const tid = getTenantId();
+    const insertColumns = ['tenant_id', 'name', 'quantity', 'unit', 'low_stock_threshold', 'category', 'cost_price'];
+    const insertValues = [tid, name, quantity || 0, unit || null, low_stock_threshold || 0, category || null, cost_price || 0];
+
+    if (columns.has('sku')) {
+      insertColumns.push('sku');
+      insertValues.push(sku || null);
+    }
+    if (columns.has('barcode')) {
+      insertColumns.push('barcode');
+      insertValues.push(barcode || null);
+    }
+    if (columns.has('expiry_date')) {
+      insertColumns.push('expiry_date');
+      insertValues.push(expiry_date || null);
+    }
+    if (columns.has('lot_number')) {
+      insertColumns.push('lot_number');
+      insertValues.push(lot_number || null);
+    }
+
+    const placeholders = insertColumns.map((_, index) => `$${index + 1}`);
     const result = await run(`
-      INSERT INTO inventory_items (tenant_id, name, quantity, unit, low_stock_threshold, category, cost_price, sku, barcode, expiry_date, lot_number)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-    `, [
-      tid,
-      name,
-      quantity || 0,
-      unit || null,
-      low_stock_threshold || 0,
-      category || null,
-      cost_price || 0,
-      sku || null,
-      barcode || null,
-      expiry_date || null,
-      lot_number || null,
-    ]);
+      INSERT INTO inventory_items (${insertColumns.join(', ')})
+      VALUES (${placeholders.join(', ')})
+    `, insertValues);
 
     res.json({
       id: result.lastInsertRowid,

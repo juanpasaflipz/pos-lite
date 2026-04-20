@@ -58,9 +58,7 @@ async function callClaude(messages, tools) {
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
 
-  // Use haiku for cost efficiency (~$0.25/1M input, $1.25/1M output)
-  // Switch to sonnet for complex analysis if needed
-  const model = 'claude-haiku-4-5-20251001';
+  const model = 'claude-sonnet-4-6';
 
   const response = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
