@@ -6,7 +6,7 @@ import {
   Check, AlertCircle, Crown, Smartphone, Wifi, WifiOff, X, Loader2,
   Landmark, Shield, FileText, Download, ShieldOff,
 } from 'lucide-react';
-import { getAccount, updateAccount, changePassword, createCheckoutSession, createPortalSession, getMpTerminals, setMpDefaultTerminal as apiSetMpDefaultTerminal, validatePromoCode, getBankConnections, getBankAccounts, syncBankConnection, deleteBankConnection, getFinancingConsent, deleteFinancingConsent, exportFinancingData, getFinancingConsentTerms, type BankConnection, type BankAccount } from '../api';
+import { getAccount, updateAccount, changePassword, createCheckoutSession, createPortalSession, getMpConnectUrl, getMpTerminals, setMpDefaultTerminal as apiSetMpDefaultTerminal, validatePromoCode, getBankConnections, getBankAccounts, syncBankConnection, deleteBankConnection, getFinancingConsent, deleteFinancingConsent, exportFinancingData, getFinancingConsentTerms, type BankConnection, type BankAccount } from '../api';
 import { usePlan } from '../context/PlanContext';
 import BankConnectionCard from '../components/banking/BankConnectionCard';
 import ConnectBankButton from '../components/banking/ConnectBankButton';
@@ -634,13 +634,20 @@ export default function AccountScreen() {
                         <p className="text-neutral-400 text-sm">
                           {t('account.mpConnectDesc')}
                         </p>
-                        <a
-                          href="/api/payments/mp/connect"
+                        <button
+                          onClick={async () => {
+                            try {
+                              const { auth_url } = await getMpConnectUrl();
+                              window.location.href = auth_url;
+                            } catch (err) {
+                              console.error('MP connect failed', err);
+                            }
+                          }}
                           className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#009ee3] text-white text-sm font-bold rounded-lg hover:bg-[#0082c0] transition-colors"
                         >
                           <Smartphone size={16} />
                           {t('account.connectMercadoPago')}
-                        </a>
+                        </button>
                       </div>
                     );
                   }

@@ -682,7 +682,7 @@ router.get('/mp/connect', requireAuth('pos_access'), requirePro, async (req, res
     redirect_uri: `${BASE_URL}/api/payments/mp/callback`,
     state: `${req.tenant.id}:${crypto.createHmac('sha256', JWT_SECRET).update(req.tenant.id).digest('hex')}`,
   });
-  res.redirect(`https://auth.mercadopago.com/authorization?${params}`);
+  res.json({ auth_url: `https://auth.mercadopago.com/authorization?${params}` });
 });
 
 // GET /api/payments/mp/terminals — list Point terminals in PDV mode

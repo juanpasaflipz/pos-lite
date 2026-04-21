@@ -2017,6 +2017,10 @@ export async function issueCfdiPublicInvoice(token: string, data: {
 
 /* ==================== Mercado Pago Point Endpoints ==================== */
 
+export async function getMpConnectUrl(): Promise<{ auth_url: string }> {
+  return apiRequest('/payments/mp/connect');
+}
+
 export async function getMpStatus(): Promise<{
   connected: boolean;
   mp_user_id: string | null;
