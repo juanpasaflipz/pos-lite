@@ -103,6 +103,76 @@ vault-backed secrets.
 
 ---
 
+## Mobile UX redesign (audit 2026-04-22)
+
+Full audit in Claude memory (`mobile_ux_audit.md`). This section is the action list, organized by impact tier. The #1 single finding: `public/menu-images/` contains one file — menu cards collapse to text-only when `item.imageUrl` is missing. Fix the content gap before the polish gap.
+
+### 5. Menu photography pipeline — mandatory content layer
+
+**What:** Upload path in MenuManagement (Sharp resize, blurhash placeholder, CDN or Railway volume), LQIP/blurhash display in menu cards, branded gradient+icon fallback keyed to category for imageless items. Stop-gap: bulk-buy food stock photography or AI-generate placeholders until real shots are done.
+
+**Why:** For a food-ordering product, no photos = text-only cards that underperform Toast/Square/Slice by an order of magnitude. Lifts conversion 25-40% in food ordering.
+
+**Pros:** Highest single ROI on mobile UX. Unlocks all Tier A items.
+**Cons:** Requires actual photography (hire photographer or buy stock) — technology alone doesn't solve it.
+
+**Trigger:** Before any Framer Motion / design-token work. Content before polish.
+
+---
+
+### 6. Mobile quick wins — 1-2 day batch
+
+**What:**
+- Remove `"orientation": "landscape"` from `public/manifest.json` (conflicts with phone portrait shell)
+- Add `screenshots`, `shortcuts`, maskable icon variant to manifest
+- Bump qty/delete touch targets in `MobileCartScreen.tsx:168-185` from 32px → 40px
+- Add skeleton loaders replacing "Loading menu…" text across mobile screens
+- Add gradient+icon fallback card for imageless menu items (stopgap until photography)
+- Unify status pill colors into design tokens (currently copy-pasted across Kitchen/MobileKitchen/Orders)
+- Fix empty `alt=""` on menu images (a11y)
+
+**Why:** All small, all independent, all visible. Best hourly ROI in the entire redesign.
+
+**Trigger:** Any free day.
+
+---
+
+### 7. Tier A — Customer QR flow rework
+
+**What:** Restaurant hero header (cover + logo chip + open/closed + ETA), photo-forward menu card (16:9 hero + overlay), category image pills, item detail sheet with hero photo + social proof, animated order tracker (Lottie + confetti + haptic on "Ready"), pairings/recommendations.
+
+**Why:** Customer-facing surface drives conversion — dead time at the order tracker is time they're *staring at their phone for*. Currently static and forgettable.
+
+**Pros:** Real brand differentiation. Conversion win.
+**Cons:** 2-3 weeks of focused work. Requires Tier 5 (photography) in place first.
+
+**Trigger:** After menu photography pipeline is operational.
+
+---
+
+### 8. Tier B — Merchant POS polish
+
+**What:** Add photos to `MobileMenuGrid`, cart-add micro-interactions (motion + existing `src/lib/haptics.ts`), status pills with dot+label (colorblind-safe), micro-bounce on cart count.
+
+**Why:** Staff recognize items by photo 2-3× faster than text — meaningful during rush. Micro-interactions reduce the "did it register?" staff anxiety.
+
+**Trigger:** After Tier A ships or in parallel when Tier A is blocked on content.
+
+---
+
+### 9. Tier C — Design system foundations
+
+**What:** Install Framer Motion (~30KB gz), add illustration set (unDraw/Humaans) for empty/error/success, expand `tailwind.config.js` with typography/radius/shadow/motion tokens, image upload pipeline (Sharp + blurhash + lazy srcset), unify `MobileMenuGrid` + `CustomerOrderScreen` into one `<MenuItemCard variant context />`.
+
+**Why:** Without tokens + component primitives, every screen keeps reinventing. Adding them now prevents further drift.
+
+**Pros:** Pays back forever; every future feature gets faster.
+**Cons:** Foundational work feels unglamorous. Run `/design-consultation` to produce DESIGN.md first.
+
+**Trigger:** When Tier A + B are shipped and there's evidence the design is settling.
+
+---
+
 ## Carryover from design doc / CEO plan
 
 These were explicitly deferred in the original plan — re-listed here so TODOS.md
