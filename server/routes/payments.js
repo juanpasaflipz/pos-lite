@@ -736,7 +736,6 @@ router.post('/mp/charge', requireAuth('pos_access'), requirePro, async (req, res
     const externalRef = `${req.tenant.id}-${order.id}`;
     const mpOrder = await createPointOrder(accessToken, {
       amount: order.total,
-      description: `Orden #${order.order_number} - ${req.tenant.name}`,
       externalRef,
       terminalId: termId,
     });

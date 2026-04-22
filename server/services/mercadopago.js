@@ -80,7 +80,7 @@ export async function getTerminals(accessToken) {
 /**
  * Create a Point order and push it to the terminal.
  */
-export async function createPointOrder(accessToken, { amount, description, externalRef, terminalId }) {
+export async function createPointOrder(accessToken, { amount, externalRef, terminalId }) {
   const res = await fetch(`${MP}/point/integration-api/devices/${terminalId}/payment-intents`, {
     method: 'POST',
     headers: {
@@ -89,10 +89,11 @@ export async function createPointOrder(accessToken, { amount, description, exter
       'X-Idempotency-Key': `dk-${externalRef}-${Date.now()}`,
     },
     body: JSON.stringify({
-      amount: Math.round(amount * 100), // centavos
-      description,
-      external_reference: externalRef,
-      print_on_terminal: true,
+      amount: Math.round(amount * 100),
+      additional_info: {
+        external_reference: externalRef,
+        print_on_terminal: true,
+      },
     }),
   });
 
