@@ -13,6 +13,7 @@ import {
   createOrderTemplate,
   getOrders,
   getOrder,
+  deleteOrder,
   conektaOxxoPayment,
   conektaSpeiPayment,
   getnetTokenize,
@@ -853,6 +854,15 @@ const POSScreen: React.FC = () => {
         onCobrar={handleCobrar}
         onToggleUnpaidOrders={() => setShowUnpaidOrders(!showUnpaidOrders)}
         onUnlinkCustomer={() => setLinkedCustomer(null)}
+        onDeleteUnpaidOrder={async (order) => {
+          if (!window.confirm(`Delete order #${order.order_number}? This cannot be undone.`)) return;
+          try {
+            await deleteOrder(order.id);
+            setUnpaidOrders((prev) => prev.filter((o) => o.id !== order.id));
+          } catch (err) {
+            window.alert(err instanceof Error ? err.message : 'Failed to delete order');
+          }
+        }}
       />
 
       {/* Tablet Portrait: Cart Drawer + Mini Button */}

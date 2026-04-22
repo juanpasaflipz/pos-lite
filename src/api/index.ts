@@ -513,6 +513,14 @@ export async function updateOrderStatus(
   });
 }
 
+export async function deleteOrder(id: number): Promise<{ success: boolean; deleted_id: number }> {
+  return apiRequest(`/orders/${id}`, { method: 'DELETE' });
+}
+
+export async function purgeUnpaidOrders(): Promise<{ success: boolean; deleted_count: number }> {
+  return apiRequest('/orders/purge-unpaid', { method: 'POST' });
+}
+
 export async function getKitchenOrders(): Promise<Order[]> {
   return apiRequest<Order[]>('/orders/kitchen/active');
 }

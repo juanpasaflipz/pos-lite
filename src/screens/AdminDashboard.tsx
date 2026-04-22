@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -20,9 +20,11 @@ import {
   FileText,
   Plug,
   User,
+  Trash2,
 } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 import { useAuth } from '../context/AuthContext';
+import { purgeUnpaidOrders } from '../api';
 
 interface AdminLink {
   to: string;
@@ -56,6 +58,20 @@ export default function AdminDashboard() {
   const { t } = useTranslation('admin');
   const { currentEmployee } = useAuth();
   const isAdmin = currentEmployee?.role === 'admin';
+  const [purging, setPurging] = useState(false);
+
+  const handlePurgeUnpaid = async () => {
+    if (!window.confirm('Delete ALL unpaid and pending-terminal orders? This cannot be undone.')) return;
+    setPurging(true);
+    try {
+      const res = await purgeUnpaidOrders();
+      window.alert(`Deleted ${res.deleted_count} order(s).`);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to purge orders');
+    } finally {
+      setPurging(false);
+    }
+  };
 
   const links = (isAdmin ? ADMIN_LINKS : ADMIN_LINKS.filter(l => !l.adminOnly)).map((link) => (
     link.to === '/admin/recipes'
@@ -93,6 +109,25 @@ export default function AdminDashboard() {
             </Link>
           ))}
         </div>
+
+        {isAdmin && (
+          <div className="mt-8 p-5 bg-neutral-900 border border-red-900/40 rounded-xl">
+            <div className="flex items-center gap-2 mb-2">
+              <Trash2 size={16} className="text-red-400" />
+              <h3 className="text-red-400 font-semibold text-sm">Danger zone</h3>
+            </div>
+            <p className="text-neutral-400 text-xs mb-4">
+              Bulk-delete all unpaid and pending-terminal orders. Useful for clearing test orders.
+            </p>
+            <button
+              onClick={handlePurgeUnpaid}
+              disabled={purging}
+              className="px-4 py-2 bg-red-900/40 border border-red-900/60 text-red-300 text-sm font-semibold rounded-lg hover:bg-red-900/60 transition-all disabled:opacity-50"
+            >
+              {purging ? 'Deleting\u2026' : 'Delete all unpaid orders'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { ClipboardList } from 'lucide-react';
+import { ClipboardList, Trash2 } from 'lucide-react';
 import { CartItem, Order, LoyaltyCustomer, ComboDefinition } from '../../types';
 import { formatPrice, TAX_LABEL } from '../../utils/currency';
 import { formatTime } from '../../utils/dateFormat';
@@ -34,6 +34,7 @@ interface CartPanelProps {
   onCobrar: (order: Order) => void;
   onToggleUnpaidOrders: () => void;
   onUnlinkCustomer: () => void;
+  onDeleteUnpaidOrder?: (order: Order) => void;
 }
 
 export default function CartPanel({
@@ -58,6 +59,7 @@ export default function CartPanel({
   onConvertToCombo,
   onCobrar,
   onToggleUnpaidOrders,
+  onDeleteUnpaidOrder,
   onUnlinkCustomer,
 }: CartPanelProps) {
   const { t } = useTranslation('pos');
@@ -117,12 +119,23 @@ export default function CartPanel({
                     <p className="text-white font-bold text-sm">#{order.order_number}</p>
                     <p className="text-neutral-400 text-xs">{formatPrice(order.total)}</p>
                   </div>
-                  <button
-                    onClick={() => onCobrar(order)}
-                    className="px-3 py-1.5 bg-brand-600 text-white text-xs font-bold rounded-lg hover:bg-brand-700 transition-all"
-                  >
-                    {t('cart.charge')}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => onCobrar(order)}
+                      className="px-3 py-1.5 bg-brand-600 text-white text-xs font-bold rounded-lg hover:bg-brand-700 transition-all"
+                    >
+                      {t('cart.charge')}
+                    </button>
+                    {onDeleteUnpaidOrder && (
+                      <button
+                        onClick={() => onDeleteUnpaidOrder(order)}
+                        title="Delete order"
+                        className="p-1.5 text-neutral-400 hover:text-red-400 hover:bg-neutral-700 rounded-lg transition-all"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

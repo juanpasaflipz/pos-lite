@@ -603,5 +603,72 @@ router.patch('/:id/payment', requireAuth('pos_access'), async (req, res) => {
   }
 });
 
+// DELETE /api/orders/:id — delete one order and all its child rows (test cleanup)
+router.delete('/:id', requireAuth('void_orders'), async (req, res) => {
+  const { id } = req.params;
+  const conn = getConn();
+  try {
+    await conn.unsafe(
+      `DELETE FROM order_item_modifiers WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = $1)`,
+      [id]
+    );
+    await conn.unsafe(
+      `DELETE FROM order_payment_items WHERE payment_id IN (SELECT id FROM order_payments WHERE order_id = $1) OR order_item_id IN (SELECT id FROM order_items WHERE order_id = $1)`,
+      [id]
+    );
+    await conn.unsafe(`DELETE FROM order_payments WHERE order_id = $1`, [id]);
+    await conn.unsafe(`DELETE FROM refunds WHERE order_id = $1`, [id]);
+    await conn.unsafe(`DELETE FROM delivery_orders WHERE order_id = $1`, [id]);
+    await conn.unsafe(`UPDATE stamp_events SET order_id = NULL WHERE order_id = $1`, [id]);
+    await conn.unsafe(`DELETE FROM order_items WHERE order_id = $1`, [id]);
+    const deleted = await conn.unsafe(`DELETE FROM orders WHERE id = $1 RETURNING id`, [id]);
+
+    if (deleted.length === 0) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    audit('order.deleted', req, { order_id: id });
+    res.json({ success: true, deleted_id: id });
+  } catch (error) {
+    console.error('Error deleting order:', error);
+    res.status(500).json({ error: 'Failed to delete order' });
+  }
+});
+
+// POST /api/orders/purge-unpaid — bulk delete all unpaid/pending_terminal orders (test cleanup)
+router.post('/purge-unpaid', requireAuth('void_orders'), async (req, res) => {
+  const conn = getConn();
+  try {
+    const unpaid = await conn.unsafe(
+      `SELECT id FROM orders WHERE payment_status IN ('unpaid', 'pending_terminal')`
+    );
+    const ids = unpaid.map(r => r.id);
+
+    if (ids.length === 0) {
+      return res.json({ success: true, deleted_count: 0 });
+    }
+
+    await conn.unsafe(
+      `DELETE FROM order_item_modifiers WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = ANY($1::int[]))`,
+      [ids]
+    );
+    await conn.unsafe(
+      `DELETE FROM order_payment_items WHERE payment_id IN (SELECT id FROM order_payments WHERE order_id = ANY($1::int[])) OR order_item_id IN (SELECT id FROM order_items WHERE order_id = ANY($1::int[]))`,
+      [ids]
+    );
+    await conn.unsafe(`DELETE FROM order_payments WHERE order_id = ANY($1::int[])`, [ids]);
+    await conn.unsafe(`DELETE FROM refunds WHERE order_id = ANY($1::int[])`, [ids]);
+    await conn.unsafe(`DELETE FROM delivery_orders WHERE order_id = ANY($1::int[])`, [ids]);
+    await conn.unsafe(`UPDATE stamp_events SET order_id = NULL WHERE order_id = ANY($1::int[])`, [ids]);
+    await conn.unsafe(`DELETE FROM order_items WHERE order_id = ANY($1::int[])`, [ids]);
+    const deleted = await conn.unsafe(`DELETE FROM orders WHERE id = ANY($1::int[]) RETURNING id`, [ids]);
+
+    audit('orders.purged_unpaid', req, { deleted_count: deleted.length });
+    res.json({ success: true, deleted_count: deleted.length });
+  } catch (error) {
+    console.error('Error purging unpaid orders:', error);
+    res.status(500).json({ error: 'Failed to purge unpaid orders' });
+  }
+});
+
 export { insertOrderWithNumber, estimatePrepTime };
 export default router;
