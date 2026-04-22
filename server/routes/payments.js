@@ -812,13 +812,47 @@ router.get('/:order_id', async (req, res) => {
     const { order_id } = req.params;
 
     const order = await get(`
-      SELECT id, order_number, payment_intent_id, payment_status, payment_method, total, tip, refund_total
+      SELECT id, order_number, payment_intent_id, payment_status, payment_method, total, tip, refund_total, mp_order_id
       FROM orders
       WHERE id = $1
     `, [order_id]);
 
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // MP Point live status pull: webhooks may not be configured per-tenant,
+    // so query MP directly when the order is still awaiting the terminal.
+    if (order.payment_status === 'pending_terminal' && order.mp_order_id && req.tenant?.id) {
+      try {
+        const tenant = await getTenant(req.tenant.id);
+        if (tenant?.mp_access_token) {
+          const accessToken = await ensureFreshToken(tenant, adminSql);
+          const piRes = await fetch(
+            `https://api.mercadopago.com/point/integration-api/payment-intents/${order.mp_order_id}`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+          if (piRes.ok) {
+            const piData = await piRes.json();
+            if (piData.state === 'FINISHED') {
+              await run(
+                `UPDATE orders SET payment_status = 'paid', payment_method = 'card', paid_at = NOW() WHERE id = $1`,
+                [order.id]
+              );
+              order.payment_status = 'paid';
+              order.payment_method = 'card';
+            } else if (piData.state === 'CANCELED' || piData.state === 'CANCELLED' || piData.state === 'ERROR') {
+              await run(
+                `UPDATE orders SET payment_status = 'failed' WHERE id = $1`,
+                [order.id]
+              );
+              order.payment_status = 'failed';
+            }
+          }
+        }
+      } catch (mpErr) {
+        console.warn('MP live status pull failed:', mpErr.message);
+      }
     }
 
     if (!order.payment_intent_id) {
