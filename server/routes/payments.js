@@ -674,12 +674,12 @@ router.get('/mp/connect', requireAuth('pos_access'), requirePro, async (req, res
   const mpCreds = await getServiceCredentials(req.tenant.id, 'mercadopago', {
     client_id: 'MP_CLIENT_ID',
   });
-  const BASE_URL = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+  const tenantOrigin = `${req.protocol}://${req.get('host')}`;
   const params = new URLSearchParams({
     client_id: mpCreds.client_id || '',
     response_type: 'code',
     platform_id: 'mp',
-    redirect_uri: `${BASE_URL}/api/payments/mp/callback`,
+    redirect_uri: `${tenantOrigin}/api/payments/mp/callback`,
     state: `${req.tenant.id}:${crypto.createHmac('sha256', JWT_SECRET).update(req.tenant.id).digest('hex')}`,
   });
   res.json({ auth_url: `https://auth.mercadopago.com/authorization?${params}` });
@@ -874,7 +874,7 @@ export async function mpOAuthCallback(req, res) {
       client_secret: 'MP_CLIENT_SECRET',
     });
 
-    const BASE_URL = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+    const tenantOrigin = `${req.protocol}://${req.get('host')}`;
     const tokenRes = await fetch('https://api.mercadopago.com/oauth/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -883,7 +883,7 @@ export async function mpOAuthCallback(req, res) {
         client_id: mpCreds.client_id,
         grant_type: 'authorization_code',
         code,
-        redirect_uri: `${BASE_URL}/api/payments/mp/callback`,
+        redirect_uri: `${tenantOrigin}/api/payments/mp/callback`,
       }),
     });
 
