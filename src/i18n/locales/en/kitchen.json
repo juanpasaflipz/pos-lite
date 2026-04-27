@@ -17,7 +17,11 @@
   },
   "status": {
     "pending": "PENDING",
+    "confirmed": "CONFIRMED",
     "preparing": "PREPARING",
+    "ready": "READY",
+    "completed": "COMPLETED",
+    "cancelled": "CANCELLED",
     "urgent": "URGENT"
   },
   "actions": {

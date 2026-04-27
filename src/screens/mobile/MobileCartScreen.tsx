@@ -166,22 +166,25 @@ const MobileCartScreen: React.FC = () => {
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={() => { tapFeedback(); cart.updateQuantity(item.cart_id, item.quantity - 1); }}
-                    className="w-8 h-8 rounded-full bg-neutral-700 flex items-center justify-center text-white touch-manipulation"
+                    aria-label={t('mobilePOS.decreaseQuantity', 'Decrease quantity')}
+                    className="w-10 h-10 rounded-full bg-neutral-700 flex items-center justify-center text-white touch-manipulation"
                   >
-                    <Minus className="w-3.5 h-3.5" />
+                    <Minus className="w-4 h-4" />
                   </button>
                   <span className="text-white font-bold text-sm w-5 text-center">{item.quantity}</span>
                   <button
                     onClick={() => { tapFeedback(); cart.updateQuantity(item.cart_id, item.quantity + 1); }}
-                    className="w-8 h-8 rounded-full bg-neutral-700 flex items-center justify-center text-white touch-manipulation"
+                    aria-label={t('mobilePOS.increaseQuantity', 'Increase quantity')}
+                    className="w-10 h-10 rounded-full bg-neutral-700 flex items-center justify-center text-white touch-manipulation"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => { tapFeedback(); cart.removeItem(item.cart_id); }}
-                    className="w-8 h-8 rounded-full bg-red-600/20 flex items-center justify-center text-red-400 touch-manipulation ml-1"
+                    aria-label={t('mobilePOS.removeItem', 'Remove item')}
+                    className="w-10 h-10 rounded-full bg-red-600/20 flex items-center justify-center text-red-400 touch-manipulation ml-1"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>

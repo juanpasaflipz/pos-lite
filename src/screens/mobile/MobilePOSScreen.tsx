@@ -17,6 +17,7 @@ import type { MenuCategory, MenuItem } from '../../types';
 
 import MobileCategoryTabs from '../../components/mobile/MobileCategoryTabs';
 import MobileMenuGrid from '../../components/mobile/MobileMenuGrid';
+import MenuGridSkeleton from '../../components/mobile/MenuGridSkeleton';
 import MobileCartBar from '../../components/mobile/MobileCartBar';
 import MobileItemDetail from '../../components/mobile/MobileItemDetail';
 
@@ -111,8 +112,9 @@ const MobilePOSScreen: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <p className="text-brand-500 font-semibold animate-pulse">{t('actions.loadingMenu')}</p>
+      <div className="flex flex-col h-full pt-12">
+        <span className="sr-only">{t('actions.loadingMenu')}</span>
+        <MenuGridSkeleton />
       </div>
     );
   }

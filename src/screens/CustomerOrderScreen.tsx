@@ -747,7 +747,7 @@ export default function CustomerOrderScreen() {
                   {item.imageUrl && (
                     <img
                       src={item.imageUrl}
-                      alt=""
+                      alt={item.name}
                       className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
                     />
                   )}
@@ -813,7 +813,7 @@ export default function CustomerOrderScreen() {
               {selectedItem.imageUrl && (
                 <img
                   src={selectedItem.imageUrl}
-                  alt=""
+                  alt={selectedItem.name}
                   className="w-full h-48 object-cover rounded-xl"
                 />
               )}

@@ -7,6 +7,7 @@ import { Order, OrderItem, CategoryRole } from '../types';
 import { formatTime, formatDate } from '../utils/dateFormat';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import BrandLogo from '../components/BrandLogo';
+import StatusPill from '../components/ui/StatusPill';
 import {
   Clock,
   ArrowLeft,
@@ -209,17 +210,6 @@ export default function KitchenDisplay() {
     return 'bg-neutral-900';
   };
 
-  const getStatusBadgeColor = (status: Order['status']): string => {
-    switch (status) {
-      case 'pending':
-        return 'bg-brand-600 text-white';
-      case 'preparing':
-        return 'bg-amber-500 text-neutral-900';
-      default:
-        return 'bg-neutral-600 text-neutral-200';
-    }
-  };
-
   const isUrgent = (elapsedSeconds: number): boolean => {
     return elapsedSeconds > 600;
   };
@@ -336,7 +326,6 @@ export default function KitchenDisplay() {
                 formatTime={formatElapsedTime}
                 getStatusColor={getUrgentColor}
                 getStatusBgColor={getStatusBgColor}
-                getStatusBadgeColor={getStatusBadgeColor}
                 isUrgent={isUrgent}
               />
             ))}
@@ -354,7 +343,6 @@ interface OrderCardProps {
   formatTime: (seconds: number) => string;
   getStatusColor: (elapsedSeconds: number, status: Order['status']) => string;
   getStatusBgColor: (status: Order['status']) => string;
-  getStatusBadgeColor: (status: Order['status']) => string;
   isUrgent: (elapsedSeconds: number) => boolean;
 }
 
@@ -365,7 +353,6 @@ function OrderCard({
   formatTime,
   getStatusColor,
   getStatusBgColor,
-  getStatusBadgeColor,
   isUrgent,
 }: OrderCardProps) {
   const { t } = useTranslation('kitchen');
@@ -383,8 +370,6 @@ function OrderCard({
       setIsLoading(false);
     }
   };
-
-  const statusLabel = order.status === 'pending' ? t('status.pending') : t('status.preparing');
 
   return (
     <div
@@ -407,11 +392,7 @@ function OrderCard({
               Table {order.table_number}
             </span>
           )}
-          <span
-            className={`${getStatusBadgeColor(order.status)} px-4 py-2 rounded-full font-bold text-sm whitespace-nowrap`}
-          >
-            {statusLabel}
-          </span>
+          <StatusPill status={order.status} size="lg" />
         </div>
       </div>
 
