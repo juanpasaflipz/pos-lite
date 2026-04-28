@@ -69,4 +69,62 @@ router.post('/bind', bindLimiter, async (req, res) => {
   }
 });
 
+function checkAdminSecret(req) {
+  const provided = req.headers['x-admin-secret'] || req.body?.admin_secret;
+  if (!process.env.ADMIN_SECRET) return false;
+  return typeof provided === 'string' && provided === process.env.ADMIN_SECRET;
+}
+
+// GET /api/kiosk/admin/tenants — list tenants (super-admin only, used in bind flow)
+router.get('/admin/tenants', async (req, res) => {
+  if (!checkAdminSecret(req)) {
+    return res.status(401).json({ error: 'Invalid admin secret' });
+  }
+  try {
+    const rows = await adminSql`
+      SELECT id, name, subdomain
+      FROM tenants
+      WHERE active = true
+      ORDER BY name ASC
+    `;
+    res.json(rows);
+  } catch (err) {
+    console.error('[kiosk/admin/tenants] error', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/kiosk/admin/bind — bind kiosk via ADMIN_SECRET + chosen tenant_id
+// Body: { admin_secret, tenant_id }  (or admin_secret via X-Admin-Secret header)
+router.post('/admin/bind', bindLimiter, async (req, res) => {
+  if (!checkAdminSecret(req)) {
+    return res.status(401).json({ error: 'Invalid admin secret' });
+  }
+  const { tenant_id } = req.body || {};
+  if (!tenant_id || typeof tenant_id !== 'string') {
+    return res.status(400).json({ error: 'tenant_id required' });
+  }
+  try {
+    const [tenant] = await adminSql`
+      SELECT id, name FROM tenants WHERE id = ${tenant_id} AND active = true
+    `;
+    if (!tenant) {
+      return res.status(404).json({ error: 'Tenant not found' });
+    }
+    const kioskToken = jwt.sign(
+      { tenantId: tenant.id, type: 'kiosk', boundVia: 'admin_secret' },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+    res.json({
+      tenant_id: tenant.id,
+      tenant_name: tenant.name,
+      kiosk_token: kioskToken,
+    });
+  } catch (err) {
+    console.error('[kiosk/admin/bind] error', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 export default router;

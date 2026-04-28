@@ -19,6 +19,42 @@ export async function bindKiosk(pin: string): Promise<BindResponse> {
   return res.json();
 }
 
+export interface AdminTenant {
+  id: string;
+  name: string;
+  subdomain: string | null;
+}
+
+export async function listTenantsWithAdminSecret(adminSecret: string): Promise<AdminTenant[]> {
+  const res = await fetch(`${API_BASE}/api/kiosk/admin/tenants`, {
+    headers: { 'X-Admin-Secret': adminSecret },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Tenant list failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function bindKioskWithAdminSecret(
+  adminSecret: string,
+  tenantId: string,
+): Promise<BindResponse> {
+  const res = await fetch(`${API_BASE}/api/kiosk/admin/bind`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Admin-Secret': adminSecret,
+    },
+    body: JSON.stringify({ tenant_id: tenantId }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Admin bind failed (${res.status})`);
+  }
+  return res.json();
+}
+
 interface AuthHeaders {
   tenantId: string;
   kioskToken: string;

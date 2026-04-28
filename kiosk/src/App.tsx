@@ -3,6 +3,7 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { KioskBindingProvider, useKioskBinding } from './context/KioskBindingContext';
 import AttractScreen from './screens/AttractScreen';
 import BindDeviceScreen from './screens/BindDeviceScreen';
+import AdminBindScreen from './screens/AdminBindScreen';
 import KioskMenuScreen from './screens/KioskMenuScreen';
 import KioskCartScreen from './screens/KioskCartScreen';
 import KioskPaymentScreen from './screens/KioskPaymentScreen';
@@ -15,6 +16,7 @@ const Routed: React.FC = () => {
     return (
       <Routes>
         <Route path="/bind" element={<BindDeviceScreen />} />
+        <Route path="/admin-bind" element={<AdminBindScreen />} />
         <Route path="*" element={<Navigate to="/bind" replace />} />
       </Routes>
     );

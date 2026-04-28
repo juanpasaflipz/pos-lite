@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useKioskBinding } from '../context/KioskBindingContext';
 import { bindKiosk } from '../lib/kioskApi';
 
@@ -22,6 +23,7 @@ const Pad: React.FC<{ label: string; onClick: () => void; variant?: 'default' | 
 };
 
 const BindDeviceScreen: React.FC = () => {
+  const navigate = useNavigate();
   const { bind } = useKioskBinding();
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -91,6 +93,13 @@ const BindDeviceScreen: React.FC = () => {
           disabled={busy || pin.length < 4}
         />
       </div>
+
+      <button
+        onClick={() => navigate('/admin-bind')}
+        className="mt-12 text-sm text-neutral-500 active:text-neutral-300 underline underline-offset-4 touch-manipulation"
+      >
+        No PIN? Use ADMIN_SECRET →
+      </button>
     </div>
   );
 };
