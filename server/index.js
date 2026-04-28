@@ -55,6 +55,7 @@ import cfdiPublicRoutes from './routes/cfdi-public.js';
 import customerOrderRoutes from './routes/customer-order.js';
 import menuBoardRoutes from './routes/menu-board.js';
 import displayAssetsRoutes from './routes/display-assets.js';
+import kioskRoutes from './routes/kiosk.js';
 
 // AI Agent
 import agentRoutes from './agent/route.js';
@@ -103,6 +104,7 @@ app.use(express.json({
 }));
 
 app.use(express.static(path.join(__dirname, '../dist')));
+app.use('/kiosk', express.static(path.join(__dirname, '../dist-kiosk')));
 app.use('/uploads', express.static(path.join(__dirname, '../data/uploads')));
 
 // ==================== Health Check ====================
@@ -147,6 +149,9 @@ app.use('/api/auth', authRoutes);
 
 // CFDI public self-service (token-based, no auth)
 app.use('/api/cfdi-public', cfdiPublicRoutes);
+
+// Kiosk bind (cross-tenant PIN search, no tenant header required)
+app.use('/api/kiosk', kioskRoutes);
 
 // Payment webhooks (before tenant middleware — cross-tenant)
 app.get('/api/payments/mp/callback', mpOAuthCallback);
@@ -240,6 +245,10 @@ app.use('/api/cfdi', cfdiRoutes);
 app.use('/api/agent', agentRoutes);
 
 // ==================== SPA Fallback ====================
+
+app.get('/kiosk/*', (_req, res) => {
+  res.sendFile(path.join(__dirname, '../dist-kiosk/index.html'));
+});
 
 app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, '../dist/index.html'));

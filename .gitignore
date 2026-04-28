@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-kiosk/
 .env
 .env.local
 *.tsbuildinfo

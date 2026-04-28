@@ -1,0 +1,10 @@
+{
+  "name": "Order Here",
+  "short_name": "Order",
+  "description": "Self-order kiosk",
+  "start_url": "/",
+  "display": "fullscreen",
+  "background_color": "#0d9488",
+  "theme_color": "#0d9488",
+  "orientation": "any"
+}
