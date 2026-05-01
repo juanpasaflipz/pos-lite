@@ -54,7 +54,7 @@ import FinancingBanner from '../components/financing/FinancingBanner';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useDeviceType } from '../hooks/useDeviceType';
 import { createOfflineOrder, toReceiptOrder } from '../lib/offlineOrderQueue';
-import { offlineDb } from '../lib/offlineDb';
+import { offlineDb, ParkedCart } from '../lib/offlineDb';
 import CategoryBar from '../components/CategoryBar';
 import CartDrawer from '../components/CartDrawer';
 import MiniCartButton from '../components/MiniCartButton';
@@ -66,6 +66,7 @@ import POSHeaderBar from '../components/pos/POSHeaderBar';
 import MenuGrid from '../components/pos/MenuGrid';
 import CartPanel from '../components/pos/CartPanel';
 import QuickOrdersModal from '../components/pos/QuickOrdersModal';
+import ParkedCartsModal from '../components/pos/ParkedCartsModal';
 
 /* ==================== Toast Notification ==================== */
 
@@ -117,6 +118,8 @@ const POSScreen: React.FC = () => {
   const [selectedBrand, setSelectedBrand] = useState<number | 'all'>('all');
   const [templateName, setTemplateName] = useState('');
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [parkedCarts, setParkedCarts] = useState<ParkedCart[]>([]);
+  const [showParkedCarts, setShowParkedCarts] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [showNavMenu, setShowNavMenu] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -242,6 +245,9 @@ const POSScreen: React.FC = () => {
         setCart(saved.items);
       }
     }).catch(() => {});
+    offlineDb.parkedCarts.orderBy('parkedAt').reverse().toArray()
+      .then(setParkedCarts)
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -540,6 +546,52 @@ const POSScreen: React.FC = () => {
       addToast(t('toast.failedSaveTemplate'), 'error');
     }
   }, [templateName, cart]);
+
+  const parkCurrentOrder = useCallback(async (name: string) => {
+    if (cart.length === 0) return;
+    try {
+      const id = await offlineDb.parkedCarts.add({
+        name,
+        items: cart,
+        parkedAt: Date.now(),
+      });
+      const fresh = await offlineDb.parkedCarts.orderBy('parkedAt').reverse().toArray();
+      setParkedCarts(fresh);
+      setCart([]);
+      setLinkedCustomer(null);
+      setShowParkedCarts(false);
+      addToast(t('parkedCarts.parked', { name }), 'success');
+      void id;
+    } catch {
+      addToast(t('parkedCarts.parkFailed'), 'error');
+    }
+  }, [cart, t]);
+
+  const resumeParkedCart = useCallback(async (id: number) => {
+    if (cart.length > 0 && !window.confirm(t('parkedCarts.confirmReplace'))) return;
+    try {
+      const parked = await offlineDb.parkedCarts.get(id);
+      if (!parked) return;
+      setCart(parked.items);
+      await offlineDb.parkedCarts.delete(id);
+      const fresh = await offlineDb.parkedCarts.orderBy('parkedAt').reverse().toArray();
+      setParkedCarts(fresh);
+      setShowParkedCarts(false);
+      addToast(t('parkedCarts.resumed', { name: parked.name }), 'success');
+    } catch {
+      addToast(t('parkedCarts.resumeFailed'), 'error');
+    }
+  }, [cart, t]);
+
+  const deleteParkedCart = useCallback(async (id: number) => {
+    try {
+      await offlineDb.parkedCarts.delete(id);
+      const fresh = await offlineDb.parkedCarts.orderBy('parkedAt').reverse().toArray();
+      setParkedCarts(fresh);
+    } catch {
+      addToast(t('parkedCarts.deleteFailed'), 'error');
+    }
+  }, [t]);
 
   // ==================== Payment Handlers ====================
 
@@ -840,12 +892,14 @@ const POSScreen: React.FC = () => {
         total={total}
         subtotal={subtotal}
         tax={tax}
+        parkedCount={parkedCarts.length}
         onRemoveFromCart={removeFromCart}
         onUpdateQuantity={updateQuantity}
         onSetNotesItem={setNotesItem}
         onShowPaymentModal={openPaymentModal}
         onShowCustomerLookup={() => setShowCustomerLookup(true)}
         onShowTemplates={() => setShowTemplates(true)}
+        onShowParkedCarts={() => setShowParkedCarts(true)}
         onShowComboBuilder={() => setShowComboBuilder(true)}
         onShowSplitPayment={() => setShowSplitPayment(true)}
         onClearCart={clearCart}
@@ -874,6 +928,7 @@ const POSScreen: React.FC = () => {
             onClose={() => setIsCartOpen(false)}
             cart={cart}
             linkedCustomer={linkedCustomer}
+            parkedCount={parkedCarts.length}
             onUnlinkCustomer={() => setLinkedCustomer(null)}
             onRemoveFromCart={removeFromCart}
             onUpdateQuantity={updateQuantity}
@@ -881,6 +936,7 @@ const POSScreen: React.FC = () => {
             onShowPaymentModal={openPaymentModal}
             onShowCustomerLookup={() => setShowCustomerLookup(true)}
             onShowTemplates={() => setShowTemplates(true)}
+            onShowParkedCarts={() => setShowParkedCarts(true)}
             onShowComboBuilder={() => setShowComboBuilder(true)}
             onShowSplitPayment={() => setShowSplitPayment(true)}
             onClearCart={clearCart}
@@ -908,6 +964,17 @@ const POSScreen: React.FC = () => {
           onSaveCartAsTemplate={saveCartAsTemplate}
           onTemplateNameChange={setTemplateName}
           onShowSaveTemplate={setShowSaveTemplate}
+        />
+      )}
+
+      {showParkedCarts && (
+        <ParkedCartsModal
+          parkedCarts={parkedCarts}
+          hasCartItems={cart.length > 0}
+          onClose={() => setShowParkedCarts(false)}
+          onParkCurrent={parkCurrentOrder}
+          onResume={resumeParkedCart}
+          onDelete={deleteParkedCart}
         />
       )}
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { ClipboardList, Trash2 } from 'lucide-react';
+import { ClipboardList, Trash2, PauseCircle } from 'lucide-react';
 import { CartItem, Order, LoyaltyCustomer, ComboDefinition } from '../../types';
 import { formatPrice, TAX_LABEL } from '../../utils/currency';
 import { formatTime } from '../../utils/dateFormat';
@@ -20,12 +20,14 @@ interface CartPanelProps {
   total: number;
   subtotal: number;
   tax: number;
+  parkedCount: number;
   onRemoveFromCart: (cartId: string) => void;
   onUpdateQuantity: (cartId: string, quantity: number) => void;
   onSetNotesItem: (item: CartItem) => void;
   onShowPaymentModal: () => void;
   onShowCustomerLookup: () => void;
   onShowTemplates: () => void;
+  onShowParkedCarts: () => void;
   onShowComboBuilder: () => void;
   onShowSplitPayment: () => void;
   onClearCart: () => void;
@@ -46,12 +48,14 @@ export default function CartPanel({
   total,
   subtotal,
   tax,
+  parkedCount,
   onRemoveFromCart,
   onUpdateQuantity,
   onSetNotesItem,
   onShowPaymentModal,
   onShowCustomerLookup,
   onShowTemplates,
+  onShowParkedCarts,
   onShowComboBuilder,
   onShowSplitPayment,
   onClearCart,
@@ -284,6 +288,16 @@ export default function CartPanel({
           }`}
         >
           {linkedCustomer ? t('loyalty.loyaltyCustomer', { name: linkedCustomer.name }) : t('loyalty.loyaltyProgram')}
+        </button>
+        <button
+          onClick={onShowParkedCarts}
+          disabled={cart.length === 0 && parkedCount === 0}
+          className="w-full py-3 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 disabled:bg-neutral-800 disabled:text-neutral-600 disabled:cursor-not-allowed transition-all touch-manipulation flex items-center justify-center gap-2"
+        >
+          <PauseCircle className="w-4 h-4" />
+          {parkedCount > 0
+            ? t('parkedCarts.buttonWithCount', { count: parkedCount })
+            : t('parkedCarts.button')}
         </button>
         <div className="flex gap-2">
           <button

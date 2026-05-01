@@ -49,6 +49,13 @@ export interface CachedCart {
   updatedAt: number;
 }
 
+export interface ParkedCart {
+  id?: number;
+  name: string;
+  items: CartItem[];
+  parkedAt: number;
+}
+
 export interface CachedEmployee {
   id: number;
   name: string;
@@ -66,6 +73,7 @@ class OfflineDatabase extends Dexie {
   menuCache!: Table<CachedMenuData, string>;
   offlineOrders!: Table<OfflineOrder, number>;
   cart!: Table<CachedCart, number>;
+  parkedCarts!: Table<ParkedCart, number>;
   employees!: Table<CachedEmployee, number>;
 
   constructor() {
@@ -75,6 +83,14 @@ class OfflineDatabase extends Dexie {
       menuCache: 'key',
       offlineOrders: '++id, tempId, status, createdAt',
       cart: 'id',
+      employees: 'id',
+    });
+
+    this.version(2).stores({
+      menuCache: 'key',
+      offlineOrders: '++id, tempId, status, createdAt',
+      cart: 'id',
+      parkedCarts: '++id, parkedAt',
       employees: 'id',
     });
   }

@@ -3,13 +3,14 @@ import { useTranslation } from 'react-i18next';
 import { CartItem, LoyaltyCustomer, ComboDefinition } from '../types';
 import { formatPrice, TAX_RATE, TAX_LABEL } from '../utils/currency';
 import { formatTime } from '../utils/dateFormat';
-import { ClipboardList, X } from 'lucide-react';
+import { ClipboardList, PauseCircle, X } from 'lucide-react';
 
 interface CartDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   cart: CartItem[];
   linkedCustomer: LoyaltyCustomer | null;
+  parkedCount: number;
   onUnlinkCustomer: () => void;
   onRemoveFromCart: (cartId: string) => void;
   onUpdateQuantity: (cartId: string, quantity: number) => void;
@@ -17,6 +18,7 @@ interface CartDrawerProps {
   onShowPaymentModal: () => void;
   onShowCustomerLookup: () => void;
   onShowTemplates: () => void;
+  onShowParkedCarts: () => void;
   onShowComboBuilder: () => void;
   onShowSplitPayment: () => void;
   onClearCart: () => void;
@@ -33,6 +35,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
   onClose,
   cart,
   linkedCustomer,
+  parkedCount,
   onUnlinkCustomer,
   onRemoveFromCart,
   onUpdateQuantity,
@@ -40,6 +43,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
   onShowPaymentModal,
   onShowCustomerLookup,
   onShowTemplates,
+  onShowParkedCarts,
   onShowComboBuilder,
   onShowSplitPayment,
   onClearCart,
@@ -245,6 +249,16 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
             }`}
           >
             {linkedCustomer ? t('loyalty.loyaltyCustomer', { name: linkedCustomer.name }) : t('loyalty.loyaltyProgram')}
+          </button>
+          <button
+            onClick={onShowParkedCarts}
+            disabled={cart.length === 0 && parkedCount === 0}
+            className="w-full py-2.5 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 disabled:bg-neutral-800 disabled:text-neutral-600 disabled:cursor-not-allowed transition-all touch-manipulation flex items-center justify-center gap-2"
+          >
+            <PauseCircle className="w-4 h-4" />
+            {parkedCount > 0
+              ? t('parkedCarts.buttonWithCount', { count: parkedCount })
+              : t('parkedCarts.button')}
           </button>
           <div className="flex gap-1.5">
             <button

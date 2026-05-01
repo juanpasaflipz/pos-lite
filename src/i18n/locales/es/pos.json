@@ -304,6 +304,25 @@
     "enterName": "Nombre de la plantilla...",
     "itemCount": "{{count}} producto(s)"
   },
+  "parkedCarts": {
+    "title": "Órdenes en Espera",
+    "subtitle": "Guarda una orden para tomar otra",
+    "button": "Pausar Orden",
+    "buttonWithCount": "En Espera ({{count}})",
+    "park": "Pausar",
+    "parkCurrent": "Pausar Orden Actual",
+    "namePlaceholder": "Nombre (ej. Cliente en mostrador)...",
+    "defaultName": "Orden a las {{time}}",
+    "empty": "Sin órdenes en espera",
+    "itemCount": "{{count}} producto(s)",
+    "delete": "Descartar",
+    "parked": "En espera: {{name}}",
+    "resumed": "Reanudada: {{name}}",
+    "confirmReplace": "¿Reemplazar el carrito actual? Se perderán los productos si no los pausas primero.",
+    "parkFailed": "No se pudo pausar la orden",
+    "resumeFailed": "No se pudo reanudar la orden",
+    "deleteFailed": "No se pudo descartar la orden en espera"
+  },
   "offline": {
     "indicator": "MODO SIN CONEXIÓN — Solo Efectivo",
     "cashOnly": "Solo efectivo sin conexión",

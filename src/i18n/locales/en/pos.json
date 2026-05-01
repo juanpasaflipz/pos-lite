@@ -304,6 +304,25 @@
     "enterName": "Enter template name...",
     "itemCount": "{{count}} item(s)"
   },
+  "parkedCarts": {
+    "title": "Held Orders",
+    "subtitle": "Save an order to take a new one",
+    "button": "Hold Order",
+    "buttonWithCount": "Held ({{count}})",
+    "park": "Hold",
+    "parkCurrent": "Hold Current Order",
+    "namePlaceholder": "Name (e.g. Customer at counter)...",
+    "defaultName": "Order at {{time}}",
+    "empty": "No held orders",
+    "itemCount": "{{count}} item(s)",
+    "delete": "Discard",
+    "parked": "Held: {{name}}",
+    "resumed": "Resumed: {{name}}",
+    "confirmReplace": "Replace the current cart? Items will be lost unless you hold them first.",
+    "parkFailed": "Failed to hold order",
+    "resumeFailed": "Failed to resume order",
+    "deleteFailed": "Failed to discard held order"
+  },
   "offline": {
     "indicator": "OFFLINE MODE — Cash Only",
     "cashOnly": "Cash only while offline",
