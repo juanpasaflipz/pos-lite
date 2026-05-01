@@ -2,7 +2,8 @@ node_modules/
 dist/
 dist-kiosk/
 .env
-.env.local
+.env.*
+!.env.example
 *.tsbuildinfo
 .claude/
 /data/
