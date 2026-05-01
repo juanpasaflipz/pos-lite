@@ -220,11 +220,21 @@ export default function StockTab({
                             type="number"
                             value={editQuantity}
                             onChange={(e) => onEditQuantityChange(e.target.value)}
+                            onFocus={(e) => e.target.select()}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && editQuantity !== '') onEditQuantity(item.id);
+                              if (e.key === 'Escape') {
+                                onEditingQuantityIdChange(null);
+                                onEditQuantityChange('');
+                              }
+                            }}
                             className="w-24 px-2 py-1 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-brand-600"
                             placeholder={item.quantity.toString()}
                             autoFocus
                           />
-                          <span className="text-neutral-500 text-sm">{item.unit}</span>
+                          {item.unit && !/^\s*\d+(\.\d+)?\s*$/.test(item.unit) && (
+                            <span className="text-neutral-500 text-sm">{item.unit}</span>
+                          )}
                           <button
                             onClick={() => onEditQuantity(item.id)}
                             disabled={actionLoading || editQuantity === ''}
@@ -245,7 +255,10 @@ export default function StockTab({
                       ) : (
                         <div className="flex gap-2 items-center">
                           <span className="text-neutral-300">
-                            {item.quantity} {item.unit}
+                            {item.quantity}
+                            {item.unit && !/^\s*\d+(\.\d+)?\s*$/.test(item.unit) && (
+                              <span className="text-neutral-500 ml-1">{item.unit}</span>
+                            )}
                           </span>
                           <button
                             onClick={() => {
