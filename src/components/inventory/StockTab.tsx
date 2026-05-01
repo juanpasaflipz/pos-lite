@@ -26,6 +26,8 @@ interface StockTabProps {
   restockAmount: string;
   editingId: number | null;
   editThreshold: string;
+  editingQuantityId: number | null;
+  editQuantity: string;
   actionLoading: boolean;
   cogsSummary: COGSSummary | null;
   forecasts: InventoryForecast[];
@@ -36,10 +38,13 @@ interface StockTabProps {
   onSortChange: (value: SortField) => void;
   onRestock: () => void;
   onEditThreshold: (id: number) => void;
+  onEditQuantity: (id: number) => void;
   onRestockingIdChange: (id: number | null) => void;
   onRestockAmountChange: (value: string) => void;
   onEditingIdChange: (id: number | null) => void;
   onEditThresholdChange: (value: string) => void;
+  onEditingQuantityIdChange: (id: number | null) => void;
+  onEditQuantityChange: (value: string) => void;
   onShowForecastsChange: (show: boolean) => void;
 }
 
@@ -53,6 +58,8 @@ export default function StockTab({
   restockAmount,
   editingId,
   editThreshold,
+  editingQuantityId,
+  editQuantity,
   actionLoading,
   cogsSummary,
   forecasts,
@@ -63,10 +70,13 @@ export default function StockTab({
   onSortChange,
   onRestock,
   onEditThreshold,
+  onEditQuantity,
   onRestockingIdChange,
   onRestockAmountChange,
   onEditingIdChange,
   onEditThresholdChange,
+  onEditingQuantityIdChange,
+  onEditQuantityChange,
   onShowForecastsChange,
 }: StockTabProps) {
   const { t } = useTranslation('inventory');
@@ -204,9 +214,51 @@ export default function StockTab({
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-neutral-300">
-                        {item.quantity} {item.unit}
-                      </span>
+                      {editingQuantityId === item.id ? (
+                        <div className="flex gap-2 items-center">
+                          <input
+                            type="number"
+                            value={editQuantity}
+                            onChange={(e) => onEditQuantityChange(e.target.value)}
+                            className="w-24 px-2 py-1 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-brand-600"
+                            placeholder={item.quantity.toString()}
+                            autoFocus
+                          />
+                          <span className="text-neutral-500 text-sm">{item.unit}</span>
+                          <button
+                            onClick={() => onEditQuantity(item.id)}
+                            disabled={actionLoading || editQuantity === ''}
+                            className="p-1 text-green-400 hover:bg-green-900/30 rounded-lg transition-colors disabled:opacity-50"
+                          >
+                            <Check size={18} />
+                          </button>
+                          <button
+                            onClick={() => {
+                              onEditingQuantityIdChange(null);
+                              onEditQuantityChange('');
+                            }}
+                            className="p-1 text-neutral-400 hover:bg-neutral-700 rounded-lg transition-colors"
+                          >
+                            <X size={18} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 items-center">
+                          <span className="text-neutral-300">
+                            {item.quantity} {item.unit}
+                          </span>
+                          <button
+                            onClick={() => {
+                              onEditingQuantityIdChange(item.id);
+                              onEditQuantityChange(item.quantity.toString());
+                            }}
+                            title={t('inventory.editQuantity')}
+                            className="p-1 text-neutral-500 hover:bg-neutral-700 rounded-lg transition-colors"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       {editingId === item.id ? (

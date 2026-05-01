@@ -72,6 +72,8 @@ export default function InventoryScreen() {
   const [restockAmount, setRestockAmount] = useState<string>('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editThreshold, setEditThreshold] = useState<string>('');
+  const [editingQuantityId, setEditingQuantityId] = useState<number | null>(null);
+  const [editQuantity, setEditQuantity] = useState<string>('');
   const [actionLoading, setActionLoading] = useState(false);
   const [forecasts, setForecasts] = useState<InventoryForecast[]>([]);
   const [showForecasts, setShowForecasts] = useState(false);
@@ -244,6 +246,30 @@ export default function InventoryScreen() {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('inventory.failedUpdateThreshold'));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleEditQuantity = async (id: number) => {
+    if (editQuantity === '') return;
+    try {
+      setActionLoading(true);
+      const qty = parseFloat(editQuantity);
+      if (isNaN(qty) || qty < 0) {
+        setError(t('inventory.invalidQuantity'));
+        return;
+      }
+      await recordInventoryCount(id, {
+        counted_quantity: qty,
+        notes: t('inventory.manualAdjustNote'),
+      });
+      await fetchItems();
+      setEditingQuantityId(null);
+      setEditQuantity('');
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('inventory.failedUpdateQuantity'));
     } finally {
       setActionLoading(false);
     }
@@ -563,6 +589,8 @@ export default function InventoryScreen() {
             restockAmount={restockAmount}
             editingId={editingId}
             editThreshold={editThreshold}
+            editingQuantityId={editingQuantityId}
+            editQuantity={editQuantity}
             actionLoading={actionLoading}
             cogsSummary={cogsSummary}
             forecasts={forecasts}
@@ -573,10 +601,13 @@ export default function InventoryScreen() {
             onSortChange={setSortBy}
             onRestock={handleRestock}
             onEditThreshold={handleEditThreshold}
+            onEditQuantity={handleEditQuantity}
             onRestockingIdChange={setRestockingId}
             onRestockAmountChange={setRestockAmount}
             onEditingIdChange={setEditingId}
             onEditThresholdChange={setEditThreshold}
+            onEditingQuantityIdChange={setEditingQuantityId}
+            onEditQuantityChange={setEditQuantity}
             onShowForecastsChange={setShowForecasts}
           />
         )}
