@@ -46,7 +46,9 @@ router.get('/sales', async (req, res) => {
         ROUND(SUM(subtotal), 2) as total_revenue,
         ROUND(AVG(total), 2) as avg_ticket,
         ROUND(SUM(tip), 2) as tip_total,
-        ROUND(SUM(tax), 2) as tax_total
+        ROUND(SUM(tax), 2) as tax_total,
+        ROUND(SUM(COALESCE(discount_amount, 0)), 2) as discount_total,
+        COUNT(*) FILTER (WHERE COALESCE(discount_amount, 0) > 0) as discounted_order_count
       FROM orders
       WHERE created_at::date >= $1
         AND payment_status = 'paid'

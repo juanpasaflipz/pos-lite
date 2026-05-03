@@ -114,7 +114,10 @@ async function ensureCounterTable() {
  * statement that serializes on the PK, so no two concurrent requests
  * can ever get the same sequence number.
  */
-async function insertOrderWithNumber(conn, { employee_id, subtotal, tax, total, offline_temp_id, tenantId }) {
+async function insertOrderWithNumber(conn, {
+  employee_id, subtotal, tax, total, offline_temp_id, tenantId,
+  discount_amount = 0, discount_type = null, discount_reason = null, discount_authorized_by = null,
+}) {
   await ensureCounterTable();
 
   const dateStr = new Date().toISOString().split('T')[0];
@@ -132,12 +135,78 @@ async function insertOrderWithNumber(conn, { employee_id, subtotal, tax, total, 
   const orderNumber = datePrefix + counter.last_seq;
 
   const [inserted] = await conn.unsafe(`
-    INSERT INTO orders (tenant_id, order_number, employee_id, status, subtotal, tax, total, payment_status, offline_temp_id)
-    VALUES ($1, $2, $3, 'pending', $4, $5, $6, 'unpaid', $7)
+    INSERT INTO orders (
+      tenant_id, order_number, employee_id, status, subtotal, tax, total,
+      payment_status, offline_temp_id,
+      discount_amount, discount_type, discount_reason, discount_authorized_by
+    )
+    VALUES ($1, $2, $3, 'pending', $4, $5, $6, 'unpaid', $7, $8, $9, $10, $11)
     RETURNING id, order_number
-  `, [tid, orderNumber, employee_id, subtotal, tax, total, offline_temp_id || null]);
+  `, [
+    tid, orderNumber, employee_id, subtotal, tax, total, offline_temp_id || null,
+    discount_amount, discount_type, discount_reason, discount_authorized_by,
+  ]);
 
   return { orderId: inserted.id, orderNumber: inserted.order_number };
+}
+
+/**
+ * Verify the actor (or their manager-approver) is authorized to apply a discount.
+ * Returns the authorizing employee_id, or throws an Error with .status set.
+ */
+async function authorizeDiscount({ actorEmployee, authorizedByEmployeeId }) {
+  // Actor has permission directly
+  const actorPerm = await get(
+    'SELECT granted FROM role_permissions WHERE role = $1 AND permission = $2',
+    [actorEmployee.role, 'apply_discounts']
+  );
+  if (actorPerm?.granted) return actorEmployee.id;
+
+  // Otherwise an approver must have been supplied (set by /manager-approve)
+  if (!authorizedByEmployeeId) {
+    const err = new Error('Manager approval required to apply discount');
+    err.status = 403;
+    throw err;
+  }
+
+  const approver = await get(
+    'SELECT id, role, active FROM employees WHERE id = $1',
+    [authorizedByEmployeeId]
+  );
+  if (!approver || !approver.active) {
+    const err = new Error('Invalid approver');
+    err.status = 403;
+    throw err;
+  }
+  const approverPerm = await get(
+    'SELECT granted FROM role_permissions WHERE role = $1 AND permission = $2',
+    [approver.role, 'apply_discounts']
+  );
+  if (!approverPerm?.granted) {
+    const err = new Error('Approver lacks apply_discounts permission');
+    err.status = 403;
+    throw err;
+  }
+  return approver.id;
+}
+
+/**
+ * Resolve a discount payload to an absolute dollar amount, capped at the line/order base.
+ * Discount payload: { type: 'percent'|'amount'|'comp', value: number, reason: string, authorized_by_employee_id?: number }
+ */
+function resolveDiscountAmount(discount, base) {
+  if (!discount) return 0;
+  const baseRounded = Math.round(base * 100) / 100;
+  if (discount.type === 'comp') return baseRounded;
+  if (discount.type === 'percent') {
+    const pct = Math.max(0, Math.min(100, Number(discount.value) || 0));
+    return Math.round(baseRounded * (pct / 100) * 100) / 100;
+  }
+  if (discount.type === 'amount') {
+    const amt = Math.max(0, Number(discount.value) || 0);
+    return Math.min(baseRounded, Math.round(amt * 100) / 100);
+  }
+  return 0;
 }
 
 // GET /api/orders - list orders (optional ?status, ?date filters)
@@ -186,7 +255,9 @@ router.get('/:id', async (req, res) => {
 
     const order = await get(`
       SELECT o.id, o.order_number, o.employee_id, o.status, o.subtotal, o.tax, o.tip, o.total,
-             o.payment_intent_id, o.payment_status, o.payment_method, o.source, o.created_at, o.completed_at, e.name as employee_name
+             o.payment_intent_id, o.payment_status, o.payment_method, o.source, o.created_at, o.completed_at,
+             o.discount_amount, o.discount_type, o.discount_reason, o.discount_authorized_by,
+             e.name as employee_name
       FROM orders o
       JOIN employees e ON o.employee_id = e.id
       WHERE o.id = $1
@@ -198,6 +269,7 @@ router.get('/:id', async (req, res) => {
 
     const items = await all(`
       SELECT oi.id, oi.order_id, oi.menu_item_id, oi.item_name, oi.quantity, oi.unit_price, oi.notes, oi.combo_instance_id,
+             oi.discount_amount, oi.discount_type, oi.discount_reason, oi.discount_authorized_by,
              oim.id AS mod_id, oim.modifier_id, oim.modifier_name, oim.price_adjustment
       FROM order_items oi
       LEFT JOIN order_item_modifiers oim ON oim.order_item_id = oi.id
@@ -211,7 +283,10 @@ router.get('/:id', async (req, res) => {
         itemMap.set(row.id, {
           id: row.id, order_id: row.order_id, menu_item_id: row.menu_item_id,
           item_name: row.item_name, quantity: row.quantity, unit_price: row.unit_price,
-          notes: row.notes, combo_instance_id: row.combo_instance_id, modifiers: [],
+          notes: row.notes, combo_instance_id: row.combo_instance_id,
+          discount_amount: row.discount_amount, discount_type: row.discount_type,
+          discount_reason: row.discount_reason, discount_authorized_by: row.discount_authorized_by,
+          modifiers: [],
         });
       }
       if (row.mod_id) {
@@ -232,7 +307,7 @@ router.get('/:id', async (req, res) => {
 // POST /api/orders - create order
 router.post('/', orderCreateLimiter, requireAuth('pos_access'), async (req, res) => {
   try {
-    const { employee_id, items, offline_temp_id } = req.body;
+    const { employee_id, items, offline_temp_id, discount: orderDiscount } = req.body;
 
     if (!employee_id || !items || items.length === 0) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -307,8 +382,20 @@ router.post('/', orderCreateLimiter, requireAuth('pos_access'), async (req, res)
       }
 
       const unitPrice = basePrice + modifierTotal;
-      const itemTotal = unitPrice * item.quantity;
-      itemsTotal += itemTotal;
+      const lineBase = unitPrice * item.quantity;
+
+      // Per-line discount
+      let lineDiscountAmount = 0;
+      let lineDiscountType = null;
+      let lineDiscountReason = null;
+      if (item.discount) {
+        lineDiscountAmount = resolveDiscountAmount(item.discount, lineBase);
+        lineDiscountType = item.discount.type;
+        lineDiscountReason = item.discount.reason || null;
+      }
+
+      const lineTotal = lineBase - lineDiscountAmount;
+      itemsTotal += lineTotal;
 
       orderItems.push({
         menu_item_id: item.menu_item_id,
@@ -319,11 +406,39 @@ router.post('/', orderCreateLimiter, requireAuth('pos_access'), async (req, res)
         combo_instance_id: item.combo_instance_id || null,
         modifiers: resolvedModifiers,
         virtual_brand_id: virtualBrandId,
+        discount_amount: lineDiscountAmount,
+        discount_type: lineDiscountType,
+        discount_reason: lineDiscountReason,
+        _lineHasDiscount: lineDiscountAmount > 0,
       });
     }
 
+    // Order-level discount applied on top of line-level discounts
+    const orderDiscountAmount = resolveDiscountAmount(orderDiscount, itemsTotal);
+    const total = Math.round((itemsTotal - orderDiscountAmount) * 100) / 100;
+
+    // Authorize discounts (line-level or order-level)
+    const anyLineDiscount = orderItems.some((it) => it._lineHasDiscount);
+    let lineAuthorizedBy = null;
+    let orderAuthorizedBy = null;
+    try {
+      if (anyLineDiscount) {
+        lineAuthorizedBy = await authorizeDiscount({
+          actorEmployee: req.employee,
+          authorizedByEmployeeId: items.find((i) => i.discount)?.discount?.authorized_by_employee_id || null,
+        });
+      }
+      if (orderDiscountAmount > 0) {
+        orderAuthorizedBy = await authorizeDiscount({
+          actorEmployee: req.employee,
+          authorizedByEmployeeId: orderDiscount?.authorized_by_employee_id || null,
+        });
+      }
+    } catch (err) {
+      return res.status(err.status || 403).json({ error: err.message });
+    }
+
     // Prices already include IVA — extract tax from the total
-    const total = itemsTotal; // what the customer pays (IVA included)
     const tax = Math.round((total - total / (1 + TAX_RATE)) * 100) / 100;
     const subtotal = Math.round((total - tax) * 100) / 100;
 
@@ -332,6 +447,10 @@ router.post('/', orderCreateLimiter, requireAuth('pos_access'), async (req, res)
     const { orderId, orderNumber } = await insertOrderWithNumber(conn, {
       employee_id, subtotal, tax, total, offline_temp_id,
       tenantId: req.tenant?.id,
+      discount_amount: orderDiscountAmount,
+      discount_type: orderDiscountAmount > 0 ? (orderDiscount?.type || null) : null,
+      discount_reason: orderDiscountAmount > 0 ? (orderDiscount?.reason || null) : null,
+      discount_authorized_by: orderAuthorizedBy,
     });
 
     // Calculate estimated prep time
@@ -344,18 +463,26 @@ router.post('/', orderCreateLimiter, requireAuth('pos_access'), async (req, res)
 
     // Batch insert all order items (1 query instead of N)
     const tenantId = req.tenant?.id || null;
-    const itemColCount = 9;
+    const itemColCount = 13;
     const itemValues = orderItems.map((_, i) => {
       const o = i * itemColCount;
-      return `($${o+1},$${o+2},$${o+3},$${o+4},$${o+5},$${o+6},$${o+7},$${o+8},$${o+9})`;
+      return `($${o+1},$${o+2},$${o+3},$${o+4},$${o+5},$${o+6},$${o+7},$${o+8},$${o+9},$${o+10},$${o+11},$${o+12},$${o+13})`;
     }).join(',');
     const itemParams = orderItems.flatMap(item => [
       tenantId, orderId, item.menu_item_id, item.item_name,
       item.quantity, item.unit_price, item.notes, item.combo_instance_id, item.virtual_brand_id || null,
+      item.discount_amount || 0,
+      item.discount_type,
+      item.discount_reason,
+      item._lineHasDiscount ? lineAuthorizedBy : null,
     ]);
 
     const insertedItems = await conn.unsafe(`
-      INSERT INTO order_items (tenant_id, order_id, menu_item_id, item_name, quantity, unit_price, notes, combo_instance_id, virtual_brand_id)
+      INSERT INTO order_items (
+        tenant_id, order_id, menu_item_id, item_name, quantity, unit_price,
+        notes, combo_instance_id, virtual_brand_id,
+        discount_amount, discount_type, discount_reason, discount_authorized_by
+      )
       VALUES ${itemValues}
       RETURNING id
     `, itemParams);
@@ -414,6 +541,10 @@ router.post('/', orderCreateLimiter, requireAuth('pos_access'), async (req, res)
       total,
       payment_status: 'unpaid',
       items: orderItems,
+      discount_amount: orderDiscountAmount,
+      discount_type: orderDiscountAmount > 0 ? (orderDiscount?.type || null) : null,
+      discount_reason: orderDiscountAmount > 0 ? (orderDiscount?.reason || null) : null,
+      discount_authorized_by: orderAuthorizedBy,
       estimated_ready_minutes: prepEstimate.estimate,
       estimated_ready_range: { low: prepEstimate.low, high: prepEstimate.high },
     });

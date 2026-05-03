@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { ClipboardList, Trash2, PauseCircle } from 'lucide-react';
-import { CartItem, Order, LoyaltyCustomer, ComboDefinition } from '../../types';
+import { ClipboardList, Trash2, PauseCircle, Percent } from 'lucide-react';
+import { CartItem, Order, LoyaltyCustomer, ComboDefinition, Discount } from '../../types';
 import { formatPrice, TAX_LABEL } from '../../utils/currency';
 import { formatTime } from '../../utils/dateFormat';
 
@@ -21,6 +21,8 @@ interface CartPanelProps {
   subtotal: number;
   tax: number;
   parkedCount: number;
+  cartDiscount: Discount | null;
+  totalDiscount: number;
   onRemoveFromCart: (cartId: string) => void;
   onUpdateQuantity: (cartId: string, quantity: number) => void;
   onSetNotesItem: (item: CartItem) => void;
@@ -37,6 +39,8 @@ interface CartPanelProps {
   onToggleUnpaidOrders: () => void;
   onUnlinkCustomer: () => void;
   onDeleteUnpaidOrder?: (order: Order) => void;
+  onApplyCartDiscount: () => void;
+  onApplyLineDiscount: (item: CartItem) => void;
 }
 
 export default function CartPanel({
@@ -49,6 +53,8 @@ export default function CartPanel({
   subtotal,
   tax,
   parkedCount,
+  cartDiscount,
+  totalDiscount,
   onRemoveFromCart,
   onUpdateQuantity,
   onSetNotesItem,
@@ -65,6 +71,8 @@ export default function CartPanel({
   onToggleUnpaidOrders,
   onDeleteUnpaidOrder,
   onUnlinkCustomer,
+  onApplyCartDiscount,
+  onApplyLineDiscount,
 }: CartPanelProps) {
   const { t } = useTranslation('pos');
 
@@ -228,13 +236,47 @@ export default function CartPanel({
                   </div>
                 )}
 
+                {item.discount && (
+                  <div className="mb-2 px-2 py-1.5 bg-amber-900/30 border border-amber-700 rounded text-xs flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-amber-300 font-semibold">
+                        {item.discount.type === 'comp'
+                          ? t('discount.compLabel')
+                          : item.discount.type === 'percent'
+                            ? t('discount.percentLabel', { value: item.discount.value })
+                            : t('discount.amountLabel', { value: formatPrice(item.discount.value) })}
+                      </p>
+                      {item.discount.reason && (
+                        <p className="text-amber-200/80 truncate">{item.discount.reason}</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => onApplyLineDiscount(item)}
+                      className="text-amber-300 hover:text-white text-xs font-bold ml-2"
+                    >
+                      {t('discount.edit')}
+                    </button>
+                  </div>
+                )}
+
                 {!isComboItem && !item.selectedModifierIds?.length && (
-                  <button
-                    onClick={() => onSetNotesItem(item)}
-                    className="w-full py-2 text-sm bg-neutral-700 text-neutral-300 rounded hover:bg-neutral-600 transition-all font-semibold"
-                  >
-                    {t('cart.addNotes')}
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => onSetNotesItem(item)}
+                      className="flex-1 py-2 text-sm bg-neutral-700 text-neutral-300 rounded hover:bg-neutral-600 transition-all font-semibold"
+                    >
+                      {t('cart.addNotes')}
+                    </button>
+                    {!item.discount && (
+                      <button
+                        onClick={() => onApplyLineDiscount(item)}
+                        title={t('discount.applyToLine')}
+                        className="px-3 py-2 text-sm bg-neutral-700 text-amber-400 rounded hover:bg-neutral-600 transition-all font-semibold"
+                      >
+                        <Percent className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             );
@@ -263,6 +305,12 @@ export default function CartPanel({
           <span className="font-bold text-white">{t('totals.total')}</span>
           <span className="font-bold text-brand-500">{formatPrice(total)}</span>
         </div>
+        {totalDiscount > 0 && (
+          <div className="flex justify-between text-amber-400 text-sm font-semibold">
+            <span>{t('totals.discount')}</span>
+            <span>-{formatPrice(totalDiscount)}</span>
+          </div>
+        )}
         <div className="flex justify-between text-neutral-500 text-sm">
           <span>{t('totals.subtotalBeforeTax')}</span>
           <span>{formatPrice(subtotal)}</span>
@@ -271,6 +319,28 @@ export default function CartPanel({
           <span>{t('totals.taxIncluded', { label: TAX_LABEL })}</span>
           <span>{formatPrice(tax)}</span>
         </div>
+        {cartDiscount && (
+          <div className="mt-2 px-3 py-2 bg-amber-900/30 border border-amber-700 rounded-lg flex items-center justify-between">
+            <div className="flex-1 min-w-0">
+              <p className="text-amber-300 font-bold text-xs">
+                {cartDiscount.type === 'comp'
+                  ? t('discount.compLabel')
+                  : cartDiscount.type === 'percent'
+                    ? t('discount.percentLabel', { value: cartDiscount.value })
+                    : t('discount.amountLabel', { value: formatPrice(cartDiscount.value) })}
+              </p>
+              {cartDiscount.reason && (
+                <p className="text-amber-200/80 text-xs truncate">{cartDiscount.reason}</p>
+              )}
+            </div>
+            <button
+              onClick={onApplyCartDiscount}
+              className="text-amber-300 hover:text-white text-xs font-bold ml-2"
+            >
+              {t('discount.edit')}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="border-t border-neutral-800 p-4 space-y-3">
@@ -321,6 +391,14 @@ export default function CartPanel({
             {t('actions.splitPay')}
           </button>
         </div>
+        <button
+          onClick={onApplyCartDiscount}
+          disabled={cart.length === 0}
+          className="w-full py-3 bg-amber-700 text-white text-sm font-bold rounded-lg hover:bg-amber-800 disabled:bg-neutral-800 disabled:text-neutral-600 disabled:cursor-not-allowed transition-all touch-manipulation flex items-center justify-center gap-2"
+        >
+          <Percent className="w-4 h-4" />
+          {cartDiscount ? t('discount.modify') : t('discount.applyToOrder')}
+        </button>
         <button
           onClick={onClearCart}
           disabled={cart.length === 0}

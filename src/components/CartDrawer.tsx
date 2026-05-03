@@ -1,9 +1,9 @@
 import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CartItem, LoyaltyCustomer, ComboDefinition } from '../types';
-import { formatPrice, TAX_RATE, TAX_LABEL } from '../utils/currency';
+import { CartItem, LoyaltyCustomer, ComboDefinition, Discount } from '../types';
+import { formatPrice, TAX_LABEL } from '../utils/currency';
 import { formatTime } from '../utils/dateFormat';
-import { ClipboardList, PauseCircle, X } from 'lucide-react';
+import { ClipboardList, PauseCircle, Percent, X } from 'lucide-react';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -28,6 +28,10 @@ interface CartDrawerProps {
   total: number;
   subtotal: number;
   tax: number;
+  cartDiscount: Discount | null;
+  totalDiscount: number;
+  onApplyCartDiscount: () => void;
+  onApplyLineDiscount: (item: CartItem) => void;
 }
 
 const CartDrawer: React.FC<CartDrawerProps> = ({
@@ -53,6 +57,10 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
   total,
   subtotal,
   tax,
+  cartDiscount,
+  totalDiscount,
+  onApplyCartDiscount,
+  onApplyLineDiscount,
 }) => {
   const { t } = useTranslation('pos');
 
@@ -187,13 +195,42 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
                       </p>
                     </div>
                   )}
+                  {item.discount && (
+                    <div className="mb-1.5 px-2 py-1 bg-amber-900/30 border border-amber-700 rounded text-xs flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-amber-300 font-semibold">
+                          {item.discount.type === 'comp'
+                            ? t('discount.compLabel')
+                            : item.discount.type === 'percent'
+                              ? t('discount.percentLabel', { value: item.discount.value })
+                              : t('discount.amountLabel', { value: formatPrice(item.discount.value) })}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => onApplyLineDiscount(item)}
+                        className="text-amber-300 hover:text-white text-xs font-bold ml-2"
+                      >
+                        {t('discount.edit')}
+                      </button>
+                    </div>
+                  )}
                   {!isComboItem && !item.selectedModifierIds?.length && (
-                    <button
-                      onClick={() => onSetNotesItem(item)}
-                      className="w-full py-1.5 text-xs bg-neutral-700 text-neutral-300 rounded hover:bg-neutral-600 transition-all font-semibold"
-                    >
-                      {t('cart.addNotes')}
-                    </button>
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => onSetNotesItem(item)}
+                        className="flex-1 py-1.5 text-xs bg-neutral-700 text-neutral-300 rounded hover:bg-neutral-600 transition-all font-semibold"
+                      >
+                        {t('cart.addNotes')}
+                      </button>
+                      {!item.discount && (
+                        <button
+                          onClick={() => onApplyLineDiscount(item)}
+                          className="px-2 py-1.5 text-xs bg-neutral-700 text-amber-400 rounded hover:bg-neutral-600 transition-all"
+                        >
+                          <Percent className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               );
@@ -223,6 +260,12 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
             <span className="font-bold text-white">{t('totals.total')}</span>
             <span className="font-bold text-brand-500">{formatPrice(total)}</span>
           </div>
+          {totalDiscount > 0 && (
+            <div className="flex justify-between text-amber-400 text-xs font-semibold">
+              <span>{t('totals.discount')}</span>
+              <span>-{formatPrice(totalDiscount)}</span>
+            </div>
+          )}
           <div className="flex justify-between text-neutral-500 text-xs">
             <span>{t('totals.subtotalBeforeTax')}</span>
             <span>{formatPrice(subtotal)}</span>
@@ -282,6 +325,14 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
               {t('actions.splitPay')}
             </button>
           </div>
+          <button
+            onClick={onApplyCartDiscount}
+            disabled={cart.length === 0}
+            className="w-full py-2.5 bg-amber-700 text-white text-xs font-bold rounded-lg hover:bg-amber-800 disabled:bg-neutral-800 disabled:text-neutral-600 disabled:cursor-not-allowed transition-all touch-manipulation flex items-center justify-center gap-1.5"
+          >
+            <Percent className="w-3.5 h-3.5" />
+            {cartDiscount ? t('discount.modify') : t('discount.applyToOrder')}
+          </button>
           <button
             onClick={onClearCart}
             disabled={cart.length === 0}

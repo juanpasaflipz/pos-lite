@@ -29,9 +29,10 @@ import {
   getCachedOrderTemplates,
   getCachedPosBrands,
 } from '../lib/menuCache';
-import { MenuCategory, MenuItem, CartItem, Order, AISuggestion, LoyaltyCustomer, ComboDefinition, OrderTemplate, VirtualBrand } from '../types';
+import { MenuCategory, MenuItem, CartItem, Order, AISuggestion, LoyaltyCustomer, ComboDefinition, OrderTemplate, VirtualBrand, Discount } from '../types';
 import RefundModal from '../components/RefundModal';
 import NotesModal from '../components/pos/NotesModal';
+import DiscountModal from '../components/pos/DiscountModal';
 import PaymentModal from '../components/pos/PaymentModal';
 import OxxoReferenceModal from '../components/pos/OxxoReferenceModal';
 import SpeiReferenceModal from '../components/pos/SpeiReferenceModal';
@@ -121,6 +122,8 @@ const POSScreen: React.FC = () => {
   const [parkedCarts, setParkedCarts] = useState<ParkedCart[]>([]);
   const [showParkedCarts, setShowParkedCarts] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [cartDiscount, setCartDiscount] = useState<Discount | null>(null);
+  const [discountTarget, setDiscountTarget] = useState<{ scope: 'cart' } | { scope: 'item'; cartId: string } | null>(null);
   const [showNavMenu, setShowNavMenu] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -376,11 +379,37 @@ const POSScreen: React.FC = () => {
     return popularItems.filter(item => brandItemMap.has(item.id));
   }, [popularItems, brandItemMap]);
 
-  const total = parseFloat(
-    cart.reduce((sum, item) => sum + item.unit_price * item.quantity, 0).toFixed(2)
+  const lineDiscountAmount = (item: CartItem): number => {
+    if (!item.discount) return 0;
+    const base = item.unit_price * item.quantity;
+    if (item.discount.type === 'comp') return base;
+    if (item.discount.type === 'percent') {
+      const pct = Math.max(0, Math.min(100, Number(item.discount.value) || 0));
+      return Math.round(base * (pct / 100) * 100) / 100;
+    }
+    return Math.min(base, Math.max(0, Math.round((Number(item.discount.value) || 0) * 100) / 100));
+  };
+
+  const grossTotal = parseFloat(
+    cart.reduce((sum, item) => sum + item.unit_price * item.quantity - lineDiscountAmount(item), 0).toFixed(2)
   );
+
+  const cartDiscountAmount = (() => {
+    if (!cartDiscount) return 0;
+    if (cartDiscount.type === 'comp') return grossTotal;
+    if (cartDiscount.type === 'percent') {
+      const pct = Math.max(0, Math.min(100, Number(cartDiscount.value) || 0));
+      return Math.round(grossTotal * (pct / 100) * 100) / 100;
+    }
+    return Math.min(grossTotal, Math.max(0, Math.round((Number(cartDiscount.value) || 0) * 100) / 100));
+  })();
+
+  const total = parseFloat(Math.max(0, grossTotal - cartDiscountAmount).toFixed(2));
   const tax = parseFloat((total - total / (1 + TAX_RATE)).toFixed(2));
   const subtotal = parseFloat((total - tax).toFixed(2));
+  const totalDiscount = parseFloat(
+    (cart.reduce((sum, item) => sum + lineDiscountAmount(item), 0) + cartDiscountAmount).toFixed(2)
+  );
   const todayOrderCount = 1;
 
   // ==================== Cart Operations ====================
@@ -498,6 +527,11 @@ const POSScreen: React.FC = () => {
   const clearCart = () => {
     setCart([]);
     setLinkedCustomer(null);
+    setCartDiscount(null);
+  };
+
+  const applyLineDiscount = (cartId: string, discount: Discount | null) => {
+    setCart((prev) => prev.map((ci) => (ci.cart_id === cartId ? { ...ci, discount } : ci)));
   };
 
   const convertToCombo = useCallback(() => {
@@ -620,12 +654,29 @@ const POSScreen: React.FC = () => {
     modifiers: item.selectedModifierIds || [],
     combo_instance_id: item.combo_instance_id || null,
     virtual_brand_id: item.virtual_brand_id || null,
+    discount: item.discount
+      ? {
+          type: item.discount.type,
+          value: item.discount.value,
+          reason: item.discount.reason,
+          authorized_by_employee_id: item.discount.authorized_by_employee_id,
+        }
+      : null,
   }));
+
+  const buildCartDiscountPayload = () => cartDiscount
+    ? {
+        type: cartDiscount.type,
+        value: cartDiscount.value,
+        reason: cartDiscount.reason,
+        authorized_by_employee_id: cartDiscount.authorized_by_employee_id,
+      }
+    : null;
 
   const openPaymentModal = async () => {
     if ((isMpConnected || isConektaConfigured) && cart.length > 0) {
       try {
-        const order = await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems() });
+        const order = await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload() });
         setPreCreatedOrderId(order.id);
       } catch (err) {
         addToast(err instanceof Error ? err.message : 'Error creating order', 'error');
@@ -641,7 +692,7 @@ const POSScreen: React.FC = () => {
     if (cart.length === 0) { addToast(t('toast.cartEmpty'), 'error'); return; }
     setIsProcessingPayment(true);
     try {
-      const order = await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems() });
+      const order = await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload() });
       const paymentIntent = await createPaymentIntent({ order_id: order.id, tip });
       await confirmPayment({ order_id: order.id, payment_intent_id: paymentIntent.payment_intent_id });
       const finalOrder: Order = { ...order, tip, total: order.total + tip, payment_method: 'card', employee_name: currentEmployee?.name, estimated_ready_minutes: order.estimated_ready_minutes, estimated_ready_range: order.estimated_ready_range };
@@ -671,7 +722,7 @@ const POSScreen: React.FC = () => {
         clearCart();
         addToast(t('offline.orderSaved', { number: offlineOrder.offlineOrderNumber }), 'success');
       } else {
-        const order = await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems() });
+        const order = await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload() });
         const result = await cashPayment({ order_id: order.id, tip, amount_received: amountReceived });
         const finalOrder: Order = { ...order, tip, total: order.total + tip, payment_method: 'cash', employee_name: currentEmployee?.name, estimated_ready_minutes: order.estimated_ready_minutes, estimated_ready_range: order.estimated_ready_range };
         await handleLoyaltyStamp(order);
@@ -692,7 +743,7 @@ const POSScreen: React.FC = () => {
     if (cart.length === 0 && !preCreatedOrderId) { addToast(t('toast.cartEmpty'), 'error'); return; }
     setIsProcessingPayment(true);
     try {
-      const orderId = preCreatedOrderId || (await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems() })).id;
+      const orderId = preCreatedOrderId || (await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload() })).id;
       const result = await conektaOxxoPayment({ order_id: orderId, tip });
       setOxxoResult({
         reference: result.reference,
@@ -715,7 +766,7 @@ const POSScreen: React.FC = () => {
     if (cart.length === 0 && !preCreatedOrderId) { addToast(t('toast.cartEmpty'), 'error'); return; }
     setIsProcessingPayment(true);
     try {
-      const orderId = preCreatedOrderId || (await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems() })).id;
+      const orderId = preCreatedOrderId || (await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload() })).id;
       const result = await conektaSpeiPayment({ order_id: orderId, tip });
       setSpeiResult({
         clabe: result.clabe,
@@ -738,7 +789,7 @@ const POSScreen: React.FC = () => {
     if (cart.length === 0 && !preCreatedOrderId) { addToast(t('toast.cartEmpty'), 'error'); return; }
     setIsProcessingPayment(true);
     try {
-      const orderId = preCreatedOrderId || (await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems() })).id;
+      const orderId = preCreatedOrderId || (await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload() })).id;
       // For Getnet card payments, the card tokenization happens on the server side
       // In a full implementation, the card form would collect and tokenize first
       // For now, this creates the order and marks it for Getnet processing
@@ -755,7 +806,7 @@ const POSScreen: React.FC = () => {
     if (cart.length === 0) { addToast(t('toast.cartEmpty'), 'error'); return; }
     setIsProcessingPayment(true);
     try {
-      const order = await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems() });
+      const order = await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload() });
       await splitPayment({ order_id: order.id, split_type: 'by_amount', splits });
       const totalTip = splits.reduce((sum, s) => sum + s.tip, 0);
       const finalOrder: Order = { ...order, tip: totalTip, total: order.subtotal + order.tax + totalTip, payment_method: 'split', employee_name: currentEmployee?.name, estimated_ready_minutes: order.estimated_ready_minutes, estimated_ready_range: order.estimated_ready_range };
@@ -893,6 +944,8 @@ const POSScreen: React.FC = () => {
         subtotal={subtotal}
         tax={tax}
         parkedCount={parkedCarts.length}
+        cartDiscount={cartDiscount}
+        totalDiscount={totalDiscount}
         onRemoveFromCart={removeFromCart}
         onUpdateQuantity={updateQuantity}
         onSetNotesItem={setNotesItem}
@@ -908,6 +961,8 @@ const POSScreen: React.FC = () => {
         onCobrar={handleCobrar}
         onToggleUnpaidOrders={() => setShowUnpaidOrders(!showUnpaidOrders)}
         onUnlinkCustomer={() => setLinkedCustomer(null)}
+        onApplyCartDiscount={() => setDiscountTarget({ scope: 'cart' })}
+        onApplyLineDiscount={(item) => setDiscountTarget({ scope: 'item', cartId: item.cart_id })}
         onDeleteUnpaidOrder={async (order) => {
           if (!window.confirm(`Delete order #${order.order_number}? This cannot be undone.`)) return;
           try {
@@ -946,6 +1001,10 @@ const POSScreen: React.FC = () => {
             total={total}
             subtotal={subtotal}
             tax={tax}
+            cartDiscount={cartDiscount}
+            totalDiscount={totalDiscount}
+            onApplyCartDiscount={() => setDiscountTarget({ scope: 'cart' })}
+            onApplyLineDiscount={(item) => setDiscountTarget({ scope: 'item', cartId: item.cart_id })}
           />
         </>
       )}
@@ -999,6 +1058,42 @@ const POSScreen: React.FC = () => {
           onClose={() => setNotesItem(null)}
         />
       )}
+
+      {discountTarget && (() => {
+        if (discountTarget.scope === 'cart') {
+          return (
+            <DiscountModal
+              base={grossTotal}
+              scope="cart"
+              initialDiscount={cartDiscount}
+              onSave={(discount) => {
+                setCartDiscount(discount);
+                setDiscountTarget(null);
+              }}
+              onClose={() => setDiscountTarget(null)}
+            />
+          );
+        }
+        const target = cart.find((ci) => ci.cart_id === discountTarget.cartId);
+        if (!target) {
+          setDiscountTarget(null);
+          return null;
+        }
+        const lineBase = target.unit_price * target.quantity;
+        return (
+          <DiscountModal
+            base={lineBase}
+            scope="item"
+            itemName={target.item_name}
+            initialDiscount={target.discount || null}
+            onSave={(discount) => {
+              applyLineDiscount(target.cart_id, discount);
+              setDiscountTarget(null);
+            }}
+            onClose={() => setDiscountTarget(null)}
+          />
+        );
+      })()}
 
       {modifierItem && (
         <ModifierModal

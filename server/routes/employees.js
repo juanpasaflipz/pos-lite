@@ -75,6 +75,15 @@ const pinLoginLimiter = rateLimit({
   message: { error: 'Too many login attempts, please try again later' },
 });
 
+const managerApproveLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  keyGenerator: (req) => `manager-approve:${ipKeyGenerator(req.ip)}:${req.tenant?.id || 'unknown'}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many approval attempts, please try again later' },
+});
+
 const router = Router();
 
 // GET /api/employees - list employees
@@ -275,6 +284,108 @@ router.post('/login', pinLoginLimiter, async (req, res) => {
   } catch (error) {
     console.error('Error during login:', error);
     res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// POST /api/employees/manager-approve - manager PIN re-auth for permission-gated actions
+// Verifies that some active employee with the supplied PIN has the requested permission.
+// Returns { employee_id, employee_name } so the client can attach an audit handle to the action.
+// Does NOT issue a JWT — the caller's existing session continues; this is a one-shot authorization.
+router.post('/manager-approve', managerApproveLimiter, requireAuth(), async (req, res) => {
+  try {
+    const { pin, permission } = req.body;
+
+    if (!pin || !permission) {
+      return res.status(400).json({ error: 'PIN and permission required' });
+    }
+
+    const tenantId = req.tenant?.id || 'default';
+
+    const lockoutStatus = checkLockout(req);
+    if (lockoutStatus.locked) {
+      const retryAfterSec = Math.ceil(lockoutStatus.retryAfterMs / 1000);
+      res.set('Retry-After', String(retryAfterSec));
+      return res.status(429).json({
+        error: `Locked due to too many failed attempts. Try again in ${Math.ceil(retryAfterSec / 60)} minutes.`,
+        locked: true,
+      });
+    }
+
+    const employees = await all(`
+      SELECT id, name, pin, role
+      FROM employees
+      WHERE active = true
+    `);
+
+    let approver = null;
+    for (const emp of employees) {
+      if (await bcrypt.compare(pin, emp.pin)) {
+        approver = emp;
+        break;
+      }
+    }
+
+    if (!approver) {
+      const entry = recordFailedAttempt(req);
+      audit({
+        tenantId,
+        actorType: 'employee',
+        actorId: String(req.employee?.id || 'unknown'),
+        action: 'manager_approve_failed',
+        resource: 'auth',
+        resourceId: null,
+        details: { permission, attempts: entry.attempts, locked: !!entry.lockedUntil },
+        ip: req.ip,
+      });
+      const backoffDelay = BACKOFF_DELAYS[Math.min(entry.attempts - 1, BACKOFF_DELAYS.length - 1)];
+      if (backoffDelay > 0) {
+        await new Promise((r) => setTimeout(r, backoffDelay));
+      }
+      return res.status(401).json({ error: 'Invalid PIN' });
+    }
+
+    const perm = await get(
+      'SELECT granted FROM role_permissions WHERE role = $1 AND permission = $2',
+      [approver.role, permission]
+    );
+
+    if (!perm || !perm.granted) {
+      audit({
+        tenantId,
+        actorType: 'employee',
+        actorId: String(req.employee?.id || 'unknown'),
+        action: 'manager_approve_denied',
+        resource: 'auth',
+        resourceId: String(approver.id),
+        details: { permission, approver_role: approver.role },
+        ip: req.ip,
+      });
+      return res.status(403).json({
+        error: `${approver.name} does not have permission: ${permission}`,
+      });
+    }
+
+    clearAttempts(req);
+
+    audit({
+      tenantId,
+      actorType: 'employee',
+      actorId: String(req.employee?.id || 'unknown'),
+      action: 'manager_approve',
+      resource: 'auth',
+      resourceId: String(approver.id),
+      details: { permission, approver_role: approver.role },
+      ip: req.ip,
+    });
+
+    res.json({
+      employee_id: approver.id,
+      employee_name: approver.name,
+      role: approver.role,
+    });
+  } catch (error) {
+    console.error('Error in manager approval:', error);
+    res.status(500).json({ error: 'Approval failed' });
   }
 });
 
