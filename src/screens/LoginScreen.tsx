@@ -7,6 +7,8 @@ import BrandLogo from '../components/BrandLogo';
 import { useBranding } from '../context/BrandingContext';
 import { usePlan } from '../context/PlanContext';
 import PWAInstallBanner from '../components/PWAInstallBanner';
+import TimeClockModal from '../components/TimeClockModal';
+import { Clock } from 'lucide-react';
 
 const LoginScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -17,6 +19,7 @@ const LoginScreen: React.FC = () => {
   const [pin, setPin] = useState('');
   const [shake, setShake] = useState(false);
   const [localError, setLocalError] = useState('');
+  const [timeClockOpen, setTimeClockOpen] = useState(false);
 
   useEffect(() => {
     if (error) {
@@ -154,7 +157,14 @@ const LoginScreen: React.FC = () => {
       )}
 
       {/* Quick Access */}
-      <div className="mt-8">
+      <div className="mt-8 flex flex-wrap gap-3 justify-center">
+        <button
+          onClick={() => setTimeClockOpen(true)}
+          className="px-6 py-3 bg-neutral-800 text-white text-sm font-semibold rounded-lg border border-neutral-700 hover:bg-neutral-700 active:bg-neutral-600 transition-all duration-75 touch-manipulation inline-flex items-center gap-2"
+        >
+          <Clock size={16} />
+          {t('login.timeClock')}
+        </button>
         <button
           onClick={handleKitchenDisplay}
           className="px-6 py-3 bg-neutral-800 text-white text-sm font-semibold rounded-lg border border-neutral-700 hover:bg-neutral-700 active:bg-neutral-600 transition-all duration-75 touch-manipulation"
@@ -162,6 +172,8 @@ const LoginScreen: React.FC = () => {
           {t('login.kitchenDisplay')}
         </button>
       </div>
+
+      <TimeClockModal isOpen={timeClockOpen} onClose={() => setTimeClockOpen(false)} />
 
       {/* Footer */}
       <div className="mt-12 text-center text-neutral-600 text-xs">

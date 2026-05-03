@@ -21,6 +21,7 @@ import {
   Plug,
   User,
   Trash2,
+  Clock,
 } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 import { useAuth } from '../context/AuthContext';
@@ -40,6 +41,7 @@ const ADMIN_LINKS: AdminLink[] = [
   { to: '/admin/modifiers', icon: <SlidersHorizontal size={24} />, label: 'Modifiers', description: 'Extras, sizes & add-ons' },
   { to: '/admin/inventory', icon: <Package size={24} />, label: 'Inventory', description: 'Stock levels & alerts' },
   { to: '/admin/employees', icon: <Users size={24} />, label: 'Employees', description: 'Staff & PINs', adminOnly: true },
+  { to: '/admin/shifts', icon: <Clock size={24} />, label: 'Time Clock', description: 'Who is on shift, hours worked' },
   { to: '/admin/reports', icon: <BarChart3 size={24} />, label: 'Reports', description: 'Sales & analytics' },
   { to: '/admin/printers', icon: <Printer size={24} />, label: 'Printers', description: 'Receipt & kitchen printers' },
   { to: '/admin/delivery', icon: <Truck size={24} />, label: 'Delivery', description: 'Platform integrations' },

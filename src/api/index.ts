@@ -484,6 +484,13 @@ export async function getOrder(id: number): Promise<Order> {
   return apiRequest<Order>(`/orders/${id}`);
 }
 
+interface DiscountPayload {
+  type: 'percent' | 'amount' | 'comp';
+  value: number;
+  reason: string;
+  authorized_by_employee_id?: number;
+}
+
 interface CreateOrderData {
   employee_id: number;
   items: {
@@ -493,13 +500,25 @@ interface CreateOrderData {
     modifiers?: number[];
     combo_instance_id?: string | null;
     virtual_brand_id?: number | null;
+    discount?: DiscountPayload | null;
   }[];
+  discount?: DiscountPayload | null;
 }
 
 export async function createOrder(data: CreateOrderData): Promise<Order> {
   return apiRequest<Order>('/orders', {
     method: 'POST',
     body: JSON.stringify(data),
+  });
+}
+
+export async function managerApprove(
+  pin: string,
+  permission: string
+): Promise<{ employee_id: number; employee_name: string; role: string }> {
+  return apiRequest('/employees/manager-approve', {
+    method: 'POST',
+    body: JSON.stringify({ pin, permission }),
   });
 }
 
@@ -776,6 +795,60 @@ export async function loginEmployee(pin: string): Promise<Employee> {
   return apiRequest<Employee>('/employees/login', {
     method: 'POST',
     body: JSON.stringify({ pin }),
+  });
+}
+
+/* ==================== Time Clock ==================== */
+
+import type {
+  ShiftStatusResponse,
+  ClockInResponse,
+  ClockOutResponse,
+  ActiveShift,
+  ShiftRow,
+} from '../types';
+
+export async function getShiftStatus(pin: string): Promise<ShiftStatusResponse> {
+  return apiRequest<ShiftStatusResponse>('/shifts/status', {
+    method: 'POST',
+    body: JSON.stringify({ pin }),
+  });
+}
+
+export async function clockIn(pin: string): Promise<ClockInResponse> {
+  return apiRequest<ClockInResponse>('/shifts/clock-in', {
+    method: 'POST',
+    body: JSON.stringify({ pin }),
+  });
+}
+
+export async function clockOut(pin: string): Promise<ClockOutResponse> {
+  return apiRequest<ClockOutResponse>('/shifts/clock-out', {
+    method: 'POST',
+    body: JSON.stringify({ pin }),
+  });
+}
+
+export async function getActiveShifts(): Promise<ActiveShift[]> {
+  return apiRequest<ActiveShift[]>('/shifts/active');
+}
+
+export async function getShifts(params: { from?: string; to?: string; employee_id?: number } = {}): Promise<ShiftRow[]> {
+  const qs = new URLSearchParams();
+  if (params.from) qs.set('from', params.from);
+  if (params.to) qs.set('to', params.to);
+  if (params.employee_id) qs.set('employee_id', String(params.employee_id));
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  return apiRequest<ShiftRow[]>(`/shifts${suffix}`);
+}
+
+export async function updateShift(
+  id: number,
+  data: { clock_in_at?: string; clock_out_at?: string | null; notes?: string }
+): Promise<ShiftRow> {
+  return apiRequest<ShiftRow>(`/shifts/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
   });
 }
 

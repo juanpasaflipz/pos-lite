@@ -67,7 +67,24 @@
     "tapPin": "Ingresa tu PIN de 6 dígitos",
     "loggingIn": "Iniciando sesión...",
     "kitchenDisplay": "Pantalla de Cocina",
+    "timeClock": "Reloj Checador",
     "posVersion": "Sistema POS v1.0"
+  },
+  "timeClock": {
+    "title": "Reloj Checador",
+    "enterPinPrompt": "Ingresa tu PIN para registrar entrada o salida",
+    "clockIn": "Registrar Entrada",
+    "clockOut": "Registrar Salida",
+    "youAreClockedIn": "Estás dentro del turno",
+    "youAreNotClockedIn": "No estás dentro del turno",
+    "since": "Desde {{time}}",
+    "elapsed": "En turno {{duration}}",
+    "clockedIn": "Bienvenido, {{name}} — entrada {{time}}",
+    "clockedOut": "Hasta luego, {{name}} — trabajaste {{duration}}",
+    "alreadyOpen": "{{name}} ya está en turno desde {{time}}",
+    "invalidPin": "PIN inválido",
+    "rateLimited": "Demasiados intentos. Intenta en unos minutos.",
+    "failed": "Error en el reloj checador. Intenta de nuevo."
   },
   "time": {
     "secondsAgo": "hace {{count}}s",

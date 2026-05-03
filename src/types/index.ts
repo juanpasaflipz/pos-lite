@@ -55,6 +55,16 @@ export interface VirtualBrandItem {
 }
 
 /* Order Types */
+export type DiscountType = 'percent' | 'amount' | 'comp';
+
+export interface Discount {
+  type: DiscountType;
+  value: number;
+  reason: string;
+  authorized_by_employee_id?: number;
+  authorized_by_employee_name?: string;
+}
+
 export interface OrderItem {
   id?: number;
   order_id?: number;
@@ -68,6 +78,10 @@ export interface OrderItem {
   virtual_brand_id?: number | null;
   brand_name?: string;
   brand_color?: string;
+  discount_amount?: number;
+  discount_type?: DiscountType | null;
+  discount_reason?: string | null;
+  discount_authorized_by?: number | null;
 }
 
 export interface CartItem extends OrderItem {
@@ -76,6 +90,7 @@ export interface CartItem extends OrderItem {
   selectedModifierIds?: number[];
   selectedModifierNames?: string[];
   virtual_brand_id?: number | null;
+  discount?: Discount | null;
 }
 
 export interface Order {
@@ -1419,6 +1434,59 @@ export interface SettlementOverview {
 }
 
 /* API Response Types */
+/* Time clock / shifts */
+export interface ShiftEmployeeStub {
+  id: number;
+  name: string;
+  role: string;
+}
+
+export interface OpenShift {
+  id: number;
+  clock_in_at: string;
+  clock_out_at: string | null;
+}
+
+export interface ShiftStatusResponse {
+  employee: ShiftEmployeeStub;
+  openShift: OpenShift | null;
+}
+
+export interface ClockInResponse {
+  shift: OpenShift;
+  employee: ShiftEmployeeStub;
+  already_open?: boolean;
+}
+
+export interface ClockOutResponse {
+  shift: OpenShift & { duration_seconds: number | null };
+  employee: ShiftEmployeeStub;
+}
+
+export interface ActiveShift {
+  id: number;
+  employee_id: number;
+  employee_name: string;
+  employee_role: string;
+  clock_in_at: string;
+  elapsed_seconds: number;
+}
+
+export interface ShiftRow {
+  id: number;
+  employee_id: number;
+  employee_name: string;
+  employee_role: string;
+  clock_in_at: string;
+  clock_out_at: string | null;
+  notes: string | null;
+  edited_by_employee_id: number | null;
+  edited_at: string | null;
+  edited_by_name: string | null;
+  duration_seconds: number | null;
+  flagged_long_open: boolean;
+}
+
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;

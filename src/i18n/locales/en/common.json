@@ -67,7 +67,24 @@
     "tapPin": "Enter your 6-digit PIN to login",
     "loggingIn": "Logging in...",
     "kitchenDisplay": "Kitchen Display",
+    "timeClock": "Time Clock",
     "posVersion": "POS System v1.0"
+  },
+  "timeClock": {
+    "title": "Time Clock",
+    "enterPinPrompt": "Enter your PIN to clock in or out",
+    "clockIn": "Clock In",
+    "clockOut": "Clock Out",
+    "youAreClockedIn": "You are clocked in",
+    "youAreNotClockedIn": "You are not clocked in",
+    "since": "Since {{time}}",
+    "elapsed": "On shift {{duration}}",
+    "clockedIn": "Welcome, {{name}} — clocked in at {{time}}",
+    "clockedOut": "Goodbye, {{name}} — worked {{duration}}",
+    "alreadyOpen": "{{name}} is already on shift since {{time}}",
+    "invalidPin": "Invalid PIN",
+    "rateLimited": "Too many attempts. Try again in a few minutes.",
+    "failed": "Time clock failed. Please try again."
   },
   "time": {
     "secondsAgo": "{{count}}s ago",

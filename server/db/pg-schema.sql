@@ -51,6 +51,23 @@ CREATE TABLE IF NOT EXISTS employees (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Time clock: payroll-grade shift tracking. One row per clock-in/out pair.
+-- clock_out_at NULL = currently on shift. Rows open >12h are flagged in UI.
+CREATE TABLE IF NOT EXISTS shifts (
+  id SERIAL PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
+  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  clock_in_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  clock_out_at TIMESTAMPTZ,
+  notes TEXT,
+  edited_by_employee_id INTEGER REFERENCES employees(id),
+  edited_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_shifts_tenant_employee ON shifts(tenant_id, employee_id, clock_in_at DESC);
+CREATE INDEX IF NOT EXISTS idx_shifts_open ON shifts(tenant_id, clock_out_at) WHERE clock_out_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS menu_categories (
   id SERIAL PRIMARY KEY,
   tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
@@ -99,7 +116,11 @@ CREATE TABLE IF NOT EXISTS orders (
   paid_at TIMESTAMPTZ DEFAULT NULL,
   mp_order_id TEXT,
   ready_at TIMESTAMPTZ,
-  estimated_ready_minutes INTEGER
+  estimated_ready_minutes INTEGER,
+  discount_amount NUMERIC(10,2) DEFAULT 0,
+  discount_type TEXT,
+  discount_reason TEXT,
+  discount_authorized_by INTEGER REFERENCES employees(id)
 );
 
 CREATE TABLE IF NOT EXISTS order_items (
@@ -112,7 +133,11 @@ CREATE TABLE IF NOT EXISTS order_items (
   unit_price NUMERIC(10,2) NOT NULL,
   notes TEXT,
   combo_instance_id TEXT DEFAULT NULL,
-  virtual_brand_id INTEGER DEFAULT NULL
+  virtual_brand_id INTEGER DEFAULT NULL,
+  discount_amount NUMERIC(10,2) DEFAULT 0,
+  discount_type TEXT,
+  discount_reason TEXT,
+  discount_authorized_by INTEGER REFERENCES employees(id)
 );
 
 CREATE TABLE IF NOT EXISTS inventory_items (
@@ -705,7 +730,7 @@ DECLARE
 BEGIN
   FOR tbl IN
     SELECT unnest(ARRAY[
-      'employees', 'menu_categories', 'menu_items', 'orders', 'order_items',
+      'employees', 'shifts', 'menu_categories', 'menu_items', 'orders', 'order_items',
       'inventory_items', 'menu_item_ingredients',
       'modifier_groups', 'modifiers', 'menu_item_modifier_groups', 'order_item_modifiers',
       'combo_definitions', 'combo_slots', 'order_payments', 'order_payment_items',
