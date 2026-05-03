@@ -486,6 +486,50 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
   }
 });
 
+// DELETE /api/inventory/:id - delete inventory item if not referenced
+router.delete('/:id', requireAuth('manage_inventory'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const item = await get('SELECT id, name FROM inventory_items WHERE id = $1', [id]);
+    if (!item) {
+      return res.status(404).json({ error: 'Inventory item not found' });
+    }
+
+    const recipeUses = await all(`
+      SELECT mi.name
+      FROM menu_item_ingredients mii
+      JOIN menu_items mi ON mi.id = mii.menu_item_id
+      WHERE mii.inventory_item_id = $1
+      ORDER BY mi.name
+      LIMIT 5
+    `, [id]);
+
+    if (recipeUses.length > 0) {
+      const names = recipeUses.map(row => row.name).join(', ');
+      return res.status(409).json({
+        error: `"${item.name}" is used in recipes (${names}). Remove it from those recipes first.`,
+      });
+    }
+
+    try {
+      await run('DELETE FROM inventory_items WHERE id = $1', [id]);
+    } catch (error) {
+      if (error?.code === '23503') {
+        return res.status(409).json({
+          error: `"${item.name}" is referenced by purchase orders, counts, or waste logs and cannot be deleted.`,
+        });
+      }
+      throw error;
+    }
+
+    res.json({ id: Number(id), deleted: true });
+  } catch (error) {
+    console.error('Error deleting inventory item:', error);
+    res.status(500).json({ error: 'Failed to delete inventory item' });
+  }
+});
+
 // POST /api/inventory/:id/restock - add to quantity
 router.post('/:id/restock', requireAuth('manage_inventory'), async (req, res) => {
   try {

@@ -10,9 +10,10 @@ import {
   Plus,
   Search,
   Sprout,
+  Trash2,
   X,
 } from 'lucide-react';
-import { createInventoryItem, getInventory, getItemRecipe, getRecipeSummary, updateItemRecipe } from '../api';
+import { createInventoryItem, deleteInventoryItem, getInventory, getItemRecipe, getRecipeSummary, updateItemRecipe } from '../api';
 import type { InventoryItem, RecipeIngredient, RecipeSummaryItem } from '../types';
 import BrandLogo from '../components/BrandLogo';
 import BackToSetupButton from '../components/BackToSetupButton';
@@ -49,6 +50,7 @@ export default function RecipeManagementScreen() {
     name: '', unit: '', cost_price: '', category: '',
   });
   const [creatingIngredient, setCreatingIngredient] = useState(false);
+  const [deletingIngredientId, setDeletingIngredientId] = useState<number | null>(null);
 
   useEffect(() => {
     void loadInitialData();
@@ -179,6 +181,31 @@ export default function RecipeManagementScreen() {
   const closeNewIngredient = () => {
     setNewIngredientOpen(false);
     setNewIngredientTargetRow(null);
+  };
+
+  const handleDeleteIngredient = async (inventoryItemId: number) => {
+    const ingredient = ingredientLookup.get(inventoryItemId);
+    if (!ingredient) return;
+    if (!confirm(t('recipe.confirmDeleteIngredient', { name: ingredient.name }))) return;
+    try {
+      setDeletingIngredientId(inventoryItemId);
+      setError(null);
+      await deleteInventoryItem(inventoryItemId);
+      setInventoryItems(current => current.filter(item => item.id !== inventoryItemId));
+      setRecipeRows(current => {
+        const next = current.map(row => (
+          row.inventory_item_id === inventoryItemId ? { ...EMPTY_ROW } : row
+        ));
+        return next.length > 0 ? next : [{ ...EMPTY_ROW }];
+      });
+      addToast(t('recipe.ingredientDeleted'), 'success');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t('recipe.failedDeleteIngredient');
+      setError(message);
+      addToast(message, 'error');
+    } finally {
+      setDeletingIngredientId(null);
+    }
   };
 
   const handleCreateIngredient = async () => {
@@ -420,6 +447,17 @@ export default function RecipeManagementScreen() {
                                 <Sprout size={16} />
                                 <span className="hidden sm:inline">{t('recipe.newIngredient')}</span>
                               </button>
+                              {ingredient && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteIngredient(ingredient.id)}
+                                  disabled={deletingIngredientId === ingredient.id}
+                                  className="shrink-0 px-3 rounded-lg border border-neutral-700 bg-neutral-900 text-neutral-400 hover:text-red-300 hover:border-red-800 disabled:opacity-50 transition-colors inline-flex items-center"
+                                  title={t('recipe.deleteIngredient')}
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
                             </div>
                           </div>
 

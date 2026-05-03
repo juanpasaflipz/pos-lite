@@ -692,6 +692,12 @@ export async function createInventoryItem(data: {
   });
 }
 
+export async function deleteInventoryItem(id: number): Promise<{ id: number; deleted: true }> {
+  return apiRequest<{ id: number; deleted: true }>(`/inventory/${id}`, {
+    method: 'DELETE',
+  });
+}
+
 /* ==================== Waste Endpoints ==================== */
 
 export async function logWaste(data: {
