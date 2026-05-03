@@ -9,6 +9,7 @@ import {
   Package,
   Plus,
   Search,
+  Settings2,
   Sprout,
   Trash2,
   X,
@@ -51,6 +52,8 @@ export default function RecipeManagementScreen() {
   });
   const [creatingIngredient, setCreatingIngredient] = useState(false);
   const [deletingIngredientId, setDeletingIngredientId] = useState<number | null>(null);
+  const [manageIngredientsOpen, setManageIngredientsOpen] = useState(false);
+  const [ingredientSearch, setIngredientSearch] = useState('');
 
   useEffect(() => {
     void loadInitialData();
@@ -117,6 +120,20 @@ export default function RecipeManagementScreen() {
     () => new Map(inventoryItems.map(item => [item.id, item])),
     [inventoryItems]
   );
+
+  const sortedInventory = useMemo(
+    () => [...inventoryItems].sort((a, b) => a.name.localeCompare(b.name)),
+    [inventoryItems]
+  );
+
+  const filteredInventory = useMemo(() => {
+    const term = ingredientSearch.trim().toLowerCase();
+    if (!term) return sortedInventory;
+    return sortedInventory.filter(item => (
+      item.name.toLowerCase().includes(term)
+      || (item.category || '').toLowerCase().includes(term)
+    ));
+  }, [ingredientSearch, sortedInventory]);
 
   const hydratedRecipe = useMemo(() => {
     return recipeRows
@@ -522,6 +539,13 @@ export default function RecipeManagementScreen() {
                       <Sprout size={18} />
                       {t('recipe.newIngredient')}
                     </button>
+                    <button
+                      onClick={() => { setIngredientSearch(''); setManageIngredientsOpen(true); }}
+                      className="px-4 py-3 rounded-xl border border-neutral-700 bg-neutral-950 text-neutral-300 hover:text-white hover:border-brand-500 transition-colors inline-flex items-center justify-center gap-2"
+                    >
+                      <Settings2 size={18} />
+                      {t('recipe.manageIngredients')}
+                    </button>
                   </div>
 
                   <button
@@ -629,6 +653,80 @@ export default function RecipeManagementScreen() {
               >
                 {creatingIngredient ? t('recipe.saving') : t('recipe.createIngredient')}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {manageIngredientsOpen && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 shadow-xl max-w-2xl w-full max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-neutral-800">
+              <div>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Settings2 size={20} />
+                  {t('recipe.manageIngredientsTitle')}
+                </h2>
+                <p className="text-sm text-neutral-400 mt-1">{t('recipe.manageIngredientsHint')}</p>
+              </div>
+              <button
+                onClick={() => setManageIngredientsOpen(false)}
+                className="text-neutral-500 hover:text-neutral-300"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 pb-3">
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+                <input
+                  type="text"
+                  value={ingredientSearch}
+                  onChange={e => setIngredientSearch(e.target.value)}
+                  placeholder={t('recipe.searchIngredients')}
+                  autoFocus
+                  className="w-full pl-10 pr-3 py-3 rounded-xl bg-neutral-950 border border-neutral-800 text-white placeholder:text-neutral-500 focus:outline-none focus:border-brand-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-2">
+              {sortedInventory.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-neutral-800 px-4 py-10 text-sm text-neutral-500 text-center">
+                  {t('recipe.noIngredientsYet')}
+                </div>
+              ) : filteredInventory.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-neutral-800 px-4 py-10 text-sm text-neutral-500 text-center">
+                  {t('recipe.noIngredientsFound')}
+                </div>
+              ) : (
+                filteredInventory.map(item => (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-neutral-800 bg-neutral-950 px-4 py-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-white truncate">{item.name}</p>
+                      <p className="text-xs text-neutral-500 mt-0.5">
+                        {item.unit}
+                        {item.category ? ` · ${item.category}` : ''}
+                        {item.cost_price ? ` · ${formatPrice(item.cost_price)}/${item.unit}` : ''}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteIngredient(item.id)}
+                      disabled={deletingIngredientId === item.id}
+                      className="shrink-0 px-3 py-2 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-red-300 hover:border-red-800 disabled:opacity-50 transition-colors inline-flex items-center gap-2 text-sm"
+                      title={t('recipe.deleteIngredient')}
+                    >
+                      <Trash2 size={16} />
+                      <span className="hidden sm:inline">{t('common:buttons.remove')}</span>
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
