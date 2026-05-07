@@ -255,7 +255,11 @@
       "modifierGroups": "Grupos de Modificadores",
       "noModifiersHint": "Selecciona grupos de modificadores para que los cajeros agreguen extras como guacamole, crema, etc.",
       "visibility": "Visibilidad en el Menú",
-      "visibilityHint": "Los productos en Menú Activo aparecen en el POS. Los de Pre-Menú quedan preparados y ocultos de los clientes."
+      "visibilityHint": "Los productos en Menú Activo aparecen en el POS. Los de Pre-Menú quedan preparados y ocultos de los clientes.",
+      "deleteItem": "Eliminar Producto",
+      "deleting": "Eliminando...",
+      "confirmDelete": "Sí, eliminar",
+      "confirmDeleteItem": "¿Eliminar permanentemente \"{{name}}\"? Esta acción no se puede deshacer."
     },
     "categoryForm": {
       "namePlaceholder": "Nombre de categoría",
@@ -585,6 +589,7 @@
     "addItem": "Error al agregar producto",
     "editItem": "Error al editar producto",
     "toggleItem": "Error al cambiar estado del producto",
+    "deleteItem": "Error al eliminar producto",
     "createCategory": "Error al crear categoría",
     "updateCategory": "Error al actualizar categoría",
     "toggleCategory": "Error al cambiar estado de categoría",

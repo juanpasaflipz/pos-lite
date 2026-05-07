@@ -255,7 +255,11 @@
       "modifierGroups": "Modifier Groups",
       "noModifiersHint": "Select modifier groups to let cashiers add extras like guac, sour cream, etc.",
       "visibility": "Menu Visibility",
-      "visibilityHint": "Live items show on the POS. Pre-Menu items are staged and hidden from customers."
+      "visibilityHint": "Live items show on the POS. Pre-Menu items are staged and hidden from customers.",
+      "deleteItem": "Delete Item",
+      "deleting": "Deleting...",
+      "confirmDelete": "Yes, delete",
+      "confirmDeleteItem": "Permanently delete \"{{name}}\"? This cannot be undone."
     },
     "categoryForm": {
       "namePlaceholder": "Category name",
@@ -585,6 +589,7 @@
     "addItem": "Failed to add item",
     "editItem": "Failed to edit item",
     "toggleItem": "Failed to toggle item",
+    "deleteItem": "Failed to delete item",
     "createCategory": "Failed to create category",
     "updateCategory": "Failed to update category",
     "toggleCategory": "Failed to toggle category",

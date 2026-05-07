@@ -368,6 +368,56 @@ router.put('/items/:id', requireAuth('manage_menu'), async (req, res) => {
   }
 });
 
+// DELETE /api/menu/items/:id - hard delete a menu item
+// Refuses if the item has been ordered (order_items references must persist for history).
+// In that case, callers should deactivate (set active=false) instead.
+router.delete('/items/:id', requireAuth('manage_menu'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const item = await get('SELECT id, name FROM menu_items WHERE id = $1', [id]);
+    if (!item) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    const ordered = await get(
+      'SELECT COUNT(*)::int AS n FROM order_items WHERE menu_item_id = $1',
+      [id]
+    );
+    if (ordered && ordered.n > 0) {
+      return res.status(409).json({
+        error: 'Cannot delete item that has been ordered',
+        code: 'item_has_orders',
+        order_count: ordered.n,
+        hint: 'Deactivate the item (set Pre-Menu) to hide it from the POS while preserving order history.',
+      });
+    }
+
+    await run('DELETE FROM menu_item_ingredients WHERE menu_item_id = $1', [id]);
+    await run('DELETE FROM menu_item_modifier_groups WHERE menu_item_id = $1', [id]);
+    await run('DELETE FROM virtual_brand_items WHERE menu_item_id = $1', [id]);
+    await run('DELETE FROM delivery_markup_rules WHERE menu_item_id = $1', [id]);
+    await run('UPDATE combo_slots SET specific_item_id = NULL WHERE specific_item_id = $1', [id]);
+    await run('DELETE FROM menu_items WHERE id = $1', [id]);
+
+    audit({
+      tenantId: req.tenant?.id || 'default',
+      actorType: 'employee',
+      actorId: req.headers['x-employee-id'] || 'unknown',
+      action: 'delete',
+      resource: 'menu_item',
+      resourceId: String(id),
+      ip: req.ip,
+      details: { name: item.name },
+    });
+
+    res.json({ message: 'Item deleted successfully', id: Number(id) });
+  } catch (error) {
+    console.error('Error deleting item:', error);
+    res.status(500).json({ error: 'Failed to delete item' });
+  }
+});
+
 // PUT /api/menu/items/:id/toggle - toggle active status
 router.put('/items/:id/toggle', requireAuth('manage_menu'), async (req, res) => {
   try {

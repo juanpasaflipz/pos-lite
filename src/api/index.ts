@@ -449,6 +449,10 @@ export async function toggleMenuItem(id: number): Promise<any> {
   return apiRequest(`/menu/items/${id}/toggle`, { method: 'PUT' });
 }
 
+export async function deleteMenuItem(id: number): Promise<any> {
+  return apiRequest(`/menu/items/${id}`, { method: 'DELETE' });
+}
+
 export async function getPopularItems(limit: number = 8): Promise<MenuItem[]> {
   return apiRequest<MenuItem[]>(`/menu/items/popular?limit=${limit}`);
 }

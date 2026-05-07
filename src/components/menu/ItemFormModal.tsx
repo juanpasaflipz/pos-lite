@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Check, SlidersHorizontal } from 'lucide-react';
+import { X, Check, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { MenuCategory, ModifierGroup } from '../../types';
 
 interface FormData {
@@ -26,6 +26,7 @@ interface ItemFormModalProps {
   onFormData: (data: FormData) => void;
   onAddItem: () => void;
   onEditItem: () => void;
+  onDeleteItem?: () => void;
   onToggleModifierGroup: (groupId: number) => void;
   onClose: () => void;
 }
@@ -42,10 +43,12 @@ export default function ItemFormModal({
   onFormData,
   onAddItem,
   onEditItem,
+  onDeleteItem,
   onToggleModifierGroup,
   onClose,
 }: ItemFormModalProps) {
   const { t } = useTranslation('inventory');
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   if (!modalMode) return null;
 
@@ -57,7 +60,7 @@ export default function ItemFormModal({
             {modalMode === 'add' ? t('menu.addMenuItem') : t('menu.editMenuItem')}
           </h2>
           <button
-            onClick={onClose}
+            onClick={() => { setConfirmDelete(false); onClose(); }}
             className="text-neutral-500 hover:text-neutral-300"
           >
             <X size={24} />
@@ -237,7 +240,7 @@ export default function ItemFormModal({
 
         <div className="flex gap-3 mt-6">
           <button
-            onClick={onClose}
+            onClick={() => { setConfirmDelete(false); onClose(); }}
             className="flex-1 px-4 py-2 border border-neutral-700 text-neutral-300 rounded-lg hover:bg-neutral-800 transition-colors font-medium min-h-[44px]"
           >
             {t('common:buttons.cancel')}
@@ -251,6 +254,44 @@ export default function ItemFormModal({
             {actionLoading ? t('menu.form.saving') : modalMode === 'add' ? t('menu.addItem') : t('menu.form.saveChanges')}
           </button>
         </div>
+
+        {modalMode === 'edit' && onDeleteItem && (
+          <div className="mt-6 pt-6 border-t border-neutral-800">
+            {confirmDelete ? (
+              <div className="space-y-3">
+                <p className="text-sm text-red-300">
+                  {t('menu.form.confirmDeleteItem', { name: formData.name })}
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setConfirmDelete(false)}
+                    disabled={actionLoading}
+                    className="flex-1 px-4 py-2 border border-neutral-700 text-neutral-300 rounded-lg hover:bg-neutral-800 transition-colors font-medium min-h-[44px] disabled:opacity-50"
+                  >
+                    {t('common:buttons.cancel')}
+                  </button>
+                  <button
+                    onClick={onDeleteItem}
+                    disabled={actionLoading}
+                    className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2 min-h-[44px]"
+                  >
+                    <Trash2 size={18} />
+                    {actionLoading ? t('menu.form.deleting') : t('menu.form.confirmDelete')}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                disabled={actionLoading}
+                className="w-full px-4 py-2 border border-red-900 text-red-400 rounded-lg hover:bg-red-950/50 transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2 min-h-[44px]"
+              >
+                <Trash2 size={18} />
+                {t('menu.form.deleteItem')}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

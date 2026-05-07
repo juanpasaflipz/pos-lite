@@ -8,6 +8,7 @@ import {
   createMenuItem,
   updateMenuItem,
   toggleMenuItem,
+  deleteMenuItem,
   createCategory,
   updateCategory,
   toggleCategory,
@@ -199,6 +200,22 @@ export default function MenuManagement() {
       await fetchMenuItems(selectedCategory);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errors.toggleItem'));
+    }
+  };
+
+  const handleDeleteItem = async () => {
+    if (!editingId) return;
+    setActionLoading(true);
+    try {
+      setError(null);
+      await deleteMenuItem(editingId);
+      await invalidateMenuCache();
+      if (selectedCategory) await fetchMenuItems(selectedCategory);
+      closeModal();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('errors.deleteItem'));
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -437,6 +454,7 @@ export default function MenuManagement() {
         onFormData={setFormData}
         onAddItem={handleAddItem}
         onEditItem={handleEditItem}
+        onDeleteItem={handleDeleteItem}
         onToggleModifierGroup={handleToggleModifierGroup}
         onClose={closeModal}
       />
