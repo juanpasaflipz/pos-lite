@@ -6,12 +6,10 @@
 - Neon Postgres, multi-tenant with RLS
 - Hosted on Railway (service name `pos-lite`)
 
-## Deploy — **important**
-GitHub → Railway auto-deploy is **NOT** wired up. Pushing to `master` alone does not ship code. After every `git push origin master`, also run:
-```
-railway up --detach
-```
-from the repo root. Verify with `railway deployment list | head -3` and look for `SUCCESS` on the new deployment id. If link is lost:
+## Deploy
+GitHub → Railway auto-deploy is wired up (Source repo `juanpasaflipz/pos-lite`, branch `master`). `git push origin master` triggers a deploy automatically. Verify with `railway deployment list | head -3` and look for `SUCCESS` on the new deployment id.
+
+Do **not** run `railway up --detach` after a push — it creates a competing deployment. Only use `railway up` for unpushed local builds (rare). If link is lost:
 ```
 railway link --project pos-lite --environment production --service pos-lite
 ```
@@ -47,7 +45,7 @@ railway link --project pos-lite --environment production --service pos-lite
 
 ## Do not
 - Do not commit `.env` files, credentials, or secrets
-- Do not skip `railway up --detach` after pushing — pushing to GitHub alone does not deploy
+- Do not run `railway up --detach` after `git push` — auto-deploy is wired and a manual `railway up` creates a competing deployment
 - Do not use `process.env.BASE_URL` for OAuth `redirect_uri` — use `req.get('host')`
 - Do not rely on third-party webhooks for payment status correctness — always provide a live-pull fallback
 - Do not add menu photography as an afterthought — it's the single biggest engagement lever and should be treated as content infrastructure (upload pipeline, CDN, blurhash, fallback)
