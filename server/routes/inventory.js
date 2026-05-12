@@ -30,6 +30,7 @@ router.get('/', async (req, res) => {
     const columns = await getInventoryColumns();
     const items = await all(`
       SELECT id, name, quantity, unit, low_stock_threshold, category, cost_price,
+             ${selectColumn(columns, 'pack_size')},
              ${selectColumn(columns, 'last_counted_at')},
              ${selectColumn(columns, 'sku')},
              ${selectColumn(columns, 'barcode')},
@@ -54,8 +55,10 @@ router.get('/search', async (req, res) => {
       return res.status(400).json({ error: 'q query parameter is required' });
     }
 
+    const columns = await getInventoryColumns();
     const items = await all(`
-      SELECT id, name, quantity, unit, cost_price, category
+      SELECT id, name, quantity, unit, cost_price, category,
+             ${selectColumn(columns, 'pack_size')}
       FROM inventory_items
       WHERE name ILIKE '%' || $1 || '%'
       ORDER BY name ASC
@@ -367,7 +370,7 @@ router.put('/:id', requireAuth('manage_inventory'), async (req, res) => {
   try {
     const columns = await getInventoryColumns();
     const { id } = req.params;
-    const { quantity, low_stock_threshold, sku, barcode, expiry_date, lot_number, cost_price } = req.body;
+    const { quantity, low_stock_threshold, sku, barcode, expiry_date, lot_number, cost_price, unit, pack_size } = req.body;
 
     const item = await get('SELECT id FROM inventory_items WHERE id = $1', [id]);
     if (!item) {
@@ -407,6 +410,14 @@ router.put('/:id', requireAuth('manage_inventory'), async (req, res) => {
       sets.push(`cost_price = $${paramIdx++}`);
       params.push(cost_price);
     }
+    if (unit !== undefined) {
+      sets.push(`unit = $${paramIdx++}`);
+      params.push(unit || null);
+    }
+    if (pack_size !== undefined && columns.has('pack_size')) {
+      sets.push(`pack_size = $${paramIdx++}`);
+      params.push(pack_size === '' || pack_size === null ? null : Number(pack_size));
+    }
 
     if (sets.length === 0) {
       return res.status(400).json({ error: 'No fields to update' });
@@ -426,7 +437,7 @@ router.put('/:id', requireAuth('manage_inventory'), async (req, res) => {
 router.post('/', requireAuth('manage_inventory'), async (req, res) => {
   try {
     const columns = await getInventoryColumns();
-    const { name, quantity, unit, low_stock_threshold, category, cost_price, sku, barcode, expiry_date, lot_number } = req.body;
+    const { name, quantity, unit, low_stock_threshold, category, cost_price, sku, barcode, expiry_date, lot_number, pack_size } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'name is required' });
@@ -460,6 +471,10 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
       insertColumns.push('lot_number');
       insertValues.push(lot_number || null);
     }
+    if (columns.has('pack_size')) {
+      insertColumns.push('pack_size');
+      insertValues.push(pack_size === undefined || pack_size === '' || pack_size === null ? null : Number(pack_size));
+    }
 
     const placeholders = insertColumns.map((_, index) => `$${index + 1}`);
     const result = await run(`
@@ -479,6 +494,7 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
       barcode: barcode || null,
       expiry_date: expiry_date || null,
       lot_number: lot_number || null,
+      pack_size: pack_size === undefined || pack_size === '' || pack_size === null ? null : Number(pack_size),
     });
   } catch (error) {
     console.error('Error creating inventory item:', error);

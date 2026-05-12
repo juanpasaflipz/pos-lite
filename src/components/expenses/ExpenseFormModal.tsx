@@ -1,14 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Camera, Image, Loader2, Plus } from 'lucide-react';
+import { X, Camera, Image, Loader2 } from 'lucide-react';
 import {
-  createExpenseSupplier,
-  getExpenseSuppliers,
   uploadReceipt,
   type Expense,
-  type ExpenseSupplier,
 } from '../../api';
-import { useToast } from '../../context/ToastContext';
+import VendorCombobox from './VendorCombobox';
 
 const CATEGORY_KEYS = ['food_cost', 'supplies', 'utilities', 'rent', 'marketing', 'other'] as const;
 const PAYMENT_METHOD_KEYS = ['', 'cash', 'card', 'transfer'] as const;
@@ -23,9 +20,11 @@ interface Props {
 
 const ExpenseFormModal: React.FC<Props> = ({ expense, initialData, onSave, onClose, saving }) => {
   const { t } = useTranslation('admin');
-  const { addToast } = useToast();
   const [category, setCategory] = useState(expense?.category || initialData?.category || 'food_cost');
   const [vendor, setVendor] = useState(expense?.vendor || initialData?.vendor || '');
+  const [vendorId, setVendorId] = useState<number | null>(
+    expense?.vendor_id ?? (initialData as { vendor_id?: number | null } | undefined)?.vendor_id ?? null
+  );
   const [payee, setPayee] = useState(expense?.payee || initialData?.payee || '');
   const [description, setDescription] = useState(expense?.description || initialData?.description || '');
   const [amount, setAmount] = useState(expense?.amount?.toString() || initialData?.amount?.toString() || '');
@@ -40,50 +39,8 @@ const ExpenseFormModal: React.FC<Props> = ({ expense, initialData, onSave, onClo
   const [receiptUrl, setReceiptUrl] = useState<string | null>(existingUrl);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(existingUrl);
   const [uploading, setUploading] = useState(false);
-  const [suppliers, setSuppliers] = useState<ExpenseSupplier[]>([]);
-  const [loadingSuppliers, setLoadingSuppliers] = useState(true);
-  const [showAddSupplier, setShowAddSupplier] = useState(false);
-  const [savingSupplier, setSavingSupplier] = useState(false);
-  const [supplierName, setSupplierName] = useState('');
-  const [supplierContact, setSupplierContact] = useState('');
-  const [supplierPhone, setSupplierPhone] = useState('');
-  const [supplierEmail, setSupplierEmail] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    let active = true;
-
-    async function loadSuppliers() {
-      setLoadingSuppliers(true);
-      try {
-        const data = await getExpenseSuppliers();
-        if (active) setSuppliers(data);
-      } catch (err) {
-        console.error('Failed to fetch suppliers:', err);
-        if (active) {
-          addToast(
-            err instanceof Error ? err.message : t('expenses.failedLoad'),
-            'error'
-          );
-        }
-      } finally {
-        if (active) setLoadingSuppliers(false);
-      }
-    }
-
-    loadSuppliers();
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const selectedSupplierId = useMemo(() => {
-    const normalizedVendor = vendor.trim().toLowerCase();
-    if (!normalizedVendor) return '';
-    const match = suppliers.find(supplier => supplier.name.trim().toLowerCase() === normalizedVendor);
-    return match ? String(match.id) : '';
-  }, [suppliers, vendor]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -108,64 +65,12 @@ const ExpenseFormModal: React.FC<Props> = ({ expense, initialData, onSave, onClo
     setReceiptPreview(null);
   };
 
-  const handleSelectSupplier = (value: string) => {
-    if (!value) return;
-
-    if (value === '__new__') {
-      setShowAddSupplier(true);
-      setSupplierName(vendor || '');
-      return;
-    }
-
-    const supplier = suppliers.find(item => String(item.id) === value);
-    if (supplier) {
-      setVendor(supplier.name);
-      setShowAddSupplier(false);
-    }
-  };
-
-  const handleCreateSupplier = async () => {
-    const trimmedName = supplierName.trim();
-    if (!trimmedName) return;
-
-    setSavingSupplier(true);
-    try {
-      const created = await createExpenseSupplier({
-        name: trimmedName,
-        contact_name: supplierContact.trim() || undefined,
-        phone: supplierPhone.trim() || undefined,
-        email: supplierEmail.trim() || undefined,
-        active: true,
-      });
-
-      setSuppliers(prev => {
-        const next = prev.filter(item => item.id !== created.id);
-        next.push(created);
-        next.sort((a, b) => a.name.localeCompare(b.name));
-        return next;
-      });
-      setVendor(created.name);
-      setShowAddSupplier(false);
-      setSupplierName('');
-      setSupplierContact('');
-      setSupplierPhone('');
-      setSupplierEmail('');
-    } catch (err) {
-      console.error('Failed to create supplier:', err);
-      addToast(
-        err instanceof Error ? err.message : t('expenses.failedSave'),
-        'error'
-      );
-    } finally {
-      setSavingSupplier(false);
-    }
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave({
       category,
       vendor: vendor || undefined,
+      vendor_id: vendorId ?? undefined,
       payee: payee || undefined,
       description: description || undefined,
       amount: Number(amount),
@@ -265,107 +170,16 @@ const ExpenseFormModal: React.FC<Props> = ({ expense, initialData, onSave, onClo
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm font-medium text-neutral-400">{t('expenses.supplierDb')}</label>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAddSupplier(prev => !prev);
-                  setSupplierName(vendor || '');
-                }}
-                className="text-xs text-brand-400 hover:text-brand-300 transition-colors"
-              >
-                {t('expenses.addSupplier')}
-              </button>
-            </div>
-            <select
-              value={selectedSupplierId}
-              onChange={e => handleSelectSupplier(e.target.value)}
-              className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none"
-            >
-              <option value="">{loadingSuppliers ? t('expenses.loadingSuppliers') : t('expenses.selectSupplier')}</option>
-              {suppliers.map(supplier => (
-                <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
-              ))}
-              <option value="__new__">{t('expenses.addSupplierOption')}</option>
-            </select>
-            <p className="mt-1 text-xs text-neutral-500">{t('expenses.supplierHelp')}</p>
-          </div>
-
-          {showAddSupplier && (
-            <div className="rounded-lg border border-neutral-800 bg-neutral-950/60 p-3 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="sm:col-span-2">
-                  <label className="block text-sm font-medium text-neutral-400 mb-1">{t('expenses.newSupplierName')} *</label>
-                  <input
-                    type="text"
-                    value={supplierName}
-                    onChange={e => setSupplierName(e.target.value)}
-                    placeholder={t('expenses.vendorPlaceholder')}
-                    className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white placeholder-neutral-500 focus:border-brand-500 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-neutral-400 mb-1">{t('expenses.newSupplierContact')}</label>
-                  <input
-                    type="text"
-                    value={supplierContact}
-                    onChange={e => setSupplierContact(e.target.value)}
-                    placeholder={t('expenses.newSupplierContactPlaceholder')}
-                    className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white placeholder-neutral-500 focus:border-brand-500 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-neutral-400 mb-1">{t('expenses.newSupplierPhone')}</label>
-                  <input
-                    type="text"
-                    value={supplierPhone}
-                    onChange={e => setSupplierPhone(e.target.value)}
-                    placeholder={t('expenses.newSupplierPhonePlaceholder')}
-                    className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white placeholder-neutral-500 focus:border-brand-500 focus:outline-none"
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-sm font-medium text-neutral-400 mb-1">{t('expenses.newSupplierEmail')}</label>
-                  <input
-                    type="email"
-                    value={supplierEmail}
-                    onChange={e => setSupplierEmail(e.target.value)}
-                    placeholder={t('expenses.newSupplierEmailPlaceholder')}
-                    className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white placeholder-neutral-500 focus:border-brand-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={handleCreateSupplier}
-                  disabled={savingSupplier || !supplierName.trim()}
-                  className="inline-flex items-center gap-2 px-3 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {savingSupplier ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                  {t('expenses.saveSupplier')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowAddSupplier(false)}
-                  className="px-3 py-2 bg-neutral-800 text-white text-sm rounded-lg border border-neutral-700 hover:bg-neutral-700 transition-colors"
-                >
-                  {t('common:buttons.cancel')}
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div>
             <label className="block text-sm font-medium text-neutral-400 mb-1">{t('expenses.vendor')}</label>
-            <input
-              type="text"
-              value={vendor}
-              onChange={e => setVendor(e.target.value)}
-              placeholder={t('expenses.vendorPlaceholder')}
-              className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white placeholder-neutral-500 focus:border-brand-500 focus:outline-none"
+            <VendorCombobox
+              value={{ id: vendorId, name: vendor }}
+              onChange={next => {
+                setVendor(next.name);
+                setVendorId(next.id);
+              }}
+              placeholder={t('expenses.vendorSearchPlaceholder')}
             />
+            <p className="mt-1 text-xs text-neutral-500">{t('expenses.supplierHelp')}</p>
           </div>
 
           <div>

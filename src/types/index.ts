@@ -195,6 +195,7 @@ export interface InventoryItem {
   barcode?: string;
   expiry_date?: string;
   lot_number?: string;
+  pack_size?: number | null;
 }
 
 /* Recipe Types */

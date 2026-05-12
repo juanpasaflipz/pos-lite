@@ -51,8 +51,11 @@ const ReceiptScanModal: React.FC<Props> = ({ onParsed, onClose }) => {
   const buildExpenseData = (matches?: InventoryMatch[]) => {
     if (!result) return;
     const parsed = result.parsed;
+    const matched = result.vendor_match;
     onParsed({
-      vendor: parsed?.vendor || undefined,
+      // If we matched an existing vendor server-side, use its canonical name + id
+      vendor: matched?.name || parsed?.vendor || undefined,
+      vendor_id: matched?.id ?? undefined,
       description: parsed?.items?.map(i => i.description).join(', ') || undefined,
       amount: parsed?.total || parsed?.subtotal || 0,
       tax_amount: parsed?.tax || 0,
@@ -211,14 +214,29 @@ const ReceiptScanModal: React.FC<Props> = ({ onParsed, onClose }) => {
                               <span className="text-white font-medium">{result.parsed.date}</span>
                             </div>
                           )}
+                          {result.vendor_match && result.vendor_match.score < 1 && (
+                            <div className="rounded-md border border-emerald-800/60 bg-emerald-950/40 px-2 py-1.5 text-xs text-emerald-200">
+                              {t('expenses.matchedExistingVendor', { name: result.vendor_match.name })}
+                            </div>
+                          )}
                           {result.parsed.items && result.parsed.items.length > 0 && (
                             <div>
                               <span className="text-neutral-400">{t('expenses.items')}</span>
                               <div className="mt-1 space-y-1">
                                 {result.parsed.items.map((item, i) => (
-                                  <div key={i} className="flex justify-between text-white">
-                                    <span>{item.description}</span>
-                                    <span>${Number(item.amount).toFixed(2)}</span>
+                                  <div key={i} className="flex justify-between gap-2 text-white">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="truncate">{item.description}</div>
+                                      {(item.quantity || item.unit) && (
+                                        <div className="text-[11px] text-neutral-500 truncate">
+                                          {item.quantity ?? '?'}
+                                          {item.pack_size ? ` × ${item.pack_size}` : ''}
+                                          {item.unit ? ` ${item.unit}` : ''}
+                                          {item.unit_price ? ` @ $${Number(item.unit_price).toFixed(2)}` : ''}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <span className="shrink-0">${Number(item.amount).toFixed(2)}</span>
                                   </div>
                                 ))}
                               </div>

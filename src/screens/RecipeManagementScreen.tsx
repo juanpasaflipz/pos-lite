@@ -47,8 +47,15 @@ export default function RecipeManagementScreen() {
 
   const [newIngredientOpen, setNewIngredientOpen] = useState(false);
   const [newIngredientTargetRow, setNewIngredientTargetRow] = useState<number | null>(null);
-  const [newIngredientForm, setNewIngredientForm] = useState({
-    name: '', unit: '', cost_price: '', category: '',
+  const INVENTORY_UNITS = ['kg', 'g', 'L', 'ml', 'pcs', 'box', 'case'] as const;
+  const [newIngredientForm, setNewIngredientForm] = useState<{
+    name: string;
+    unit: string;
+    cost_price: string;
+    category: string;
+    pack_size: string;
+  }>({
+    name: '', unit: '', cost_price: '', category: '', pack_size: '',
   });
   const [creatingIngredient, setCreatingIngredient] = useState(false);
   const [deletingIngredientId, setDeletingIngredientId] = useState<number | null>(null);
@@ -191,7 +198,7 @@ export default function RecipeManagementScreen() {
 
   const openNewIngredient = (rowIndex: number | null = null) => {
     setNewIngredientTargetRow(rowIndex);
-    setNewIngredientForm({ name: '', unit: '', cost_price: '', category: '' });
+    setNewIngredientForm({ name: '', unit: '', cost_price: '', category: '', pack_size: '' });
     setNewIngredientOpen(true);
   };
 
@@ -237,6 +244,7 @@ export default function RecipeManagementScreen() {
         unit,
         cost_price: newIngredientForm.cost_price ? Number(newIngredientForm.cost_price) : undefined,
         category: newIngredientForm.category.trim() || undefined,
+        pack_size: newIngredientForm.pack_size ? Number(newIngredientForm.pack_size) : null,
       });
       setInventoryItems(current => [...current, created].sort((a, b) => a.name.localeCompare(b.name)));
       if (newIngredientTargetRow !== null) {
@@ -593,17 +601,37 @@ export default function RecipeManagementScreen() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-neutral-300 mb-2">
                     {t('recipe.unit')}
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={newIngredientForm.unit}
                     onChange={e => setNewIngredientForm({ ...newIngredientForm, unit: e.target.value })}
-                    placeholder={t('recipe.unitPlaceholder')}
-                    className="w-full px-4 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-brand-500"
+                    className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-brand-500"
+                  >
+                    <option value="">{t('recipe.unitPlaceholder')}</option>
+                    {INVENTORY_UNITS.map(u => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label
+                    className="block text-sm font-medium text-neutral-300 mb-2"
+                    title={t('recipe.packSizeHelp')}
+                  >
+                    {t('recipe.packSize')}
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={newIngredientForm.pack_size}
+                    onChange={e => setNewIngredientForm({ ...newIngredientForm, pack_size: e.target.value })}
+                    placeholder={t('recipe.packSizePlaceholder')}
+                    className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-brand-500"
                   />
                 </div>
                 <div>

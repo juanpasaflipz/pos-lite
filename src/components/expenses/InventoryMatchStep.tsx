@@ -11,12 +11,38 @@ import {
 interface ParsedItem {
   description: string;
   amount: number;
+  quantity?: number | null;
+  unit?: string | null;
+  pack_size?: number | null;
+  unit_price?: number | null;
 }
 
 interface Props {
   items: ParsedItem[];
   onContinue: (matches: InventoryMatch[]) => void;
   onSkipAll: () => void;
+}
+
+function unitsCompatible(a?: string | null, b?: string | null): boolean {
+  if (!a || !b) return false;
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+function defaultQuantityFor(parsed: ParsedItem, inv: InventorySearchResult | null): number {
+  if (!inv) return 0;
+  const parsedQty = Number(parsed.quantity) || 1;
+  const parsedPack = Number(parsed.pack_size) || 1;
+  const invPack = Number(inv.pack_size) || 1;
+
+  // If receipt and inventory use the same unit, restock parsed_qty * parsed_pack (in that unit)
+  if (unitsCompatible(parsed.unit, inv.unit) && parsed.pack_size) {
+    return parsedQty * parsedPack;
+  }
+  // If inventory is tracked by pack (e.g. "cases") and receipt has same unit, multiply by inv pack_size
+  if (parsed.pack_size && invPack) {
+    return parsedQty * parsedPack;
+  }
+  return parsedQty;
 }
 
 interface ItemMatchState {
@@ -45,6 +71,7 @@ const InventoryMatchStep: React.FC<Props> = ({ items, onContinue, onSkipAll }) =
           unit: i.unit || '',
           cost_price: i.cost_price || 0,
           category: i.category || '',
+          pack_size: i.pack_size ?? null,
         }));
         setAllInventory(mapped);
       })
@@ -57,11 +84,10 @@ const InventoryMatchStep: React.FC<Props> = ({ items, onContinue, onSkipAll }) =
 
     setMatchStates(
       items.map((item) => {
-        // Try auto-match against full inventory
         const autoMatch = allInventory.length > 0 ? fuzzyMatch(item.description, allInventory) : null;
         return {
           selectedItem: autoMatch,
-          quantity: autoMatch ? 1 : 0,
+          quantity: defaultQuantityFor(item, autoMatch),
           searchQuery: '',
           searchResults: [],
           showDropdown: false,
@@ -112,26 +138,27 @@ const InventoryMatchStep: React.FC<Props> = ({ items, onContinue, onSkipAll }) =
 
   const handleSelectItem = useCallback(
     (index: number, item: InventorySearchResult | null) => {
+      const parsed = items[index];
       updateState(index, {
         selectedItem: item,
-        quantity: item ? 1 : 0,
+        quantity: item ? defaultQuantityFor(parsed, item) : 0,
         showDropdown: false,
         searchQuery: '',
       });
     },
-    [updateState]
+    [items, updateState]
   );
 
   const handleContinue = () => {
     const matches: InventoryMatch[] = matchStates
-      .filter((s) => s.selectedItem && s.quantity > 0)
-      .map((s) => ({
-        inventory_item_id: s.selectedItem!.id,
-        inventory_item_name: s.selectedItem!.name,
-        quantity: s.quantity,
-        cost_price: items[matchStates.indexOf(s)]
-          ? items[matchStates.indexOf(s)].amount / (s.quantity || 1)
-          : undefined,
+      .map((s, idx) => ({ state: s, parsed: items[idx] }))
+      .filter(({ state }) => state.selectedItem && state.quantity > 0)
+      .map(({ state, parsed }) => ({
+        inventory_item_id: state.selectedItem!.id,
+        inventory_item_name: state.selectedItem!.name,
+        quantity: state.quantity,
+        cost_price: parsed.amount ? parsed.amount / (state.quantity || 1) : undefined,
+        raw_description: parsed.description,
       }));
     onContinue(matches);
   };
@@ -228,10 +255,20 @@ const MatchRow: React.FC<MatchRowProps> = ({
   return (
     <div className="bg-neutral-800/50 rounded-lg p-3 space-y-2">
       {/* Parsed item info */}
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-white font-medium truncate mr-2">
-          {parsedItem.description}
-        </span>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-sm text-white font-medium truncate">
+            {parsedItem.description}
+          </div>
+          {(parsedItem.quantity || parsedItem.unit) && (
+            <div className="text-xs text-neutral-500 truncate">
+              {parsedItem.quantity ?? '?'}
+              {parsedItem.pack_size ? ` × ${parsedItem.pack_size}` : ''}
+              {parsedItem.unit ? ` ${parsedItem.unit}` : ''}
+              {parsedItem.unit_price ? ` @ $${Number(parsedItem.unit_price).toFixed(2)}` : ''}
+            </div>
+          )}
+        </div>
         <span className="text-sm text-neutral-400 shrink-0">
           ${Number(parsedItem.amount).toFixed(2)}
         </span>

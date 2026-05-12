@@ -57,6 +57,83 @@ router.get('/suppliers', requireAuth('view_reports'), async (_req, res) => {
   }
 });
 
+// GET /api/expenses/suppliers/search?q=... — typeahead, trigram-ranked
+router.get('/suppliers/search', requireAuth('view_reports'), async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    const limit = Math.min(Number(req.query.limit) || 10, 25);
+
+    if (!q) {
+      const suppliers = await all(
+        'SELECT id, name, contact_name, phone FROM vendors WHERE active = true ORDER BY name ASC LIMIT $1',
+        [limit]
+      );
+      return res.json(suppliers);
+    }
+
+    let rows;
+    try {
+      rows = await all(
+        `SELECT id, name, contact_name, phone, similarity(name, $1) AS score
+         FROM vendors
+         WHERE active = true AND (name ILIKE '%' || $1 || '%' OR similarity(name, $1) > 0.2)
+         ORDER BY (name ILIKE $1 || '%') DESC, score DESC, name ASC
+         LIMIT $2`,
+        [q, limit]
+      );
+    } catch {
+      // Fallback if pg_trgm extension not yet applied
+      rows = await all(
+        `SELECT id, name, contact_name, phone
+         FROM vendors
+         WHERE active = true AND name ILIKE '%' || $1 || '%'
+         ORDER BY (name ILIKE $1 || '%') DESC, name ASC
+         LIMIT $2`,
+        [q, limit]
+      );
+    }
+    res.json(rows);
+  } catch (err) {
+    console.error('[Expenses] Supplier search error:', err.message);
+    res.status(500).json({ error: 'Failed to search suppliers' });
+  }
+});
+
+// POST /api/expenses/suppliers/match — fuzzy lookup by name (for "did you mean?")
+router.post('/suppliers/match', requireAuth('view_reports'), async (req, res) => {
+  try {
+    const name = String(req.body?.name || '').trim();
+    const threshold = Math.min(Math.max(Number(req.body?.threshold) || 0.5, 0.1), 0.95);
+
+    if (!name) return res.json({ match: null });
+
+    // Exact case-insensitive first
+    const exact = await get(
+      'SELECT id, name, contact_name, phone FROM vendors WHERE active = true AND LOWER(name) = LOWER($1) LIMIT 1',
+      [name]
+    );
+    if (exact) return res.json({ match: { ...exact, score: 1, exact: true } });
+
+    // Fuzzy with pg_trgm
+    try {
+      const fuzzy = await get(
+        `SELECT id, name, contact_name, phone, similarity(name, $1) AS score
+         FROM vendors
+         WHERE active = true AND similarity(name, $1) >= $2
+         ORDER BY score DESC
+         LIMIT 1`,
+        [name, threshold]
+      );
+      return res.json({ match: fuzzy ? { ...fuzzy, exact: false } : null });
+    } catch {
+      return res.json({ match: null });
+    }
+  } catch (err) {
+    console.error('[Expenses] Supplier match error:', err.message);
+    res.status(500).json({ error: 'Failed to match supplier' });
+  }
+});
+
 // POST /api/expenses/suppliers — create supplier for expense entry
 router.post('/suppliers', requireAuth('manage_inventory'), async (req, res) => {
   try {
@@ -156,7 +233,7 @@ router.get('/', requireAuth('view_reports'), async (req, res) => {
 // POST /api/expenses — create expense
 router.post('/', requireAuth('manage_inventory'), async (req, res) => {
   try {
-    const { category, vendor, description, amount, tax_amount, expense_date, payment_method, notes, receipt_image_url, receipt_data, inventory_matches, payee } = req.body;
+    const { category, vendor, vendor_id, description, amount, tax_amount, expense_date, payment_method, notes, receipt_image_url, receipt_data, inventory_matches, payee } = req.body;
 
     if (!category || !VALID_CATEGORIES.includes(category)) {
       return res.status(400).json({ error: `category must be one of: ${VALID_CATEGORIES.join(', ')}` });
@@ -180,14 +257,31 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
       finalReceiptData.inventory_matches = inventory_matches;
     }
 
-    const result = await get(
-      `INSERT INTO expenses (tenant_id, category, vendor, description, amount, tax_amount, expense_date, payment_method, notes, receipt_image_url, receipt_data, created_by, payee)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-       RETURNING *`,
-      [tenantId, category, vendor || null, description || null, amount, tax_amount || 0, expense_date, payment_method || null, notes || null, receipt_image_url || null, finalReceiptData ? JSON.stringify(finalReceiptData) : null, employeeId, payee || null]
+    // Detect whether vendor_id column exists (migration 0040)
+    const hasVendorId = await get(
+      `SELECT 1 AS ok FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'expenses' AND column_name = 'vendor_id'`
     );
 
-    // Process inventory restocks from matches
+    let result;
+    if (hasVendorId) {
+      result = await get(
+        `INSERT INTO expenses (tenant_id, category, vendor, vendor_id, description, amount, tax_amount, expense_date, payment_method, notes, receipt_image_url, receipt_data, created_by, payee)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+         RETURNING *`,
+        [tenantId, category, vendor || null, vendor_id || null, description || null, amount, tax_amount || 0, expense_date, payment_method || null, notes || null, receipt_image_url || null, finalReceiptData ? JSON.stringify(finalReceiptData) : null, employeeId, payee || null]
+      );
+    } else {
+      result = await get(
+        `INSERT INTO expenses (tenant_id, category, vendor, description, amount, tax_amount, expense_date, payment_method, notes, receipt_image_url, receipt_data, created_by, payee)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+         RETURNING *`,
+        [tenantId, category, vendor || null, description || null, amount, tax_amount || 0, expense_date, payment_method || null, notes || null, receipt_image_url || null, finalReceiptData ? JSON.stringify(finalReceiptData) : null, employeeId, payee || null]
+      );
+    }
+
+    // Process inventory restocks from matches.
+    // `quantity` is the amount to add in inventory's base unit (frontend computes parsed_qty * pack_size).
     if (inventory_matches && Array.isArray(inventory_matches)) {
       for (const match of inventory_matches) {
         if (!match.inventory_item_id || !match.quantity || match.quantity <= 0) continue;
@@ -196,8 +290,8 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
           const item = await get('SELECT id, quantity FROM inventory_items WHERE id = $1', [match.inventory_item_id]);
           if (!item) continue;
 
-          const quantityBefore = item.quantity;
-          const newQuantity = quantityBefore + match.quantity;
+          const quantityBefore = Number(item.quantity) || 0;
+          const newQuantity = quantityBefore + Number(match.quantity);
 
           if (match.cost_price !== undefined && match.cost_price !== null) {
             await run('UPDATE inventory_items SET quantity = $1, cost_price = $2 WHERE id = $3',
@@ -205,6 +299,24 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
           } else {
             await run('UPDATE inventory_items SET quantity = $1 WHERE id = $2',
               [newQuantity, match.inventory_item_id]);
+          }
+
+          // Remember this vendor↔item mapping so next receipt auto-suggests
+          if (vendor_id && match.raw_description) {
+            try {
+              await run(
+                `INSERT INTO vendor_items (tenant_id, vendor_id, inventory_item_id, vendor_sku, unit_cost, last_seen_description, last_used_at)
+                 VALUES ($1, $2, $3, NULL, $4, $5, NOW())
+                 ON CONFLICT (vendor_id, inventory_item_id) DO UPDATE
+                   SET unit_cost = COALESCE(EXCLUDED.unit_cost, vendor_items.unit_cost),
+                       last_seen_description = EXCLUDED.last_seen_description,
+                       last_used_at = NOW()`,
+                [tenantId, vendor_id, match.inventory_item_id, match.cost_price || 0, match.raw_description]
+              );
+            } catch (mapErr) {
+              // last_seen_description / last_used_at may not yet exist on older schema
+              console.warn('[Expenses] vendor_items upsert skipped:', mapErr.message);
+            }
           }
 
           // Fire-and-forget: log restock for AI
@@ -226,7 +338,7 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
 router.put('/:id', requireAuth('manage_inventory'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { category, vendor, description, amount, tax_amount, expense_date, payment_method, notes, receipt_image_url, payee } = req.body;
+    const { category, vendor, vendor_id, description, amount, tax_amount, expense_date, payment_method, notes, receipt_image_url, payee } = req.body;
 
     const existing = await get('SELECT id FROM expenses WHERE id = $1', [id]);
     if (!existing) {
@@ -240,23 +352,50 @@ router.put('/:id', requireAuth('manage_inventory'), async (req, res) => {
       return res.status(400).json({ error: `payment_method must be one of: ${VALID_PAYMENT_METHODS.join(', ')}` });
     }
 
-    const result = await get(
-      `UPDATE expenses SET
-        category = COALESCE($1, category),
-        vendor = $2,
-        description = $3,
-        amount = COALESCE($4, amount),
-        tax_amount = COALESCE($5, tax_amount),
-        expense_date = COALESCE($6, expense_date),
-        payment_method = $7,
-        notes = $8,
-        receipt_image_url = COALESCE($9, receipt_image_url),
-        payee = $10,
-        updated_at = NOW()
-      WHERE id = $11
-      RETURNING *`,
-      [category || null, vendor ?? null, description ?? null, amount || null, tax_amount ?? null, expense_date || null, payment_method ?? null, notes ?? null, receipt_image_url ?? null, payee ?? null, id]
+    const hasVendorId = await get(
+      `SELECT 1 AS ok FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'expenses' AND column_name = 'vendor_id'`
     );
+
+    let result;
+    if (hasVendorId) {
+      result = await get(
+        `UPDATE expenses SET
+          category = COALESCE($1, category),
+          vendor = $2,
+          vendor_id = $3,
+          description = $4,
+          amount = COALESCE($5, amount),
+          tax_amount = COALESCE($6, tax_amount),
+          expense_date = COALESCE($7, expense_date),
+          payment_method = $8,
+          notes = $9,
+          receipt_image_url = COALESCE($10, receipt_image_url),
+          payee = $11,
+          updated_at = NOW()
+        WHERE id = $12
+        RETURNING *`,
+        [category || null, vendor ?? null, vendor_id ?? null, description ?? null, amount || null, tax_amount ?? null, expense_date || null, payment_method ?? null, notes ?? null, receipt_image_url ?? null, payee ?? null, id]
+      );
+    } else {
+      result = await get(
+        `UPDATE expenses SET
+          category = COALESCE($1, category),
+          vendor = $2,
+          description = $3,
+          amount = COALESCE($4, amount),
+          tax_amount = COALESCE($5, tax_amount),
+          expense_date = COALESCE($6, expense_date),
+          payment_method = $7,
+          notes = $8,
+          receipt_image_url = COALESCE($9, receipt_image_url),
+          payee = $10,
+          updated_at = NOW()
+        WHERE id = $11
+        RETURNING *`,
+        [category || null, vendor ?? null, description ?? null, amount || null, tax_amount ?? null, expense_date || null, payment_method ?? null, notes ?? null, receipt_image_url ?? null, payee ?? null, id]
+      );
+    }
 
     res.json(result);
   } catch (err) {
@@ -297,7 +436,39 @@ router.delete('/:id', requireAuth('manage_inventory'), async (req, res) => {
   }
 });
 
-// POST /api/expenses/scan-receipt — upload receipt image, AI parse
+// POST /api/expenses/scan-receipt — upload receipt image, Claude vision parse
+const RECEIPT_PARSER_PROMPT = `You parse purchase receipts for a restaurant inventory + expense system. Extract structured line-item data so the system can deduct cost AND restock inventory.
+
+Return ONLY valid JSON, no prose, with this exact schema:
+{
+  "vendor": "string — store / supplier name as printed (e.g. \\"COSTCO WHOLESALE\\", \\"Central de Abastos - Bodega 14\\")",
+  "date": "YYYY-MM-DD or null",
+  "items": [
+    {
+      "description": "item name as printed",
+      "quantity": number,        // packs/units purchased (e.g. 2 for "2 x")
+      "unit": "kg" | "g" | "L" | "ml" | "pcs" | "box" | "case" | null,  // canonical unit, lowercase
+      "pack_size": number | null,  // size of one pack in 'unit' (e.g. 5 for "5kg sack", 24 for "24-can case")
+      "unit_price": number | null, // price per pack as printed
+      "amount": number             // line total (quantity * unit_price)
+    }
+  ],
+  "subtotal": number | null,
+  "tax": number | null,
+  "total": number,
+  "payment_method": "cash" | "card" | "transfer" | null,
+  "category": "food_cost" | "supplies" | "utilities" | "rent" | "marketing" | "other"
+}
+
+Rules:
+- Numbers must be JSON numbers, not strings. No currency symbols, no thousands separators.
+- For weights: prefer kg/L. Convert grams→kg only when the line clearly shows kg (e.g. "1.250 KG").
+- "pack_size" is the content of ONE pack. Example: "ACEITE CAPULLO 1L x 2" → quantity=2, unit="L", pack_size=1. "HARINA 5KG" → quantity=1, unit="kg", pack_size=5.
+- If a line is a single piece (eggs, fruit by count), use unit="pcs" and pack_size=1.
+- If unit/pack_size genuinely can't be determined, use null — do NOT guess.
+- "category" should be "food_cost" for groceries/produce/meat/beverage suppliers; "supplies" for cleaning, paper, kitchen tools; else best fit.
+- Skip non-purchase lines (subtotal/tax/total/change/loyalty discount) from "items".`;
+
 router.post('/scan-receipt', requireAuth('manage_inventory'), upload.single('receipt'), async (req, res) => {
   try {
     if (!req.file) {
@@ -306,56 +477,42 @@ router.post('/scan-receipt', requireAuth('manage_inventory'), upload.single('rec
 
     const imageUrl = `/uploads/receipts/${req.file.filename}`;
 
-    // Check if Grok API is available
-    if (!process.env.XAI_API_KEY) {
+    if (!process.env.ANTHROPIC_API_KEY) {
       return res.json({
         image_url: imageUrl,
         parsed: null,
-        message: 'AI parsing not available — XAI_API_KEY not configured. You can enter details manually.',
+        message: 'AI parsing not available — ANTHROPIC_API_KEY not configured. You can enter details manually.',
       });
     }
 
-    // Read file as base64 for vision API
     const imageBuffer = fs.readFileSync(req.file.path);
     const base64Image = imageBuffer.toString('base64');
-    const mimeType = req.file.mimetype || 'image/jpeg';
+    let mediaType = req.file.mimetype || 'image/jpeg';
+    // Anthropic vision accepts: image/jpeg, image/png, image/gif, image/webp
+    if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mediaType)) {
+      mediaType = 'image/jpeg';
+    }
 
-    const model = (await getConfig('grok_model')) || 'grok-4-1-fast-reasoning';
-
-    const response = await fetch('https://api.x.ai/v1/chat/completions', {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.XAI_API_KEY}`,
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model,
-        max_tokens: 1024,
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2048,
+        system: RECEIPT_PARSER_PROMPT,
         messages: [
-          {
-            role: 'system',
-            content: `You are a receipt parser for a restaurant expense tracking system. Extract structured data from receipt images.
-Return ONLY valid JSON with this schema:
-{
-  "vendor": "store/vendor name",
-  "date": "YYYY-MM-DD",
-  "items": [{ "description": "item name", "amount": 123.45 }],
-  "subtotal": 0,
-  "tax": 0,
-  "total": 0,
-  "payment_method": "cash" | "card" | "transfer" | null,
-  "category": "food_cost" | "supplies" | "utilities" | "rent" | "marketing" | "other"
-}
-If a field cannot be determined, use null. Amounts should be numbers. Dates in YYYY-MM-DD format.`,
-          },
           {
             role: 'user',
             content: [
-              { type: 'text', text: 'Parse this receipt and extract the structured data:' },
               {
-                type: 'image_url',
-                image_url: { url: `data:${mimeType};base64,${base64Image}` },
+                type: 'image',
+                source: { type: 'base64', media_type: mediaType, data: base64Image },
               },
+              { type: 'text', text: 'Parse this receipt.' },
             ],
           },
         ],
@@ -364,7 +521,7 @@ If a field cannot be determined, use null. Amounts should be numbers. Dates in Y
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error('[Expenses] Grok vision error:', errText);
+      console.error('[Expenses] Claude vision error:', response.status, errText);
       return res.json({
         image_url: imageUrl,
         parsed: null,
@@ -373,9 +530,8 @@ If a field cannot be determined, use null. Amounts should be numbers. Dates in Y
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || '';
+    const content = data.content?.[0]?.text || '';
 
-    // Extract JSON from response
     let parsed = null;
     try {
       const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -383,13 +539,34 @@ If a field cannot be determined, use null. Amounts should be numbers. Dates in Y
         parsed = JSON.parse(jsonMatch[0]);
       }
     } catch {
-      console.warn('[Expenses] Failed to parse AI response as JSON');
+      console.warn('[Expenses] Failed to parse Claude response as JSON');
+    }
+
+    // Server-side vendor fuzzy match — let the client know if we recognized the vendor
+    let vendorMatch = null;
+    if (parsed?.vendor && typeof parsed.vendor === 'string') {
+      try {
+        vendorMatch = await get(
+          `SELECT id, name, similarity(name, $1) AS score
+           FROM vendors
+           WHERE active = true AND similarity(name, $1) > 0.4
+           ORDER BY score DESC
+           LIMIT 1`,
+          [parsed.vendor.trim()]
+        );
+      } catch (matchErr) {
+        // pg_trgm not available — non-fatal
+        console.warn('[Expenses] Vendor fuzzy match skipped:', matchErr.message);
+      }
     }
 
     res.json({
       image_url: imageUrl,
       parsed,
-      message: parsed ? 'Receipt parsed successfully. Please review and confirm.' : 'Could not parse receipt. Please enter details manually.',
+      vendor_match: vendorMatch,
+      message: parsed
+        ? 'Receipt parsed successfully. Please review and confirm.'
+        : 'Could not parse receipt. Please enter details manually.',
     });
   } catch (err) {
     console.error('[Expenses] Scan error:', err.message);
