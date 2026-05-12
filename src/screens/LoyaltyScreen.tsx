@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft, Heart, Users, BarChart3, Gift, Settings,
-  Search, Plus, Phone, ChevronDown, ChevronUp,
+  Search, Plus, Phone, ChevronDown, ChevronUp, Pencil, Save,
 } from 'lucide-react';
 import {
   getLoyaltyCustomers,
@@ -12,11 +12,13 @@ import {
   getLoyaltyReferrals,
   getLoyaltyConfig,
   updateLoyaltyConfig as updateConfigAPI,
+  updateLoyaltyCustomer,
   addManualStamps,
 } from '../api';
 import { LoyaltyCustomer, LoyaltyAnalytics, LoyaltyConfig, StampCard } from '../types';
 import { formatPrice } from '../utils/currency';
 import { formatDate } from '../utils/dateFormat';
+import { formatPhone } from '../utils/phone';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
@@ -92,6 +94,10 @@ function CustomersTab() {
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [expandedDetail, setExpandedDetail] = useState<any>(null);
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState<{ name: string; phone: string; orders_count: string; total_spent: string; stamps_earned: string } | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   const fetchCustomers = async (s?: string, p?: number) => {
     setLoading(true);
@@ -117,14 +123,70 @@ function CustomersTab() {
     if (expandedId === id) {
       setExpandedId(null);
       setExpandedDetail(null);
+      setEditing(false);
+      setEditForm(null);
+      setEditError(null);
       return;
     }
     setExpandedId(id);
+    setEditing(false);
+    setEditForm(null);
+    setEditError(null);
     try {
       const detail = await getLoyaltyCustomer(id);
       setExpandedDetail(detail);
     } catch {
       setExpandedDetail(null);
+    }
+  };
+
+  const startEdit = (customer: LoyaltyCustomer & { stamps_earned: number }) => {
+    setEditing(true);
+    setEditError(null);
+    setEditForm({
+      name: customer.name,
+      phone: customer.phone,
+      orders_count: String(customer.orders_count ?? 0),
+      total_spent: String(customer.total_spent ?? 0),
+      stamps_earned: String(customer.stamps_earned ?? 0),
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
+    setEditForm(null);
+    setEditError(null);
+  };
+
+  const saveEdit = async (id: number) => {
+    if (!editForm) return;
+    setSavingEdit(true);
+    setEditError(null);
+    try {
+      const ordersN = Number(editForm.orders_count);
+      const spentN = Number(editForm.total_spent);
+      const stampsN = Number(editForm.stamps_earned);
+      if (!editForm.name.trim()) throw new Error('Name is required');
+      if (!Number.isFinite(ordersN) || ordersN < 0 || !Number.isInteger(ordersN)) throw new Error('Orders must be a non-negative integer');
+      if (!Number.isFinite(spentN) || spentN < 0) throw new Error('Spent must be a non-negative number');
+      if (!Number.isFinite(stampsN) || stampsN < 0 || !Number.isInteger(stampsN)) throw new Error('Stamps must be a non-negative integer');
+
+      await updateLoyaltyCustomer(id, {
+        name: editForm.name,
+        phone: editForm.phone,
+        orders_count: ordersN,
+        total_spent: spentN,
+        stamps_earned: stampsN,
+      });
+      setEditing(false);
+      setEditForm(null);
+      await fetchCustomers();
+      const detail = await getLoyaltyCustomer(id);
+      setExpandedDetail(detail);
+    } catch (err: any) {
+      setEditError(err?.message || 'Failed to save');
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -203,7 +265,7 @@ function CustomersTab() {
                     className="border-b border-neutral-800 hover:bg-neutral-800/50 cursor-pointer transition-colors"
                   >
                     <td className="p-4 font-medium text-white">{c.name}</td>
-                    <td className="p-4 text-neutral-300">{c.phone}</td>
+                    <td className="p-4 text-neutral-300 font-mono text-sm">{formatPhone(c.phone)}</td>
                     <td className="p-4">
                       {c.activeCard && renderStampDots(c.activeCard.stamps_earned, c.activeCard.stamps_required)}
                     </td>
@@ -219,6 +281,89 @@ function CustomersTab() {
                   {expandedId === c.id && expandedDetail && (
                     <tr>
                       <td colSpan={7} className="bg-neutral-800/30 p-4">
+                        {editing && editForm ? (
+                          <div className="bg-neutral-900 border border-purple-700/40 rounded-lg p-4 mb-4 space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                              <label className="block">
+                                <span className="text-xs text-neutral-400">{t('loyalty.customers.edit.name')}</span>
+                                <input
+                                  type="text"
+                                  value={editForm.name}
+                                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                  className="mt-1 w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-white focus:outline-none focus:border-purple-600"
+                                  disabled={savingEdit}
+                                />
+                              </label>
+                              <label className="block">
+                                <span className="text-xs text-neutral-400">{t('loyalty.customers.edit.phone')}</span>
+                                <input
+                                  type="tel"
+                                  inputMode="tel"
+                                  value={editForm.phone}
+                                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                                  placeholder="5545879933"
+                                  className="mt-1 w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-white font-mono focus:outline-none focus:border-purple-600"
+                                  disabled={savingEdit}
+                                />
+                              </label>
+                              <label className="block">
+                                <span className="text-xs text-neutral-400">{t('loyalty.customers.edit.orders')}</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={editForm.orders_count}
+                                  onChange={(e) => setEditForm({ ...editForm, orders_count: e.target.value })}
+                                  className="mt-1 w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-white focus:outline-none focus:border-purple-600"
+                                  disabled={savingEdit}
+                                />
+                              </label>
+                              <label className="block">
+                                <span className="text-xs text-neutral-400">{t('loyalty.customers.edit.spent')}</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={editForm.total_spent}
+                                  onChange={(e) => setEditForm({ ...editForm, total_spent: e.target.value })}
+                                  className="mt-1 w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-white focus:outline-none focus:border-purple-600"
+                                  disabled={savingEdit}
+                                />
+                              </label>
+                              <label className="block col-span-2">
+                                <span className="text-xs text-neutral-400">{t('loyalty.customers.edit.stamps')}</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={editForm.stamps_earned}
+                                  onChange={(e) => setEditForm({ ...editForm, stamps_earned: e.target.value })}
+                                  className="mt-1 w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-white focus:outline-none focus:border-purple-600"
+                                  disabled={savingEdit}
+                                />
+                              </label>
+                            </div>
+                            {editError && <p className="text-sm text-red-400">{editError}</p>}
+                            <div className="flex gap-2 justify-end">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); cancelEdit(); }}
+                                disabled={savingEdit}
+                                className="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-white text-sm font-bold rounded-lg disabled:opacity-50"
+                              >
+                                {t('loyalty.customers.edit.cancel')}
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); saveEdit(c.id); }}
+                                disabled={savingEdit}
+                                className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold rounded-lg disabled:opacity-50"
+                              >
+                                <Save size={14} />
+                                {savingEdit ? t('loyalty.customers.edit.saving') : t('loyalty.customers.edit.save')}
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+
                         <div className="grid grid-cols-3 gap-4">
                           <div>
                             <p className="text-xs text-neutral-400 mb-1">{t('loyalty.customers.detail.referralCode')}</p>
@@ -283,12 +428,22 @@ function CustomersTab() {
                           </div>
                         )}
 
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleAddStamp(c.id); }}
-                          className="mt-4 flex items-center gap-2 px-4 py-2 bg-purple-600 text-white text-sm font-bold rounded-lg hover:bg-purple-700 transition-colors"
-                        >
-                          <Plus size={14} /> {t('loyalty.customers.addStamp')}
-                        </button>
+                        <div className="mt-4 flex gap-2">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleAddStamp(c.id); }}
+                            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white text-sm font-bold rounded-lg hover:bg-purple-700 transition-colors"
+                          >
+                            <Plus size={14} /> {t('loyalty.customers.addStamp')}
+                          </button>
+                          {!editing && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); startEdit(expandedDetail); }}
+                              className="flex items-center gap-2 px-4 py-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-white text-sm font-bold rounded-lg transition-colors"
+                            >
+                              <Pencil size={14} /> {t('loyalty.customers.edit.button')}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )}

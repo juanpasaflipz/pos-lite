@@ -114,16 +114,46 @@ router.post('/customers', requireAuth('pos_access'), requirePlanFeature('loyalty
 // PUT /customers/:id — Update customer info
 router.put('/customers/:id', requireAuth('manage_loyalty'), async (req, res) => {
   try {
-    const { name, sms_opt_in } = req.body;
+    const { name, sms_opt_in, phone, orders_count, total_spent, stamps_earned } = req.body;
     const id = parseInt(req.params.id);
     const customer = await get('SELECT * FROM loyalty_customers WHERE id = $1', [id]);
     if (!customer) return res.status(404).json({ error: 'Customer not found' });
 
-    if (name !== undefined) await run('UPDATE loyalty_customers SET name = $1 WHERE id = $2', [name, id]);
-    if (sms_opt_in !== undefined) await run('UPDATE loyalty_customers SET sms_opt_in = $1 WHERE id = $2', [sms_opt_in ? true : false, id]);
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'Name cannot be empty' });
+      await run('UPDATE loyalty_customers SET name = $1 WHERE id = $2', [name.trim(), id]);
+    }
+    if (sms_opt_in !== undefined) {
+      await run('UPDATE loyalty_customers SET sms_opt_in = $1 WHERE id = $2', [sms_opt_in ? true : false, id]);
+    }
+    if (phone !== undefined) {
+      const normalized = normalizePhone(phone);
+      if (normalized.length < 10) return res.status(400).json({ error: 'Invalid phone number' });
+      const existing = await get('SELECT id FROM loyalty_customers WHERE phone = $1 AND id <> $2', [normalized, id]);
+      if (existing) return res.status(409).json({ error: 'A customer with this phone number already exists' });
+      await run('UPDATE loyalty_customers SET phone = $1 WHERE id = $2', [normalized, id]);
+    }
+    if (orders_count !== undefined) {
+      const n = Number(orders_count);
+      if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) return res.status(400).json({ error: 'orders_count must be a non-negative integer' });
+      await run('UPDATE loyalty_customers SET orders_count = $1 WHERE id = $2', [n, id]);
+    }
+    if (total_spent !== undefined) {
+      const n = Number(total_spent);
+      if (!Number.isFinite(n) || n < 0) return res.status(400).json({ error: 'total_spent must be a non-negative number' });
+      await run('UPDATE loyalty_customers SET total_spent = $1 WHERE id = $2', [n, id]);
+    }
+    if (stamps_earned !== undefined) {
+      const n = Number(stamps_earned);
+      if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) return res.status(400).json({ error: 'stamps_earned must be a non-negative integer' });
+      await run('UPDATE loyalty_customers SET stamps_earned = $1 WHERE id = $2', [n, id]);
+    }
 
     res.json(await get('SELECT * FROM loyalty_customers WHERE id = $1', [id]));
   } catch (err) {
+    if (err?.message?.includes('UNIQUE') || err?.code === '23505') {
+      return res.status(409).json({ error: 'A customer with this phone number already exists' });
+    }
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
   }

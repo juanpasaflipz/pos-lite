@@ -671,6 +671,7 @@ export interface InventoryMatch {
   inventory_item_name: string;
   quantity: number;
   cost_price?: number;
+  raw_description?: string;
 }
 
 export interface InventorySearchResult {
@@ -680,6 +681,7 @@ export interface InventorySearchResult {
   unit: string;
   cost_price: number;
   category: string;
+  pack_size?: number | null;
 }
 
 export async function searchInventory(query: string): Promise<InventorySearchResult[]> {
@@ -708,6 +710,7 @@ export async function createInventoryItem(data: {
   expiry_date?: string;
   lot_number?: string;
   category?: string;
+  pack_size?: number | null;
 }): Promise<InventoryItem> {
   return apiRequest<InventoryItem>('/inventory', {
     method: 'POST',
@@ -1491,7 +1494,17 @@ export async function getLoyaltyCustomer(id: number): Promise<LoyaltyCustomer & 
   return apiRequest(`/loyalty/customers/${id}`);
 }
 
-export async function updateLoyaltyCustomer(id: number, data: { name?: string; sms_opt_in?: boolean }): Promise<LoyaltyCustomer> {
+export async function updateLoyaltyCustomer(
+  id: number,
+  data: {
+    name?: string;
+    phone?: string;
+    sms_opt_in?: boolean;
+    orders_count?: number;
+    total_spent?: number;
+    stamps_earned?: number;
+  },
+): Promise<LoyaltyCustomer> {
   return apiRequest(`/loyalty/customers/${id}`, {
     method: 'PUT',
     body: JSON.stringify(data),
@@ -2829,6 +2842,7 @@ export interface Expense {
   tenant_id: string;
   category: string;
   vendor: string | null;
+  vendor_id?: number | null;
   description: string | null;
   amount: number;
   tax_amount: number;
@@ -2856,17 +2870,33 @@ export interface ExpenseSupplier {
   created_at: string;
 }
 
+export interface ParsedReceiptItem {
+  description: string;
+  amount: number;
+  quantity?: number | null;
+  unit?: string | null;
+  pack_size?: number | null;
+  unit_price?: number | null;
+}
+
 export interface ReceiptScanResult {
   image_url: string;
   parsed: {
     vendor?: string | null;
     date?: string | null;
-    items?: { description: string; amount: number }[];
+    items?: ParsedReceiptItem[];
     subtotal?: number | null;
     tax?: number | null;
     total?: number | null;
     payment_method?: string | null;
     category?: string | null;
+  } | null;
+  vendor_match?: {
+    id: number;
+    name: string;
+    score: number;
+    contact_name?: string | null;
+    phone?: string | null;
   } | null;
   message: string;
 }
@@ -2881,6 +2911,20 @@ export async function getExpenses(params?: { from?: string; to?: string }): Prom
 
 export async function getExpenseSuppliers(): Promise<ExpenseSupplier[]> {
   return apiRequest<ExpenseSupplier[]>('/expenses/suppliers');
+}
+
+export async function searchExpenseSuppliers(q: string, limit = 10): Promise<ExpenseSupplier[]> {
+  const qs = new URLSearchParams();
+  if (q) qs.set('q', q);
+  qs.set('limit', String(limit));
+  return apiRequest<ExpenseSupplier[]>(`/expenses/suppliers/search?${qs}`);
+}
+
+export async function matchExpenseSupplier(name: string, threshold = 0.5): Promise<{ match: (ExpenseSupplier & { score: number; exact: boolean }) | null }> {
+  return apiRequest('/expenses/suppliers/match', {
+    method: 'POST',
+    body: JSON.stringify({ name, threshold }),
+  });
 }
 
 export async function createExpenseSupplier(data: Partial<ExpenseSupplier>): Promise<ExpenseSupplier> {

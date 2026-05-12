@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { UserPlus, Search, X, Gift, Phone } from 'lucide-react';
 import type { LoyaltyCustomer } from '../types';
 import { lookupLoyaltyCustomer, createLoyaltyCustomer } from '../api';
+import { formatPhone } from '../utils/phone';
 
 interface Props {
   onCustomerLinked: (customer: LoyaltyCustomer) => void;
@@ -141,6 +142,7 @@ export default function CustomerLookupModal({ onCustomerLinked, onClose }: Props
                   <span className="text-sm font-semibold">{t('customerLookup.customerFound')}</span>
                 </div>
                 <p className="text-white text-lg font-bold">{foundCustomer.name}</p>
+                <p className="text-neutral-400 text-sm font-mono">{formatPhone(foundCustomer.phone)}</p>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div>
                     <p className="text-neutral-500">{t('customerLookup.orders')}</p>
@@ -180,7 +182,7 @@ export default function CustomerLookupModal({ onCustomerLinked, onClose }: Props
           {phase === 'register' && (
             <div className="space-y-3">
               <p className="text-sm text-neutral-400">
-                {t('customerLookup.noCustomerFound', { phone: digits })}
+                {t('customerLookup.noCustomerFound', { phone: formatPhone(digits) })}
               </p>
               <div>
                 <label className="block text-sm font-semibold text-neutral-300 mb-2">
