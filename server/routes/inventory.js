@@ -863,8 +863,10 @@ router.get('/stale', async (req, res) => {
     }
 
     const includeSoon = req.query.include_soon === '1';
-    // soonFactor: items within 80% of shelf life. Adjust if you want earlier nudges.
-    const soonFactor = 0.8;
+    // soonFactor: items within 80% of shelf life. Inlined as a constant because
+    // postgres.js was binding it as text and breaking the (int * text * interval)
+    // operator chain. Compute the integer day threshold up-front instead.
+    const SOON_PCT = 80; // 0.8 expressed as integer percent for clean SQL math
 
     const rows = await all(
       `SELECT
@@ -874,16 +876,15 @@ router.get('/stale', async (req, res) => {
          CASE
            WHEN ii.last_restocked_at IS NULL OR ii.shelf_life_days IS NULL THEN NULL
            WHEN NOW() > ii.last_restocked_at + (ii.shelf_life_days * INTERVAL '1 day') THEN 'expired'
-           WHEN NOW() > ii.last_restocked_at + (ii.shelf_life_days * $1 * INTERVAL '1 day') THEN 'soon'
+           WHEN NOW() > ii.last_restocked_at + ((ii.shelf_life_days * ${SOON_PCT} / 100) * INTERVAL '1 day') THEN 'soon'
            ELSE NULL
          END AS stale_status
        FROM inventory_items ii
        WHERE ii.quantity > 0
          AND ii.last_restocked_at IS NOT NULL
          AND ii.shelf_life_days IS NOT NULL
-         AND NOW() > ii.last_restocked_at + (ii.shelf_life_days * $1 * INTERVAL '1 day')
-       ORDER BY (NOW() - ii.last_restocked_at - (ii.shelf_life_days * INTERVAL '1 day')) DESC NULLS LAST`,
-      [soonFactor]
+         AND NOW() > ii.last_restocked_at + ((ii.shelf_life_days * ${SOON_PCT} / 100) * INTERVAL '1 day')
+       ORDER BY (NOW() - ii.last_restocked_at - (ii.shelf_life_days * INTERVAL '1 day')) DESC NULLS LAST`
     );
 
     const filtered = includeSoon ? rows : rows.filter(r => r.stale_status === 'expired');
