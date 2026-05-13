@@ -20,6 +20,7 @@ import {
 } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../utils/currency';
+import { formatDate } from '../utils/dateFormat';
 import BrandLogo from '../components/BrandLogo';
 import { usePlan } from '../context/PlanContext';
 import {
@@ -137,7 +138,7 @@ export default function ReportsScreen() {
   const generateCSV = () => {
     const headers = [t('sales.csvHeaders.metric'), t('sales.csvHeaders.value')];
     const rows = [
-      [t('sales.csvHeaders.period'), period],
+      [t('sales.csvHeaders.period'), `${getPeriodLabel(period)} (${getDateRangeLabel(period)})`],
       [t('sales.csvHeaders.totalRevenue'), salesData?.total_revenue || 0],
       [t('sales.csvHeaders.orderCount'), salesData?.order_count || 0],
       [t('sales.csvHeaders.avgTicket'), salesData?.avg_ticket || 0],
@@ -166,6 +167,32 @@ export default function ReportsScreen() {
       case 'week': return t('sales.periods.week');
       case 'month': return t('sales.periods.month');
     }
+  };
+
+  const getPeriodStart = (p: Period): Date => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    if (p === 'week') {
+      start.setDate(start.getDate() - start.getDay());
+    } else if (p === 'month') {
+      start.setDate(1);
+    }
+    return start;
+  };
+
+  const getDateRangeLabel = (p: Period): string => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (p === 'today') {
+      return formatDate(today, { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+    const start = getPeriodStart(p);
+    const sameYear = start.getFullYear() === today.getFullYear();
+    const startStr = formatDate(start, sameYear
+      ? { month: 'short', day: 'numeric' }
+      : { year: 'numeric', month: 'short', day: 'numeric' });
+    const endStr = formatDate(today, { year: 'numeric', month: 'short', day: 'numeric' });
+    return `${startStr} – ${endStr}`;
   };
 
   const tabs: { key: Tab; label: string }[] = [
@@ -215,7 +242,7 @@ export default function ReportsScreen() {
         )}
 
         {/* Period Selector */}
-        <div className="flex gap-3 mb-4">
+        <div className="flex gap-3 mb-2">
           {(['today', 'week', 'month'] as const).map((p) => (
             <button
               key={p}
@@ -229,6 +256,9 @@ export default function ReportsScreen() {
               {getPeriodLabel(p)}
             </button>
           ))}
+        </div>
+        <div className="text-sm text-neutral-400 mb-4" aria-live="polite">
+          {getDateRangeLabel(period)}
         </div>
 
         {/* Tab Selector */}
