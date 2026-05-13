@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatPrice } from '../../utils/currency';
 import { usePlan } from '../../context/PlanContext';
-import { mpCharge, mpCancelCharge, getPaymentStatus } from '../../api';
+import { mpCharge, mpCancelCharge, clipCharge, clipCancelCharge, getPaymentStatus } from '../../api';
+
+type TerminalProvider = 'mp' | 'clip';
 
 export interface PaymentModalProps {
   orderTotal: number;
@@ -36,7 +38,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   getnetEnabled,
 }) => {
   const { t } = useTranslation('pos');
-  const { isMpConnected } = usePlan();
+  const { isMpConnected, isClipConfigured } = usePlan();
   const [tip, setTip] = useState(0);
   const [customTip, setCustomTip] = useState('');
   const [showCustomInput, setShowCustomInput] = useState(false);
@@ -48,6 +50,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   const [terminalSuccess, setTerminalSuccess] = useState(false);
   const [terminalError, setTerminalError] = useState('');
   const [terminalOrderId, setTerminalOrderId] = useState<number | null>(null);
+  const [terminalProvider, setTerminalProvider] = useState<TerminalProvider | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const handleTipSelect = (percentage: number) => {
@@ -101,16 +104,22 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     };
   }, []);
 
-  const handleTerminalPayment = async () => {
+  const handleTerminalPayment = async (provider: TerminalProvider) => {
     if (!orderId) return;
+    setTerminalProvider(provider);
     setTerminalPending(true);
     setTerminalError('');
     try {
-      await mpCharge(orderId);
+      if (provider === 'mp') {
+        await mpCharge(orderId);
+      } else {
+        await clipCharge(orderId);
+      }
       setTerminalOrderId(orderId);
       startPolling(orderId);
     } catch (err) {
       setTerminalPending(false);
+      setTerminalProvider(null);
       setTerminalError(err instanceof Error ? err.message : t('payment.terminalSendError'));
     }
   };
@@ -118,15 +127,20 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   const handleCancelTerminal = async () => {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = null;
-    if (terminalOrderId) {
+    if (terminalOrderId && terminalProvider) {
       try {
-        await mpCancelCharge(terminalOrderId);
+        if (terminalProvider === 'mp') {
+          await mpCancelCharge(terminalOrderId);
+        } else {
+          await clipCancelCharge(terminalOrderId);
+        }
       } catch {
         // Best effort
       }
     }
     setTerminalPending(false);
     setTerminalOrderId(null);
+    setTerminalProvider(null);
     setTerminalError('');
   };
 
@@ -288,12 +302,23 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
               {/* Mercado Pago Terminal — only for Pro+ with MP connected */}
               {isMpConnected && orderId && (
                 <button
-                  onClick={handleTerminalPayment}
+                  onClick={() => handleTerminalPayment('mp')}
                   disabled={isProcessing || !isOnline}
                   className="w-full py-4 bg-[#009ee3] text-white text-xl font-bold rounded-lg hover:bg-[#0082c0] disabled:bg-neutral-700 disabled:text-neutral-400 transition-all touch-manipulation"
                   title={!isOnline ? t('offline.cardUnavailable') : undefined}
                 >
                   {!isOnline ? t('offline.cardUnavailable') : t('payment.sendToMPTerminal')}
+                </button>
+              )}
+              {/* Clip Terminal — only when Clip credentials are configured */}
+              {isClipConfigured && orderId && (
+                <button
+                  onClick={() => handleTerminalPayment('clip')}
+                  disabled={isProcessing || !isOnline}
+                  className="w-full py-4 bg-[#FF5A1F] text-white text-xl font-bold rounded-lg hover:bg-[#e64e16] disabled:bg-neutral-700 disabled:text-neutral-400 transition-all touch-manipulation"
+                  title={!isOnline ? t('offline.cardUnavailable') : undefined}
+                >
+                  {!isOnline ? t('offline.cardUnavailable') : t('payment.sendToClipTerminal')}
                 </button>
               )}
               <button

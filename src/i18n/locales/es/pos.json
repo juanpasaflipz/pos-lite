@@ -95,6 +95,7 @@
     "terminalReaderPrompt": "El cobro fue enviado al lector. Pide al cliente que acerque o inserte su tarjeta.",
     "cancelCharge": "Cancelar cobro",
     "sendToMPTerminal": "Enviar a Terminal MP",
+    "sendToClipTerminal": "Enviar a Terminal Clip",
     "payWithGetnet": "Pagar con Getnet (~1.8%)",
     "payAtOxxo": "Pagar en OXXO",
     "speiTransfer": "Transferencia SPEI"

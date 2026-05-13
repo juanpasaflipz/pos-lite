@@ -36,6 +36,14 @@ const SERVICE_SCHEMA = {
       { key: 'merchant_id', label: 'Merchant ID (Seller ID)', secret: false },
     ],
   },
+  clip: {
+    label: 'Clip (Terminal PinPad)',
+    fields: [
+      { key: 'api_key', label: 'API Key', secret: false },
+      { key: 'secret_key', label: 'Secret Key', secret: true },
+      { key: 'default_terminal_id', label: 'PinPad / Terminal ID', secret: false },
+    ],
+  },
   twilio: {
     label: 'Twilio (SMS)',
     fields: [

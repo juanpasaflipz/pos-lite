@@ -13,6 +13,7 @@ import {
 const SERVICE_ICONS: Record<string, string> = {
   mercadopago: '\uD83D\uDCF1',
   stripe: '\uD83D\uDCB3',
+  clip: '\uD83D\uDCB3',
   twilio: '\uD83D\uDCE8',
   facturapi: '\uD83E\uDDFE',
   xai: '\uD83E\uDDE0',
@@ -22,7 +23,7 @@ const SERVICE_ICONS: Record<string, string> = {
 };
 
 const SERVICE_GROUP_KEYS: { labelKey: string; keys: string[] }[] = [
-  { labelKey: 'integrations.groups.payments', keys: ['mercadopago', 'stripe'] },
+  { labelKey: 'integrations.groups.payments', keys: ['mercadopago', 'clip', 'stripe'] },
   { labelKey: 'integrations.groups.delivery', keys: ['uber_eats', 'rappi', 'didi_food'] },
   { labelKey: 'integrations.groups.communications', keys: ['twilio'] },
   { labelKey: 'integrations.groups.invoicing', keys: ['facturapi'] },

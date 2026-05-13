@@ -95,6 +95,7 @@
     "terminalReaderPrompt": "Charge was sent to the reader. Ask the customer to tap or insert their card.",
     "cancelCharge": "Cancel charge",
     "sendToMPTerminal": "Send to MP Terminal",
+    "sendToClipTerminal": "Send to Clip Terminal",
     "payWithGetnet": "Pay with Getnet (~1.8%)",
     "payAtOxxo": "Pay at OXXO",
     "speiTransfer": "SPEI Transfer"

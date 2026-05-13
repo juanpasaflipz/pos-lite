@@ -23,6 +23,14 @@ import {
   getConektaOrder,
 } from '../conekta.js';
 import { refundPayment as getnetRefundPayment } from '../services/getnet/payments.js';
+import {
+  getClipAuthHeader,
+  getClipDefaultTerminalId,
+  createPinPadPayment as clipCreatePinPadPayment,
+  getPaymentStatus as clipGetPaymentStatus,
+  cancelPinPadPayment as clipCancelPinPadPayment,
+  mapStatus as mapClipStatus,
+} from '../services/clip.js';
 
 const router = Router();
 
@@ -806,19 +814,149 @@ router.get('/mp/status', requireAuth('pos_access'), async (req, res) => {
   }
 });
 
+// ==================== Clip PinPad Terminal ====================
+
+// GET /api/payments/clip/status — tenant Clip configuration status
+router.get('/clip/status', requireAuth('pos_access'), async (req, res) => {
+  try {
+    const authHeader = await getClipAuthHeader(req.tenant.id);
+    const terminalId = await getClipDefaultTerminalId(req.tenant.id);
+    res.json({
+      configured: !!authHeader,
+      default_terminal_id: terminalId,
+    });
+  } catch (error) {
+    console.error('Clip status error:', error);
+    res.status(500).json({ error: 'Failed to get Clip status' });
+  }
+});
+
+// POST /api/payments/clip/charge — create a PinPad payment intent
+router.post('/clip/charge', paymentLimiter, requireAuth('pos_access'), async (req, res) => {
+  try {
+    const { order_id, terminal_id } = req.body;
+    if (!order_id) return res.status(400).json({ error: 'Missing order_id' });
+
+    const order = await get(
+      'SELECT id, total, order_number, payment_status FROM orders WHERE id = $1',
+      [order_id]
+    );
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.payment_status === 'paid') {
+      return res.status(400).json({ error: 'Order is already paid' });
+    }
+
+    const authHeader = await getClipAuthHeader(req.tenant.id);
+    if (!authHeader) {
+      return res.status(400).json({ error: 'Clip not configured' });
+    }
+
+    const termId = terminal_id || (await getClipDefaultTerminalId(req.tenant.id));
+    if (!termId) return res.status(400).json({ error: 'No Clip terminal selected' });
+
+    const externalRef = `${req.tenant.id}-${order.id}`;
+    const { payment_id } = await clipCreatePinPadPayment(authHeader, {
+      amount: Number(order.total),
+      externalRef,
+      terminalId: termId,
+    });
+
+    await run(
+      `UPDATE orders
+         SET clip_payment_id = $1,
+             clip_terminal_id = $2,
+             payment_status = 'pending_terminal'
+       WHERE id = $3`,
+      [payment_id, termId, order.id]
+    );
+
+    res.json({ success: true, clip_payment_id: payment_id });
+  } catch (error) {
+    console.error('Clip charge error:', error);
+    res.status(500).json({ error: 'Failed to create Clip terminal payment' });
+  }
+});
+
+// POST /api/payments/clip/cancel — cancel a pending PinPad payment
+router.post('/clip/cancel', requireAuth('pos_access'), async (req, res) => {
+  try {
+    const { order_id } = req.body;
+    if (!order_id) return res.status(400).json({ error: 'Missing order_id' });
+
+    const order = await get(
+      'SELECT id, clip_payment_id, payment_status FROM orders WHERE id = $1',
+      [order_id]
+    );
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.payment_status !== 'pending_terminal') {
+      return res.status(400).json({ error: 'Order is not pending terminal payment' });
+    }
+
+    const authHeader = await getClipAuthHeader(req.tenant.id);
+    if (authHeader && order.clip_payment_id) {
+      try {
+        await clipCancelPinPadPayment(authHeader, order.clip_payment_id);
+      } catch (cancelErr) {
+        console.warn('Clip cancel warning:', cancelErr.message);
+      }
+    }
+
+    await run(
+      `UPDATE orders
+         SET payment_status = 'unpaid', clip_payment_id = NULL, clip_terminal_id = NULL
+       WHERE id = $1`,
+      [order.id]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Clip cancel error:', error);
+    res.status(500).json({ error: 'Failed to cancel Clip terminal payment' });
+  }
+});
+
 // GET /api/payments/:order_id - get payment status
 router.get('/:order_id', async (req, res) => {
   try {
     const { order_id } = req.params;
 
     const order = await get(`
-      SELECT id, order_number, payment_intent_id, payment_status, payment_method, total, tip, refund_total, mp_order_id
+      SELECT id, order_number, payment_intent_id, payment_status, payment_method, total, tip, refund_total, mp_order_id, clip_payment_id
       FROM orders
       WHERE id = $1
     `, [order_id]);
 
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // Clip PinPad live status pull: webhooks aren't required for correctness.
+    if (order.payment_status === 'pending_terminal' && order.clip_payment_id && req.tenant?.id) {
+      try {
+        const authHeader = await getClipAuthHeader(req.tenant.id);
+        if (authHeader) {
+          const result = await clipGetPaymentStatus(authHeader, order.clip_payment_id);
+          if (result) {
+            const mapped = mapClipStatus(result.status);
+            if (mapped === 'paid') {
+              await run(
+                `UPDATE orders SET payment_status = 'paid', payment_method = 'card', paid_at = NOW() WHERE id = $1`,
+                [order.id]
+              );
+              order.payment_status = 'paid';
+              order.payment_method = 'card';
+            } else if (mapped === 'failed') {
+              await run(
+                `UPDATE orders SET payment_status = 'failed' WHERE id = $1`,
+                [order.id]
+              );
+              order.payment_status = 'failed';
+            }
+          }
+        }
+      } catch (clipErr) {
+        console.warn('Clip live status pull failed:', clipErr.message);
+      }
     }
 
     // MP Point live status pull: webhooks may not be configured per-tenant,

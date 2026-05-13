@@ -9,6 +9,7 @@ import { updateTenant, getTenant } from '../tenants.js';
 import { getPlanLimits, planUpgradeError } from '../planLimits.js';
 import { isConektaConfigured } from '../conekta.js';
 import { isGetnetConfigured } from '../services/getnet/auth.js';
+import { getClipAuthHeader } from '../services/clip.js';
 import { getDisplayMenuSettings, setDisplayMenuSettings } from '../lib/displayMenu.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -82,11 +83,15 @@ router.get('/', async (req, res) => {
 
   let conektaConfigured = false;
   let getnetConfigured = false;
+  let clipConfigured = false;
   try {
     conektaConfigured = await isConektaConfigured(tenant.id);
   } catch { /* non-blocking */ }
   try {
     getnetConfigured = await isGetnetConfigured(tenant.id);
+  } catch { /* non-blocking */ }
+  try {
+    clipConfigured = !!(await getClipAuthHeader(tenant.id));
   } catch { /* non-blocking */ }
 
   res.json({
@@ -103,6 +108,7 @@ router.get('/', async (req, res) => {
     conektaConfigured,
     getnetConfigured,
     getnetEnabled: !!tenant.getnet_enabled,
+    clipConfigured,
   });
 });
 

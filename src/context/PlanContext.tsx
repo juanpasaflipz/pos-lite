@@ -37,6 +37,7 @@ interface PlanContextType {
   isConektaConfigured: boolean;
   isGetnetConfigured: boolean;
   isGetnetEnabled: boolean;
+  isClipConfigured: boolean;
   isAtLimit: (resource: 'menuItems' | 'inventoryItems' | 'employees' | 'modifierGroups' | 'combos', currentCount: number) => boolean;
   isFeatureLocked: (feature: 'printers' | 'delivery' | 'permissions' | 'loyalty' | 'prepForecast' | 'banking' | 'bankReconciliation' | 'dataExport' | 'cfdi' | 'ai') => boolean;
   refresh: () => Promise<void>;
@@ -72,6 +73,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   const [conektaConfigured, setConektaConfigured] = useState(false);
   const [getnetConfigured, setGetnetConfigured] = useState(false);
   const [getnetEnabled, setGetnetEnabled] = useState(false);
+  const [clipConfigured, setClipConfigured] = useState(false);
 
   const fetchPlan = useCallback(async () => {
     try {
@@ -93,6 +95,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
         if (data.conektaConfigured !== undefined) setConektaConfigured(data.conektaConfigured);
         if (data.getnetConfigured !== undefined) setGetnetConfigured(data.getnetConfigured);
         if (data.getnetEnabled !== undefined) setGetnetEnabled(data.getnetEnabled);
+        if (data.clipConfigured !== undefined) setClipConfigured(data.clipConfigured);
       }
     } catch {
       // Server unreachable — keep defaults
@@ -107,6 +110,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   const isConektaConfigured = conektaConfigured;
   const isGetnetConfigured = getnetConfigured;
   const isGetnetEnabled = getnetEnabled;
+  const isClipConfigured = clipConfigured;
 
   const isAtLimit = useCallback((resource: string, currentCount: number) => {
     const max = (limits as unknown as Record<string, unknown>)[resource];
@@ -126,7 +130,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   }, [limits]);
 
   return (
-    <PlanContext.Provider value={{ plan, limits, ownerEmail, mpUserId, mpDefaultTerminalId, isPaid, isFree, isMpConnected, isConektaConfigured, isGetnetConfigured, isGetnetEnabled, isAtLimit, isFeatureLocked, refresh: fetchPlan }}>
+    <PlanContext.Provider value={{ plan, limits, ownerEmail, mpUserId, mpDefaultTerminalId, isPaid, isFree, isMpConnected, isConektaConfigured, isGetnetConfigured, isGetnetEnabled, isClipConfigured, isAtLimit, isFeatureLocked, refresh: fetchPlan }}>
       {children}
     </PlanContext.Provider>
   );

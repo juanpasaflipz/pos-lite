@@ -2158,6 +2158,26 @@ export async function mpCancelCharge(order_id: number): Promise<{ success: boole
   });
 }
 
+/* ==================== Clip PinPad Terminal ==================== */
+
+export async function getClipStatus(): Promise<{ configured: boolean; default_terminal_id: string | null }> {
+  return apiRequest('/payments/clip/status');
+}
+
+export async function clipCharge(order_id: number, terminal_id?: string): Promise<{ success: boolean; clip_payment_id: string }> {
+  return apiRequest('/payments/clip/charge', {
+    method: 'POST',
+    body: JSON.stringify({ order_id, terminal_id }),
+  });
+}
+
+export async function clipCancelCharge(order_id: number): Promise<{ success: boolean }> {
+  return apiRequest('/payments/clip/cancel', {
+    method: 'POST',
+    body: JSON.stringify({ order_id }),
+  });
+}
+
 /* ==================== Conekta Payments ==================== */
 
 export async function conektaOxxoPayment(data: { order_id: number; tip?: number }): Promise<{
