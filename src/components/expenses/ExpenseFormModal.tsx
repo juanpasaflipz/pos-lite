@@ -8,6 +8,7 @@ import {
 } from '../../api';
 import VendorCombobox from './VendorCombobox';
 import ExpenseInventoryLines from './ExpenseInventoryLines';
+import PayeeCombobox from './PayeeCombobox';
 
 const INVENTORY_LINKED_CATEGORIES = new Set(['food_cost', 'supplies']);
 
@@ -195,12 +196,10 @@ const ExpenseFormModal: React.FC<Props> = ({ expense, initialData, onSave, onClo
 
           <div>
             <label className="block text-sm font-medium text-neutral-400 mb-1">{t('expenses.payee')}</label>
-            <input
-              type="text"
+            <PayeeCombobox
               value={payee}
-              onChange={e => setPayee(e.target.value)}
+              onChange={setPayee}
               placeholder={t('expenses.payeePlaceholder')}
-              className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white placeholder-neutral-500 focus:border-brand-500 focus:outline-none"
             />
           </div>
 

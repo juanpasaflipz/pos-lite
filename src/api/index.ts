@@ -2954,6 +2954,26 @@ export async function createExpenseSupplier(data: Partial<ExpenseSupplier>): Pro
   });
 }
 
+export interface ExpensePayee {
+  name: string;
+  source: 'expense_history' | 'employee';
+  score?: number;
+}
+
+export async function searchExpensePayees(q: string, limit = 10): Promise<ExpensePayee[]> {
+  const qs = new URLSearchParams();
+  qs.set('q', q);
+  qs.set('limit', String(limit));
+  return apiRequest<ExpensePayee[]>(`/expenses/payees/search?${qs}`);
+}
+
+export async function matchExpensePayee(name: string, threshold = 0.5): Promise<{ match: (ExpensePayee & { score: number; exact: boolean }) | null }> {
+  return apiRequest('/expenses/payees/match', {
+    method: 'POST',
+    body: JSON.stringify({ name, threshold }),
+  });
+}
+
 export interface OverpayAlert {
   inventory_item_id: number;
   inventory_item_name: string | null;

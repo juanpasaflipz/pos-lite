@@ -200,6 +200,180 @@ router.post('/suppliers', requireAuth('manage_inventory'), async (req, res) => {
   }
 });
 
+// ────────────────────────────────────────────────────────────────────────────
+// Payees — dedupe across history + active employees, trigram-ranked typeahead.
+// Payees are stored as TEXT on expenses (no normalized table) so this is a
+// derived view, not a CRUD surface.
+// ────────────────────────────────────────────────────────────────────────────
+
+function normalizePayee(raw) {
+  if (raw == null) return null;
+  const trimmed = String(raw).trim().replace(/\s+/g, ' ');
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+// GET /api/expenses/payees/search?q=&limit=
+router.get('/payees/search', requireAuth('view_reports'), async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    const limit = Math.min(Number(req.query.limit) || 10, 25);
+
+    // Empty query: most-recent payees first.
+    if (!q) {
+      const recent = await all(
+        `WITH history AS (
+           SELECT payee AS name, 'expense_history'::text AS source, MAX(created_at) AS last_used
+           FROM expenses
+           WHERE payee IS NOT NULL AND length(trim(payee)) > 0
+           GROUP BY payee
+         ),
+         emp AS (
+           SELECT name, 'employee'::text AS source, created_at AS last_used
+           FROM employees
+           WHERE name IS NOT NULL AND length(trim(name)) > 0
+         ),
+         combined AS (
+           SELECT name, source, last_used FROM emp
+           UNION ALL
+           SELECT h.name, h.source, h.last_used FROM history h
+           WHERE NOT EXISTS (SELECT 1 FROM emp e WHERE LOWER(e.name) = LOWER(h.name))
+         )
+         SELECT name, source FROM combined
+         ORDER BY last_used DESC NULLS LAST, name ASC
+         LIMIT $1`,
+        [limit]
+      );
+      return res.json(recent);
+    }
+
+    let rows;
+    try {
+      rows = await all(
+        `WITH history AS (
+           SELECT payee AS name, 'expense_history'::text AS source, MAX(created_at) AS last_used
+           FROM expenses
+           WHERE payee IS NOT NULL AND length(trim(payee)) > 0
+           GROUP BY payee
+         ),
+         emp AS (
+           SELECT name, 'employee'::text AS source, created_at AS last_used
+           FROM employees
+           WHERE name IS NOT NULL AND length(trim(name)) > 0
+         ),
+         combined AS (
+           SELECT name, source, last_used FROM emp
+           UNION ALL
+           SELECT h.name, h.source, h.last_used FROM history h
+           WHERE NOT EXISTS (SELECT 1 FROM emp e WHERE LOWER(e.name) = LOWER(h.name))
+         )
+         SELECT name, source, similarity(name, $1) AS score
+         FROM combined
+         WHERE name ILIKE '%' || $1 || '%' OR similarity(name, $1) > 0.2
+         ORDER BY (name ILIKE $1 || '%') DESC, score DESC, last_used DESC NULLS LAST
+         LIMIT $2`,
+        [q, limit]
+      );
+    } catch {
+      // pg_trgm absent — fall back to plain ILIKE
+      rows = await all(
+        `WITH history AS (
+           SELECT payee AS name, 'expense_history'::text AS source, MAX(created_at) AS last_used
+           FROM expenses
+           WHERE payee IS NOT NULL AND length(trim(payee)) > 0
+           GROUP BY payee
+         ),
+         emp AS (
+           SELECT name, 'employee'::text AS source, created_at AS last_used
+           FROM employees
+           WHERE name IS NOT NULL AND length(trim(name)) > 0
+         ),
+         combined AS (
+           SELECT name, source, last_used FROM emp
+           UNION ALL
+           SELECT h.name, h.source, h.last_used FROM history h
+           WHERE NOT EXISTS (SELECT 1 FROM emp e WHERE LOWER(e.name) = LOWER(h.name))
+         )
+         SELECT name, source FROM combined
+         WHERE name ILIKE '%' || $1 || '%'
+         ORDER BY (name ILIKE $1 || '%') DESC, name ASC
+         LIMIT $2`,
+        [q, limit]
+      );
+    }
+    res.json(rows);
+  } catch (err) {
+    console.error('[Expenses] Payee search error:', err.message);
+    res.status(500).json({ error: 'Failed to search payees' });
+  }
+});
+
+// POST /api/expenses/payees/match — fuzzy "did you mean?" check
+router.post('/payees/match', requireAuth('view_reports'), async (req, res) => {
+  try {
+    const name = String(req.body?.name || '').trim();
+    const threshold = Math.min(Math.max(Number(req.body?.threshold) || 0.5, 0.1), 0.95);
+    if (!name) return res.json({ match: null });
+
+    // Exact case-insensitive first.
+    const exact = await get(
+      `WITH history AS (
+         SELECT payee AS name, 'expense_history'::text AS source
+         FROM expenses
+         WHERE payee IS NOT NULL AND length(trim(payee)) > 0
+         GROUP BY payee
+       ),
+       emp AS (
+         SELECT name, 'employee'::text AS source
+         FROM employees
+         WHERE name IS NOT NULL AND length(trim(name)) > 0
+       ),
+       combined AS (
+         SELECT name, source FROM emp
+         UNION ALL
+         SELECT h.name, h.source FROM history h
+         WHERE NOT EXISTS (SELECT 1 FROM emp e WHERE LOWER(e.name) = LOWER(h.name))
+       )
+       SELECT name, source FROM combined WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+      [name]
+    );
+    if (exact) return res.json({ match: { ...exact, score: 1, exact: true } });
+
+    try {
+      const fuzzy = await get(
+        `WITH history AS (
+           SELECT payee AS name, 'expense_history'::text AS source
+           FROM expenses
+           WHERE payee IS NOT NULL AND length(trim(payee)) > 0
+           GROUP BY payee
+         ),
+         emp AS (
+           SELECT name, 'employee'::text AS source
+           FROM employees
+           WHERE name IS NOT NULL AND length(trim(name)) > 0
+         ),
+         combined AS (
+           SELECT name, source FROM emp
+           UNION ALL
+           SELECT h.name, h.source FROM history h
+           WHERE NOT EXISTS (SELECT 1 FROM emp e WHERE LOWER(e.name) = LOWER(h.name))
+         )
+         SELECT name, source, similarity(name, $1) AS score
+         FROM combined
+         WHERE similarity(name, $1) >= $2
+         ORDER BY score DESC
+         LIMIT 1`,
+        [name, threshold]
+      );
+      return res.json({ match: fuzzy ? { ...fuzzy, exact: false } : null });
+    } catch {
+      return res.json({ match: null });
+    }
+  } catch (err) {
+    console.error('[Expenses] Payee match error:', err.message);
+    res.status(500).json({ error: 'Failed to match payee' });
+  }
+});
+
 // GET /api/expenses — list expenses with optional date range
 router.get('/', requireAuth('view_reports'), async (req, res) => {
   try {
@@ -271,14 +445,14 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
         `INSERT INTO expenses (tenant_id, category, vendor, vendor_id, description, amount, tax_amount, expense_date, payment_method, notes, receipt_image_url, receipt_data, created_by, payee)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          RETURNING *`,
-        [tenantId, category, vendor || null, vendor_id || null, description || null, amount, tax_amount || 0, expense_date, payment_method || null, notes || null, receipt_image_url || null, finalReceiptData ? JSON.stringify(finalReceiptData) : null, employeeId, payee || null]
+        [tenantId, category, vendor || null, vendor_id || null, description || null, amount, tax_amount || 0, expense_date, payment_method || null, notes || null, receipt_image_url || null, finalReceiptData ? JSON.stringify(finalReceiptData) : null, employeeId, normalizePayee(payee)]
       );
     } else {
       result = await get(
         `INSERT INTO expenses (tenant_id, category, vendor, description, amount, tax_amount, expense_date, payment_method, notes, receipt_image_url, receipt_data, created_by, payee)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          RETURNING *`,
-        [tenantId, category, vendor || null, description || null, amount, tax_amount || 0, expense_date, payment_method || null, notes || null, receipt_image_url || null, finalReceiptData ? JSON.stringify(finalReceiptData) : null, employeeId, payee || null]
+        [tenantId, category, vendor || null, description || null, amount, tax_amount || 0, expense_date, payment_method || null, notes || null, receipt_image_url || null, finalReceiptData ? JSON.stringify(finalReceiptData) : null, employeeId, normalizePayee(payee)]
       );
     }
 
@@ -487,7 +661,7 @@ router.put('/:id', requireAuth('manage_inventory'), async (req, res) => {
           updated_at = NOW()
         WHERE id = $12
         RETURNING *`,
-        [category || null, vendor ?? null, vendor_id ?? null, description ?? null, amount || null, tax_amount ?? null, expense_date || null, payment_method ?? null, notes ?? null, receipt_image_url ?? null, payee ?? null, id]
+        [category || null, vendor ?? null, vendor_id ?? null, description ?? null, amount || null, tax_amount ?? null, expense_date || null, payment_method ?? null, notes ?? null, receipt_image_url ?? null, payee === undefined ? null : normalizePayee(payee), id]
       );
     } else {
       result = await get(
@@ -505,7 +679,7 @@ router.put('/:id', requireAuth('manage_inventory'), async (req, res) => {
           updated_at = NOW()
         WHERE id = $11
         RETURNING *`,
-        [category || null, vendor ?? null, description ?? null, amount || null, tax_amount ?? null, expense_date || null, payment_method ?? null, notes ?? null, receipt_image_url ?? null, payee ?? null, id]
+        [category || null, vendor ?? null, description ?? null, amount || null, tax_amount ?? null, expense_date || null, payment_method ?? null, notes ?? null, receipt_image_url ?? null, payee === undefined ? null : normalizePayee(payee), id]
       );
     }
 
