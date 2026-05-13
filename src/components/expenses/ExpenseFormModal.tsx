@@ -4,8 +4,12 @@ import { X, Camera, Image, Loader2 } from 'lucide-react';
 import {
   uploadReceipt,
   type Expense,
+  type InventoryMatch,
 } from '../../api';
 import VendorCombobox from './VendorCombobox';
+import ExpenseInventoryLines from './ExpenseInventoryLines';
+
+const INVENTORY_LINKED_CATEGORIES = new Set(['food_cost', 'supplies']);
 
 const CATEGORY_KEYS = ['food_cost', 'supplies', 'utilities', 'rent', 'marketing', 'other'] as const;
 const PAYMENT_METHOD_KEYS = ['', 'cash', 'card', 'transfer'] as const;
@@ -34,6 +38,9 @@ const ExpenseFormModal: React.FC<Props> = ({ expense, initialData, onSave, onClo
   );
   const [paymentMethod, setPaymentMethod] = useState(expense?.payment_method || initialData?.payment_method || '');
   const [notes, setNotes] = useState(expense?.notes || initialData?.notes || '');
+  const [inventoryMatches, setInventoryMatches] = useState<InventoryMatch[]>(
+    (initialData as { inventory_matches?: InventoryMatch[] } | undefined)?.inventory_matches || []
+  );
 
   const existingUrl = initialData?.receipt_image_url || expense?.receipt_image_url || null;
   const [receiptUrl, setReceiptUrl] = useState<string | null>(existingUrl);
@@ -67,6 +74,7 @@ const ExpenseFormModal: React.FC<Props> = ({ expense, initialData, onSave, onClo
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const shouldLinkInventory = INVENTORY_LINKED_CATEGORIES.has(category) && !expense;
     onSave({
       category,
       vendor: vendor || undefined,
@@ -80,7 +88,10 @@ const ExpenseFormModal: React.FC<Props> = ({ expense, initialData, onSave, onClo
       notes: notes || undefined,
       receipt_image_url: receiptUrl || undefined,
       receipt_data: initialData?.receipt_data || expense?.receipt_data,
-    });
+      ...(shouldLinkInventory && inventoryMatches.length > 0
+        ? { inventory_matches: inventoryMatches }
+        : {}),
+    } as Partial<Expense> & { inventory_matches?: InventoryMatch[] });
   };
 
   return (
@@ -256,6 +267,14 @@ const ExpenseFormModal: React.FC<Props> = ({ expense, initialData, onSave, onClo
               </select>
             </div>
           </div>
+
+          {INVENTORY_LINKED_CATEGORIES.has(category) && !expense && (
+            <ExpenseInventoryLines
+              value={inventoryMatches}
+              onChange={setInventoryMatches}
+              totalAmount={Number(amount) || undefined}
+            />
+          )}
 
           <div>
             <label className="block text-sm font-medium text-neutral-400 mb-1">{t('expenses.notes')}</label>

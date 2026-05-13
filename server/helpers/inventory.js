@@ -1,4 +1,48 @@
-import { getConn } from '../db/index.js';
+import { getConn, get } from '../db/index.js';
+
+const OVERPAY_THRESHOLD = 1.15;
+const OVERPAY_MIN_HISTORY = 3;
+const OVERPAY_WINDOW_DAYS = 180;
+
+/**
+ * Detect whether an incoming unit_cost is significantly above the rolling median
+ * of recent purchase prices for the same inventory item. Returns null when there
+ * is insufficient history to make a judgement (avoids false alarms on new items).
+ *
+ * @param {number} inventoryItemId
+ * @param {number} incomingUnitCost
+ * @returns {Promise<{ median: number, deviation_pct: number, history_count: number } | null>}
+ */
+export async function detectOverpay(inventoryItemId, incomingUnitCost) {
+  if (!inventoryItemId || !incomingUnitCost || incomingUnitCost <= 0) return null;
+  try {
+    const row = await get(
+      `SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY unit_cost) AS median,
+              COUNT(*) AS history_count
+       FROM inventory_cost_history
+       WHERE inventory_item_id = $1
+         AND unit_cost > 0
+         AND created_at > NOW() - INTERVAL '${OVERPAY_WINDOW_DAYS} days'`,
+      [inventoryItemId]
+    );
+    const historyCount = Number(row?.history_count) || 0;
+    const median = row?.median == null ? null : Number(row.median);
+    if (historyCount < OVERPAY_MIN_HISTORY || !median || median <= 0) return null;
+
+    const ratio = incomingUnitCost / median;
+    if (ratio <= OVERPAY_THRESHOLD) return null;
+
+    return {
+      median: Math.round(median * 10000) / 10000,
+      deviation_pct: Math.round((ratio - 1) * 100 * 10) / 10,
+      history_count: historyCount,
+    };
+  } catch (err) {
+    // Table may not exist on a stale schema (pre-migration 0042). Non-fatal.
+    console.warn('[Inventory] overpay check skipped:', err.message);
+    return null;
+  }
+}
 
 /**
  * Deduct inventory for all items in an order.

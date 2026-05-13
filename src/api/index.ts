@@ -2954,7 +2954,69 @@ export async function createExpenseSupplier(data: Partial<ExpenseSupplier>): Pro
   });
 }
 
-export async function createExpense(data: Partial<Expense> & { inventory_matches?: InventoryMatch[] }): Promise<Expense> {
+export interface OverpayAlert {
+  inventory_item_id: number;
+  inventory_item_name: string | null;
+  unit_cost: number;
+  median_cost: number;
+  deviation_pct: number;
+  history_count: number;
+}
+
+export interface VarianceAlert {
+  rule_id: number;
+  rule_label: string;
+  expected_amount: number;
+  variance_threshold_pct: number;
+  actual_amount: number;
+  deviation_pct: number;
+  flagged: boolean;
+}
+
+export interface RecurringExpense {
+  id: number;
+  label: string;
+  category: string;
+  vendor_id: number | null;
+  vendor_name?: string | null;
+  payee: string | null;
+  expected_amount: number;
+  variance_threshold_pct: number;
+  frequency: 'weekly' | 'biweekly' | 'monthly' | 'bimonthly' | 'quarterly' | 'annual';
+  last_charged_date: string | null;
+  next_expected_date: string | null;
+  active: boolean;
+  notes: string | null;
+}
+
+export type CreateExpenseResponse = Expense & {
+  overpay_alerts?: OverpayAlert[];
+  variance_alert?: VarianceAlert | null;
+};
+
+export async function getRecurringExpenses(activeOnly = false): Promise<RecurringExpense[]> {
+  return apiRequest<RecurringExpense[]>(`/recurring-expenses${activeOnly ? '?active_only=1' : ''}`);
+}
+
+export async function createRecurringExpense(data: Partial<RecurringExpense>): Promise<RecurringExpense> {
+  return apiRequest<RecurringExpense>('/recurring-expenses', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateRecurringExpense(id: number, data: Partial<RecurringExpense>): Promise<RecurringExpense> {
+  return apiRequest<RecurringExpense>(`/recurring-expenses/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteRecurringExpense(id: number): Promise<{ success: boolean }> {
+  return apiRequest<{ success: boolean }>(`/recurring-expenses/${id}`, { method: 'DELETE' });
+}
+
+export async function createExpense(data: Partial<Expense> & { inventory_matches?: InventoryMatch[] }): Promise<CreateExpenseResponse> {
   return apiRequest('/expenses', {
     method: 'POST',
     body: JSON.stringify(data),

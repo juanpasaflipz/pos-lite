@@ -5,6 +5,8 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { all, get, run, getTenantId } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
+import { detectOverpay } from '../helpers/inventory.js';
+import { matchAndCheckVariance } from './recurring-expenses.js';
 // AI modules removed in pos-lite
 const getConfig = () => ({});
 const logRestockEvent = () => {};
@@ -280,25 +282,131 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
       );
     }
 
+    // Recurring-expense variance check (rent/utilities/services).
+    // Records the match (and any variance) regardless of category — rules
+    // self-filter by category, so non-recurring categories simply return null.
+    let varianceAlert = null;
+    try {
+      const matched = await matchAndCheckVariance({
+        category,
+        vendor_id: vendor_id || null,
+        payee: payee || null,
+        description: description || null,
+        amount,
+      });
+      if (matched) {
+        // Stamp the expense with the matched rule for trend reporting.
+        try {
+          await run(
+            'UPDATE expenses SET recurring_expense_id = $1 WHERE id = $2',
+            [matched.rule_id, result.id]
+          );
+          // Roll the rule's last_charged_date forward so the next bill compares fresh.
+          await run(
+            'UPDATE recurring_expenses SET last_charged_date = $1, updated_at = NOW() WHERE id = $2',
+            [expense_date, matched.rule_id]
+          );
+        } catch (linkErr) {
+          // Column / table may be missing pre-migration 0043; non-fatal.
+          console.warn('[Expenses] recurring link skipped:', linkErr.message);
+        }
+        if (matched.flagged) varianceAlert = matched;
+      }
+    } catch (varErr) {
+      console.warn('[Expenses] variance match failed:', varErr.message);
+    }
+
     // Process inventory restocks from matches.
     // `quantity` is the amount to add in inventory's base unit (frontend computes parsed_qty * pack_size).
+    // `cost_price` here is the per-unit cost (frontend computes amount / quantity).
+    const overpayAlerts = [];
     if (inventory_matches && Array.isArray(inventory_matches)) {
       for (const match of inventory_matches) {
         if (!match.inventory_item_id || !match.quantity || match.quantity <= 0) continue;
 
         try {
-          const item = await get('SELECT id, quantity FROM inventory_items WHERE id = $1', [match.inventory_item_id]);
+          const item = await get('SELECT id, quantity, cost_price FROM inventory_items WHERE id = $1', [match.inventory_item_id]);
           if (!item) continue;
 
           const quantityBefore = Number(item.quantity) || 0;
-          const newQuantity = quantityBefore + Number(match.quantity);
+          const prevCostPrice = item.cost_price == null ? null : Number(item.cost_price);
+          const addedQty = Number(match.quantity);
+          const newQuantity = quantityBefore + addedQty;
+          const incomingUnitCost = (match.cost_price !== undefined && match.cost_price !== null)
+            ? Number(match.cost_price)
+            : null;
 
-          if (match.cost_price !== undefined && match.cost_price !== null) {
+          // Weighted moving average: only update cost when we have a positive incoming
+          // unit_cost. If there's no prior stock or no prior cost, the new purchase
+          // defines the cost outright.
+          let newCostPrice = prevCostPrice;
+          if (incomingUnitCost != null && incomingUnitCost > 0) {
+            if (quantityBefore <= 0 || prevCostPrice == null || prevCostPrice === 0) {
+              newCostPrice = incomingUnitCost;
+            } else {
+              newCostPrice = (quantityBefore * prevCostPrice + addedQty * incomingUnitCost) / newQuantity;
+              // Round to 4dp to avoid drift accumulation across many purchases.
+              newCostPrice = Math.round(newCostPrice * 10000) / 10000;
+            }
+          }
+
+          if (newCostPrice != null && newCostPrice !== prevCostPrice) {
             await run('UPDATE inventory_items SET quantity = $1, cost_price = $2 WHERE id = $3',
-              [newQuantity, match.cost_price, match.inventory_item_id]);
+              [newQuantity, newCostPrice, match.inventory_item_id]);
           } else {
             await run('UPDATE inventory_items SET quantity = $1 WHERE id = $2',
               [newQuantity, match.inventory_item_id]);
+          }
+
+          // Overpay detection BEFORE writing new history row so the median
+          // reflects prior purchases only.
+          if (incomingUnitCost != null && incomingUnitCost > 0) {
+            const overpay = await detectOverpay(match.inventory_item_id, incomingUnitCost);
+            if (overpay) {
+              overpayAlerts.push({
+                inventory_item_id: match.inventory_item_id,
+                inventory_item_name: match.inventory_item_name || null,
+                unit_cost: incomingUnitCost,
+                median_cost: overpay.median,
+                deviation_pct: overpay.deviation_pct,
+                history_count: overpay.history_count,
+              });
+            }
+          }
+
+          // Append to cost history ledger (Phase 2 overpay detection reads from this).
+          if (incomingUnitCost != null && incomingUnitCost > 0) {
+            try {
+              await run(
+                `INSERT INTO inventory_cost_history
+                   (tenant_id, inventory_item_id, vendor_id, expense_id, quantity_added, unit_cost, prev_cost_price, new_cost_price)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                [tenantId, match.inventory_item_id, vendor_id || null, result.id, addedQty, incomingUnitCost, prevCostPrice, newCostPrice]
+              );
+            } catch (histErr) {
+              // Table may not exist yet on a stale schema; non-fatal.
+              console.warn('[Expenses] cost history insert skipped:', histErr.message);
+            }
+          }
+
+          // Normalized expense_items row (audit trail + recipe cost queries).
+          try {
+            await run(
+              `INSERT INTO expense_items
+                 (tenant_id, expense_id, inventory_item_id, quantity, unit_cost, line_total, raw_description)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+              [
+                tenantId,
+                result.id,
+                match.inventory_item_id,
+                addedQty,
+                incomingUnitCost ?? 0,
+                incomingUnitCost != null ? (addedQty * incomingUnitCost).toFixed(2) : 0,
+                match.raw_description || null,
+              ]
+            );
+          } catch (itemErr) {
+            console.warn('[Expenses] expense_items insert skipped:', itemErr.message);
           }
 
           // Remember this vendor↔item mapping so next receipt auto-suggests
@@ -311,7 +419,7 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
                    SET unit_cost = COALESCE(EXCLUDED.unit_cost, vendor_items.unit_cost),
                        last_seen_description = EXCLUDED.last_seen_description,
                        last_used_at = NOW()`,
-                [tenantId, vendor_id, match.inventory_item_id, match.cost_price || 0, match.raw_description]
+                [tenantId, vendor_id, match.inventory_item_id, incomingUnitCost ?? 0, match.raw_description]
               );
             } catch (mapErr) {
               // last_seen_description / last_used_at may not yet exist on older schema
@@ -320,14 +428,18 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
           }
 
           // Fire-and-forget: log restock for AI
-          setImmediate(() => logRestockEvent(match.inventory_item_id, quantityBefore, match.quantity));
+          setImmediate(() => logRestockEvent(match.inventory_item_id, quantityBefore, addedQty));
         } catch (restockErr) {
           console.error(`[Expenses] Restock error for item ${match.inventory_item_id}:`, restockErr.message);
         }
       }
     }
 
-    res.json(result);
+    res.json({
+      ...result,
+      overpay_alerts: overpayAlerts,
+      variance_alert: varianceAlert,
+    });
   } catch (err) {
     console.error('[Expenses] Create error:', err.message);
     res.status(500).json({ error: 'Failed to create expense' });

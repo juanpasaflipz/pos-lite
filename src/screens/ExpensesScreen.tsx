@@ -19,6 +19,7 @@ import {
   CalendarDays,
   Eye,
   Package,
+  Repeat,
 } from 'lucide-react';
 import {
   getExpenses,
@@ -32,6 +33,8 @@ import {
 import { formatPrice } from '../utils/currency';
 import ExpenseFormModal from '../components/expenses/ExpenseFormModal';
 import ReceiptScanModal from '../components/expenses/ReceiptScanModal';
+import RecurringExpensesModal from '../components/expenses/RecurringExpensesModal';
+import { useToast } from '../context/ToastContext';
 
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -187,6 +190,7 @@ const ExpensesScreen: React.FC = () => {
   // Modals
   const [showForm, setShowForm] = useState(false);
   const [showScan, setShowScan] = useState(false);
+  const [showRecurring, setShowRecurring] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [scanInitialData, setScanInitialData] = useState<Partial<Expense> | undefined>(undefined);
   const [pendingInventoryMatches, setPendingInventoryMatches] = useState<InventoryMatch[] | undefined>(undefined);
@@ -198,6 +202,7 @@ const ExpensesScreen: React.FC = () => {
   const [viewingReceipt, setViewingReceipt] = useState<string | null>(null);
 
   const { t } = useTranslation('admin');
+  const { addToast } = useToast();
   const getCategoryLabel = (cat: string) => t(`expenses.categories.${cat}`, cat);
 
   const fetchExpenses = useCallback(async () => {
@@ -216,13 +221,48 @@ const ExpensesScreen: React.FC = () => {
     fetchExpenses();
   }, [fetchExpenses]);
 
-  const handleSave = async (data: Partial<Expense>) => {
+  const handleSave = async (data: Partial<Expense> & { inventory_matches?: InventoryMatch[] }) => {
     setSaving(true);
     try {
       if (editingExpense) {
         await updateExpense(editingExpense.id, data);
       } else {
-        await createExpense({ ...data, inventory_matches: pendingInventoryMatches });
+        // Form-supplied inventory_matches (manual entry) take priority over
+        // the receipt-scan path's pendingInventoryMatches.
+        const matches = data.inventory_matches ?? pendingInventoryMatches;
+        const result = await createExpense({ ...data, inventory_matches: matches });
+        if (result.overpay_alerts && result.overpay_alerts.length > 0) {
+          for (const alert of result.overpay_alerts) {
+            const name = alert.inventory_item_name || `#${alert.inventory_item_id}`;
+            addToast(
+              t('expenses.overpayAlert', {
+                defaultValue: 'Paying {{deviation}}% above usual for {{name}} ({{paid}} vs median {{median}})',
+                deviation: alert.deviation_pct.toFixed(0),
+                name,
+                paid: formatPrice(alert.unit_cost),
+                median: formatPrice(alert.median_cost),
+              }),
+              'warning',
+              8000
+            );
+          }
+        }
+        if (result.variance_alert?.flagged) {
+          const v = result.variance_alert;
+          const direction = v.deviation_pct > 0 ? '+' : '';
+          addToast(
+            t('expenses.varianceAlert', {
+              defaultValue: '{{label}} is {{direction}}{{deviation}}% off expected ({{actual}} vs {{expected}})',
+              label: v.rule_label,
+              direction,
+              deviation: v.deviation_pct.toFixed(0),
+              actual: formatPrice(v.actual_amount),
+              expected: formatPrice(v.expected_amount),
+            }),
+            'warning',
+            8000
+          );
+        }
       }
       setShowForm(false);
       setEditingExpense(null);
@@ -297,6 +337,16 @@ const ExpensesScreen: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowRecurring(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-neutral-800 text-white rounded-lg border border-neutral-700 hover:bg-neutral-700 transition-colors text-sm font-medium"
+              title={t('expenses.recurringTitle', { defaultValue: 'Recurring Expenses' })}
+            >
+              <Repeat size={16} />
+              <span className="hidden md:inline">
+                {t('expenses.recurringShort', { defaultValue: 'Recurring' })}
+              </span>
+            </button>
             <button
               onClick={() => setShowScan(true)}
               className="flex items-center gap-2 px-4 py-2 bg-neutral-800 text-white rounded-lg border border-neutral-700 hover:bg-neutral-700 transition-colors text-sm font-medium"
@@ -525,6 +575,10 @@ const ExpensesScreen: React.FC = () => {
           onParsed={handleScanComplete}
           onClose={() => setShowScan(false)}
         />
+      )}
+
+      {showRecurring && (
+        <RecurringExpensesModal onClose={() => setShowRecurring(false)} />
       )}
 
       {viewingReceipt && (

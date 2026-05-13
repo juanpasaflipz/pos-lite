@@ -1,4 +1,4 @@
-export const version = 40;
+export const version = 41;
 export const name = 'clip_terminal';
 
 export async function up(sql) {

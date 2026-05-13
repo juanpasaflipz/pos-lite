@@ -377,6 +377,16 @@ export default function RecipeManagementScreen() {
               {filteredItems.map(item => {
                 const isSelected = item.id === selectedItemId;
                 const missingRecipe = item.ingredient_count === 0;
+                const foodCostPct = item.price > 0 && item.cost_per_unit > 0
+                  ? (item.cost_per_unit / item.price) * 100
+                  : null;
+                const badgeTone = foodCostPct == null
+                  ? 'border-neutral-800 bg-neutral-900 text-neutral-500'
+                  : foodCostPct > 35
+                    ? 'border-red-800 bg-red-950/50 text-red-300'
+                    : foodCostPct > 30
+                      ? 'border-amber-800 bg-amber-950/50 text-amber-300'
+                      : 'border-green-800 bg-green-950/40 text-green-300';
                 return (
                   <button
                     key={item.id}
@@ -403,9 +413,19 @@ export default function RecipeManagementScreen() {
 
                     <div className="mt-3 flex items-center justify-between text-sm">
                       <span className="text-neutral-400">{formatPrice(item.price)}</span>
-                      <span className="text-neutral-500">
-                        {t('recipe.ingredientCount', { count: item.ingredient_count })}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {foodCostPct != null && (
+                          <span
+                            className={`text-[11px] px-2 py-0.5 rounded-full border font-medium ${badgeTone}`}
+                            title={t('recipe.foodCostTitle', { defaultValue: 'Food cost %' })}
+                          >
+                            {foodCostPct.toFixed(0)}%
+                          </span>
+                        )}
+                        <span className="text-neutral-500 text-xs">
+                          {t('recipe.ingredientCount', { count: item.ingredient_count })}
+                        </span>
+                      </div>
                     </div>
                   </button>
                 );
