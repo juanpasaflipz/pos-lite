@@ -272,13 +272,22 @@ router.post('/scan-restock', requireAuth('manage_inventory'), async (req, res) =
     const quantityBefore = item.quantity;
     const newQuantity = quantityBefore + quantity;
 
-    // Update quantity and optionally cost_price
+    // Update quantity, optionally cost_price, and stamp last_restocked_at when available.
+    const hasLastRestocked = columns.has('last_restocked_at');
     if (cost_price !== undefined && cost_price !== null) {
-      await run('UPDATE inventory_items SET quantity = $1, cost_price = $2 WHERE id = $3',
-        [newQuantity, cost_price, item.id]);
+      await run(
+        hasLastRestocked
+          ? 'UPDATE inventory_items SET quantity = $1, cost_price = $2, last_restocked_at = NOW() WHERE id = $3'
+          : 'UPDATE inventory_items SET quantity = $1, cost_price = $2 WHERE id = $3',
+        [newQuantity, cost_price, item.id]
+      );
     } else {
-      await run('UPDATE inventory_items SET quantity = $1 WHERE id = $2',
-        [newQuantity, item.id]);
+      await run(
+        hasLastRestocked
+          ? 'UPDATE inventory_items SET quantity = $1, last_restocked_at = NOW() WHERE id = $2'
+          : 'UPDATE inventory_items SET quantity = $1 WHERE id = $2',
+        [newQuantity, item.id]
+      );
     }
 
     // Log restock for AI
@@ -370,7 +379,7 @@ router.put('/:id', requireAuth('manage_inventory'), async (req, res) => {
   try {
     const columns = await getInventoryColumns();
     const { id } = req.params;
-    const { quantity, low_stock_threshold, sku, barcode, expiry_date, lot_number, cost_price, unit, pack_size } = req.body;
+    const { quantity, low_stock_threshold, sku, barcode, expiry_date, lot_number, cost_price, unit, pack_size, shelf_life_days, storage_type } = req.body;
 
     const item = await get('SELECT id FROM inventory_items WHERE id = $1', [id]);
     if (!item) {
@@ -418,6 +427,16 @@ router.put('/:id', requireAuth('manage_inventory'), async (req, res) => {
       sets.push(`pack_size = $${paramIdx++}`);
       params.push(pack_size === '' || pack_size === null ? null : Number(pack_size));
     }
+    if (shelf_life_days !== undefined && columns.has('shelf_life_days')) {
+      sets.push(`shelf_life_days = $${paramIdx++}`);
+      params.push(shelf_life_days === '' || shelf_life_days === null
+        ? null
+        : Math.max(1, Math.round(Number(shelf_life_days))));
+    }
+    if (storage_type !== undefined && columns.has('storage_type')) {
+      sets.push(`storage_type = $${paramIdx++}`);
+      params.push(STORAGE_TYPES.includes(storage_type) ? storage_type : null);
+    }
 
     if (sets.length === 0) {
       return res.status(400).json({ error: 'No fields to update' });
@@ -437,7 +456,7 @@ router.put('/:id', requireAuth('manage_inventory'), async (req, res) => {
 router.post('/', requireAuth('manage_inventory'), async (req, res) => {
   try {
     const columns = await getInventoryColumns();
-    const { name, quantity, unit, low_stock_threshold, category, cost_price, sku, barcode, expiry_date, lot_number, pack_size } = req.body;
+    const { name, quantity, unit, low_stock_threshold, category, cost_price, sku, barcode, expiry_date, lot_number, pack_size, shelf_life_days, storage_type } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'name is required' });
@@ -475,6 +494,22 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
       insertColumns.push('pack_size');
       insertValues.push(pack_size === undefined || pack_size === '' || pack_size === null ? null : Number(pack_size));
     }
+    if (columns.has('shelf_life_days')) {
+      insertColumns.push('shelf_life_days');
+      insertValues.push(shelf_life_days === undefined || shelf_life_days === '' || shelf_life_days === null
+        ? null
+        : Math.max(1, Math.round(Number(shelf_life_days))));
+    }
+    if (columns.has('storage_type') && STORAGE_TYPES.includes(storage_type)) {
+      insertColumns.push('storage_type');
+      insertValues.push(storage_type);
+    }
+    // Items born with stock start the stale clock immediately; manually created
+    // empty rows (recipe-only) wait until first real restock through the expense flow.
+    if (columns.has('last_restocked_at') && (quantity || 0) > 0) {
+      insertColumns.push('last_restocked_at');
+      insertValues.push(new Date().toISOString());
+    }
 
     const placeholders = insertColumns.map((_, index) => `$${index + 1}`);
     const result = await run(`
@@ -495,6 +530,10 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
       expiry_date: expiry_date || null,
       lot_number: lot_number || null,
       pack_size: pack_size === undefined || pack_size === '' || pack_size === null ? null : Number(pack_size),
+      shelf_life_days: shelf_life_days === undefined || shelf_life_days === '' || shelf_life_days === null
+        ? null
+        : Math.max(1, Math.round(Number(shelf_life_days))),
+      storage_type: STORAGE_TYPES.includes(storage_type) ? storage_type : null,
     });
   } catch (error) {
     console.error('Error creating inventory item:', error);
@@ -562,12 +601,13 @@ router.post('/:id/restock', requireAuth('manage_inventory'), async (req, res) =>
     }
 
     const newQuantity = item.quantity + amount;
+    const columns = await getInventoryColumns();
 
-    await run(`
-      UPDATE inventory_items
-      SET quantity = $1
-      WHERE id = $2
-    `, [newQuantity, id]);
+    if (columns.has('last_restocked_at')) {
+      await run('UPDATE inventory_items SET quantity = $1, last_restocked_at = NOW() WHERE id = $2', [newQuantity, id]);
+    } else {
+      await run('UPDATE inventory_items SET quantity = $1 WHERE id = $2', [newQuantity, id]);
+    }
 
     // Fire-and-forget: log restock for AI pattern analysis
     setImmediate(() => logRestockEvent(parseInt(id), item.quantity, amount));
@@ -576,6 +616,242 @@ router.post('/:id/restock', requireAuth('manage_inventory'), async (req, res) =>
   } catch (error) {
     console.error('Error restocking inventory:', error);
     res.status(500).json({ error: 'Failed to restock inventory' });
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Shelf life: AI suggestion + stale-stock detection + three-button actions.
+// AI suggests, SQL detects, human decides. Mirrors the receipt-scanner pattern
+// in expenses.js — same provider (Claude), same fallback discipline.
+// ────────────────────────────────────────────────────────────────────────────
+
+const STORAGE_TYPES = ['refrigerated', 'frozen', 'dry', 'ambient'];
+const WASTE_REASONS = ['spoilage', 'prep_error', 'dropped', 'expired', 'other'];
+
+// Coarse fallback when AI is unavailable. Keeps the feature working offline.
+const CATEGORY_DEFAULTS = {
+  dairy: { shelf_life_days: 14, storage_type: 'refrigerated' },
+  produce: { shelf_life_days: 7, storage_type: 'refrigerated' },
+  meat: { shelf_life_days: 5, storage_type: 'refrigerated' },
+  seafood: { shelf_life_days: 3, storage_type: 'refrigerated' },
+  bakery: { shelf_life_days: 5, storage_type: 'ambient' },
+  beverages: { shelf_life_days: 180, storage_type: 'ambient' },
+  frozen: { shelf_life_days: 90, storage_type: 'frozen' },
+  dry_goods: { shelf_life_days: 365, storage_type: 'dry' },
+  spices: { shelf_life_days: 540, storage_type: 'dry' },
+  cleaning: { shelf_life_days: 730, storage_type: 'dry' },
+};
+
+function fallbackAttrs(category) {
+  const key = (category || '').toLowerCase().replace(/\s+/g, '_');
+  return CATEGORY_DEFAULTS[key] || { shelf_life_days: 30, storage_type: 'ambient' };
+}
+
+const SHELF_LIFE_PROMPT = `You estimate shelf life for restaurant inventory items so a POS can flag stale stock.
+
+Return ONLY valid JSON, no prose, with this exact schema:
+{
+  "shelf_life_days": number,     // typical days from purchase to spoilage assuming proper storage
+  "storage_type": "refrigerated" | "frozen" | "dry" | "ambient",
+  "category": "dairy" | "produce" | "meat" | "seafood" | "bakery" | "beverages" | "frozen" | "dry_goods" | "spices" | "cleaning" | "other",
+  "confidence": "high" | "medium" | "low"
+}
+
+Rules:
+- Be realistic for a small restaurant context (opened packages, not sealed manufacturer life).
+- Cheese hard (cheddar, parmesan): 30-60 days refrigerated. Soft cheese (queso fresco, mozzarella): 7-14 days.
+- Fresh produce by item: leafy greens 5-7, tomatoes 7-10, citrus 14-21, root veg 30+.
+- Meat by item: ground 2-3, whole cuts 5-7, cured 21+.
+- Cleaning supplies, oils, dry pantry items: 180-540 days.
+- If the name is ambiguous (e.g. just "queso"), pick the most common interpretation and mark confidence "medium" or "low".
+- All numbers as JSON numbers. No prose. No nulls.`;
+
+// POST /api/inventory/suggest-attrs — Claude infers shelf_life_days + storage_type
+// from item name + optional category hint. Falls back to category defaults when
+// the AI key is missing or the call fails.
+router.post('/suggest-attrs', requireAuth('manage_inventory'), async (req, res) => {
+  try {
+    const name = String(req.body?.name || '').trim();
+    const categoryHint = String(req.body?.category || '').trim();
+
+    if (!name) {
+      return res.status(400).json({ error: 'name is required' });
+    }
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      const fb = fallbackAttrs(categoryHint);
+      return res.json({ ...fb, category: categoryHint || 'other', confidence: 'low', source: 'fallback' });
+    }
+
+    const userText = categoryHint
+      ? `Item name: ${name}\nUser-provided category hint: ${categoryHint}`
+      : `Item name: ${name}`;
+
+    let response;
+    try {
+      response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 256,
+          system: SHELF_LIFE_PROMPT,
+          messages: [{ role: 'user', content: userText }],
+        }),
+      });
+    } catch (fetchErr) {
+      console.warn('[Inventory] suggest-attrs network error, falling back:', fetchErr.message);
+      const fb = fallbackAttrs(categoryHint);
+      return res.json({ ...fb, category: categoryHint || 'other', confidence: 'low', source: 'fallback' });
+    }
+
+    if (!response.ok) {
+      console.warn('[Inventory] suggest-attrs HTTP', response.status);
+      const fb = fallbackAttrs(categoryHint);
+      return res.json({ ...fb, category: categoryHint || 'other', confidence: 'low', source: 'fallback' });
+    }
+
+    const data = await response.json();
+    const content = data.content?.[0]?.text || '';
+
+    let parsed = null;
+    try {
+      const m = content.match(/\{[\s\S]*\}/);
+      if (m) parsed = JSON.parse(m[0]);
+    } catch (parseErr) {
+      console.warn('[Inventory] suggest-attrs JSON parse failed:', parseErr.message);
+    }
+
+    if (!parsed || typeof parsed.shelf_life_days !== 'number' || parsed.shelf_life_days <= 0) {
+      const fb = fallbackAttrs(categoryHint);
+      return res.json({ ...fb, category: categoryHint || 'other', confidence: 'low', source: 'fallback' });
+    }
+
+    // Sanitize storage_type to our enum.
+    if (!STORAGE_TYPES.includes(parsed.storage_type)) {
+      parsed.storage_type = fallbackAttrs(parsed.category || categoryHint).storage_type;
+    }
+
+    res.json({
+      shelf_life_days: Math.round(parsed.shelf_life_days),
+      storage_type: parsed.storage_type,
+      category: parsed.category || categoryHint || 'other',
+      confidence: parsed.confidence || 'medium',
+      source: 'ai',
+    });
+  } catch (err) {
+    console.error('[Inventory] suggest-attrs error:', err.message);
+    const fb = fallbackAttrs(req.body?.category);
+    res.json({ ...fb, category: req.body?.category || 'other', confidence: 'low', source: 'fallback' });
+  }
+});
+
+// GET /api/inventory/stale — items past their shelf life with quantity remaining.
+// Joins recent count history to suppress items the user already confirmed today.
+router.get('/stale', async (req, res) => {
+  try {
+    const columns = await getInventoryColumns();
+    if (!columns.has('shelf_life_days') || !columns.has('last_restocked_at')) {
+      // Migration not yet applied — return empty rather than error.
+      return res.json([]);
+    }
+
+    const includeSoon = req.query.include_soon === '1';
+    // soonFactor: items within 80% of shelf life. Adjust if you want earlier nudges.
+    const soonFactor = 0.8;
+
+    const rows = await all(
+      `SELECT
+         ii.id, ii.name, ii.quantity, ii.unit, ii.category,
+         ii.shelf_life_days, ii.storage_type, ii.last_restocked_at, ii.cost_price,
+         EXTRACT(EPOCH FROM (NOW() - ii.last_restocked_at)) / 86400.0 AS days_since_restock,
+         CASE
+           WHEN ii.last_restocked_at IS NULL OR ii.shelf_life_days IS NULL THEN NULL
+           WHEN NOW() > ii.last_restocked_at + (ii.shelf_life_days * INTERVAL '1 day') THEN 'expired'
+           WHEN NOW() > ii.last_restocked_at + (ii.shelf_life_days * $1 * INTERVAL '1 day') THEN 'soon'
+           ELSE NULL
+         END AS stale_status
+       FROM inventory_items ii
+       WHERE ii.quantity > 0
+         AND ii.last_restocked_at IS NOT NULL
+         AND ii.shelf_life_days IS NOT NULL
+         AND NOW() > ii.last_restocked_at + (ii.shelf_life_days * $1 * INTERVAL '1 day')
+       ORDER BY (NOW() - ii.last_restocked_at - (ii.shelf_life_days * INTERVAL '1 day')) DESC NULLS LAST`,
+      [soonFactor]
+    );
+
+    const filtered = includeSoon ? rows : rows.filter(r => r.stale_status === 'expired');
+    res.json(filtered.map(r => ({
+      ...r,
+      days_since_restock: Math.round(Number(r.days_since_restock) || 0),
+    })));
+  } catch (err) {
+    console.error('[Inventory] stale fetch error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch stale stock' });
+  }
+});
+
+// POST /api/inventory/:id/touch-restocked — user confirmed item is still good.
+// Resets the stale clock without changing quantity.
+router.post('/:id/touch-restocked', requireAuth('manage_inventory'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const item = await get('SELECT id FROM inventory_items WHERE id = $1', [id]);
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+
+    await run('UPDATE inventory_items SET last_restocked_at = NOW() WHERE id = $1', [id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Inventory] touch-restocked error:', err.message);
+    res.status(500).json({ error: 'Failed to update item' });
+  }
+});
+
+// POST /api/inventory/:id/mark-wasted — item gone (spoiled, used, discarded).
+// Writes a waste_log row at current cost_price, zeros quantity (or subtracts a
+// partial amount if `quantity` is in the body), clears last_restocked_at.
+router.post('/:id/mark-wasted', requireAuth('manage_inventory'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const reason = WASTE_REASONS.includes(req.body?.reason) ? req.body.reason : 'expired';
+    const notes = req.body?.notes ? String(req.body.notes).slice(0, 500) : null;
+
+    const item = await get('SELECT id, quantity, unit, cost_price FROM inventory_items WHERE id = $1', [id]);
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+
+    const currentQty = Number(item.quantity) || 0;
+    if (currentQty <= 0) return res.status(400).json({ error: 'Item already at zero quantity' });
+
+    const requested = Number(req.body?.quantity);
+    const wasteQty = Number.isFinite(requested) && requested > 0 && requested <= currentQty
+      ? requested
+      : currentQty;
+
+    const employeeId = req.employee?.id || null;
+    const costAtTime = (Number(item.cost_price) || 0) * wasteQty;
+
+    await run(
+      `INSERT INTO waste_log (inventory_item_id, quantity, unit, reason, cost_at_time, notes, logged_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [id, wasteQty, item.unit || null, reason, costAtTime.toFixed(2), notes, employeeId]
+    );
+
+    const newQty = currentQty - wasteQty;
+    // Clearing last_restocked_at prevents the same item from re-flagging immediately
+    // when the user later restocks it through the expense flow (which sets the clock fresh).
+    await run(
+      `UPDATE inventory_items SET quantity = $1, last_restocked_at = CASE WHEN $1 > 0 THEN last_restocked_at ELSE NULL END WHERE id = $2`,
+      [newQty, id]
+    );
+
+    res.json({ success: true, new_quantity: newQty, wasted: wasteQty, cost_at_time: costAtTime });
+  } catch (err) {
+    console.error('[Inventory] mark-wasted error:', err.message);
+    res.status(500).json({ error: 'Failed to mark wasted' });
   }
 });
 

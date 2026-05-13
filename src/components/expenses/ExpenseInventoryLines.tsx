@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, Package, Plus, Search, Trash2, X } from 'lucide-react';
+import { ChevronDown, Package, Plus, Search, Sparkles, Trash2, X } from 'lucide-react';
 import {
   createInventoryItem,
   getInventory,
   searchInventory,
+  suggestInventoryAttrs,
   type InventoryMatch,
   type InventorySearchResult,
 } from '../../api';
@@ -77,8 +78,17 @@ const ExpenseInventoryLines: React.FC<Props> = ({ value, onChange, totalAmount }
   });
   const [allInventory, setAllInventory] = useState<InventorySearchResult[]>([]);
   const [createOpen, setCreateOpen] = useState<number | null>(null);
-  const [createForm, setCreateForm] = useState({ name: '', unit: 'kg', category: '' });
+  const [createForm, setCreateForm] = useState({
+    name: '',
+    unit: 'kg',
+    category: '',
+    shelf_life_days: '' as string,
+    storage_type: '' as '' | 'refrigerated' | 'frozen' | 'dry' | 'ambient',
+  });
   const [creating, setCreating] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestion, setSuggestion] = useState<{ shelf_life_days: number; storage_type: string; source: string } | null>(null);
+  const suggestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchTimers = useRef<(ReturnType<typeof setTimeout> | null)[]>([]);
 
   useEffect(() => {
@@ -145,9 +155,47 @@ const ExpenseInventoryLines: React.FC<Props> = ({ value, onChange, totalAmount }
   };
 
   const openCreate = (idx: number) => {
-    setCreateForm({ name: '', unit: 'kg', category: '' });
+    setCreateForm({ name: '', unit: 'kg', category: '', shelf_life_days: '', storage_type: '' });
+    setSuggestion(null);
     setCreateOpen(idx);
   };
+
+  // Debounced AI suggestion when user types a name. Pre-fills shelf life +
+  // storage_type but never overwrites a value the user already edited.
+  useEffect(() => {
+    if (createOpen == null) return;
+    const name = createForm.name.trim();
+    if (!name || name.length < 3) {
+      setSuggestion(null);
+      return;
+    }
+    if (suggestTimer.current) clearTimeout(suggestTimer.current);
+    suggestTimer.current = setTimeout(async () => {
+      try {
+        setSuggesting(true);
+        const result = await suggestInventoryAttrs(name, createForm.category || undefined);
+        setSuggestion({
+          shelf_life_days: result.shelf_life_days,
+          storage_type: result.storage_type,
+          source: result.source,
+        });
+        setCreateForm(prev => ({
+          ...prev,
+          shelf_life_days: prev.shelf_life_days || String(result.shelf_life_days),
+          storage_type: prev.storage_type || result.storage_type,
+          category: prev.category || (result.category && result.category !== 'other' ? result.category : ''),
+        }));
+      } catch {
+        setSuggestion(null);
+      } finally {
+        setSuggesting(false);
+      }
+    }, 600);
+    return () => {
+      if (suggestTimer.current) clearTimeout(suggestTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createForm.name, createOpen]);
 
   const submitCreate = async () => {
     const name = createForm.name.trim();
@@ -158,6 +206,8 @@ const ExpenseInventoryLines: React.FC<Props> = ({ value, onChange, totalAmount }
         name,
         unit: createForm.unit,
         category: createForm.category.trim() || undefined,
+        shelf_life_days: createForm.shelf_life_days ? Number(createForm.shelf_life_days) : undefined,
+        storage_type: createForm.storage_type || undefined,
       });
       const asResult: InventorySearchResult = {
         id: created.id,
@@ -268,6 +318,60 @@ const ExpenseInventoryLines: React.FC<Props> = ({ value, onChange, totalAmount }
                 className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white placeholder-neutral-500 focus:border-brand-500 focus:outline-none min-h-[40px]"
               />
             </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-neutral-500 mb-0.5">
+                  {t('inventory:shelfLifeDays', { defaultValue: 'Shelf life (days)' })}
+                </label>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  step={1}
+                  placeholder={suggesting ? '…' : '30'}
+                  value={createForm.shelf_life_days}
+                  onChange={(e) => setCreateForm({ ...createForm, shelf_life_days: e.target.value })}
+                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white placeholder-neutral-500 focus:border-brand-500 focus:outline-none min-h-[40px]"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-neutral-500 mb-0.5">
+                  {t('inventory:storage', { defaultValue: 'Storage' })}
+                </label>
+                <select
+                  value={createForm.storage_type}
+                  onChange={(e) => setCreateForm({ ...createForm, storage_type: e.target.value as typeof createForm.storage_type })}
+                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none min-h-[40px]"
+                >
+                  <option value="">—</option>
+                  <option value="refrigerated">{t('inventory:storageRefrigerated', { defaultValue: 'Refrigerated' })}</option>
+                  <option value="frozen">{t('inventory:storageFrozen', { defaultValue: 'Frozen' })}</option>
+                  <option value="dry">{t('inventory:storageDry', { defaultValue: 'Dry pantry' })}</option>
+                  <option value="ambient">{t('inventory:storageAmbient', { defaultValue: 'Ambient' })}</option>
+                </select>
+              </div>
+            </div>
+
+            {(suggesting || suggestion) && (
+              <div className="flex items-center gap-1.5 text-xs text-brand-400/80">
+                <Sparkles size={12} className={suggesting ? 'animate-pulse' : ''} />
+                {suggesting
+                  ? t('inventory:aiThinking', { defaultValue: 'Looking up typical shelf life…' })
+                  : suggestion?.source === 'ai'
+                    ? t('inventory:aiSuggested', {
+                        defaultValue: 'AI suggested {{days}} days, {{storage}}',
+                        days: suggestion.shelf_life_days,
+                        storage: suggestion.storage_type,
+                      })
+                    : t('inventory:fallbackSuggested', {
+                        defaultValue: 'Defaulted to {{days}} days, {{storage}}',
+                        days: suggestion?.shelf_life_days,
+                        storage: suggestion?.storage_type,
+                      })}
+              </div>
+            )}
+
             <div className="flex gap-2 pt-1">
               <button
                 type="button"

@@ -524,12 +524,26 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
             }
           }
 
-          if (newCostPrice != null && newCostPrice !== prevCostPrice) {
-            await run('UPDATE inventory_items SET quantity = $1, cost_price = $2 WHERE id = $3',
-              [newQuantity, newCostPrice, match.inventory_item_id]);
-          } else {
-            await run('UPDATE inventory_items SET quantity = $1 WHERE id = $2',
-              [newQuantity, match.inventory_item_id]);
+          // Always stamp last_restocked_at so the stale-stock detector has a clock.
+          // Schema check is implicit — the column ships in migration 0044 and is
+          // safe to write even on older rows (NULL → NOW()).
+          try {
+            if (newCostPrice != null && newCostPrice !== prevCostPrice) {
+              await run('UPDATE inventory_items SET quantity = $1, cost_price = $2, last_restocked_at = NOW() WHERE id = $3',
+                [newQuantity, newCostPrice, match.inventory_item_id]);
+            } else {
+              await run('UPDATE inventory_items SET quantity = $1, last_restocked_at = NOW() WHERE id = $2',
+                [newQuantity, match.inventory_item_id]);
+            }
+          } catch (colErr) {
+            // last_restocked_at column missing (pre-migration). Retry without it.
+            if (newCostPrice != null && newCostPrice !== prevCostPrice) {
+              await run('UPDATE inventory_items SET quantity = $1, cost_price = $2 WHERE id = $3',
+                [newQuantity, newCostPrice, match.inventory_item_id]);
+            } else {
+              await run('UPDATE inventory_items SET quantity = $1 WHERE id = $2',
+                [newQuantity, match.inventory_item_id]);
+            }
           }
 
           // Overpay detection BEFORE writing new history row so the median

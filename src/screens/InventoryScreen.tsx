@@ -51,6 +51,7 @@ import CountTab from '../components/inventory/CountTab';
 import VarianceTab from '../components/inventory/VarianceTab';
 import AlertsTab from '../components/inventory/AlertsTab';
 import AIInsightsTab from '../components/inventory/AIInsightsTab';
+import StaleStockPanel from '../components/inventory/StaleStockPanel';
 
 type Tab = 'stock' | 'scan' | 'waste' | 'count' | 'variance' | 'alerts' | 'insights';
 type SortField = 'name' | 'quantity' | 'status';
@@ -558,6 +559,8 @@ export default function InventoryScreen() {
             </button>
           </div>
         )}
+
+        <StaleStockPanel onItemUpdated={fetchItems} />
 
         {/* Tabs */}
         <div className="flex gap-2 mb-6 border-b border-neutral-800 pb-4 overflow-x-auto">

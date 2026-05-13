@@ -711,10 +711,59 @@ export async function createInventoryItem(data: {
   lot_number?: string;
   category?: string;
   pack_size?: number | null;
+  shelf_life_days?: number | null;
+  storage_type?: 'refrigerated' | 'frozen' | 'dry' | 'ambient' | null;
 }): Promise<InventoryItem> {
   return apiRequest<InventoryItem>('/inventory', {
     method: 'POST',
     body: JSON.stringify(data),
+  });
+}
+
+export interface SuggestedItemAttrs {
+  shelf_life_days: number;
+  storage_type: 'refrigerated' | 'frozen' | 'dry' | 'ambient';
+  category: string;
+  confidence: 'high' | 'medium' | 'low';
+  source: 'ai' | 'fallback';
+}
+
+export async function suggestInventoryAttrs(name: string, category?: string): Promise<SuggestedItemAttrs> {
+  return apiRequest<SuggestedItemAttrs>('/inventory/suggest-attrs', {
+    method: 'POST',
+    body: JSON.stringify({ name, category: category || undefined }),
+  });
+}
+
+export interface StaleStockItem {
+  id: number;
+  name: string;
+  quantity: number;
+  unit: string | null;
+  category: string | null;
+  shelf_life_days: number;
+  storage_type: 'refrigerated' | 'frozen' | 'dry' | 'ambient' | null;
+  last_restocked_at: string;
+  cost_price: number;
+  days_since_restock: number;
+  stale_status: 'expired' | 'soon';
+}
+
+export async function getStaleStock(includeSoon = false): Promise<StaleStockItem[]> {
+  return apiRequest<StaleStockItem[]>(`/inventory/stale${includeSoon ? '?include_soon=1' : ''}`);
+}
+
+export async function touchInventoryRestocked(id: number): Promise<{ success: boolean }> {
+  return apiRequest<{ success: boolean }>(`/inventory/${id}/touch-restocked`, { method: 'POST' });
+}
+
+export async function markInventoryWasted(
+  id: number,
+  data?: { quantity?: number; reason?: 'spoilage' | 'prep_error' | 'dropped' | 'expired' | 'other'; notes?: string }
+): Promise<{ success: boolean; new_quantity: number; wasted: number; cost_at_time: number }> {
+  return apiRequest(`/inventory/${id}/mark-wasted`, {
+    method: 'POST',
+    body: JSON.stringify(data || {}),
   });
 }
 

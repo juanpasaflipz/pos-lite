@@ -196,6 +196,9 @@ export interface InventoryItem {
   expiry_date?: string;
   lot_number?: string;
   pack_size?: number | null;
+  shelf_life_days?: number | null;
+  storage_type?: 'refrigerated' | 'frozen' | 'dry' | 'ambient' | null;
+  last_restocked_at?: string | null;
 }
 
 /* Recipe Types */

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -14,7 +14,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { createInventoryItem, deleteInventoryItem, getInventory, getItemRecipe, getRecipeSummary, updateItemRecipe } from '../api';
+import { createInventoryItem, deleteInventoryItem, getInventory, getItemRecipe, getRecipeSummary, suggestInventoryAttrs, updateItemRecipe } from '../api';
 import type { InventoryItem, RecipeIngredient, RecipeSummaryItem } from '../types';
 import BrandLogo from '../components/BrandLogo';
 import BackToSetupButton from '../components/BackToSetupButton';
@@ -54,10 +54,15 @@ export default function RecipeManagementScreen() {
     cost_price: string;
     category: string;
     pack_size: string;
+    shelf_life_days: string;
+    storage_type: '' | 'refrigerated' | 'frozen' | 'dry' | 'ambient';
   }>({
-    name: '', unit: '', cost_price: '', category: '', pack_size: '',
+    name: '', unit: '', cost_price: '', category: '', pack_size: '', shelf_life_days: '', storage_type: '',
   });
   const [creatingIngredient, setCreatingIngredient] = useState(false);
+  const [aiSuggesting, setAiSuggesting] = useState(false);
+  const [aiSuggestion, setAiSuggestion] = useState<{ shelf_life_days: number; storage_type: string; source: string } | null>(null);
+  const aiSuggestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [deletingIngredientId, setDeletingIngredientId] = useState<number | null>(null);
   const [manageIngredientsOpen, setManageIngredientsOpen] = useState(false);
   const [ingredientSearch, setIngredientSearch] = useState('');
@@ -198,9 +203,46 @@ export default function RecipeManagementScreen() {
 
   const openNewIngredient = (rowIndex: number | null = null) => {
     setNewIngredientTargetRow(rowIndex);
-    setNewIngredientForm({ name: '', unit: '', cost_price: '', category: '', pack_size: '' });
+    setNewIngredientForm({ name: '', unit: '', cost_price: '', category: '', pack_size: '', shelf_life_days: '', storage_type: '' });
+    setAiSuggestion(null);
     setNewIngredientOpen(true);
   };
+
+  // Debounced AI shelf-life suggestion when typing an ingredient name.
+  useEffect(() => {
+    if (!newIngredientOpen) return;
+    const name = newIngredientForm.name.trim();
+    if (!name || name.length < 3) {
+      setAiSuggestion(null);
+      return;
+    }
+    if (aiSuggestTimer.current) clearTimeout(aiSuggestTimer.current);
+    aiSuggestTimer.current = setTimeout(async () => {
+      try {
+        setAiSuggesting(true);
+        const result = await suggestInventoryAttrs(name, newIngredientForm.category || undefined);
+        setAiSuggestion({
+          shelf_life_days: result.shelf_life_days,
+          storage_type: result.storage_type,
+          source: result.source,
+        });
+        setNewIngredientForm(prev => ({
+          ...prev,
+          shelf_life_days: prev.shelf_life_days || String(result.shelf_life_days),
+          storage_type: prev.storage_type || (result.storage_type as typeof prev.storage_type),
+          category: prev.category || (result.category && result.category !== 'other' ? result.category : ''),
+        }));
+      } catch {
+        setAiSuggestion(null);
+      } finally {
+        setAiSuggesting(false);
+      }
+    }, 600);
+    return () => {
+      if (aiSuggestTimer.current) clearTimeout(aiSuggestTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newIngredientForm.name, newIngredientOpen]);
 
   const closeNewIngredient = () => {
     setNewIngredientOpen(false);
@@ -245,6 +287,8 @@ export default function RecipeManagementScreen() {
         cost_price: newIngredientForm.cost_price ? Number(newIngredientForm.cost_price) : undefined,
         category: newIngredientForm.category.trim() || undefined,
         pack_size: newIngredientForm.pack_size ? Number(newIngredientForm.pack_size) : null,
+        shelf_life_days: newIngredientForm.shelf_life_days ? Number(newIngredientForm.shelf_life_days) : undefined,
+        storage_type: newIngredientForm.storage_type || undefined,
       });
       setInventoryItems(current => [...current, created].sort((a, b) => a.name.localeCompare(b.name)));
       if (newIngredientTargetRow !== null) {
@@ -685,6 +729,57 @@ export default function RecipeManagementScreen() {
                   className="w-full px-4 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-brand-500"
                 />
               </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-neutral-300 mb-2">
+                    {t('inventory:shelfLifeDays', { defaultValue: 'Shelf life (days)' })}
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={newIngredientForm.shelf_life_days}
+                    onChange={e => setNewIngredientForm({ ...newIngredientForm, shelf_life_days: e.target.value })}
+                    placeholder={aiSuggesting ? '…' : '30'}
+                    className="w-full px-4 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-brand-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-neutral-300 mb-2">
+                    {t('inventory:storage', { defaultValue: 'Storage' })}
+                  </label>
+                  <select
+                    value={newIngredientForm.storage_type}
+                    onChange={e => setNewIngredientForm({ ...newIngredientForm, storage_type: e.target.value as typeof newIngredientForm.storage_type })}
+                    className="w-full px-4 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-brand-500"
+                  >
+                    <option value="">—</option>
+                    <option value="refrigerated">{t('inventory:storageRefrigerated', { defaultValue: 'Refrigerated' })}</option>
+                    <option value="frozen">{t('inventory:storageFrozen', { defaultValue: 'Frozen' })}</option>
+                    <option value="dry">{t('inventory:storageDry', { defaultValue: 'Dry pantry' })}</option>
+                    <option value="ambient">{t('inventory:storageAmbient', { defaultValue: 'Ambient' })}</option>
+                  </select>
+                </div>
+              </div>
+
+              {(aiSuggesting || aiSuggestion) && (
+                <div className="text-xs text-brand-400/80">
+                  {aiSuggesting
+                    ? t('inventory:aiThinking', { defaultValue: 'Looking up typical shelf life…' })
+                    : aiSuggestion?.source === 'ai'
+                      ? t('inventory:aiSuggested', {
+                          defaultValue: 'AI suggested {{days}} days, {{storage}}',
+                          days: aiSuggestion.shelf_life_days,
+                          storage: aiSuggestion.storage_type,
+                        })
+                      : t('inventory:fallbackSuggested', {
+                          defaultValue: 'Defaulted to {{days}} days, {{storage}}',
+                          days: aiSuggestion?.shelf_life_days,
+                          storage: aiSuggestion?.storage_type,
+                        })}
+                </div>
+              )}
             </div>
 
             <div className="flex gap-3 mt-6">
