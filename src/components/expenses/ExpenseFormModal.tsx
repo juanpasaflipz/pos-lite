@@ -230,17 +230,6 @@ const ExpenseFormModal: React.FC<Props> = ({ expense, initialData, onSave, onClo
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-neutral-400 mb-1">{t('expenses.description')}</label>
-            <input
-              type="text"
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder={t('expenses.descriptionPlaceholder')}
-              className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white placeholder-neutral-500 focus:border-brand-500 focus:outline-none"
-            />
-          </div>
-
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-neutral-400 mb-1">{t('expenses.amount')} *</label>
@@ -301,6 +290,24 @@ const ExpenseFormModal: React.FC<Props> = ({ expense, initialData, onSave, onClo
               totalAmount={Number(amount) || undefined}
             />
           )}
+
+          <div>
+            <label className="block text-sm font-medium text-neutral-400 mb-1">{t('expenses.description')}</label>
+            <input
+              type="text"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder={t('expenses.descriptionPlaceholder')}
+              className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white placeholder-neutral-500 focus:border-brand-500 focus:outline-none"
+            />
+            {INVENTORY_LINKED_CATEGORIES.has(category) && !expense && (
+              <p className="mt-1 text-xs text-neutral-500">
+                {t('expenses.descriptionHint', {
+                  defaultValue: 'Auto-fills from items above. Edit to override.',
+                })}
+              </p>
+            )}
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-neutral-400 mb-1">{t('expenses.notes')}</label>
