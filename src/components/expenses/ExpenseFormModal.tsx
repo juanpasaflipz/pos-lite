@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Camera, Image, Loader2 } from 'lucide-react';
 import {
@@ -42,6 +42,33 @@ const ExpenseFormModal: React.FC<Props> = ({ expense, initialData, onSave, onClo
   const [inventoryMatches, setInventoryMatches] = useState<InventoryMatch[]>(
     (initialData as { inventory_matches?: InventoryMatch[] } | undefined)?.inventory_matches || []
   );
+
+  // Track the most recent auto-generated description so we only overwrite it
+  // when the user hasn't typed their own text. Once they edit, the values
+  // diverge and we stop touching description.
+  const lastAutoDescription = useRef<string>('');
+
+  // Mirror inventory line items into the description field so saved expenses
+  // are searchable and reports read naturally. Skipped on edit (existing expense)
+  // to avoid clobbering historical descriptions.
+  useEffect(() => {
+    if (expense) return;
+    const namedItems = inventoryMatches
+      .map(m => m.inventory_item_name?.trim())
+      .filter((n): n is string => Boolean(n));
+    if (namedItems.length === 0) return;
+
+    const auto = namedItems.length <= 3
+      ? namedItems.join(', ')
+      : `${namedItems.slice(0, 2).join(', ')} +${namedItems.length - 2}`;
+
+    const currentIsEmptyOrAuto = !description || description === lastAutoDescription.current;
+    if (currentIsEmptyOrAuto && auto !== description) {
+      setDescription(auto);
+      lastAutoDescription.current = auto;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inventoryMatches, expense]);
 
   const existingUrl = initialData?.receipt_image_url || expense?.receipt_image_url || null;
   const [receiptUrl, setReceiptUrl] = useState<string | null>(existingUrl);
