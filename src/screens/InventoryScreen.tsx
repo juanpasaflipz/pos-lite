@@ -52,6 +52,7 @@ import VarianceTab from '../components/inventory/VarianceTab';
 import AlertsTab from '../components/inventory/AlertsTab';
 import AIInsightsTab from '../components/inventory/AIInsightsTab';
 import StaleStockPanel from '../components/inventory/StaleStockPanel';
+import ShelfLifeAuditBanner from '../components/inventory/ShelfLifeAuditBanner';
 
 type Tab = 'stock' | 'scan' | 'waste' | 'count' | 'variance' | 'alerts' | 'insights';
 type SortField = 'name' | 'quantity' | 'status';
@@ -560,6 +561,7 @@ export default function InventoryScreen() {
           </div>
         )}
 
+        <ShelfLifeAuditBanner onAuditComplete={fetchItems} />
         <StaleStockPanel onItemUpdated={fetchItems} />
 
         {/* Tabs */}

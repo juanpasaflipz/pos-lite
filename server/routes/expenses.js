@@ -524,16 +524,30 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
             }
           }
 
-          // Always stamp last_restocked_at so the stale-stock detector has a clock.
-          // Schema check is implicit — the column ships in migration 0044 and is
-          // safe to write even on older rows (NULL → NOW()).
+          // Stamp last_restocked_at using the expense_date (the actual purchase
+          // date the user entered), not NOW(). Backdated entries — bought weeks
+          // ago, logged today — would otherwise reset the stale clock to today
+          // and never flag. GREATEST() guards against an old backdated entry
+          // pushing the clock backwards past a more recent restock.
+          const restockTimestamp = expense_date ? `${expense_date}T00:00:00Z` : new Date().toISOString();
           try {
             if (newCostPrice != null && newCostPrice !== prevCostPrice) {
-              await run('UPDATE inventory_items SET quantity = $1, cost_price = $2, last_restocked_at = NOW() WHERE id = $3',
-                [newQuantity, newCostPrice, match.inventory_item_id]);
+              await run(
+                `UPDATE inventory_items
+                 SET quantity = $1,
+                     cost_price = $2,
+                     last_restocked_at = GREATEST(COALESCE(last_restocked_at, '1970-01-01'::timestamptz), $3::timestamptz)
+                 WHERE id = $4`,
+                [newQuantity, newCostPrice, restockTimestamp, match.inventory_item_id]
+              );
             } else {
-              await run('UPDATE inventory_items SET quantity = $1, last_restocked_at = NOW() WHERE id = $2',
-                [newQuantity, match.inventory_item_id]);
+              await run(
+                `UPDATE inventory_items
+                 SET quantity = $1,
+                     last_restocked_at = GREATEST(COALESCE(last_restocked_at, '1970-01-01'::timestamptz), $2::timestamptz)
+                 WHERE id = $3`,
+                [newQuantity, restockTimestamp, match.inventory_item_id]
+              );
             }
           } catch (colErr) {
             // last_restocked_at column missing (pre-migration). Retry without it.

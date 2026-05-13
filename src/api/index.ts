@@ -757,6 +757,39 @@ export async function touchInventoryRestocked(id: number): Promise<{ success: bo
   return apiRequest<{ success: boolean }>(`/inventory/${id}/touch-restocked`, { method: 'POST' });
 }
 
+export interface InventoryAuditStatus {
+  total: number;
+  missing_shelf_life: number;
+  missing_clock: number;
+}
+
+export async function getInventoryAuditStatus(): Promise<InventoryAuditStatus> {
+  return apiRequest<InventoryAuditStatus>('/inventory/audit-status');
+}
+
+export interface BackfillAttrsResult {
+  processed: number;
+  ai_hits: number;
+  fallbacks: number;
+  restock_clock_set: number;
+  remaining: number;
+  items: Array<{
+    id: number;
+    name: string;
+    shelf_life_days: number;
+    storage_type: string;
+    source: 'ai' | 'fallback';
+    restock_clock_set: boolean;
+  }>;
+}
+
+export async function backfillInventoryAttrs(limit = 25): Promise<BackfillAttrsResult> {
+  return apiRequest<BackfillAttrsResult>('/inventory/backfill-attrs', {
+    method: 'POST',
+    body: JSON.stringify({ limit }),
+  });
+}
+
 export async function markInventoryWasted(
   id: number,
   data?: { quantity?: number; reason?: 'spoilage' | 'prep_error' | 'dropped' | 'expired' | 'other'; notes?: string }

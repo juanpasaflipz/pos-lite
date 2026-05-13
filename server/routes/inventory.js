@@ -666,87 +666,189 @@ Rules:
 - If the name is ambiguous (e.g. just "queso"), pick the most common interpretation and mark confidence "medium" or "low".
 - All numbers as JSON numbers. No prose. No nulls.`;
 
-// POST /api/inventory/suggest-attrs — Claude infers shelf_life_days + storage_type
-// from item name + optional category hint. Falls back to category defaults when
-// the AI key is missing or the call fails.
+// Single-item shelf-life inference. Shared by /suggest-attrs and /backfill-attrs.
+async function inferShelfLife(name, categoryHint) {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    const fb = fallbackAttrs(categoryHint);
+    return { ...fb, category: categoryHint || 'other', confidence: 'low', source: 'fallback' };
+  }
+
+  const userText = categoryHint
+    ? `Item name: ${name}\nUser-provided category hint: ${categoryHint}`
+    : `Item name: ${name}`;
+
+  let response;
+  try {
+    response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 256,
+        system: SHELF_LIFE_PROMPT,
+        messages: [{ role: 'user', content: userText }],
+      }),
+    });
+  } catch (fetchErr) {
+    console.warn('[Inventory] inferShelfLife network error:', fetchErr.message);
+    const fb = fallbackAttrs(categoryHint);
+    return { ...fb, category: categoryHint || 'other', confidence: 'low', source: 'fallback' };
+  }
+
+  if (!response.ok) {
+    const fb = fallbackAttrs(categoryHint);
+    return { ...fb, category: categoryHint || 'other', confidence: 'low', source: 'fallback' };
+  }
+
+  const data = await response.json();
+  const content = data.content?.[0]?.text || '';
+
+  let parsed = null;
+  try {
+    const m = content.match(/\{[\s\S]*\}/);
+    if (m) parsed = JSON.parse(m[0]);
+  } catch {
+    /* fall through */
+  }
+
+  if (!parsed || typeof parsed.shelf_life_days !== 'number' || parsed.shelf_life_days <= 0) {
+    const fb = fallbackAttrs(categoryHint);
+    return { ...fb, category: categoryHint || 'other', confidence: 'low', source: 'fallback' };
+  }
+
+  if (!STORAGE_TYPES.includes(parsed.storage_type)) {
+    parsed.storage_type = fallbackAttrs(parsed.category || categoryHint).storage_type;
+  }
+
+  return {
+    shelf_life_days: Math.round(parsed.shelf_life_days),
+    storage_type: parsed.storage_type,
+    category: parsed.category || categoryHint || 'other',
+    confidence: parsed.confidence || 'medium',
+    source: 'ai',
+  };
+}
+
+// POST /api/inventory/suggest-attrs — single-item AI inference (used by create-new modals).
 router.post('/suggest-attrs', requireAuth('manage_inventory'), async (req, res) => {
   try {
     const name = String(req.body?.name || '').trim();
     const categoryHint = String(req.body?.category || '').trim();
+    if (!name) return res.status(400).json({ error: 'name is required' });
 
-    if (!name) {
-      return res.status(400).json({ error: 'name is required' });
-    }
-
-    if (!process.env.ANTHROPIC_API_KEY) {
-      const fb = fallbackAttrs(categoryHint);
-      return res.json({ ...fb, category: categoryHint || 'other', confidence: 'low', source: 'fallback' });
-    }
-
-    const userText = categoryHint
-      ? `Item name: ${name}\nUser-provided category hint: ${categoryHint}`
-      : `Item name: ${name}`;
-
-    let response;
-    try {
-      response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': process.env.ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 256,
-          system: SHELF_LIFE_PROMPT,
-          messages: [{ role: 'user', content: userText }],
-        }),
-      });
-    } catch (fetchErr) {
-      console.warn('[Inventory] suggest-attrs network error, falling back:', fetchErr.message);
-      const fb = fallbackAttrs(categoryHint);
-      return res.json({ ...fb, category: categoryHint || 'other', confidence: 'low', source: 'fallback' });
-    }
-
-    if (!response.ok) {
-      console.warn('[Inventory] suggest-attrs HTTP', response.status);
-      const fb = fallbackAttrs(categoryHint);
-      return res.json({ ...fb, category: categoryHint || 'other', confidence: 'low', source: 'fallback' });
-    }
-
-    const data = await response.json();
-    const content = data.content?.[0]?.text || '';
-
-    let parsed = null;
-    try {
-      const m = content.match(/\{[\s\S]*\}/);
-      if (m) parsed = JSON.parse(m[0]);
-    } catch (parseErr) {
-      console.warn('[Inventory] suggest-attrs JSON parse failed:', parseErr.message);
-    }
-
-    if (!parsed || typeof parsed.shelf_life_days !== 'number' || parsed.shelf_life_days <= 0) {
-      const fb = fallbackAttrs(categoryHint);
-      return res.json({ ...fb, category: categoryHint || 'other', confidence: 'low', source: 'fallback' });
-    }
-
-    // Sanitize storage_type to our enum.
-    if (!STORAGE_TYPES.includes(parsed.storage_type)) {
-      parsed.storage_type = fallbackAttrs(parsed.category || categoryHint).storage_type;
-    }
-
-    res.json({
-      shelf_life_days: Math.round(parsed.shelf_life_days),
-      storage_type: parsed.storage_type,
-      category: parsed.category || categoryHint || 'other',
-      confidence: parsed.confidence || 'medium',
-      source: 'ai',
-    });
+    const result = await inferShelfLife(name, categoryHint);
+    res.json(result);
   } catch (err) {
     console.error('[Inventory] suggest-attrs error:', err.message);
     const fb = fallbackAttrs(req.body?.category);
     res.json({ ...fb, category: req.body?.category || 'other', confidence: 'low', source: 'fallback' });
+  }
+});
+
+// GET /api/inventory/audit-status — how many items still need shelf-life data.
+// Drives the "Run AI audit" banner. Returns zeros when migration not applied.
+router.get('/audit-status', async (_req, res) => {
+  try {
+    const columns = await getInventoryColumns();
+    if (!columns.has('shelf_life_days') || !columns.has('last_restocked_at')) {
+      return res.json({ missing_shelf_life: 0, missing_clock: 0, total: 0 });
+    }
+    const row = await get(
+      `SELECT
+         COUNT(*)::int AS total,
+         COUNT(*) FILTER (WHERE shelf_life_days IS NULL)::int AS missing_shelf_life,
+         COUNT(*) FILTER (WHERE quantity > 0 AND last_restocked_at IS NULL)::int AS missing_clock
+       FROM inventory_items`
+    );
+    res.json(row || { total: 0, missing_shelf_life: 0, missing_clock: 0 });
+  } catch (err) {
+    console.error('[Inventory] audit-status error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch audit status' });
+  }
+});
+
+// POST /api/inventory/backfill-attrs — one-time audit: for every item with NULL
+// shelf_life_days, call Claude and persist the suggestion. Also stamps
+// last_restocked_at=NOW() on items with quantity>0 still missing the clock,
+// so the stale detector has something to measure from. Capped per call to keep
+// response time bounded — frontend can loop until backfilled=0.
+router.post('/backfill-attrs', requireAuth('manage_inventory'), async (req, res) => {
+  try {
+    const columns = await getInventoryColumns();
+    if (!columns.has('shelf_life_days') || !columns.has('last_restocked_at')) {
+      return res.status(400).json({ error: 'shelf life columns not present — apply migration 0044' });
+    }
+
+    const limit = Math.min(Math.max(Number(req.body?.limit) || 25, 1), 50);
+
+    const targets = await all(
+      `SELECT id, name, category, quantity, last_restocked_at
+       FROM inventory_items
+       WHERE shelf_life_days IS NULL
+       ORDER BY (quantity > 0) DESC, id ASC
+       LIMIT $1`,
+      [limit]
+    );
+
+    const results = [];
+    let aiHits = 0;
+    let fallbacks = 0;
+    let restockClockSet = 0;
+
+    for (const row of targets) {
+      try {
+        const inferred = await inferShelfLife(row.name, row.category || '');
+        if (inferred.source === 'ai') aiHits++; else fallbacks++;
+
+        // Set last_restocked_at to NOW() only when it's currently NULL AND we have
+        // stock — implies "we don't know when this arrived, treat as fresh today".
+        const shouldStampClock = row.quantity > 0 && row.last_restocked_at == null;
+        if (shouldStampClock) restockClockSet++;
+
+        await run(
+          shouldStampClock
+            ? `UPDATE inventory_items
+               SET shelf_life_days = $1, storage_type = $2, last_restocked_at = NOW()
+               WHERE id = $3 AND shelf_life_days IS NULL`
+            : `UPDATE inventory_items
+               SET shelf_life_days = $1, storage_type = $2
+               WHERE id = $3 AND shelf_life_days IS NULL`,
+          [inferred.shelf_life_days, inferred.storage_type, row.id]
+        );
+
+        results.push({
+          id: row.id,
+          name: row.name,
+          shelf_life_days: inferred.shelf_life_days,
+          storage_type: inferred.storage_type,
+          source: inferred.source,
+          restock_clock_set: shouldStampClock,
+        });
+      } catch (itemErr) {
+        console.warn(`[Inventory] backfill failed for item ${row.id}:`, itemErr.message);
+      }
+    }
+
+    // How many items still need backfilling after this batch?
+    const remaining = await get(
+      `SELECT COUNT(*)::int AS n FROM inventory_items WHERE shelf_life_days IS NULL`
+    );
+
+    res.json({
+      processed: targets.length,
+      ai_hits: aiHits,
+      fallbacks,
+      restock_clock_set: restockClockSet,
+      remaining: remaining?.n || 0,
+      items: results,
+    });
+  } catch (err) {
+    console.error('[Inventory] backfill-attrs error:', err.message);
+    res.status(500).json({ error: 'Failed to backfill shelf-life attributes' });
   }
 });
 
