@@ -5,6 +5,7 @@ import { Clock } from 'lucide-react';
 import { Order, CfdiInvoice } from '../../types';
 import { formatPrice, TAX_LABEL } from '../../utils/currency';
 import { formatDateTime } from '../../utils/dateFormat';
+import { sendSmsReceipt } from '../../api';
 import BrandLogo from '../BrandLogo';
 import { useBranding } from '../../context/BrandingContext';
 
@@ -21,9 +22,32 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint }) 
   const { branding } = useBranding();
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [invoiceIssued, setInvoiceIssued] = useState(false);
+  const [showSmsForm, setShowSmsForm] = useState(false);
+  const [smsPhone, setSmsPhone] = useState('');
+  const [smsState, setSmsState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [smsError, setSmsError] = useState<string | null>(null);
 
   const appUrl = (window.location.origin + '/#/invoice/');
   const invoiceUrl = order.invoice_token ? `${appUrl}${order.invoice_token}` : null;
+
+  const handleSendSms = useCallback(async () => {
+    const phone = smsPhone.trim();
+    if (!phone) return;
+    setSmsState('sending');
+    setSmsError(null);
+    try {
+      await sendSmsReceipt(order.id, phone);
+      setSmsState('sent');
+      setTimeout(() => {
+        setShowSmsForm(false);
+        setSmsPhone('');
+        setSmsState('idle');
+      }, 1800);
+    } catch (err) {
+      setSmsState('error');
+      setSmsError(err instanceof Error ? err.message : 'No pudimos enviar el SMS');
+    }
+  }, [smsPhone, order.id]);
 
   const handleInvoiceIssued = useCallback((_invoice: CfdiInvoice) => {
     setInvoiceIssued(true);
@@ -151,6 +175,44 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint }) 
             >
               {t('receipt.printReceipt')}
             </button>
+            {!showSmsForm ? (
+              <button
+                onClick={() => setShowSmsForm(true)}
+                className="w-full py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-all"
+              >
+                Enviar recibo por SMS
+              </button>
+            ) : (
+              <div className="space-y-2 p-3 bg-neutral-50 rounded-lg border border-neutral-200">
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  autoFocus
+                  placeholder="Teléfono (ej. 5629152086)"
+                  value={smsPhone}
+                  onChange={(e) => setSmsPhone(e.target.value)}
+                  disabled={smsState === 'sending' || smsState === 'sent'}
+                  className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-neutral-900 placeholder:text-neutral-400"
+                />
+                {smsError && <p className="text-red-600 text-xs">{smsError}</p>}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setShowSmsForm(false); setSmsPhone(''); setSmsState('idle'); setSmsError(null); }}
+                    disabled={smsState === 'sending'}
+                    className="flex-1 py-2 bg-neutral-200 text-neutral-700 font-semibold rounded-lg hover:bg-neutral-300"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleSendSms}
+                    disabled={!smsPhone.trim() || smsState === 'sending' || smsState === 'sent'}
+                    className="flex-1 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {smsState === 'sending' ? 'Enviando...' : smsState === 'sent' ? '✓ Enviado' : 'Enviar'}
+                  </button>
+                </div>
+              </div>
+            )}
             {!invoiceIssued && !order.cfdi_invoice_id && (
               <button
                 onClick={() => setShowInvoiceModal(true)}

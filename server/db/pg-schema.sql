@@ -629,6 +629,16 @@ CREATE TABLE IF NOT EXISTS cfdi_invoice_tokens (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Receipt Tokens (public-link SMS receipts)
+CREATE TABLE IF NOT EXISTS receipt_tokens (
+  id SERIAL PRIMARY KEY,
+  token TEXT NOT NULL UNIQUE,
+  tenant_id TEXT NOT NULL,
+  order_id INTEGER NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Tenant Credentials
 CREATE TABLE IF NOT EXISTS tenant_credentials (
   id SERIAL PRIMARY KEY,

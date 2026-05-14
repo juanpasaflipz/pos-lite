@@ -255,3 +255,11 @@ export async function sendReferralSuccessMessage(phone, name, refereeName, bonus
   const body = `¡Hola ${name}! Tu amigo ${refereeName} se unió a ${restaurantName} Rewards con tu código. Ambos ganaron ${bonus} sellos extra. ¡Gracias!`;
   return sendSMS(phone, body, customerId, 'referral_success', countryCode);
 }
+
+// Receipt SMS — body kept single-segment so MX carriers don't sender-rotate
+// (~160 GSM-7 chars). orderNumber, totalFormatted ($250.00 MXN), and url
+// together usually fit comfortably under that budget.
+export async function sendReceiptMessage(phone, orderNumber, totalFormatted, url, restaurantName = 'us', countryCode = 'MX') {
+  const body = `${restaurantName}: Recibo #${orderNumber} ${totalFormatted}. Ver: ${url}`;
+  return sendSMS(phone, body, null, 'receipt', countryCode);
+}

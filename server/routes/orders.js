@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
+import crypto from 'node:crypto';
 import { all, get, run, getConn } from '../db/index.js';
 import { adminSql } from '../db/index.js';
 // AI data pipeline removed in pos-lite
 const recordOrderItemPairs = () => {};
 import { requireAuth } from '../middleware/auth.js';
 import { audit } from '../lib/auditLog.js';
+import { sendReceiptMessage } from '../helpers/twilio.js';
 
 const router = Router();
 
@@ -731,6 +733,74 @@ router.patch('/:id/payment', requireAuth('pos_access'), async (req, res) => {
   } catch (error) {
     console.error('Error confirming payment:', error);
     res.status(500).json({ error: 'Failed to confirm payment' });
+  }
+});
+
+// POST /api/orders/:id/sms-receipt — send a public receipt link via SMS
+router.post('/:id/sms-receipt', requireAuth('pos_access'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { phone, country_code = 'MX' } = req.body || {};
+
+    if (!phone || typeof phone !== 'string') {
+      return res.status(400).json({ error: 'phone is required' });
+    }
+
+    const tenantId = req.tenant?.id;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant not resolved' });
+    }
+
+    const order = await get(
+      'SELECT id, order_number, total, payment_status FROM orders WHERE id = $1',
+      [id],
+    );
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+
+    // Reuse an unexpired token for this order so re-sends don't pile up rows.
+    let tokenRow = await adminSql`
+      SELECT token FROM receipt_tokens
+      WHERE order_id = ${order.id} AND tenant_id = ${tenantId} AND expires_at > NOW()
+      ORDER BY id DESC LIMIT 1
+    `.then(rows => rows[0]);
+
+    let token;
+    if (tokenRow) {
+      token = tokenRow.token;
+    } else {
+      token = crypto.randomBytes(8).toString('hex');
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      await adminSql`
+        INSERT INTO receipt_tokens (token, tenant_id, order_id, expires_at)
+        VALUES (${token}, ${tenantId}, ${order.id}, ${expiresAt})
+      `;
+    }
+
+    const host = req.get('host');
+    const protocol = (req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim();
+    const url = `${protocol}://${host}/#/r/${token}`;
+
+    const restaurantName = req.tenant?.name || req.tenant?.subdomain || 'Recibo';
+    const totalFormatted = `$${Number(order.total).toFixed(2)} MXN`;
+
+    const sid = await sendReceiptMessage(
+      phone,
+      order.order_number,
+      totalFormatted,
+      url,
+      restaurantName,
+      country_code,
+    );
+
+    if (!sid) {
+      return res.status(502).json({ error: 'SMS send failed. Check Twilio credentials and try again.' });
+    }
+
+    audit('order.sms_receipt_sent', req, { order_id: order.id, phone_last4: phone.slice(-4) });
+    res.json({ success: true, token, url, message_sid: sid });
+  } catch (error) {
+    console.error('Error sending SMS receipt:', error);
+    res.status(500).json({ error: 'Failed to send SMS receipt' });
   }
 });
 

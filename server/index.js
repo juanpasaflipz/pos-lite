@@ -52,6 +52,7 @@ import demoProvisionRoutes from './routes/demo-provision.js';
 // Invoicing (CFDI)
 import cfdiRoutes from './routes/cfdi.js';
 import cfdiPublicRoutes from './routes/cfdi-public.js';
+import receiptsPublicRoutes from './routes/receipts-public.js';
 
 // Customer-facing
 import customerOrderRoutes from './routes/customer-order.js';
@@ -151,6 +152,9 @@ app.use('/api/auth', authRoutes);
 
 // CFDI public self-service (token-based, no auth)
 app.use('/api/cfdi-public', cfdiPublicRoutes);
+
+// Public SMS receipt links (token-based, no auth)
+app.use('/api/public/receipts', receiptsPublicRoutes);
 
 // Kiosk bind (cross-tenant PIN search, no tenant header required)
 app.use('/api/kiosk', kioskRoutes);

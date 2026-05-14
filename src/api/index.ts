@@ -559,6 +559,50 @@ export async function confirmOrderPayment(
   });
 }
 
+export async function sendSmsReceipt(
+  orderId: number,
+  phone: string,
+  country_code: string = 'MX',
+): Promise<{ success: boolean; token: string; url: string; message_sid: string }> {
+  return apiRequest(`/orders/${orderId}/sms-receipt`, {
+    method: 'POST',
+    body: JSON.stringify({ phone, country_code }),
+  });
+}
+
+export interface PublicReceiptResponse {
+  tenant: { name: string; branding: Record<string, unknown> | null };
+  order: {
+    id: number;
+    order_number: string | number;
+    subtotal: number;
+    tax: number;
+    tip: number;
+    total: number;
+    payment_status: string;
+    payment_method: string | null;
+    created_at: string;
+    paid_at: string | null;
+    items: Array<{
+      id: number;
+      item_name: string;
+      quantity: number;
+      unit_price: number;
+      notes: string | null;
+    }>;
+  };
+}
+
+export async function getPublicReceipt(token: string): Promise<PublicReceiptResponse> {
+  const base = FALLBACK_URLS.length ? await resolveBaseUrl() : activeBaseUrl;
+  const res = await fetch(`${base}/public/receipts/${encodeURIComponent(token)}`);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Failed to load receipt (${res.status})`);
+  }
+  return res.json();
+}
+
 /* ==================== Payment Endpoints ==================== */
 
 interface CreatePaymentIntentData {
