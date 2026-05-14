@@ -103,10 +103,11 @@ function toE164SMS(phone, countryCode = 'MX') {
 }
 
 /**
- * Send a free-form SMS (used for non-template flows like delivery recapture).
+ * Send a free-form SMS via Twilio REST API. Loyalty wrappers pass customerId +
+ * messageType so each delivery is logged to loyalty_messages for tracking.
  * Returns the Twilio message SID on success, or null on failure / missing config.
  */
-export async function sendSMS(to, body, countryCode = 'MX') {
+export async function sendSMS(to, body, customerId = null, messageType = 'general', countryCode = 'MX') {
   const { sid, token, sender } = await resolveTwilio();
   if (!sid || !token || !sender || !body) return null;
 
@@ -127,6 +128,14 @@ export async function sendSMS(to, body, countryCode = 'MX') {
       body: params,
     });
     const data = await res.json();
+
+    if (customerId) {
+      await run(
+        `INSERT INTO loyalty_messages (customer_id, message_type, twilio_sid, status) VALUES ($1, $2, $3, $4)`,
+        [customerId, messageType, data.sid || null, res.ok ? 'sent' : 'failed']
+      );
+    }
+
     if (!res.ok) {
       console.error('[Twilio] SMS send failed:', data.message || data);
       return null;
@@ -203,42 +212,39 @@ export async function sendWhatsAppTemplate(to, messageType, variables, customerI
   }
 }
 
+// Loyalty wrappers route through SMS by default — WhatsApp template approval is
+// slow and per-tenant. To re-enable WhatsApp, swap each sendSMS call below for
+// sendWhatsAppTemplate with the matching messageType and positional variables.
+
+// Append a Google review CTA to body when the tenant has configured a review URL.
+function withReviewCta(body, reviewUrl) {
+  const url = (reviewUrl || '').trim();
+  if (!url) return body;
+  return `${body}\n\n⭐ ¿Te encantó? Déjanos una reseña en Google: ${url}`;
+}
+
 export async function sendWelcomeMessage(phone, name, referralCode, restaurantName = 'Our', countryCode = 'MX') {
-  return sendWhatsAppTemplate(
-    phone,
-    'welcome',
-    { 1: restaurantName, 2: name, 3: referralCode },
-    null,
-    countryCode,
-  );
+  const body = `¡Bienvenido a ${restaurantName} Rewards, ${name}! 🎉 Gana un sello con cada visita y desbloquea recompensas. Comparte tu código ${referralCode} con amigos — ambos ganan 2 sellos extra en su próxima visita.`;
+  return sendSMS(phone, body, null, 'welcome', countryCode);
 }
 
-export async function sendStampEarnedMessage(phone, name, earned, required, customerId, restaurantName = 'us', countryCode = 'MX') {
-  return sendWhatsAppTemplate(
-    phone,
-    'stamp_earned',
-    { 1: name, 2: restaurantName, 3: String(earned), 4: String(required) },
-    customerId,
-    countryCode,
+export async function sendStampEarnedMessage(phone, name, earned, required, customerId, restaurantName = 'us', countryCode = 'MX', reviewUrl = null) {
+  const body = withReviewCta(
+    `¡Hola ${name}! Ganaste un sello en ${restaurantName} 🌯 Llevas ${earned}/${required} sellos en tu tarjeta. ¡Sigue así!`,
+    reviewUrl,
   );
+  return sendSMS(phone, body, customerId, 'stamp_earned', countryCode);
 }
 
-export async function sendCardCompletedMessage(phone, name, reward, customerId, restaurantName = 'us', countryCode = 'MX') {
-  return sendWhatsAppTemplate(
-    phone,
-    'card_completed',
-    { 1: name, 2: restaurantName, 3: reward },
-    customerId,
-    countryCode,
+export async function sendCardCompletedMessage(phone, name, reward, customerId, restaurantName = 'us', countryCode = 'MX', reviewUrl = null) {
+  const body = withReviewCta(
+    `¡Felicidades ${name}! 🎊 Completaste tu tarjeta en ${restaurantName}. Tu recompensa: ${reward}. Canjéala en tu próxima visita.`,
+    reviewUrl,
   );
+  return sendSMS(phone, body, customerId, 'card_completed', countryCode);
 }
 
 export async function sendReferralSuccessMessage(phone, name, refereeName, bonus, customerId, restaurantName = 'Our', countryCode = 'MX') {
-  return sendWhatsAppTemplate(
-    phone,
-    'referral_success',
-    { 1: name, 2: refereeName, 3: restaurantName, 4: String(bonus) },
-    customerId,
-    countryCode,
-  );
+  const body = `¡Hola ${name}! Tu amigo ${refereeName} se unió a ${restaurantName} Rewards usando tu código. Ambos ganaron ${bonus} sellos extra. 🙌 ¡Gracias por correr la voz!`;
+  return sendSMS(phone, body, customerId, 'referral_success', countryCode);
 }

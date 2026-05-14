@@ -338,7 +338,8 @@
       "rewardDescription": "Reward Description",
       "stampBonusThreshold": "Bonus Stamp Threshold ($)",
       "referralBonusStamps": "Referral Bonus Stamps",
-      "smsNotifications": "SMS Notifications"
+      "smsNotifications": "SMS Notifications",
+      "googleReviewUrl": "Google Review Link"
     }
   },
   "menuEngineering": {

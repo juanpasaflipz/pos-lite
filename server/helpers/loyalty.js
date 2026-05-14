@@ -174,12 +174,13 @@ export async function addStampsForOrder(customerId, orderId, count = null, resta
   // Send SMS notifications (non-blocking)
   const smsEnabled = await getConfigValue('sms_enabled', 'true');
   if (customer.sms_opt_in && smsEnabled === 'true') {
+    const reviewUrl = await getConfigValue('google_review_url', '');
     if (cardCompleted) {
-      sendCardCompletedMessage(customer.phone, customer.name, updatedCard.reward_description, customerId, restaurantName, customer.country_code).catch(() => {});
+      sendCardCompletedMessage(customer.phone, customer.name, updatedCard.reward_description, customerId, restaurantName, customer.country_code, reviewUrl).catch(() => {});
       // Auto-create next card
       await getActiveStampCard(customerId);
     } else {
-      sendStampEarnedMessage(customer.phone, customer.name, updatedCard.stamps_earned, updatedCard.stamps_required, customerId, restaurantName, customer.country_code).catch(() => {});
+      sendStampEarnedMessage(customer.phone, customer.name, updatedCard.stamps_earned, updatedCard.stamps_required, customerId, restaurantName, customer.country_code, reviewUrl).catch(() => {});
     }
   } else if (cardCompleted) {
     // Still auto-create next card even if SMS disabled

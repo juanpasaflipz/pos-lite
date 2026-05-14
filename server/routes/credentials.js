@@ -45,11 +45,11 @@ const SERVICE_SCHEMA = {
     ],
   },
   twilio: {
-    label: 'Twilio (WhatsApp)',
+    label: 'Twilio (SMS)',
     fields: [
       { key: 'account_sid', label: 'Account SID (AC...)', secret: false },
       { key: 'auth_token', label: 'Auth Token', secret: true },
-      { key: 'phone_number', label: 'WhatsApp Sender Number (+...)', secret: false },
+      { key: 'phone_number', label: 'SMS Sender Number (+...)', secret: false },
       { key: 'content_sid_welcome', label: 'Welcome Template SID (HX...)', secret: false },
       { key: 'content_sid_stamp_earned', label: 'Stamp Earned Template SID (HX...)', secret: false },
       { key: 'content_sid_card_completed', label: 'Card Completed Template SID (HX...)', secret: false },

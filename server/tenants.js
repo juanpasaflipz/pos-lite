@@ -115,6 +115,7 @@ async function seedTenantDefaults(tenantId) {
     { key: 'referral_bonus_stamps', value: '2', description: 'Bonus stamps for referrer and referee' },
     { key: 'sms_enabled', value: 'true', description: 'Enable SMS notifications for loyalty events' },
     { key: 'stamp_bonus_threshold', value: '400', description: 'Spend amount (per ticket) that earns one extra stamp on top of the base stamp' },
+    { key: 'google_review_url', value: '', description: 'Google review link appended to stamp/reward SMS to drive 5-star reviews' },
   ];
 
   for (const { key, value, description } of loyaltyDefaults) {
