@@ -216,21 +216,28 @@ export async function sendWhatsAppTemplate(to, messageType, variables, customerI
 // slow and per-tenant. To re-enable WhatsApp, swap each sendSMS call below for
 // sendWhatsAppTemplate with the matching messageType and positional variables.
 
-// Append a Google review CTA to body when the tenant has configured a review URL.
+// Append a Google review CTA when the tenant has configured a review URL.
+// Kept tight (no emoji, short prefix) so we stay within a single GSM-7 segment
+// after appending — multi-segment MX A2P traffic gets sender-rotated by the
+// carrier and arrives as separate conversations on iOS.
 function withReviewCta(body, reviewUrl) {
   const url = (reviewUrl || '').trim();
   if (!url) return body;
-  return `${body}\n\n⭐ ¿Te encantó? Déjanos una reseña en Google: ${url}`;
+  return `${body} Reseña: ${url}`;
 }
 
+// Bodies are plain GSM-7 (no emoji, no special chars beyond Spanish accents).
+// Why: emoji forces UCS-2 → 70 chars/segment → 3-segment messages that the MX
+// carrier pool splits across different sender numbers, looking spammy.
+
 export async function sendWelcomeMessage(phone, name, referralCode, restaurantName = 'Our', countryCode = 'MX') {
-  const body = `¡Bienvenido a ${restaurantName} Rewards, ${name}! 🎉 Gana un sello con cada visita y desbloquea recompensas. Comparte tu código ${referralCode} con amigos — ambos ganan 2 sellos extra en su próxima visita.`;
+  const body = `¡Bienvenido a ${restaurantName} Rewards, ${name}! Gana un sello con cada visita. Comparte tu código ${referralCode} con amigos — ambos ganan 2 sellos extra.`;
   return sendSMS(phone, body, null, 'welcome', countryCode);
 }
 
 export async function sendStampEarnedMessage(phone, name, earned, required, customerId, restaurantName = 'us', countryCode = 'MX', reviewUrl = null) {
   const body = withReviewCta(
-    `¡Hola ${name}! Ganaste un sello en ${restaurantName} 🌯 Llevas ${earned}/${required} sellos en tu tarjeta. ¡Sigue así!`,
+    `¡Hola ${name}! Ganaste un sello en ${restaurantName} (${earned}/${required}). ¡Sigue así!`,
     reviewUrl,
   );
   return sendSMS(phone, body, customerId, 'stamp_earned', countryCode);
@@ -238,13 +245,13 @@ export async function sendStampEarnedMessage(phone, name, earned, required, cust
 
 export async function sendCardCompletedMessage(phone, name, reward, customerId, restaurantName = 'us', countryCode = 'MX', reviewUrl = null) {
   const body = withReviewCta(
-    `¡Felicidades ${name}! 🎊 Completaste tu tarjeta en ${restaurantName}. Tu recompensa: ${reward}. Canjéala en tu próxima visita.`,
+    `¡Felicidades ${name}! Tarjeta completa en ${restaurantName}. Recompensa: ${reward}. Canjéala en tu próxima visita.`,
     reviewUrl,
   );
   return sendSMS(phone, body, customerId, 'card_completed', countryCode);
 }
 
 export async function sendReferralSuccessMessage(phone, name, refereeName, bonus, customerId, restaurantName = 'Our', countryCode = 'MX') {
-  const body = `¡Hola ${name}! Tu amigo ${refereeName} se unió a ${restaurantName} Rewards usando tu código. Ambos ganaron ${bonus} sellos extra. 🙌 ¡Gracias por correr la voz!`;
+  const body = `¡Hola ${name}! Tu amigo ${refereeName} se unió a ${restaurantName} Rewards con tu código. Ambos ganaron ${bonus} sellos extra. ¡Gracias!`;
   return sendSMS(phone, body, customerId, 'referral_success', countryCode);
 }
