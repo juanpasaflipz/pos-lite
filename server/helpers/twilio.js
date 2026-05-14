@@ -84,6 +84,61 @@ function senderAddress(sender) {
 }
 
 /**
+ * E.164 formatter for **SMS** delivery. MX mobile numbers require the "+521"
+ * mobile prefix on the Twilio SMS network (unlike WhatsApp, which uses "+52").
+ */
+function toE164SMS(phone, countryCode = 'MX') {
+  const raw = String(phone || '');
+  if (raw.startsWith('+')) return raw;
+  const digits = raw.replace(/\D/g, '');
+  const cc = (countryCode || 'MX').toUpperCase();
+
+  if (cc === 'US' || cc === 'CA') {
+    if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+    return `+1${digits.slice(-10)}`;
+  }
+  if (digits.length === 13 && digits.startsWith('521')) return `+${digits}`;
+  if (digits.length === 12 && digits.startsWith('52')) return `+521${digits.slice(2)}`;
+  return `+521${digits.slice(-10)}`;
+}
+
+/**
+ * Send a free-form SMS (used for non-template flows like delivery recapture).
+ * Returns the Twilio message SID on success, or null on failure / missing config.
+ */
+export async function sendSMS(to, body, countryCode = 'MX') {
+  const { sid, token, sender } = await resolveTwilio();
+  if (!sid || !token || !sender || !body) return null;
+
+  const from = sender.startsWith('whatsapp:') ? sender.replace(/^whatsapp:/, '') : sender;
+  const e164 = toE164SMS(to, countryCode);
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
+  const auth = Buffer.from(`${sid}:${token}`).toString('base64');
+
+  const params = new URLSearchParams({ To: e164, From: from, Body: body });
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params,
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      console.error('[Twilio] SMS send failed:', data.message || data);
+      return null;
+    }
+    return data.sid;
+  } catch (err) {
+    console.error('[Twilio] SMS error:', err.message);
+    return null;
+  }
+}
+
+/**
  * Send a WhatsApp message using a Twilio approved Content template.
  *
  * Variables map by messageType (positional, matches Twilio template {{1}}, {{2}}...):
