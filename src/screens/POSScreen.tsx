@@ -1179,6 +1179,7 @@ const POSScreen: React.FC = () => {
       {showReceiptModal && completedOrder && (
         <ReceiptModal
           order={completedOrder}
+          linkedCustomer={linkedCustomer}
           onClose={() => { setShowReceiptModal(false); setCompletedOrder(null); }}
           onPrint={() => { window.print(); }}
         />

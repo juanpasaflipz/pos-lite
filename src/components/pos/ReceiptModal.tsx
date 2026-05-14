@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QRCodeSVG } from 'qrcode.react';
 import { Clock } from 'lucide-react';
-import { Order, CfdiInvoice } from '../../types';
+import { Order, CfdiInvoice, LoyaltyCustomer } from '../../types';
 import { formatPrice, TAX_LABEL } from '../../utils/currency';
 import { formatDateTime } from '../../utils/dateFormat';
 import { sendSmsReceipt } from '../../api';
@@ -15,17 +15,18 @@ export interface ReceiptModalProps {
   order: Order;
   onClose: () => void;
   onPrint: () => void;
+  linkedCustomer?: LoyaltyCustomer | null;
 }
 
-const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint }) => {
+const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, linkedCustomer = null }) => {
   const { t } = useTranslation('pos');
   const { branding } = useBranding();
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [invoiceIssued, setInvoiceIssued] = useState(false);
   const [showSmsForm, setShowSmsForm] = useState(false);
-  const [smsPhone, setSmsPhone] = useState('');
-  const [smsName, setSmsName] = useState('');
-  const [enrollLoyalty, setEnrollLoyalty] = useState(true);
+  const [smsPhone, setSmsPhone] = useState(linkedCustomer?.phone || '');
+  const [smsName, setSmsName] = useState(linkedCustomer?.name || '');
+  const [enrollLoyalty, setEnrollLoyalty] = useState(!linkedCustomer);
   const [smsState, setSmsState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [smsError, setSmsError] = useState<string | null>(null);
 
@@ -186,21 +187,26 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint }) 
                 onClick={() => setShowSmsForm(true)}
                 className="w-full py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-all"
               >
-                Enviar recibo por SMS
+                {linkedCustomer ? `Enviar recibo a ${linkedCustomer.name}` : 'Enviar recibo por SMS'}
               </button>
             ) : (
               <div className="space-y-2 p-3 bg-neutral-50 rounded-lg border border-neutral-200">
+                {linkedCustomer && (
+                  <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-md px-2 py-1">
+                    <span>✓ Cliente reconocido — {linkedCustomer.name}</span>
+                  </div>
+                )}
                 <input
                   type="tel"
                   inputMode="tel"
-                  autoFocus
+                  autoFocus={!linkedCustomer}
                   placeholder="Teléfono (ej. 5629152086)"
                   value={smsPhone}
                   onChange={(e) => setSmsPhone(e.target.value)}
                   disabled={smsState === 'sending' || smsState === 'sent'}
                   className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-neutral-900 placeholder:text-neutral-400"
                 />
-                {enrollLoyalty && (
+                {enrollLoyalty && !linkedCustomer && (
                   <input
                     type="text"
                     placeholder="Nombre del cliente (opcional)"
@@ -210,20 +216,28 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint }) 
                     className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-neutral-900 placeholder:text-neutral-400"
                   />
                 )}
-                <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={enrollLoyalty}
-                    onChange={(e) => setEnrollLoyalty(e.target.checked)}
-                    disabled={smsState === 'sending' || smsState === 'sent'}
-                    className="w-4 h-4 accent-green-600"
-                  />
-                  Sumar al programa de lealtad (+1 sello)
-                </label>
+                {!linkedCustomer && (
+                  <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={enrollLoyalty}
+                      onChange={(e) => setEnrollLoyalty(e.target.checked)}
+                      disabled={smsState === 'sending' || smsState === 'sent'}
+                      className="w-4 h-4 accent-green-600"
+                    />
+                    Sumar al programa de lealtad (+1 sello)
+                  </label>
+                )}
                 {smsError && <p className="text-red-600 text-xs">{smsError}</p>}
                 <div className="flex gap-2">
                   <button
-                    onClick={() => { setShowSmsForm(false); setSmsPhone(''); setSmsName(''); setSmsState('idle'); setSmsError(null); }}
+                    onClick={() => {
+                      setShowSmsForm(false);
+                      setSmsPhone(linkedCustomer?.phone || '');
+                      setSmsName(linkedCustomer?.name || '');
+                      setSmsState('idle');
+                      setSmsError(null);
+                    }}
                     disabled={smsState === 'sending'}
                     className="flex-1 py-2 bg-neutral-200 text-neutral-700 font-semibold rounded-lg hover:bg-neutral-300"
                   >

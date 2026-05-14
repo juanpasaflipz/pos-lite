@@ -828,7 +828,16 @@ router.post('/:id/sms-receipt', requireAuth('pos_access'), async (req, res) => {
       return res.status(502).json({ error: 'SMS send failed. Check Twilio credentials and try again.' });
     }
 
-    audit('order.sms_receipt_sent', req, { order_id: order.id, phone_last4: phone.slice(-4), enrolled: !!loyaltyResult });
+    audit({
+      tenantId: tenantId,
+      actorType: 'employee',
+      actorId: req.employee?.id,
+      action: 'sms_receipt_sent',
+      resource: 'order',
+      resourceId: String(order.id),
+      details: { phone_last4: phone.slice(-4), enrolled: !!loyaltyResult },
+      ip: req.ip,
+    });
     res.json({ success: true, token, url, message_sid: sid, loyalty: loyaltyResult });
   } catch (error) {
     console.error('Error sending SMS receipt:', error);
