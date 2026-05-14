@@ -1,9 +1,9 @@
 import { all, get, run } from '../db/index.js';
 import {
-  sendWelcomeSMS,
-  sendStampEarnedSMS,
-  sendCardCompletedSMS,
-  sendReferralSuccessSMS,
+  sendWelcomeMessage,
+  sendStampEarnedMessage,
+  sendCardCompletedMessage,
+  sendReferralSuccessMessage,
 } from './twilio.js';
 
 /* ==================== Helpers ==================== */
@@ -117,7 +117,7 @@ export async function findOrCreateCustomer(phone, name, referralCodeUsed, smsOpt
   // Send welcome SMS (non-blocking)
   const smsEnabled = await getConfigValue('sms_enabled', 'true');
   if (customer.sms_opt_in && smsEnabled === 'true') {
-    sendWelcomeSMS(normalized, name, referralCode, restaurantName, cc).catch(() => {});
+    sendWelcomeMessage(normalized, name, referralCode, restaurantName, cc).catch(() => {});
   }
 
   return { customer: await get('SELECT * FROM loyalty_customers WHERE id = $1', [customer.id]), created: true };
@@ -175,11 +175,11 @@ export async function addStampsForOrder(customerId, orderId, count = null, resta
   const smsEnabled = await getConfigValue('sms_enabled', 'true');
   if (customer.sms_opt_in && smsEnabled === 'true') {
     if (cardCompleted) {
-      sendCardCompletedSMS(customer.phone, customer.name, updatedCard.reward_description, customerId, restaurantName, customer.country_code).catch(() => {});
+      sendCardCompletedMessage(customer.phone, customer.name, updatedCard.reward_description, customerId, restaurantName, customer.country_code).catch(() => {});
       // Auto-create next card
       await getActiveStampCard(customerId);
     } else {
-      sendStampEarnedSMS(customer.phone, customer.name, updatedCard.stamps_earned, updatedCard.stamps_required, customerId, restaurantName, customer.country_code).catch(() => {});
+      sendStampEarnedMessage(customer.phone, customer.name, updatedCard.stamps_earned, updatedCard.stamps_required, customerId, restaurantName, customer.country_code).catch(() => {});
     }
   } else if (cardCompleted) {
     // Still auto-create next card even if SMS disabled
@@ -258,7 +258,7 @@ export async function processReferral(referralCode, newCustomerId, restaurantNam
   const referee = await get('SELECT * FROM loyalty_customers WHERE id = $1', [newCustomerId]);
   const smsEnabled = await getConfigValue('sms_enabled', 'true');
   if (referrer.sms_opt_in && smsEnabled === 'true') {
-    sendReferralSuccessSMS(referrer.phone, referrer.name, referee.name, bonus, referrer.id, restaurantName, referrer.country_code).catch(() => {});
+    sendReferralSuccessMessage(referrer.phone, referrer.name, referee.name, bonus, referrer.id, restaurantName, referrer.country_code).catch(() => {});
   }
 
   return { referrer_id: referrer.id, referee_id: newCustomerId, bonus };

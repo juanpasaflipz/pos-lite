@@ -7,8 +7,16 @@ const PLATFORM_SID = process.env.TWILIO_ACCOUNT_SID;
 const PLATFORM_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const PLATFORM_PHONE = process.env.TWILIO_PHONE_NUMBER;
 
+const CONTENT_SID_ENV = {
+  welcome: 'TWILIO_CONTENT_SID_WELCOME',
+  stamp_earned: 'TWILIO_CONTENT_SID_STAMP_EARNED',
+  card_completed: 'TWILIO_CONTENT_SID_CARD_COMPLETED',
+  referral_success: 'TWILIO_CONTENT_SID_REFERRAL_SUCCESS',
+};
+
 /**
- * Resolve Twilio credentials: tenant-level first, then platform env vars.
+ * Resolve Twilio credentials + per-message-type Content SIDs.
+ * Tenant-level config takes precedence; platform env vars are a fallback.
  */
 async function resolveTwilio() {
   const tenantId = tenantContext.getStore()?.tenantId;
@@ -17,17 +25,40 @@ async function resolveTwilio() {
       account_sid: 'TWILIO_ACCOUNT_SID',
       auth_token: 'TWILIO_AUTH_TOKEN',
       phone_number: 'TWILIO_PHONE_NUMBER',
+      content_sid_welcome: CONTENT_SID_ENV.welcome,
+      content_sid_stamp_earned: CONTENT_SID_ENV.stamp_earned,
+      content_sid_card_completed: CONTENT_SID_ENV.card_completed,
+      content_sid_referral_success: CONTENT_SID_ENV.referral_success,
     });
-    return { sid: creds.account_sid, token: creds.auth_token, phone: creds.phone_number };
+    return {
+      sid: creds.account_sid,
+      token: creds.auth_token,
+      sender: creds.phone_number,
+      contentSids: {
+        welcome: creds.content_sid_welcome,
+        stamp_earned: creds.content_sid_stamp_earned,
+        card_completed: creds.content_sid_card_completed,
+        referral_success: creds.content_sid_referral_success,
+      },
+    };
   }
-  return { sid: PLATFORM_SID, token: PLATFORM_TOKEN, phone: PLATFORM_PHONE };
+  return {
+    sid: PLATFORM_SID,
+    token: PLATFORM_TOKEN,
+    sender: PLATFORM_PHONE,
+    contentSids: {
+      welcome: process.env[CONTENT_SID_ENV.welcome],
+      stamp_earned: process.env[CONTENT_SID_ENV.stamp_earned],
+      card_completed: process.env[CONTENT_SID_ENV.card_completed],
+      referral_success: process.env[CONTENT_SID_ENV.referral_success],
+    },
+  };
 }
 
 /**
- * Format a phone number to E.164 for Twilio, honoring the customer's stored
- * country code. MX mobile numbers use the +521 prefix (Twilio requirement for
- * mobile delivery); US/CA use +1. Falls back to MX when countryCode is missing
- * so legacy rows keep working.
+ * Format a phone number to E.164 for WhatsApp delivery. WhatsApp uses the
+ * customer's real country code (+1 for US, +52 for MX — no mobile prefix
+ * "+521" gymnastics, that's an SMS-only Twilio quirk). Falls back to MX.
  */
 function toE164(phone, countryCode = 'MX') {
   const raw = String(phone || '');
@@ -39,24 +70,54 @@ function toE164(phone, countryCode = 'MX') {
     if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
     return `+1${digits.slice(-10)}`;
   }
-  // MX (default)
-  if (digits.length === 13 && digits.startsWith('521')) return `+${digits}`;
+  // MX: WhatsApp accepts +52 + 10 digits (do NOT use the +521 mobile prefix)
+  if (digits.length === 13 && digits.startsWith('521')) return `+52${digits.slice(3)}`;
   if (digits.length === 12 && digits.startsWith('52')) return `+${digits}`;
-  return `+521${digits.slice(-10)}`;
+  return `+52${digits.slice(-10)}`;
+}
+
+/** Normalize the merchant's WhatsApp sender into `whatsapp:+E164` form. */
+function senderAddress(sender) {
+  if (!sender) return null;
+  if (sender.startsWith('whatsapp:')) return sender;
+  return `whatsapp:${sender.startsWith('+') ? sender : '+' + sender}`;
 }
 
 /**
- * Send SMS via Twilio REST API (no SDK).
- * Automatically resolves tenant credentials via AsyncLocalStorage.
- * Returns the message SID on success, null on failure or when unconfigured.
+ * Send a WhatsApp message using a Twilio approved Content template.
+ *
+ * Variables map by messageType (positional, matches Twilio template {{1}}, {{2}}...):
+ *   welcome:          { 1: restaurantName, 2: name,        3: referralCode }
+ *   stamp_earned:     { 1: name,           2: restaurantName, 3: earned, 4: required }
+ *   card_completed:   { 1: name,           2: restaurantName, 3: reward }
+ *   referral_success: { 1: name,           2: refereeName,   3: restaurantName, 4: bonus }
+ *
+ * Templates with no placeholders ignore extra variables — safe to send anyway.
+ * If no Content SID is configured for the message type, the send is skipped
+ * silently (returns null) so partial template coverage doesn't crash flows.
  */
-export async function sendSMS(to, body, customerId = null, messageType = 'general', countryCode = 'MX') {
-  const { sid, token, phone } = await resolveTwilio();
-  if (!sid || !token || !phone) return null;
+export async function sendWhatsAppTemplate(to, messageType, variables, customerId = null, countryCode = 'MX') {
+  const { sid, token, sender, contentSids } = await resolveTwilio();
+  if (!sid || !token || !sender) return null;
+
+  const contentSid = contentSids[messageType];
+  if (!contentSid) {
+    // Tenant hasn't configured a template for this message type — skip.
+    return null;
+  }
 
   const e164 = toE164(to, countryCode);
   const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
   const auth = Buffer.from(`${sid}:${token}`).toString('base64');
+
+  const params = new URLSearchParams({
+    To: `whatsapp:${e164}`,
+    From: senderAddress(sender),
+    ContentSid: contentSid,
+  });
+  if (variables && Object.keys(variables).length > 0) {
+    params.append('ContentVariables', JSON.stringify(variables));
+  }
 
   try {
     const res = await fetch(url, {
@@ -65,9 +126,8 @@ export async function sendSMS(to, body, customerId = null, messageType = 'genera
         'Authorization': `Basic ${auth}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: new URLSearchParams({ To: e164, From: phone, Body: body }),
+      body: params,
     });
-
     const data = await res.json();
 
     if (customerId) {
@@ -78,33 +138,52 @@ export async function sendSMS(to, body, customerId = null, messageType = 'genera
     }
 
     if (!res.ok) {
-      console.error('[Twilio] SMS send failed:', data.message || data);
+      console.error('[Twilio] WhatsApp send failed:', data.message || data);
       return null;
     }
-
     return data.sid;
   } catch (err) {
-    console.error('[Twilio] SMS error:', err.message);
+    console.error('[Twilio] WhatsApp error:', err.message);
     return null;
   }
 }
 
-export async function sendWelcomeSMS(phone, name, referralCode, restaurantName = 'Our', countryCode = 'MX') {
-  const body = `Welcome to ${restaurantName} Rewards, ${name}! You'll earn a stamp with every order. Share your code ${referralCode} with friends — you both get 2 bonus stamps!`;
-  return sendSMS(phone, body, null, 'welcome', countryCode);
+export async function sendWelcomeMessage(phone, name, referralCode, restaurantName = 'Our', countryCode = 'MX') {
+  return sendWhatsAppTemplate(
+    phone,
+    'welcome',
+    { 1: restaurantName, 2: name, 3: referralCode },
+    null,
+    countryCode,
+  );
 }
 
-export async function sendStampEarnedSMS(phone, name, earned, required, customerId, restaurantName = 'us', countryCode = 'MX') {
-  const body = `Hey ${name}! You earned a stamp at ${restaurantName}! ${earned}/${required} stamps collected. Keep going!`;
-  return sendSMS(phone, body, customerId, 'stamp_earned', countryCode);
+export async function sendStampEarnedMessage(phone, name, earned, required, customerId, restaurantName = 'us', countryCode = 'MX') {
+  return sendWhatsAppTemplate(
+    phone,
+    'stamp_earned',
+    { 1: name, 2: restaurantName, 3: String(earned), 4: String(required) },
+    customerId,
+    countryCode,
+  );
 }
 
-export async function sendCardCompletedSMS(phone, name, reward, customerId, restaurantName = 'us', countryCode = 'MX') {
-  const body = `Congrats ${name}! You completed your stamp card at ${restaurantName}! Your reward: ${reward}. Redeem it on your next visit!`;
-  return sendSMS(phone, body, customerId, 'card_completed', countryCode);
+export async function sendCardCompletedMessage(phone, name, reward, customerId, restaurantName = 'us', countryCode = 'MX') {
+  return sendWhatsAppTemplate(
+    phone,
+    'card_completed',
+    { 1: name, 2: restaurantName, 3: reward },
+    customerId,
+    countryCode,
+  );
 }
 
-export async function sendReferralSuccessSMS(phone, name, refereeName, bonus, customerId, restaurantName = 'Our', countryCode = 'MX') {
-  const body = `Hey ${name}! Your friend ${refereeName} joined ${restaurantName} Rewards using your code. You both earned ${bonus} bonus stamps!`;
-  return sendSMS(phone, body, customerId, 'referral_success', countryCode);
+export async function sendReferralSuccessMessage(phone, name, refereeName, bonus, customerId, restaurantName = 'Our', countryCode = 'MX') {
+  return sendWhatsAppTemplate(
+    phone,
+    'referral_success',
+    { 1: name, 2: refereeName, 3: restaurantName, 4: String(bonus) },
+    customerId,
+    countryCode,
+  );
 }
