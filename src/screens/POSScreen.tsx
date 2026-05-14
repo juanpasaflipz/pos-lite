@@ -110,6 +110,9 @@ const POSScreen: React.FC = () => {
   const [refundOrderId, setRefundOrderId] = useState<number | null>(null);
   const [linkedCustomer, setLinkedCustomer] = useState<LoyaltyCustomer | null>(null);
   const [showCustomerLookup, setShowCustomerLookup] = useState(false);
+  // Tracks whether we've already auto-prompted the loyalty modal for the current
+  // cart cycle. Resets when the cart goes empty (cleared, paid, or parked).
+  const [loyaltyPromptedThisCart, setLoyaltyPromptedThisCart] = useState(false);
   const [popularItems, setPopularItems] = useState<MenuItem[]>([]);
   const [categorySuggestedOrder, setCategorySuggestedOrder] = useState<number[]>([]);
   const [comboDefinitions, setComboDefinitions] = useState<ComboDefinition[]>([]);
@@ -263,6 +266,21 @@ const POSScreen: React.FC = () => {
     }, 300);
     return () => clearTimeout(timer);
   }, [cart]);
+
+  // Auto-open the loyalty modal once per cart cycle when an order starts.
+  // Skipped if a customer is already linked, the modal is already open, or the
+  // cashier has dismissed it for this cart. Resets when the cart goes empty.
+  useEffect(() => {
+    if (cart.length === 0) {
+      if (loyaltyPromptedThisCart) setLoyaltyPromptedThisCart(false);
+      return;
+    }
+    if (loyaltyPromptedThisCart) return;
+    if (linkedCustomer) return;
+    if (showCustomerLookup) return;
+    setShowCustomerLookup(true);
+    setLoyaltyPromptedThisCart(true);
+  }, [cart.length, linkedCustomer, showCustomerLookup, loyaltyPromptedThisCart]);
 
   // ==================== Helpers ====================
 

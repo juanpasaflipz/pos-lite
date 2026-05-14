@@ -473,6 +473,7 @@ CREATE TABLE IF NOT EXISTS loyalty_customers (
   id SERIAL PRIMARY KEY,
   tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
   phone TEXT NOT NULL,
+  country_code TEXT NOT NULL DEFAULT 'MX',
   name TEXT NOT NULL,
   referral_code TEXT,
   referred_by INTEGER REFERENCES loyalty_customers(id),
@@ -483,7 +484,7 @@ CREATE TABLE IF NOT EXISTS loyalty_customers (
   last_visit TIMESTAMPTZ,
   sms_opt_in BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(tenant_id, phone),
+  UNIQUE(tenant_id, country_code, phone),
   UNIQUE(tenant_id, referral_code)
 );
 

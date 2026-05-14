@@ -24,14 +24,24 @@ async function resolveTwilio() {
 }
 
 /**
- * Format a 10-digit MX number to E.164 (+521XXXXXXXXXX) for Twilio.
+ * Format a phone number to E.164 for Twilio, honoring the customer's stored
+ * country code. MX mobile numbers use the +521 prefix (Twilio requirement for
+ * mobile delivery); US/CA use +1. Falls back to MX when countryCode is missing
+ * so legacy rows keep working.
  */
-function toE164(phone) {
-  const digits = phone.replace(/\D/g, '');
-  if (digits.startsWith('+')) return digits;
-  if (digits.length === 10) return `+521${digits}`;
-  if (digits.length === 12 && digits.startsWith('52')) return `+${digits}`;
+function toE164(phone, countryCode = 'MX') {
+  const raw = String(phone || '');
+  if (raw.startsWith('+')) return raw;
+  const digits = raw.replace(/\D/g, '');
+  const cc = (countryCode || 'MX').toUpperCase();
+
+  if (cc === 'US' || cc === 'CA') {
+    if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+    return `+1${digits.slice(-10)}`;
+  }
+  // MX (default)
   if (digits.length === 13 && digits.startsWith('521')) return `+${digits}`;
+  if (digits.length === 12 && digits.startsWith('52')) return `+${digits}`;
   return `+521${digits.slice(-10)}`;
 }
 
@@ -40,11 +50,11 @@ function toE164(phone) {
  * Automatically resolves tenant credentials via AsyncLocalStorage.
  * Returns the message SID on success, null on failure or when unconfigured.
  */
-export async function sendSMS(to, body, customerId = null, messageType = 'general') {
+export async function sendSMS(to, body, customerId = null, messageType = 'general', countryCode = 'MX') {
   const { sid, token, phone } = await resolveTwilio();
   if (!sid || !token || !phone) return null;
 
-  const e164 = toE164(to);
+  const e164 = toE164(to, countryCode);
   const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
   const auth = Buffer.from(`${sid}:${token}`).toString('base64');
 
@@ -79,22 +89,22 @@ export async function sendSMS(to, body, customerId = null, messageType = 'genera
   }
 }
 
-export async function sendWelcomeSMS(phone, name, referralCode, restaurantName = 'Our') {
+export async function sendWelcomeSMS(phone, name, referralCode, restaurantName = 'Our', countryCode = 'MX') {
   const body = `Welcome to ${restaurantName} Rewards, ${name}! You'll earn a stamp with every order. Share your code ${referralCode} with friends — you both get 2 bonus stamps!`;
-  return sendSMS(phone, body, null, 'welcome');
+  return sendSMS(phone, body, null, 'welcome', countryCode);
 }
 
-export async function sendStampEarnedSMS(phone, name, earned, required, customerId, restaurantName = 'us') {
+export async function sendStampEarnedSMS(phone, name, earned, required, customerId, restaurantName = 'us', countryCode = 'MX') {
   const body = `Hey ${name}! You earned a stamp at ${restaurantName}! ${earned}/${required} stamps collected. Keep going!`;
-  return sendSMS(phone, body, customerId, 'stamp_earned');
+  return sendSMS(phone, body, customerId, 'stamp_earned', countryCode);
 }
 
-export async function sendCardCompletedSMS(phone, name, reward, customerId, restaurantName = 'us') {
+export async function sendCardCompletedSMS(phone, name, reward, customerId, restaurantName = 'us', countryCode = 'MX') {
   const body = `Congrats ${name}! You completed your stamp card at ${restaurantName}! Your reward: ${reward}. Redeem it on your next visit!`;
-  return sendSMS(phone, body, customerId, 'card_completed');
+  return sendSMS(phone, body, customerId, 'card_completed', countryCode);
 }
 
-export async function sendReferralSuccessSMS(phone, name, refereeName, bonus, customerId, restaurantName = 'Our') {
+export async function sendReferralSuccessSMS(phone, name, refereeName, bonus, customerId, restaurantName = 'Our', countryCode = 'MX') {
   const body = `Hey ${name}! Your friend ${refereeName} joined ${restaurantName} Rewards using your code. You both earned ${bonus} bonus stamps!`;
-  return sendSMS(phone, body, customerId, 'referral_success');
+  return sendSMS(phone, body, customerId, 'referral_success', countryCode);
 }

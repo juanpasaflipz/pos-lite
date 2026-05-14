@@ -95,7 +95,7 @@ function CustomersTab() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [expandedDetail, setExpandedDetail] = useState<any>(null);
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState<{ name: string; phone: string; orders_count: string; total_spent: string; stamps_earned: string } | null>(null);
+  const [editForm, setEditForm] = useState<{ name: string; phone: string; country_code: string; orders_count: string; total_spent: string; stamps_earned: string } | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -146,6 +146,7 @@ function CustomersTab() {
     setEditForm({
       name: customer.name,
       phone: customer.phone,
+      country_code: (customer.country_code || 'MX').toUpperCase(),
       orders_count: String(customer.orders_count ?? 0),
       total_spent: String(customer.total_spent ?? 0),
       stamps_earned: String(customer.stamps_earned ?? 0),
@@ -174,6 +175,7 @@ function CustomersTab() {
       await updateLoyaltyCustomer(id, {
         name: editForm.name,
         phone: editForm.phone,
+        country_code: editForm.country_code,
         orders_count: ordersN,
         total_spent: spentN,
         stamps_earned: stampsN,
@@ -265,7 +267,7 @@ function CustomersTab() {
                     className="border-b border-neutral-800 hover:bg-neutral-800/50 cursor-pointer transition-colors"
                   >
                     <td className="p-4 font-medium text-white">{c.name}</td>
-                    <td className="p-4 text-neutral-300 font-mono text-sm">{formatPhone(c.phone)}</td>
+                    <td className="p-4 text-neutral-300 font-mono text-sm">{formatPhone(c.phone, c.country_code)}</td>
                     <td className="p-4">
                       {c.activeCard && renderStampDots(c.activeCard.stamps_earned, c.activeCard.stamps_required)}
                     </td>
@@ -296,15 +298,26 @@ function CustomersTab() {
                               </label>
                               <label className="block">
                                 <span className="text-xs text-neutral-400">{t('loyalty.customers.edit.phone')}</span>
-                                <input
-                                  type="tel"
-                                  inputMode="tel"
-                                  value={editForm.phone}
-                                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                                  placeholder="5545879933"
-                                  className="mt-1 w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-white font-mono focus:outline-none focus:border-purple-600"
-                                  disabled={savingEdit}
-                                />
+                                <div className="mt-1 flex gap-2">
+                                  <select
+                                    value={editForm.country_code}
+                                    onChange={(e) => setEditForm({ ...editForm, country_code: e.target.value })}
+                                    disabled={savingEdit}
+                                    className="bg-neutral-800 border border-neutral-700 rounded px-2 py-2 text-white text-sm focus:outline-none focus:border-purple-600"
+                                  >
+                                    <option value="MX">🇲🇽 +52</option>
+                                    <option value="US">🇺🇸 +1</option>
+                                  </select>
+                                  <input
+                                    type="tel"
+                                    inputMode="tel"
+                                    value={editForm.phone}
+                                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                                    placeholder="5545879933"
+                                    className="flex-1 bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-white font-mono focus:outline-none focus:border-purple-600"
+                                    disabled={savingEdit}
+                                  />
+                                </div>
                               </label>
                               <label className="block">
                                 <span className="text-xs text-neutral-400">{t('loyalty.customers.edit.orders')}</span>
@@ -677,6 +690,7 @@ function SettingsTab() {
   const settings = [
     { key: 'stamps_required', label: t('loyalty.settings.stampsRequired'), type: 'number' as const },
     { key: 'reward_description', label: t('loyalty.settings.rewardDescription'), type: 'text' as const },
+    { key: 'stamp_bonus_threshold', label: t('loyalty.settings.stampBonusThreshold'), type: 'number' as const },
     { key: 'referral_bonus_stamps', label: t('loyalty.settings.referralBonusStamps'), type: 'number' as const },
     { key: 'sms_enabled', label: t('loyalty.settings.smsNotifications'), type: 'toggle' as const },
   ];

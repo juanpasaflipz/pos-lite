@@ -336,6 +336,7 @@
       "failedToLoad": "Error al cargar configuración",
       "stampsRequired": "Sellos Requeridos",
       "rewardDescription": "Descripción de Recompensa",
+      "stampBonusThreshold": "Umbral para Sello Extra ($)",
       "referralBonusStamps": "Sellos de Bono por Referido",
       "smsNotifications": "Notificaciones SMS"
     }

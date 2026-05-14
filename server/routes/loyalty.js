@@ -71,10 +71,23 @@ router.get('/customers/:id', requireAuth('manage_loyalty'), async (req, res) => 
 });
 
 // GET /customers/phone/:phone — Lookup by phone (POS checkout)
+// Optional ?country_code=MX|US — when omitted, search across all countries for
+// the same local digits and prefer the most-recently-active match.
 router.get('/customers/phone/:phone', requireAuth('pos_access'), async (req, res) => {
   try {
-    const normalized = normalizePhone(req.params.phone);
-    const customer = await get('SELECT * FROM loyalty_customers WHERE phone = $1', [normalized]);
+    const cc = (req.query.country_code || '').toString().toUpperCase() || null;
+    const normalized = normalizePhone(req.params.phone, cc || 'MX');
+
+    const customer = cc
+      ? await get(
+          'SELECT * FROM loyalty_customers WHERE phone = $1 AND country_code = $2',
+          [normalized, cc]
+        )
+      : await get(
+          `SELECT * FROM loyalty_customers WHERE phone = $1
+           ORDER BY (last_visit IS NULL), last_visit DESC, id DESC LIMIT 1`,
+          [normalized]
+        );
     if (!customer) return res.status(404).json({ error: 'Customer not found' });
 
     const activeCard = await getActiveStampCard(customer.id);
@@ -88,13 +101,14 @@ router.get('/customers/phone/:phone', requireAuth('pos_access'), async (req, res
 // POST /customers — Register new customer
 router.post('/customers', requireAuth('pos_access'), requirePlanFeature('loyalty'), async (req, res) => {
   try {
-    const { phone, name, referral_code_used, sms_opt_in } = req.body;
+    const { phone, name, referral_code_used, sms_opt_in, country_code } = req.body;
     if (!phone || !name) return res.status(400).json({ error: 'Phone and name are required' });
 
-    const normalized = normalizePhone(phone);
+    const cc = (country_code || 'MX').toString().toUpperCase();
+    const normalized = normalizePhone(phone, cc);
     if (normalized.length < 10) return res.status(400).json({ error: 'Invalid phone number' });
 
-    const { customer, created } = await findOrCreateCustomer(normalized, name, referral_code_used, sms_opt_in, req.tenant?.name || 'Restaurant');
+    const { customer, created } = await findOrCreateCustomer(normalized, name, referral_code_used, sms_opt_in, req.tenant?.name || 'Restaurant', cc);
 
     if (!created && sms_opt_in !== undefined) {
       await run('UPDATE loyalty_customers SET sms_opt_in = $1 WHERE id = $2', [sms_opt_in ? true : false, customer.id]);
@@ -114,7 +128,7 @@ router.post('/customers', requireAuth('pos_access'), requirePlanFeature('loyalty
 // PUT /customers/:id — Update customer info
 router.put('/customers/:id', requireAuth('manage_loyalty'), async (req, res) => {
   try {
-    const { name, sms_opt_in, phone, orders_count, total_spent, stamps_earned } = req.body;
+    const { name, sms_opt_in, phone, country_code, orders_count, total_spent, stamps_earned } = req.body;
     const id = parseInt(req.params.id);
     const customer = await get('SELECT * FROM loyalty_customers WHERE id = $1', [id]);
     if (!customer) return res.status(404).json({ error: 'Customer not found' });
@@ -126,10 +140,19 @@ router.put('/customers/:id', requireAuth('manage_loyalty'), async (req, res) => 
     if (sms_opt_in !== undefined) {
       await run('UPDATE loyalty_customers SET sms_opt_in = $1 WHERE id = $2', [sms_opt_in ? true : false, id]);
     }
+    if (country_code !== undefined) {
+      const cc = String(country_code).toUpperCase();
+      if (!/^[A-Z]{2}$/.test(cc)) return res.status(400).json({ error: 'Invalid country_code' });
+      await run('UPDATE loyalty_customers SET country_code = $1 WHERE id = $2', [cc, id]);
+    }
     if (phone !== undefined) {
-      const normalized = normalizePhone(phone);
+      const cc = (country_code || customer.country_code || 'MX').toString().toUpperCase();
+      const normalized = normalizePhone(phone, cc);
       if (normalized.length < 10) return res.status(400).json({ error: 'Invalid phone number' });
-      const existing = await get('SELECT id FROM loyalty_customers WHERE phone = $1 AND id <> $2', [normalized, id]);
+      const existing = await get(
+        'SELECT id FROM loyalty_customers WHERE phone = $1 AND country_code = $2 AND id <> $3',
+        [normalized, cc, id]
+      );
       if (existing) return res.status(409).json({ error: 'A customer with this phone number already exists' });
       await run('UPDATE loyalty_customers SET phone = $1 WHERE id = $2', [normalized, id]);
     }
@@ -170,7 +193,8 @@ router.post('/customers/:id/stamps', requireAuth('pos_access'), requirePlanFeatu
     const customer = await get('SELECT * FROM loyalty_customers WHERE id = $1', [customerId]);
     if (!customer) return res.status(404).json({ error: 'Customer not found' });
 
-    const result = await addStampsForOrder(customerId, order_id, 1, req.tenant?.name || 'Restaurant');
+    // count=null → helper computes (1 + floor(total / stamp_bonus_threshold))
+    const result = await addStampsForOrder(customerId, order_id, null, req.tenant?.name || 'Restaurant');
 
     // Update total_spent from order
     if (order_id) {

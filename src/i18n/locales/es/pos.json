@@ -274,7 +274,9 @@
     "registerAndLink": "Registrar y Vincular",
     "enterDigits": "Ingresa un número de 10 dígitos",
     "nameRequired": "El nombre es obligatorio",
-    "registrationFailed": "Error al registrar"
+    "registrationFailed": "Error al registrar",
+    "modeExisting": "Existente",
+    "modeNew": "Nuevo Cliente"
   },
   "refund": {
     "title": "Reembolso",

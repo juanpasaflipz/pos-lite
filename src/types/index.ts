@@ -963,6 +963,7 @@ export interface FinancialProjection {
 export interface LoyaltyCustomer {
   id: number;
   phone: string;
+  country_code?: string;
   name: string;
   referral_code: string;
   referred_by: number | null;

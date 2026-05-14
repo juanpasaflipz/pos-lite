@@ -336,6 +336,7 @@
       "failedToLoad": "Failed to load settings",
       "stampsRequired": "Stamps Required",
       "rewardDescription": "Reward Description",
+      "stampBonusThreshold": "Bonus Stamp Threshold ($)",
       "referralBonusStamps": "Referral Bonus Stamps",
       "smsNotifications": "SMS Notifications"
     }

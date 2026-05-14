@@ -1543,8 +1543,9 @@ export async function updateRolePermissions(role: string, permissions: Record<st
 
 /* ==================== Loyalty / CRM Endpoints ==================== */
 
-export async function lookupLoyaltyCustomer(phone: string): Promise<LoyaltyCustomer> {
-  return apiRequest<LoyaltyCustomer>(`/loyalty/customers/phone/${encodeURIComponent(phone)}`);
+export async function lookupLoyaltyCustomer(phone: string, countryCode?: string): Promise<LoyaltyCustomer> {
+  const qs = countryCode ? `?country_code=${encodeURIComponent(countryCode)}` : '';
+  return apiRequest<LoyaltyCustomer>(`/loyalty/customers/phone/${encodeURIComponent(phone)}${qs}`);
 }
 
 export async function createLoyaltyCustomer(data: {
@@ -1552,6 +1553,7 @@ export async function createLoyaltyCustomer(data: {
   name: string;
   referral_code_used?: string;
   sms_opt_in?: boolean;
+  country_code?: string;
 }): Promise<LoyaltyCustomer & { created: boolean }> {
   return apiRequest('/loyalty/customers', {
     method: 'POST',
@@ -1581,6 +1583,7 @@ export async function updateLoyaltyCustomer(
   data: {
     name?: string;
     phone?: string;
+    country_code?: string;
     sms_opt_in?: boolean;
     orders_count?: number;
     total_spent?: number;

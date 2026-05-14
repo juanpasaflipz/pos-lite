@@ -274,7 +274,9 @@
     "registerAndLink": "Register & Link",
     "enterDigits": "Enter a 10-digit phone number",
     "nameRequired": "Name is required",
-    "registrationFailed": "Registration failed"
+    "registrationFailed": "Registration failed",
+    "modeExisting": "Existing",
+    "modeNew": "New Customer"
   },
   "refund": {
     "title": "Refund Order",

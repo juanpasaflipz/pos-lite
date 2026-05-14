@@ -22,13 +22,23 @@ export async function generateReferralCode() {
   return 'JB' + Date.now().toString(36).toUpperCase().slice(-6);
 }
 
-export function normalizePhone(phone) {
-  const digits = phone.replace(/\D/g, '');
-  // Accept 10-digit MX numbers, or with country code prefix
-  if (digits.length === 10) return digits;
-  if (digits.length === 12 && digits.startsWith('52')) return digits.slice(2);
+// Strip leading country-code digits and return the 10-digit local number.
+// countryCode is the ISO code we're storing in loyalty_customers ('MX', 'US', ...).
+// US/CA numbers may be entered as 10-digit local or with a leading 1; MX numbers
+// may be entered as 10-digit local, "52" + 10 digits, or "521" + 10 digits.
+export function normalizePhone(phone, countryCode = 'MX') {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
+  const cc = (countryCode || 'MX').toUpperCase();
+
+  if (cc === 'US' || cc === 'CA') {
+    if (digits.length === 11 && digits.startsWith('1')) return digits.slice(1);
+    return digits.slice(-10);
+  }
+  // MX (default)
   if (digits.length === 13 && digits.startsWith('521')) return digits.slice(3);
-  return digits.slice(-10); // best effort
+  if (digits.length === 12 && digits.startsWith('52')) return digits.slice(2);
+  return digits.slice(-10);
 }
 
 /* ==================== Config ==================== */
@@ -76,9 +86,13 @@ export async function getActiveStampCard(customerId) {
 
 /* ==================== Customer Operations ==================== */
 
-export async function findOrCreateCustomer(phone, name, referralCodeUsed, smsOptIn = false, restaurantName = 'Our') {
-  const normalized = normalizePhone(phone);
-  let customer = await get('SELECT * FROM loyalty_customers WHERE phone = $1', [normalized]);
+export async function findOrCreateCustomer(phone, name, referralCodeUsed, smsOptIn = false, restaurantName = 'Our', countryCode = 'MX') {
+  const cc = (countryCode || 'MX').toUpperCase();
+  const normalized = normalizePhone(phone, cc);
+  let customer = await get(
+    'SELECT * FROM loyalty_customers WHERE phone = $1 AND country_code = $2',
+    [normalized, cc]
+  );
 
   if (customer) {
     return { customer, created: false };
@@ -86,8 +100,8 @@ export async function findOrCreateCustomer(phone, name, referralCodeUsed, smsOpt
 
   const referralCode = await generateReferralCode();
   const { lastInsertRowid } = await run(
-    `INSERT INTO loyalty_customers (phone, name, referral_code, sms_opt_in) VALUES ($1, $2, $3, $4)`,
-    [normalized, name, referralCode, smsOptIn]
+    `INSERT INTO loyalty_customers (phone, country_code, name, referral_code, sms_opt_in) VALUES ($1, $2, $3, $4, $5)`,
+    [normalized, cc, name, referralCode, smsOptIn]
   );
 
   customer = await get('SELECT * FROM loyalty_customers WHERE id = $1', [lastInsertRowid]);
@@ -103,7 +117,7 @@ export async function findOrCreateCustomer(phone, name, referralCodeUsed, smsOpt
   // Send welcome SMS (non-blocking)
   const smsEnabled = await getConfigValue('sms_enabled', 'true');
   if (customer.sms_opt_in && smsEnabled === 'true') {
-    sendWelcomeSMS(normalized, name, referralCode, restaurantName).catch(() => {});
+    sendWelcomeSMS(normalized, name, referralCode, restaurantName, cc).catch(() => {});
   }
 
   return { customer: await get('SELECT * FROM loyalty_customers WHERE id = $1', [customer.id]), created: true };
@@ -111,7 +125,20 @@ export async function findOrCreateCustomer(phone, name, referralCodeUsed, smsOpt
 
 /* ==================== Stamp Operations ==================== */
 
-export async function addStampsForOrder(customerId, orderId, count = 1, restaurantName = 'us') {
+export async function addStampsForOrder(customerId, orderId, count = null, restaurantName = 'us') {
+  // count=null → compute from order total: 1 base stamp + 1 extra per stamp_bonus_threshold spent.
+  // Falls back to 1 stamp if the order can't be loaded.
+  if (count === null || count === undefined) {
+    let total = 0;
+    if (orderId) {
+      const order = await get('SELECT total FROM orders WHERE id = $1', [orderId]);
+      total = Number(order?.total) || 0;
+    }
+    const threshold = parseFloat(await getConfigValue('stamp_bonus_threshold', '400')) || 400;
+    count = 1 + Math.floor(total / threshold);
+  }
+  count = Math.max(1, parseInt(count, 10) || 1);
+
   const card = await getActiveStampCard(customerId);
   const newStamps = card.stamps_earned + count;
   const cardCompleted = newStamps >= card.stamps_required;
@@ -148,11 +175,11 @@ export async function addStampsForOrder(customerId, orderId, count = 1, restaura
   const smsEnabled = await getConfigValue('sms_enabled', 'true');
   if (customer.sms_opt_in && smsEnabled === 'true') {
     if (cardCompleted) {
-      sendCardCompletedSMS(customer.phone, customer.name, updatedCard.reward_description, customerId, restaurantName).catch(() => {});
+      sendCardCompletedSMS(customer.phone, customer.name, updatedCard.reward_description, customerId, restaurantName, customer.country_code).catch(() => {});
       // Auto-create next card
       await getActiveStampCard(customerId);
     } else {
-      sendStampEarnedSMS(customer.phone, customer.name, updatedCard.stamps_earned, updatedCard.stamps_required, customerId, restaurantName).catch(() => {});
+      sendStampEarnedSMS(customer.phone, customer.name, updatedCard.stamps_earned, updatedCard.stamps_required, customerId, restaurantName, customer.country_code).catch(() => {});
     }
   } else if (cardCompleted) {
     // Still auto-create next card even if SMS disabled
@@ -231,7 +258,7 @@ export async function processReferral(referralCode, newCustomerId, restaurantNam
   const referee = await get('SELECT * FROM loyalty_customers WHERE id = $1', [newCustomerId]);
   const smsEnabled = await getConfigValue('sms_enabled', 'true');
   if (referrer.sms_opt_in && smsEnabled === 'true') {
-    sendReferralSuccessSMS(referrer.phone, referrer.name, referee.name, bonus, referrer.id, restaurantName).catch(() => {});
+    sendReferralSuccessSMS(referrer.phone, referrer.name, referee.name, bonus, referrer.id, restaurantName, referrer.country_code).catch(() => {});
   }
 
   return { referrer_id: referrer.id, referee_id: newCustomerId, bonus };
