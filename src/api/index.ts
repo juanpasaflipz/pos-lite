@@ -563,10 +563,17 @@ export async function sendSmsReceipt(
   orderId: number,
   phone: string,
   country_code: string = 'MX',
-): Promise<{ success: boolean; token: string; url: string; message_sid: string }> {
+  opts: { enroll_loyalty?: boolean; customer_name?: string } = {},
+): Promise<{
+  success: boolean;
+  token: string;
+  url: string;
+  message_sid: string;
+  loyalty: null | { customer_id: number; stamps_earned: number; stamps_required: number; card_completed: boolean };
+}> {
   return apiRequest(`/orders/${orderId}/sms-receipt`, {
     method: 'POST',
-    body: JSON.stringify({ phone, country_code }),
+    body: JSON.stringify({ phone, country_code, ...opts }),
   });
 }
 

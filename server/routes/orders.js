@@ -8,6 +8,7 @@ const recordOrderItemPairs = () => {};
 import { requireAuth } from '../middleware/auth.js';
 import { audit } from '../lib/auditLog.js';
 import { sendReceiptMessage } from '../helpers/twilio.js';
+import { findOrCreateCustomer, addStampsForOrder } from '../helpers/loyalty.js';
 
 const router = Router();
 
@@ -736,11 +737,17 @@ router.patch('/:id/payment', requireAuth('pos_access'), async (req, res) => {
   }
 });
 
-// POST /api/orders/:id/sms-receipt — send a public receipt link via SMS
+// POST /api/orders/:id/sms-receipt — send a public receipt link via SMS,
+// and optionally enroll the customer in loyalty + award a stamp for this order.
 router.post('/:id/sms-receipt', requireAuth('pos_access'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { phone, country_code = 'MX' } = req.body || {};
+    const {
+      phone,
+      country_code = 'MX',
+      enroll_loyalty = false,
+      customer_name = '',
+    } = req.body || {};
 
     if (!phone || typeof phone !== 'string') {
       return res.status(400).json({ error: 'phone is required' });
@@ -752,10 +759,35 @@ router.post('/:id/sms-receipt', requireAuth('pos_access'), async (req, res) => {
     }
 
     const order = await get(
-      'SELECT id, order_number, total, payment_status FROM orders WHERE id = $1',
+      'SELECT id, order_number, total, payment_status, loyalty_customer_id FROM orders WHERE id = $1',
       [id],
     );
     if (!order) return res.status(404).json({ error: 'Order not found' });
+
+    // Loyalty enrollment + stamp (skipped if already stamped on this order).
+    let loyaltyResult = null;
+    if (enroll_loyalty && !order.loyalty_customer_id) {
+      const restaurantName = req.tenant?.name || 'us';
+      try {
+        const { customer } = await findOrCreateCustomer(
+          phone,
+          (customer_name || '').trim() || 'Cliente',
+          null,
+          true,
+          restaurantName,
+          country_code,
+        );
+        const stampOutcome = await addStampsForOrder(customer.id, order.id, null, restaurantName);
+        loyaltyResult = {
+          customer_id: customer.id,
+          stamps_earned: stampOutcome.stampCard?.stamps_earned,
+          stamps_required: stampOutcome.stampCard?.stamps_required,
+          card_completed: stampOutcome.cardCompleted,
+        };
+      } catch (err) {
+        console.error('[sms-receipt] loyalty enrollment failed (continuing with receipt):', err.message);
+      }
+    }
 
     // Reuse an unexpired token for this order so re-sends don't pile up rows.
     let tokenRow = await adminSql`
@@ -796,8 +828,8 @@ router.post('/:id/sms-receipt', requireAuth('pos_access'), async (req, res) => {
       return res.status(502).json({ error: 'SMS send failed. Check Twilio credentials and try again.' });
     }
 
-    audit('order.sms_receipt_sent', req, { order_id: order.id, phone_last4: phone.slice(-4) });
-    res.json({ success: true, token, url, message_sid: sid });
+    audit('order.sms_receipt_sent', req, { order_id: order.id, phone_last4: phone.slice(-4), enrolled: !!loyaltyResult });
+    res.json({ success: true, token, url, message_sid: sid, loyalty: loyaltyResult });
   } catch (error) {
     console.error('Error sending SMS receipt:', error);
     res.status(500).json({ error: 'Failed to send SMS receipt' });

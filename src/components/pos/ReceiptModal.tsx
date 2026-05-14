@@ -24,6 +24,8 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint }) 
   const [invoiceIssued, setInvoiceIssued] = useState(false);
   const [showSmsForm, setShowSmsForm] = useState(false);
   const [smsPhone, setSmsPhone] = useState('');
+  const [smsName, setSmsName] = useState('');
+  const [enrollLoyalty, setEnrollLoyalty] = useState(true);
   const [smsState, setSmsState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [smsError, setSmsError] = useState<string | null>(null);
 
@@ -36,18 +38,22 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint }) 
     setSmsState('sending');
     setSmsError(null);
     try {
-      await sendSmsReceipt(order.id, phone);
+      await sendSmsReceipt(order.id, phone, 'MX', {
+        enroll_loyalty: enrollLoyalty,
+        customer_name: smsName.trim() || undefined,
+      });
       setSmsState('sent');
       setTimeout(() => {
         setShowSmsForm(false);
         setSmsPhone('');
+        setSmsName('');
         setSmsState('idle');
       }, 1800);
     } catch (err) {
       setSmsState('error');
       setSmsError(err instanceof Error ? err.message : 'No pudimos enviar el SMS');
     }
-  }, [smsPhone, order.id]);
+  }, [smsPhone, smsName, enrollLoyalty, order.id]);
 
   const handleInvoiceIssued = useCallback((_invoice: CfdiInvoice) => {
     setInvoiceIssued(true);
@@ -194,10 +200,30 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint }) 
                   disabled={smsState === 'sending' || smsState === 'sent'}
                   className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-neutral-900 placeholder:text-neutral-400"
                 />
+                {enrollLoyalty && (
+                  <input
+                    type="text"
+                    placeholder="Nombre del cliente (opcional)"
+                    value={smsName}
+                    onChange={(e) => setSmsName(e.target.value)}
+                    disabled={smsState === 'sending' || smsState === 'sent'}
+                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-neutral-900 placeholder:text-neutral-400"
+                  />
+                )}
+                <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={enrollLoyalty}
+                    onChange={(e) => setEnrollLoyalty(e.target.checked)}
+                    disabled={smsState === 'sending' || smsState === 'sent'}
+                    className="w-4 h-4 accent-green-600"
+                  />
+                  Sumar al programa de lealtad (+1 sello)
+                </label>
                 {smsError && <p className="text-red-600 text-xs">{smsError}</p>}
                 <div className="flex gap-2">
                   <button
-                    onClick={() => { setShowSmsForm(false); setSmsPhone(''); setSmsState('idle'); setSmsError(null); }}
+                    onClick={() => { setShowSmsForm(false); setSmsPhone(''); setSmsName(''); setSmsState('idle'); setSmsError(null); }}
                     disabled={smsState === 'sending'}
                     className="flex-1 py-2 bg-neutral-200 text-neutral-700 font-semibold rounded-lg hover:bg-neutral-300"
                   >
