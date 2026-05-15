@@ -662,7 +662,8 @@ const POSScreen: React.FC = () => {
     } catch {
       // Non-blocking: payment already succeeded
     }
-    setLinkedCustomer(null);
+    // NOTE: do not clear linkedCustomer here — ReceiptModal still needs it to
+    // prefill the SMS receipt form. Cleared in onClose of the receipt modal.
   };
 
   const buildOrderItems = () => cart.map((item) => ({
@@ -1180,7 +1181,7 @@ const POSScreen: React.FC = () => {
         <ReceiptModal
           order={completedOrder}
           linkedCustomer={linkedCustomer}
-          onClose={() => { setShowReceiptModal(false); setCompletedOrder(null); }}
+          onClose={() => { setShowReceiptModal(false); setCompletedOrder(null); setLinkedCustomer(null); }}
           onPrint={() => { window.print(); }}
         />
       )}
