@@ -12,6 +12,8 @@ import {
   ensureFreshToken,
   getTerminals as mpGetTerminals,
   createPointOrder,
+  getPointOrder,
+  mapPointOrderStatus,
   cancelPointOrder,
 } from '../services/mercadopago.js';
 import { getServiceCredentials } from '../helpers/tenantCredentials.js';
@@ -677,6 +679,27 @@ function requirePro(req, res, next) {
   next();
 }
 
+async function markTerminalOrderPaid(orderId, tenantId = 'default') {
+  await run(
+    `UPDATE orders
+     SET payment_status = 'paid', status = 'preparing', payment_method = 'card', paid_at = NOW()
+     WHERE id = $1`,
+    [orderId]
+  );
+
+  await deductInventoryForOrder(orderId);
+
+  let invoice_token = null;
+  try {
+    invoice_token = await generateInvoiceToken(tenantId, orderId, 72);
+    await run('UPDATE orders SET invoice_token = $1 WHERE id = $2', [invoice_token, orderId]);
+  } catch (tokenErr) {
+    console.error('Non-fatal: failed to generate invoice token:', tokenErr.message);
+  }
+
+  return invoice_token;
+}
+
 // GET /api/payments/mp/connect — initiate MP OAuth flow
 router.get('/mp/connect', requireAuth('pos_access'), requirePro, async (req, res) => {
   const mpCreds = await getServiceCredentials(req.tenant.id, 'mercadopago', {
@@ -725,7 +748,7 @@ router.post('/mp/terminals/default', requireAuth('pos_access'), requirePro, asyn
 // POST /api/payments/mp/charge — create MP payment intent and push to terminal
 router.post('/mp/charge', requireAuth('pos_access'), requirePro, async (req, res) => {
   try {
-    const { order_id, terminal_id } = req.body;
+    const { order_id, terminal_id, tip = 0 } = req.body;
     if (!order_id) return res.status(400).json({ error: 'Missing order_id' });
 
     const order = await get('SELECT id, total, order_number, payment_status FROM orders WHERE id = $1', [order_id]);
@@ -741,16 +764,18 @@ router.post('/mp/charge', requireAuth('pos_access'), requirePro, async (req, res
     const termId = terminal_id || tenant.mp_default_terminal_id;
     if (!termId) return res.status(400).json({ error: 'No terminal selected' });
 
+    const tipAmount = typeof tip === 'number' ? tip : 0;
+    const totalAmount = Number(order.total) + tipAmount;
     const externalRef = `${req.tenant.id}-${order.id}`;
     const mpOrder = await createPointOrder(accessToken, {
-      amount: order.total,
+      amount: totalAmount,
       externalRef,
       terminalId: termId,
     });
 
     await run(
-      `UPDATE orders SET mp_order_id = $1, payment_status = 'pending_terminal' WHERE id = $2`,
-      [mpOrder.id, order.id]
+      `UPDATE orders SET mp_order_id = $1, payment_status = 'pending_terminal', tip = $2 WHERE id = $3`,
+      [mpOrder.id, tipAmount, order.id]
     );
 
     res.json({ success: true, mp_order_id: mpOrder.id, payment_intent_id: mpOrder.id });
@@ -966,26 +991,18 @@ router.get('/:order_id', async (req, res) => {
         const tenant = await getTenant(req.tenant.id);
         if (tenant?.mp_access_token) {
           const accessToken = await ensureFreshToken(tenant, adminSql);
-          const piRes = await fetch(
-            `https://api.mercadopago.com/point/integration-api/payment-intents/${order.mp_order_id}`,
-            { headers: { Authorization: `Bearer ${accessToken}` } }
-          );
-          if (piRes.ok) {
-            const piData = await piRes.json();
-            if (piData.state === 'FINISHED') {
-              await run(
-                `UPDATE orders SET payment_status = 'paid', payment_method = 'card', paid_at = NOW() WHERE id = $1`,
-                [order.id]
-              );
-              order.payment_status = 'paid';
-              order.payment_method = 'card';
-            } else if (piData.state === 'CANCELED' || piData.state === 'CANCELLED' || piData.state === 'ERROR') {
-              await run(
-                `UPDATE orders SET payment_status = 'failed' WHERE id = $1`,
-                [order.id]
-              );
-              order.payment_status = 'failed';
-            }
+          const mpOrder = await getPointOrder(accessToken, order.mp_order_id, tenant.mp_default_terminal_id);
+          const mapped = mapPointOrderStatus(mpOrder);
+          if (mapped === 'paid') {
+            await markTerminalOrderPaid(order.id, req.tenant.id);
+            order.payment_status = 'paid';
+            order.payment_method = 'card';
+          } else if (mapped === 'failed') {
+            await run(
+              `UPDATE orders SET payment_status = 'failed' WHERE id = $1`,
+              [order.id]
+            );
+            order.payment_status = 'failed';
           }
         }
       } catch (mpErr) {
@@ -1159,21 +1176,16 @@ export async function mpWebhook(req, res) {
         return;
       }
 
-      // Fetch payment intent status from MP
-      const piRes = await fetch(`https://api.mercadopago.com/point/integration-api/payment-intents/${paymentId}`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
+      const mpOrder = await getPointOrder(accessToken, paymentId, tenant.mp_default_terminal_id);
+      const mapped = mapPointOrderStatus(mpOrder);
 
-      if (!piRes.ok) return;
-      const piData = await piRes.json();
-
-      if (piData.state === 'FINISHED') {
+      if (mapped === 'paid') {
         await adminSql`
           UPDATE orders
           SET payment_status = 'paid', payment_method = 'card', paid_at = NOW()
           WHERE id = ${ord.id}
         `;
-      } else if (piData.state === 'CANCELLED' || piData.state === 'ERROR') {
+      } else if (mapped === 'failed') {
         await adminSql`
           UPDATE orders
           SET payment_status = 'failed'

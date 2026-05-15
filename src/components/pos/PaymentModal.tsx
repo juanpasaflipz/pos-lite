@@ -14,7 +14,7 @@ export interface PaymentModalProps {
   onOxxoPayment?: (tip: number) => void;
   onSpeiPayment?: (tip: number) => void;
   onGetnetPayment?: (tip: number) => void;
-  onTerminalPaymentSuccess?: () => void;
+  onTerminalPaymentSuccess?: (orderId: number) => void;
   onCancel: () => void;
   isProcessing: boolean;
   isOnline: boolean;
@@ -81,7 +81,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
           setTerminalSuccess(true);
           setTimeout(() => {
             if (onTerminalPaymentSuccess) {
-              onTerminalPaymentSuccess();
+              onTerminalPaymentSuccess(oid);
             }
             onCancel();
           }, 1200);
@@ -111,7 +111,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     setTerminalError('');
     try {
       if (provider === 'mp') {
-        await mpCharge(orderId);
+        await mpCharge(orderId, undefined, tip);
       } else {
         await clipCharge(orderId);
       }

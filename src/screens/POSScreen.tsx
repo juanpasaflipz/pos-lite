@@ -1163,7 +1163,15 @@ const POSScreen: React.FC = () => {
           onOxxoPayment={handleOxxoPayment}
           onSpeiPayment={handleSpeiPayment}
           onGetnetPayment={handleGetnetPayment}
-          onTerminalPaymentSuccess={() => {
+          onTerminalPaymentSuccess={async (orderId) => {
+            try {
+              const paidOrder = await getOrder(orderId);
+              await handleLoyaltyStamp(paidOrder);
+              setCompletedOrder(paidOrder);
+              setShowReceiptModal(true);
+            } catch {
+              // Payment succeeded; receipt fetch is non-blocking.
+            }
             clearCart();
             setShowPaymentModal(false);
             setPreCreatedOrderId(null);

@@ -2280,10 +2280,10 @@ export async function setMpDefaultTerminal(terminal_id: string): Promise<{ succe
   });
 }
 
-export async function mpCharge(order_id: number, terminal_id?: string): Promise<{ success: boolean; mp_order_id: string; payment_intent_id: string }> {
+export async function mpCharge(order_id: number, terminal_id?: string, tip: number = 0): Promise<{ success: boolean; mp_order_id: string; payment_intent_id: string }> {
   return apiRequest('/payments/mp/charge', {
     method: 'POST',
-    body: JSON.stringify({ order_id, terminal_id }),
+    body: JSON.stringify({ order_id, terminal_id, tip }),
   });
 }
 

@@ -64,24 +64,34 @@ export async function ensureFreshToken(tenant, adminSql) {
  * List Point terminals in PDV (integrated) mode.
  */
 export async function getTerminals(accessToken) {
-  const res = await fetch(`${MP}/point/integration-api/devices`, {
+  const res = await fetch(`${MP}/terminals/v1/list?limit=50&offset=0`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`MP getTerminals failed: ${res.status} ${text}`);
+  if (res.ok) {
+    const data = await res.json();
+    return (data.data?.terminals || []).filter(t => t.operating_mode === 'PDV');
   }
 
-  const data = await res.json();
-  return (data.devices || []).filter(d => d.operating_mode === 'PDV');
+  // Fallback for accounts still exposed only through the legacy Point API.
+  const legacy = await fetch(`${MP}/point/integration-api/devices`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!legacy.ok) {
+    const text = await legacy.text();
+    throw new Error(`MP getTerminals failed: ${res.status}; legacy failed: ${legacy.status} ${text}`);
+  }
+
+  const legacyData = await legacy.json();
+  return (legacyData.devices || []).filter(d => d.operating_mode === 'PDV');
 }
 
 /**
  * Create a Point order and push it to the terminal.
  */
 export async function createPointOrder(accessToken, { amount, externalRef, terminalId }) {
-  const res = await fetch(`${MP}/point/integration-api/devices/${terminalId}/payment-intents`, {
+  const amountString = Number(amount).toFixed(2);
+  const res = await fetch(`${MP}/v1/orders`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -89,11 +99,22 @@ export async function createPointOrder(accessToken, { amount, externalRef, termi
       'X-Idempotency-Key': `dk-${externalRef}-${Date.now()}`,
     },
     body: JSON.stringify({
-      amount: Math.round(amount * 100),
-      additional_info: {
-        external_reference: externalRef,
-        print_on_terminal: true,
+      type: 'point',
+      external_reference: externalRef,
+      expiration_time: 'PT16M',
+      transactions: {
+        payments: [{ amount: amountString }],
       },
+      config: {
+        point: {
+          terminal_id: terminalId,
+          print_on_terminal: 'no_ticket',
+        },
+        payment_method: {
+          default_type: 'credit_card',
+        },
+      },
+      description: `POS order ${externalRef}`,
     }),
   });
 
@@ -105,10 +126,78 @@ export async function createPointOrder(accessToken, { amount, externalRef, termi
   return res.json();
 }
 
+export async function getPointOrder(accessToken, orderId, terminalId = null) {
+  if (String(orderId).startsWith('ORD')) {
+    const res = await fetch(`${MP}/v1/orders/${orderId}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`MP getPointOrder failed: ${res.status} ${text}`);
+    }
+
+    return res.json();
+  }
+
+  if (!terminalId) {
+    throw new Error('Missing terminal_id for legacy MP payment intent lookup');
+  }
+
+  const res = await fetch(`${MP}/point/integration-api/devices/${terminalId}/payment-intents/${orderId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`MP legacy getPointOrder failed: ${res.status} ${text}`);
+  }
+
+  return res.json();
+}
+
+export function mapPointOrderStatus(order) {
+  const payment = order?.transactions?.payments?.[0];
+  const status = String(payment?.status || order?.status || '').toLowerCase();
+  const detail = String(payment?.status_detail || order?.status_detail || '').toLowerCase();
+
+  if (['processed', 'approved', 'paid'].includes(status)) return 'paid';
+  if (['canceled', 'cancelled', 'rejected', 'failed', 'expired'].includes(status)) return 'failed';
+  if (['canceled', 'cancelled', 'rejected', 'failed', 'expired'].includes(detail)) return 'failed';
+
+  // Legacy payment-intents API returns FINISHED / ERROR state.
+  const state = String(order?.state || '').toUpperCase();
+  if (state === 'FINISHED') return 'paid';
+  if (state === 'CANCELED' || state === 'CANCELLED' || state === 'ERROR') return 'failed';
+
+  return 'pending';
+}
+
 /**
  * Cancel an active Point payment intent.
  */
 export async function cancelPointOrder(accessToken, terminalId, paymentIntentId) {
+  if (String(paymentIntentId).startsWith('ORD')) {
+    const res = await fetch(`${MP}/v1/orders/${paymentIntentId}/cancel`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'X-Idempotency-Key': `dk-cancel-${paymentIntentId}-${Date.now()}`,
+      },
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`MP cancelPointOrder failed: ${res.status} ${text}`);
+    }
+
+    return;
+  }
+
   const res = await fetch(`${MP}/point/integration-api/devices/${terminalId}/payment-intents/${paymentIntentId}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${accessToken}` },
