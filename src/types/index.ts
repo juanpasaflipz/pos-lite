@@ -623,6 +623,8 @@ export interface CashCardBreakdown {
   total_revenue: number;
   breakdown: Array<{
     payment_method: string;
+    payment_source?: string;
+    display_name?: string;
     count: number;
     total: number;
     tips: number;
@@ -689,6 +691,7 @@ export interface LiveDashboardData {
   };
   hourly: Array<{ hour: number; orders: number; revenue: number }>;
   sources: Array<{ source: string; count: number; revenue: number }>;
+  payment_sources?: Array<{ payment_source: string; payment_method: string; display_name: string; count: number; revenue: number; tips: number }>;
   topItems: Array<{ item_name: string; qty: number }>;
 }
 

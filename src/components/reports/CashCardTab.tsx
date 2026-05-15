@@ -5,6 +5,12 @@ import { CashCardBreakdown } from '../../types';
 
 const COLORS = ['#0d9488', '#16a34a', '#2563eb', '#ca8a04', '#7c3aed', '#ea580c'];
 const fmt = (v: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(v);
+const methodLabel = (method: CashCardBreakdown['breakdown'][number], t: ReturnType<typeof useTranslation<'reports'>>['t']) => {
+  if (method.display_name) return method.display_name;
+  if (method.payment_method === 'card') return t('sales.cashCard.card');
+  if (method.payment_method === 'cash') return t('sales.cashCard.cash');
+  return method.payment_method.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+};
 
 interface CashCardTabProps {
   cashCard: CashCardBreakdown;
@@ -29,7 +35,7 @@ export default function CashCardTab({ cashCard }: CashCardTabProps) {
           <div className="mt-2">
             {cashCard.breakdown.map((b, i) => (
               <p key={i} className="text-lg font-bold text-white">
-                {b.payment_method === 'card' ? t('sales.cashCard.card') : t('sales.cashCard.cash')}: {b.percentage}%
+                {methodLabel(b, t)}: {b.percentage}%
               </p>
             ))}
           </div>
@@ -42,7 +48,7 @@ export default function CashCardTab({ cashCard }: CashCardTabProps) {
           <ResponsiveContainer width="100%" height={250}>
             <PieChart>
               <Pie
-                data={cashCard.breakdown.map(b => ({ name: b.payment_method === 'card' ? t('sales.cashCard.card') : t('sales.cashCard.cash'), value: b.total || 0 }))}
+                data={cashCard.breakdown.map(b => ({ name: methodLabel(b, t), value: b.total || 0 }))}
                 cx="50%"
                 cy="50%"
                 innerRadius={60}
@@ -65,7 +71,7 @@ export default function CashCardTab({ cashCard }: CashCardTabProps) {
             {cashCard.breakdown.map((b, i) => (
               <div key={i} className="p-4 bg-neutral-800 rounded-lg">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-lg font-bold text-white">{b.payment_method === 'card' ? t('sales.cashCard.card') : t('sales.cashCard.cash')}</span>
+                  <span className="text-lg font-bold text-white">{methodLabel(b, t)}</span>
                   <span className="text-lg font-bold text-brand-400">{fmt(b.total || 0)}</span>
                 </div>
                 <div className="flex justify-between text-sm text-neutral-400">

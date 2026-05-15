@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   mp_token_expires_at TIMESTAMPTZ,
   mp_default_terminal_id TEXT,
   signup_promo_code TEXT DEFAULT NULL,
-  timezone TEXT NOT NULL DEFAULT 'UTC',
+  timezone TEXT NOT NULL DEFAULT 'America/Mexico_City',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

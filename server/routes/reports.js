@@ -16,7 +16,7 @@ function tzToday(tz) {
 /**
  * Compute the start-of-period date string (YYYY-MM-DD) anchored to the
  * tenant's local timezone. SQL must compare with
- * `(created_at AT TIME ZONE $tz)::date >= startDate`.
+ * `(COALESCE(paid_at, created_at) AT TIME ZONE $tz)::date >= startDate`.
  */
 function getDateRange(period, tz = 'UTC') {
   const todayStr = tzToday(tz);
@@ -41,6 +41,41 @@ function getDateRange(period, tz = 'UTC') {
   }
 }
 
+function paymentSourceSql(alias = '') {
+  const p = alias ? `${alias}.` : '';
+  return `
+    CASE
+      WHEN ${p}payment_method = 'cash' THEN 'cash'
+      WHEN ${p}payment_method = 'getnet_card' THEN 'getnet_card'
+      WHEN ${p}payment_method = 'getnet_tap' THEN 'getnet_tap'
+      WHEN ${p}payment_method = 'oxxo' THEN 'oxxo'
+      WHEN ${p}payment_method = 'spei' THEN 'spei'
+      WHEN ${p}payment_method = 'transfer' THEN 'transfer'
+      WHEN ${p}payment_method = 'split' THEN 'split'
+      WHEN ${p}payment_method = 'card' AND ${p}mp_order_id IS NOT NULL THEN 'mercado_pago_terminal'
+      WHEN ${p}payment_method = 'card' AND ${p}clip_payment_id IS NOT NULL THEN 'clip_terminal'
+      WHEN ${p}payment_method = 'card' AND ${p}payment_intent_id IS NOT NULL THEN 'stripe_card'
+      WHEN ${p}payment_method = 'card' THEN 'card'
+      ELSE COALESCE(${p}payment_method, 'unknown')
+    END
+  `;
+}
+
+const PAYMENT_SOURCE_LABELS = {
+  cash: 'Cash',
+  mercado_pago_terminal: 'Mercado Pago terminal',
+  stripe_card: 'Stripe card',
+  clip_terminal: 'Clip terminal',
+  getnet_card: 'Getnet card',
+  getnet_tap: 'Getnet tap',
+  card: 'Card',
+  split: 'Split payment',
+  transfer: 'Transfer',
+  oxxo: 'OXXO',
+  spei: 'SPEI',
+  unknown: 'Unknown',
+};
+
 // GET /api/reports/sales - sales summary
 router.get('/sales', async (req, res) => {
   try {
@@ -58,7 +93,7 @@ router.get('/sales', async (req, res) => {
         ROUND(SUM(COALESCE(discount_amount, 0)), 2) as discount_total,
         COUNT(*) FILTER (WHERE COALESCE(discount_amount, 0) > 0) as discounted_order_count
       FROM orders
-      WHERE (created_at AT TIME ZONE $2)::date >= $1
+      WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $2)::date >= $1
         AND payment_status = 'paid'
     `, [startDate, tz]);
 
@@ -88,7 +123,7 @@ router.get('/top-items', async (req, res) => {
         ROUND(SUM(oi.quantity * oi.unit_price), 2) as revenue
       FROM order_items oi
       JOIN orders o ON oi.order_id = o.id
-      WHERE (o.created_at AT TIME ZONE $3)::date >= $1
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date >= $1
         AND o.payment_status = 'paid'
       GROUP BY oi.item_name
       ORDER BY quantity_sold DESC
@@ -118,7 +153,7 @@ router.get('/employee-performance', async (req, res) => {
         ROUND(AVG(o.total), 2) as avg_ticket,
         ROUND(SUM(o.tip), 2) as tips_received
       FROM employees e
-      LEFT JOIN orders o ON e.id = o.employee_id AND (o.created_at AT TIME ZONE $2)::date >= $1 AND o.payment_status = 'paid'
+      LEFT JOIN orders o ON e.id = o.employee_id AND (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date >= $1 AND o.payment_status = 'paid'
       GROUP BY e.id, e.name
       ORDER BY total_sales DESC
     `, [startDate, tz]);
@@ -138,12 +173,12 @@ router.get('/hourly', async (req, res) => {
 
     const hourly = await all(`
       SELECT
-        EXTRACT(HOUR FROM created_at AT TIME ZONE $2)::int as hour,
+        EXTRACT(HOUR FROM COALESCE(paid_at, created_at) AT TIME ZONE $2)::int as hour,
         COUNT(*) as orders,
         ROUND(SUM(subtotal), 2) as revenue,
         ROUND(AVG(total), 2) as avg_ticket
       FROM orders
-      WHERE (created_at AT TIME ZONE $2)::date = $1
+      WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $2)::date = $1
         AND payment_status = 'paid'
       GROUP BY hour
       ORDER BY hour ASC
@@ -182,15 +217,17 @@ router.get('/cash-card-breakdown', async (req, res) => {
 
     const breakdown = await all(`
       SELECT
-        payment_method,
+        ${paymentSourceSql()} as payment_source,
+        MIN(payment_method) as payment_method,
         COUNT(*) as count,
         ROUND(SUM(subtotal + tip), 2) as total,
         ROUND(SUM(tip), 2) as tips
       FROM orders
-      WHERE (created_at AT TIME ZONE $2)::date >= $1
+      WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $2)::date >= $1
         AND payment_status = 'paid'
         AND payment_method IS NOT NULL
-      GROUP BY payment_method
+      GROUP BY 1
+      ORDER BY total DESC
     `, [startDate, tz]);
 
     // Coerce Postgres numeric/bigint strings to JS numbers
@@ -205,6 +242,7 @@ router.get('/cash-card-breakdown', async (req, res) => {
 
     const result = breakdown.map(b => ({
       ...b,
+      display_name: PAYMENT_SOURCE_LABELS[b.payment_source] || b.payment_source,
       percentage: totalOrders > 0 ? Math.round((b.count / totalOrders) * 100) : 0,
       revenue_percentage: totalRevenue > 0 ? Math.round((b.total / totalRevenue) * 100) : 0,
     }));
@@ -234,7 +272,7 @@ router.get('/cogs-summary', async (req, res) => {
     const revRow = await get(`
       SELECT COALESCE(SUM(subtotal), 0) as revenue
       FROM orders
-      WHERE (created_at AT TIME ZONE $3)::date >= $1 AND (created_at AT TIME ZONE $3)::date <= $2
+      WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $3)::date >= $1 AND (COALESCE(paid_at, created_at) AT TIME ZONE $3)::date <= $2
         AND payment_status = 'paid'
     `, [startDate, endDate, tz]);
     const revenue = Number(revRow?.revenue || 0);
@@ -246,7 +284,7 @@ router.get('/cogs-summary', async (req, res) => {
       JOIN menu_item_ingredients mii ON oi.menu_item_id = mii.menu_item_id
       JOIN inventory_items ii ON mii.inventory_item_id = ii.id
       JOIN orders o ON oi.order_id = o.id
-      WHERE (o.created_at AT TIME ZONE $3)::date >= $1 AND (o.created_at AT TIME ZONE $3)::date <= $2
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date >= $1 AND (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date <= $2
         AND o.payment_status = 'paid'
     `, [startDate, endDate, tz]);
     const cogs = Number(cogsRow?.cogs || 0);
@@ -306,7 +344,7 @@ router.get('/cogs', async (req, res) => {
         ROUND(SUM(oi.quantity * oi.unit_price), 2) as revenue
       FROM order_items oi
       JOIN orders o ON oi.order_id = o.id
-      WHERE (o.created_at AT TIME ZONE $2)::date >= $1
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date >= $1
         AND o.payment_status = 'paid'
       GROUP BY oi.menu_item_id, oi.item_name
       ORDER BY revenue DESC
@@ -373,7 +411,7 @@ router.get('/category-margins', async (req, res) => {
       JOIN orders o ON oi.order_id = o.id
       JOIN menu_items mi ON oi.menu_item_id = mi.id
       JOIN menu_categories mc ON mi.category_id = mc.id
-      WHERE (o.created_at AT TIME ZONE $2)::date >= $1
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date >= $1
         AND o.payment_status = 'paid'
       GROUP BY mc.id, mc.name
       ORDER BY revenue DESC
@@ -388,7 +426,7 @@ router.get('/category-margins', async (req, res) => {
         JOIN orders o ON oi.order_id = o.id
         JOIN menu_items mi ON oi.menu_item_id = mi.id
         WHERE mi.category_id = $1
-          AND (o.created_at AT TIME ZONE $3)::date >= $2
+          AND (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date >= $2
           AND o.payment_status = 'paid'
       `, [cat.category_id, startDate, tz]);
 
@@ -399,7 +437,7 @@ router.get('/category-margins', async (req, res) => {
           FROM order_items oi
           JOIN orders o ON oi.order_id = o.id
           WHERE oi.menu_item_id = $1
-            AND (o.created_at AT TIME ZONE $3)::date >= $2
+            AND (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date >= $2
             AND o.payment_status = 'paid'
         `, [item.menu_item_id, startDate, tz]);
 
@@ -442,14 +480,14 @@ router.get('/contribution-margin', async (req, res) => {
 
     const dailyRevenue = await all(`
       SELECT
-        (o.created_at AT TIME ZONE $2)::date as date,
+        (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date as date,
         ROUND(SUM(oi.quantity * oi.unit_price), 2) as revenue,
         COUNT(DISTINCT o.id) as orders
       FROM order_items oi
       JOIN orders o ON oi.order_id = o.id
-      WHERE (o.created_at AT TIME ZONE $2)::date >= $1
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date >= $1
         AND o.payment_status = 'paid'
-      GROUP BY (o.created_at AT TIME ZONE $2)::date
+      GROUP BY (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date
       ORDER BY date ASC
     `, [startDate, tz]);
 
@@ -460,7 +498,7 @@ router.get('/contribution-margin', async (req, res) => {
         SELECT oi.menu_item_id, SUM(oi.quantity) as qty
         FROM order_items oi
         JOIN orders o ON oi.order_id = o.id
-        WHERE (o.created_at AT TIME ZONE $2)::date = $1
+        WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date = $1
           AND o.payment_status = 'paid'
         GROUP BY oi.menu_item_id
       `, [day.date, tz]);
@@ -513,22 +551,22 @@ router.get('/live', async (req, res) => {
         ROUND(AVG(total), 2) as avg_ticket,
         ROUND(SUM(tip), 2) as tips,
         SUM(CASE WHEN payment_method = 'cash' THEN 1 ELSE 0 END) as cash_orders,
-        SUM(CASE WHEN payment_method = 'card' THEN 1 ELSE 0 END) as card_orders,
+        SUM(CASE WHEN payment_method <> 'cash' THEN 1 ELSE 0 END) as card_orders,
         ROUND(SUM(CASE WHEN payment_method = 'cash' THEN subtotal + tip ELSE 0 END), 2) as cash_revenue,
-        ROUND(SUM(CASE WHEN payment_method = 'card' THEN subtotal + tip ELSE 0 END), 2) as card_revenue
+        ROUND(SUM(CASE WHEN payment_method <> 'cash' THEN subtotal + tip ELSE 0 END), 2) as card_revenue
       FROM orders
-      WHERE (created_at AT TIME ZONE $2)::date = $1
+      WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $2)::date = $1
         AND payment_status = 'paid'
     `, [today, tz]);
 
     // Hourly trend
     const hourly = await all(`
       SELECT
-        EXTRACT(HOUR FROM created_at AT TIME ZONE $2)::int as hour,
+        EXTRACT(HOUR FROM COALESCE(paid_at, created_at) AT TIME ZONE $2)::int as hour,
         COUNT(*) as orders,
         ROUND(SUM(subtotal), 2) as revenue
       FROM orders
-      WHERE (created_at AT TIME ZONE $2)::date = $1
+      WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $2)::date = $1
         AND payment_status = 'paid'
       GROUP BY hour
       ORDER BY hour ASC
@@ -541,17 +579,40 @@ router.get('/live', async (req, res) => {
         COUNT(*) as count,
         ROUND(SUM(subtotal), 2) as revenue
       FROM orders
-      WHERE (created_at AT TIME ZONE $2)::date = $1
+      WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $2)::date = $1
         AND payment_status = 'paid'
       GROUP BY source
     `, [today, tz]);
+
+    const paymentSources = await all(`
+      SELECT
+        ${paymentSourceSql()} as payment_source,
+        MIN(payment_method) as payment_method,
+        COUNT(*) as count,
+        ROUND(SUM(subtotal + tip), 2) as revenue,
+        ROUND(SUM(tip), 2) as tips
+      FROM orders
+      WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $2)::date = $1
+        AND payment_status = 'paid'
+        AND payment_method IS NOT NULL
+      GROUP BY 1
+      ORDER BY revenue DESC
+    `, [today, tz]);
+
+    const payment_sources = paymentSources.map((source) => ({
+      ...source,
+      count: Number(source.count) || 0,
+      revenue: Number(source.revenue) || 0,
+      tips: Number(source.tips) || 0,
+      display_name: PAYMENT_SOURCE_LABELS[source.payment_source] || source.payment_source,
+    }));
 
     // Top 5 items today
     const topItems = await all(`
       SELECT oi.item_name, SUM(oi.quantity) as qty
       FROM order_items oi
       JOIN orders o ON oi.order_id = o.id
-      WHERE (o.created_at AT TIME ZONE $2)::date = $1
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date = $1
         AND o.payment_status = 'paid'
       GROUP BY oi.item_name
       ORDER BY qty DESC
@@ -563,6 +624,7 @@ router.get('/live', async (req, res) => {
       kpis: kpis || { order_count: 0, revenue: 0, avg_ticket: 0, tips: 0, cash_orders: 0, card_orders: 0, cash_revenue: 0, card_revenue: 0 },
       hourly,
       sources,
+      payment_sources,
       topItems,
     });
   } catch (error) {
@@ -590,7 +652,7 @@ router.get('/delivery-margins', async (req, res) => {
       FROM delivery_platforms dp
       LEFT JOIN delivery_orders dor ON dp.id = dor.platform_id
       LEFT JOIN orders o ON dor.order_id = o.id
-        AND (o.created_at AT TIME ZONE $2)::date >= $1
+        AND (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date >= $1
         AND o.payment_status = 'paid'
       GROUP BY dp.id, dp.display_name, dp.commission_percent
     `, [startDate, tz]);
@@ -625,7 +687,7 @@ router.get('/channel-comparison', async (req, res) => {
         ROUND(SUM(o.subtotal), 2) as revenue,
         ROUND(AVG(o.total), 2) as avg_ticket
       FROM orders o
-      WHERE (o.created_at AT TIME ZONE $2)::date >= $1
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date >= $1
         AND o.payment_status = 'paid'
       GROUP BY o.source
       ORDER BY revenue DESC
@@ -650,7 +712,7 @@ router.get('/reconciliation', requireAuth('view_reports'), async (req, res) => {
     const orders = await all(`
       SELECT id, order_number, total, tip, payment_intent_id, payment_status, refund_total
       FROM orders
-      WHERE (created_at AT TIME ZONE $3)::date >= $1 AND (created_at AT TIME ZONE $3)::date <= $2
+      WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $3)::date >= $1 AND (COALESCE(paid_at, created_at) AT TIME ZONE $3)::date <= $2
         AND payment_method = 'card'
         AND payment_intent_id IS NOT NULL
       ORDER BY created_at ASC
@@ -702,7 +764,7 @@ router.get('/payment-fees', requireAuth('view_reports'), async (req, res) => {
     const orders = await all(`
       SELECT id, total, tip, payment_intent_id, created_at
       FROM orders
-      WHERE (created_at AT TIME ZONE $2)::date >= $1
+      WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $2)::date >= $1
         AND payment_method = 'card'
         AND payment_intent_id IS NOT NULL
         AND payment_status = 'paid'
@@ -840,7 +902,7 @@ router.get('/financial-projection', requireAuth('view_reports'), async (req, res
     const revRow = await get(`
       SELECT COALESCE(SUM(subtotal), 0) as revenue
       FROM orders
-      WHERE (created_at AT TIME ZONE $3)::date >= $1 AND (created_at AT TIME ZONE $3)::date <= $2
+      WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $3)::date >= $1 AND (COALESCE(paid_at, created_at) AT TIME ZONE $3)::date <= $2
         AND payment_status = 'paid'
     `, [startDate, endDate, tz]);
     const revenue = revRow?.revenue || 0;
@@ -850,7 +912,7 @@ router.get('/financial-projection', requireAuth('view_reports'), async (req, res
       SELECT oi.menu_item_id, SUM(oi.quantity) as qty
       FROM order_items oi
       JOIN orders o ON oi.order_id = o.id
-      WHERE (o.created_at AT TIME ZONE $3)::date >= $1 AND (o.created_at AT TIME ZONE $3)::date <= $2
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date >= $1 AND (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date <= $2
         AND o.payment_status = 'paid'
       GROUP BY oi.menu_item_id
     `, [startDate, endDate, tz]);
@@ -873,7 +935,7 @@ router.get('/financial-projection', requireAuth('view_reports'), async (req, res
     const cardOrders = await all(`
       SELECT payment_intent_id
       FROM orders
-      WHERE (created_at AT TIME ZONE $3)::date >= $1 AND (created_at AT TIME ZONE $3)::date <= $2
+      WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $3)::date >= $1 AND (COALESCE(paid_at, created_at) AT TIME ZONE $3)::date <= $2
         AND payment_method = 'card'
         AND payment_intent_id IS NOT NULL
         AND payment_status = 'paid'
@@ -894,7 +956,7 @@ router.get('/financial-projection', requireAuth('view_reports'), async (req, res
       SELECT COALESCE(SUM(dor.platform_commission), 0) as total
       FROM delivery_orders dor
       JOIN orders o ON dor.order_id = o.id
-      WHERE (o.created_at AT TIME ZONE $3)::date >= $1 AND (o.created_at AT TIME ZONE $3)::date <= $2
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date >= $1 AND (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date <= $2
         AND o.payment_status = 'paid'
     `, [startDate, endDate, tz]);
     const deliveryCommissions = Math.round((delRow?.total || 0) * 100) / 100;
@@ -1052,7 +1114,7 @@ router.get('/menu-engineering', async (req, res) => {
       JOIN orders o ON oi.order_id = o.id
       LEFT JOIN menu_items mi ON oi.menu_item_id = mi.id
       LEFT JOIN menu_categories mc ON mi.category_id = mc.id
-      WHERE (o.created_at AT TIME ZONE $2)::date >= $1
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date >= $1
         AND o.payment_status = 'paid'
         AND oi.menu_item_id IS NOT NULL
       GROUP BY oi.menu_item_id, oi.item_name, mc.name, mi.price
