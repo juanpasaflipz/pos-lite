@@ -31,6 +31,7 @@ interface PlanContextType {
   ownerEmail: string | null;
   mpUserId: string | null;
   mpDefaultTerminalId: string | null;
+  timezone: string;
   isPaid: boolean;
   isFree: boolean;
   isMpConnected: boolean;
@@ -74,6 +75,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   const [getnetConfigured, setGetnetConfigured] = useState(false);
   const [getnetEnabled, setGetnetEnabled] = useState(false);
   const [clipConfigured, setClipConfigured] = useState(false);
+  const [timezone, setTimezone] = useState<string>('UTC');
 
   const fetchPlan = useCallback(async () => {
     try {
@@ -96,6 +98,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
         if (data.getnetConfigured !== undefined) setGetnetConfigured(data.getnetConfigured);
         if (data.getnetEnabled !== undefined) setGetnetEnabled(data.getnetEnabled);
         if (data.clipConfigured !== undefined) setClipConfigured(data.clipConfigured);
+        if (typeof data.timezone === 'string' && data.timezone) setTimezone(data.timezone);
       }
     } catch {
       // Server unreachable — keep defaults
@@ -130,7 +133,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   }, [limits]);
 
   return (
-    <PlanContext.Provider value={{ plan, limits, ownerEmail, mpUserId, mpDefaultTerminalId, isPaid, isFree, isMpConnected, isConektaConfigured, isGetnetConfigured, isGetnetEnabled, isClipConfigured, isAtLimit, isFeatureLocked, refresh: fetchPlan }}>
+    <PlanContext.Provider value={{ plan, limits, ownerEmail, mpUserId, mpDefaultTerminalId, timezone, isPaid, isFree, isMpConnected, isConektaConfigured, isGetnetConfigured, isGetnetEnabled, isClipConfigured, isAtLimit, isFeatureLocked, refresh: fetchPlan }}>
       {children}
     </PlanContext.Provider>
   );

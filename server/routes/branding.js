@@ -109,6 +109,7 @@ router.get('/', async (req, res) => {
     getnetConfigured,
     getnetEnabled: !!tenant.getnet_enabled,
     clipConfigured,
+    timezone: tenant.timezone || 'UTC',
   });
 });
 
@@ -214,6 +215,37 @@ router.put('/settings', requireAuth('manage_branding'), async (req, res) => {
   } catch (error) {
     console.error('Branding settings update error:', error);
     res.status(500).json({ error: 'Failed to update branding settings' });
+  }
+});
+
+/**
+ * PUT /api/branding/timezone — set tenant timezone (employee auth, manage_branding)
+ * Body: { timezone: 'America/Mexico_City' }
+ * Validates against IANA tz database via Intl.DateTimeFormat.
+ */
+router.put('/timezone', requireAuth('manage_branding'), async (req, res) => {
+  try {
+    const tenantId = req.tenant?.id;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'No tenant context — timezone is per-tenant' });
+    }
+
+    const { timezone } = req.body;
+    if (!timezone || typeof timezone !== 'string') {
+      return res.status(400).json({ error: 'timezone is required' });
+    }
+
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: timezone }).format(new Date());
+    } catch {
+      return res.status(400).json({ error: `Invalid IANA timezone: ${timezone}` });
+    }
+
+    await updateTenant(tenantId, { timezone });
+    res.json({ timezone });
+  } catch (error) {
+    console.error('Timezone update error:', error);
+    res.status(500).json({ error: 'Failed to update timezone' });
   }
 });
 

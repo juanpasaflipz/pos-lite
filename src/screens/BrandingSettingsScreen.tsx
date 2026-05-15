@@ -23,16 +23,39 @@ const PRESET_COLORS = [
   '#db2777', // pink
 ];
 
+const TIMEZONE_OPTIONS = [
+  'America/Mexico_City',
+  'America/Cancun',
+  'America/Tijuana',
+  'America/Monterrey',
+  'America/Bogota',
+  'America/Lima',
+  'America/Santiago',
+  'America/Buenos_Aires',
+  'America/Sao_Paulo',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Phoenix',
+  'America/Los_Angeles',
+  'America/Anchorage',
+  'Pacific/Honolulu',
+  'Europe/Madrid',
+  'Europe/London',
+  'UTC',
+];
+
 export default function BrandingSettingsScreen() {
   const { t } = useTranslation('admin');
   const { branding, refresh } = useBranding();
   const { currentEmployee } = useAuth();
-  const { limits } = usePlan();
+  const { limits, timezone, refresh: refreshPlan } = usePlan();
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
 
   const [restaurantName, setRestaurantName] = useState('');
   const [tagline, setTagline] = useState('');
   const [address, setAddress] = useState('');
+  const [tz, setTz] = useState<string>('UTC');
   const [primaryColor, setPrimaryColor] = useState('#0d9488');
   const [customHex, setCustomHex] = useState('');
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -53,6 +76,10 @@ export default function BrandingSettingsScreen() {
       setLogoPreview(branding.logoUrl || null);
     }
   }, [branding]);
+
+  useEffect(() => {
+    setTz(timezone || 'UTC');
+  }, [timezone]);
 
   // Update preview palette when color changes
   useEffect(() => {
@@ -134,6 +161,24 @@ export default function BrandingSettingsScreen() {
         throw new Error(data.error || 'Failed to save settings');
       }
 
+      // Save timezone if changed
+      if (tz && tz !== timezone) {
+        const tzRes = await fetch(`${baseUrl2}/branding/timezone`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(!isCap2 && tid2 ? { 'X-Tenant-ID': tid2 } : {}),
+          },
+          body: JSON.stringify({ timezone: tz }),
+        });
+        if (!tzRes.ok) {
+          const data = await tzRes.json();
+          throw new Error(data.error || 'Failed to save timezone');
+        }
+        await refreshPlan();
+      }
+
       // Refresh branding context
       await refresh();
       setLogoFile(null);
@@ -210,6 +255,25 @@ export default function BrandingSettingsScreen() {
             className="w-full bg-neutral-800 text-white rounded-lg px-4 py-3 border border-neutral-700 focus:border-brand-500 focus:outline-none"
             placeholder={t('branding.addressPlaceholder')}
           />
+        </div>
+
+        {/* Timezone */}
+        <div className="bg-neutral-900 rounded-lg border border-neutral-800 p-6">
+          <label className="block text-sm font-medium text-neutral-400 mb-2">
+            {t('branding.timezone', 'Timezone')}
+          </label>
+          <p className="text-xs text-neutral-500 mb-3">
+            {t('branding.timezoneHint', 'Sales reports group "today" / hourly data by this timezone.')}
+          </p>
+          <select
+            value={tz}
+            onChange={(e) => setTz(e.target.value)}
+            className="w-full bg-neutral-800 text-white rounded-lg px-4 py-3 border border-neutral-700 focus:border-brand-500 focus:outline-none"
+          >
+            {(TIMEZONE_OPTIONS.includes(tz) ? TIMEZONE_OPTIONS : [tz, ...TIMEZONE_OPTIONS]).map((z) => (
+              <option key={z} value={z}>{z.replace('_', ' ')}</option>
+            ))}
+          </select>
         </div>
 
         {/* Logo Upload */}

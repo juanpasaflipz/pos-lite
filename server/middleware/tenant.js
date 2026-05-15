@@ -115,6 +115,7 @@ export async function tenantMiddleware(req, res, next) {
       owner_email: tenant.owner_email || null,
       mp_user_id: tenant.mp_user_id || null,
       mp_default_terminal_id: tenant.mp_default_terminal_id || null,
+      timezone: tenant.timezone || 'UTC',
     };
 
     tenantContext.run({ conn, tenantId }, () => {

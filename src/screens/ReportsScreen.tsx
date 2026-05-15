@@ -20,7 +20,7 @@ import {
 } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../utils/currency';
-import { formatDate } from '../utils/dateFormat';
+import { formatDate, todayInTz } from '../utils/dateFormat';
 import BrandLogo from '../components/BrandLogo';
 import { usePlan } from '../context/PlanContext';
 import {
@@ -54,7 +54,7 @@ type Tab = 'overview' | 'cashcard' | 'cogs' | 'categories' | 'margin' | 'deliver
 export default function ReportsScreen() {
   const { t } = useTranslation('reports');
   const { currentEmployee } = useAuth();
-  const { limits } = usePlan();
+  const { limits, timezone: tenantTz } = usePlan();
   const [period, setPeriod] = useState<Period>('today');
   const [tab, setTab] = useState<Tab>('overview');
   const [salesData, setSalesData] = useState<SalesReport | null>(null);
@@ -71,7 +71,7 @@ export default function ReportsScreen() {
   const [refundData, setRefundData] = useState<RefundSummary | null>(null);
   const [financialData, setFinancialData] = useState<FinancialProjection | null>(null);
   const [engineeringData, setEngineeringData] = useState<MenuEngineeringReport | null>(null);
-  const [financialMonth, setFinancialMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [financialMonth, setFinancialMonth] = useState(() => todayInTz(tenantTz).slice(0, 7));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const canEditFinancials = !!(currentEmployee && ['admin', 'manager'].includes(currentEmployee.role) && limits.reports.editVariables);
@@ -154,7 +154,7 @@ export default function ReportsScreen() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `sales-report-${period}-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `sales-report-${period}-${todayInTz(tenantTz)}.csv`;
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);
