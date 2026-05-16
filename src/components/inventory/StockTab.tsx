@@ -10,10 +10,23 @@ import {
   X,
   Sparkles,
   DollarSign,
+  Trash2,
 } from 'lucide-react';
 import { InventoryItem, InventoryForecast, COGSSummary } from '../../types';
 
 type SortField = 'name' | 'quantity' | 'status';
+type InventoryItemForm = {
+  name: string;
+  category: string;
+  unit: string;
+  quantity: string;
+  low_stock_threshold: string;
+  cost_price: string;
+  sku: string;
+  barcode: string;
+  expiry_date: string;
+  lot_number: string;
+};
 
 interface StockTabProps {
   items: InventoryItem[];
@@ -28,6 +41,9 @@ interface StockTabProps {
   editThreshold: string;
   editingQuantityId: number | null;
   editQuantity: string;
+  itemFormOpen: boolean;
+  itemFormMode: 'create' | 'edit';
+  itemForm: InventoryItemForm;
   actionLoading: boolean;
   cogsSummary: COGSSummary | null;
   forecasts: InventoryForecast[];
@@ -45,6 +61,12 @@ interface StockTabProps {
   onEditThresholdChange: (value: string) => void;
   onEditingQuantityIdChange: (id: number | null) => void;
   onEditQuantityChange: (value: string) => void;
+  onItemFormChange: (value: InventoryItemForm) => void;
+  onCreateItem: () => void;
+  onEditItem: (item: InventoryItem) => void;
+  onSaveItem: () => void;
+  onDeleteItem: (item: InventoryItem) => void;
+  onCloseItemForm: () => void;
   onShowForecastsChange: (show: boolean) => void;
 }
 
@@ -60,6 +82,9 @@ export default function StockTab({
   editThreshold,
   editingQuantityId,
   editQuantity,
+  itemFormOpen,
+  itemFormMode,
+  itemForm,
   actionLoading,
   cogsSummary,
   forecasts,
@@ -77,9 +102,19 @@ export default function StockTab({
   onEditThresholdChange,
   onEditingQuantityIdChange,
   onEditQuantityChange,
+  onItemFormChange,
+  onCreateItem,
+  onEditItem,
+  onSaveItem,
+  onDeleteItem,
+  onCloseItemForm,
   onShowForecastsChange,
 }: StockTabProps) {
   const { t } = useTranslation('inventory');
+
+  const updateFormField = (field: keyof InventoryItemForm, value: string) => {
+    onItemFormChange({ ...itemForm, [field]: value });
+  };
 
   const getStatusBadge = (quantity: number, threshold: number) => {
     if (quantity === 0) return <span className="px-3 py-1 bg-brand-600/20 text-brand-400 rounded-full text-xs font-medium border border-brand-800">{t('inventory.status.outOfStock')}</span>;
@@ -135,6 +170,16 @@ export default function StockTab({
       )}
 
       <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800 mb-6">
+        <div className="flex justify-end mb-4">
+          <button
+            onClick={onCreateItem}
+            className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors text-sm font-medium min-h-[44px] flex items-center gap-2"
+          >
+            <Plus size={18} />
+            {t('inventory.addItem')}
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="relative">
             <Search className="absolute left-3 top-3 text-neutral-500" size={20} />
@@ -358,15 +403,32 @@ export default function StockTab({
                           </button>
                         </div>
                       ) : (
-                        <button
-                          onClick={() => {
-                            onRestockingIdChange(item.id);
-                            onRestockAmountChange('');
-                          }}
-                          className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors text-sm font-medium min-h-[44px] flex items-center justify-center"
-                        >
-                          {t('inventory.restock')}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              onRestockingIdChange(item.id);
+                              onRestockAmountChange('');
+                            }}
+                            className="px-3 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors text-sm font-medium min-h-[40px] flex items-center justify-center"
+                          >
+                            {t('inventory.restock')}
+                          </button>
+                          <button
+                            onClick={() => onEditItem(item)}
+                            title={t('inventory.editItem')}
+                            className="p-2 text-neutral-300 bg-neutral-800 hover:bg-neutral-700 rounded-lg transition-colors"
+                          >
+                            <Edit2 size={18} />
+                          </button>
+                          <button
+                            onClick={() => onDeleteItem(item)}
+                            disabled={actionLoading}
+                            title={t('inventory.deleteItem')}
+                            className="p-2 text-red-400 bg-neutral-800 hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -376,6 +438,149 @@ export default function StockTab({
           </div>
         )}
       </div>
+
+      {itemFormOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl bg-neutral-900 border border-neutral-800 rounded-lg shadow-2xl">
+            <div className="flex items-center justify-between p-5 border-b border-neutral-800">
+              <h3 className="text-lg font-semibold text-white">
+                {itemFormMode === 'edit' ? t('inventory.editItem') : t('inventory.addItem')}
+              </h3>
+              <button
+                onClick={onCloseItemForm}
+                className="p-2 text-neutral-400 hover:text-white hover:bg-neutral-800 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <label className="block md:col-span-2">
+                <span className="block text-sm text-neutral-400 mb-1">{t('inventory.form.name')}</span>
+                <input
+                  type="text"
+                  value={itemForm.name}
+                  onChange={(e) => updateFormField('name', e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-brand-600"
+                  autoFocus
+                />
+              </label>
+
+              <label className="block">
+                <span className="block text-sm text-neutral-400 mb-1">{t('inventory.form.category')}</span>
+                <input
+                  type="text"
+                  value={itemForm.category}
+                  onChange={(e) => updateFormField('category', e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-brand-600"
+                />
+              </label>
+
+              <label className="block">
+                <span className="block text-sm text-neutral-400 mb-1">{t('inventory.form.unit')}</span>
+                <input
+                  type="text"
+                  value={itemForm.unit}
+                  onChange={(e) => updateFormField('unit', e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-brand-600"
+                />
+              </label>
+
+              <label className="block">
+                <span className="block text-sm text-neutral-400 mb-1">{t('inventory.form.quantity')}</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={itemForm.quantity}
+                  onChange={(e) => updateFormField('quantity', e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-brand-600"
+                />
+              </label>
+
+              <label className="block">
+                <span className="block text-sm text-neutral-400 mb-1">{t('inventory.form.threshold')}</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={itemForm.low_stock_threshold}
+                  onChange={(e) => updateFormField('low_stock_threshold', e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-brand-600"
+                />
+              </label>
+
+              <label className="block">
+                <span className="block text-sm text-neutral-400 mb-1">{t('inventory.form.costPrice')}</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={itemForm.cost_price}
+                  onChange={(e) => updateFormField('cost_price', e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-brand-600"
+                />
+              </label>
+
+              <label className="block">
+                <span className="block text-sm text-neutral-400 mb-1">{t('inventory.form.sku')}</span>
+                <input
+                  type="text"
+                  value={itemForm.sku}
+                  onChange={(e) => updateFormField('sku', e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-brand-600"
+                />
+              </label>
+
+              <label className="block">
+                <span className="block text-sm text-neutral-400 mb-1">{t('inventory.form.barcode')}</span>
+                <input
+                  type="text"
+                  value={itemForm.barcode}
+                  onChange={(e) => updateFormField('barcode', e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-brand-600"
+                />
+              </label>
+
+              <label className="block">
+                <span className="block text-sm text-neutral-400 mb-1">{t('inventory.form.expiryDate')}</span>
+                <input
+                  type="date"
+                  value={itemForm.expiry_date}
+                  onChange={(e) => updateFormField('expiry_date', e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-brand-600"
+                />
+              </label>
+
+              <label className="block">
+                <span className="block text-sm text-neutral-400 mb-1">{t('inventory.form.lotNumber')}</span>
+                <input
+                  type="text"
+                  value={itemForm.lot_number}
+                  onChange={(e) => updateFormField('lot_number', e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-brand-600"
+                />
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-3 p-5 border-t border-neutral-800">
+              <button
+                onClick={onCloseItemForm}
+                className="px-4 py-2 bg-neutral-800 text-neutral-300 rounded-lg hover:bg-neutral-700 transition-colors"
+              >
+                {t('inventory.cancel')}
+              </button>
+              <button
+                onClick={onSaveItem}
+                disabled={actionLoading || !itemForm.name.trim()}
+                className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50"
+              >
+                {actionLoading ? t('inventory.saving') : t('inventory.saveItem')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* AI Forecast Section */}
       {forecasts.filter(f => f.risk_level === 'critical' || f.risk_level === 'high').length > 0 && (

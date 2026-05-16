@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import {
   getInventory,
+  createInventoryItem,
+  deleteInventoryItem,
   restockItem,
   updateInventory,
   getInventoryForecast,
@@ -56,6 +58,31 @@ import ShelfLifeAuditBanner from '../components/inventory/ShelfLifeAuditBanner';
 
 type Tab = 'stock' | 'scan' | 'waste' | 'count' | 'variance' | 'alerts' | 'insights';
 type SortField = 'name' | 'quantity' | 'status';
+type InventoryItemForm = {
+  name: string;
+  category: string;
+  unit: string;
+  quantity: string;
+  low_stock_threshold: string;
+  cost_price: string;
+  sku: string;
+  barcode: string;
+  expiry_date: string;
+  lot_number: string;
+};
+
+const emptyInventoryForm: InventoryItemForm = {
+  name: '',
+  category: '',
+  unit: '',
+  quantity: '0',
+  low_stock_threshold: '0',
+  cost_price: '0',
+  sku: '',
+  barcode: '',
+  expiry_date: '',
+  lot_number: '',
+};
 
 export default function InventoryScreen() {
   const { t } = useTranslation('inventory');
@@ -76,6 +103,10 @@ export default function InventoryScreen() {
   const [editThreshold, setEditThreshold] = useState<string>('');
   const [editingQuantityId, setEditingQuantityId] = useState<number | null>(null);
   const [editQuantity, setEditQuantity] = useState<string>('');
+  const [itemFormOpen, setItemFormOpen] = useState(false);
+  const [itemFormMode, setItemFormMode] = useState<'create' | 'edit'>('create');
+  const [itemForm, setItemForm] = useState<InventoryItemForm>(emptyInventoryForm);
+  const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [forecasts, setForecasts] = useState<InventoryForecast[]>([]);
   const [showForecasts, setShowForecasts] = useState(false);
@@ -272,6 +303,102 @@ export default function InventoryScreen() {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('inventory.failedUpdateQuantity'));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const openCreateItemForm = () => {
+    setItemFormMode('create');
+    setEditingItemId(null);
+    setItemForm(emptyInventoryForm);
+    setItemFormOpen(true);
+  };
+
+  const openEditItemForm = (item: InventoryItem) => {
+    setItemFormMode('edit');
+    setEditingItemId(item.id);
+    setItemForm({
+      name: item.name || '',
+      category: item.category || '',
+      unit: item.unit || '',
+      quantity: String(item.quantity ?? 0),
+      low_stock_threshold: String(item.low_stock_threshold ?? 0),
+      cost_price: String(item.cost_price ?? 0),
+      sku: item.sku || '',
+      barcode: item.barcode || '',
+      expiry_date: item.expiry_date ? item.expiry_date.slice(0, 10) : '',
+      lot_number: item.lot_number || '',
+    });
+    setItemFormOpen(true);
+  };
+
+  const closeItemForm = () => {
+    setItemFormOpen(false);
+    setEditingItemId(null);
+    setItemForm(emptyInventoryForm);
+  };
+
+  const numberFromForm = (value: string, fallback = 0) => {
+    if (value.trim() === '') return fallback;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : NaN;
+  };
+
+  const handleSaveItem = async () => {
+    const name = itemForm.name.trim();
+    const quantity = numberFromForm(itemForm.quantity);
+    const threshold = numberFromForm(itemForm.low_stock_threshold);
+    const costPrice = numberFromForm(itemForm.cost_price);
+
+    if (!name) {
+      setError(t('inventory.itemNameRequired'));
+      return;
+    }
+    if ([quantity, threshold, costPrice].some((value) => Number.isNaN(value) || value < 0)) {
+      setError(t('inventory.invalidItemFields'));
+      return;
+    }
+
+    const payload = {
+      name,
+      category: itemForm.category.trim(),
+      unit: itemForm.unit.trim(),
+      quantity,
+      low_stock_threshold: threshold,
+      cost_price: costPrice,
+      sku: itemForm.sku.trim(),
+      barcode: itemForm.barcode.trim(),
+      expiry_date: itemForm.expiry_date,
+      lot_number: itemForm.lot_number.trim(),
+    };
+
+    try {
+      setActionLoading(true);
+      setError(null);
+      if (itemFormMode === 'edit' && editingItemId) {
+        await updateInventory(editingItemId, payload);
+      } else {
+        await createInventoryItem(payload);
+      }
+      closeItemForm();
+      await fetchItems();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t(itemFormMode === 'edit' ? 'inventory.failedSaveItem' : 'inventory.failedCreateItem'));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteItem = async (item: InventoryItem) => {
+    if (!window.confirm(t('inventory.confirmDeleteItem', { name: item.name }))) return;
+    try {
+      setActionLoading(true);
+      setError(null);
+      await deleteInventoryItem(item.id);
+      await fetchItems();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('inventory.failedDeleteItem'));
     } finally {
       setActionLoading(false);
     }
@@ -596,6 +723,9 @@ export default function InventoryScreen() {
             editThreshold={editThreshold}
             editingQuantityId={editingQuantityId}
             editQuantity={editQuantity}
+            itemFormOpen={itemFormOpen}
+            itemFormMode={itemFormMode}
+            itemForm={itemForm}
             actionLoading={actionLoading}
             cogsSummary={cogsSummary}
             forecasts={forecasts}
@@ -613,6 +743,12 @@ export default function InventoryScreen() {
             onEditThresholdChange={setEditThreshold}
             onEditingQuantityIdChange={setEditingQuantityId}
             onEditQuantityChange={setEditQuantity}
+            onItemFormChange={setItemForm}
+            onCreateItem={openCreateItemForm}
+            onEditItem={openEditItemForm}
+            onSaveItem={handleSaveItem}
+            onDeleteItem={handleDeleteItem}
+            onCloseItemForm={closeItemForm}
             onShowForecastsChange={setShowForecasts}
           />
         )}

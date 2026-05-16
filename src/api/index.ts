@@ -691,7 +691,22 @@ export async function getLowStock(): Promise<InventoryItem[]> {
 
 export async function updateInventory(
   id: number,
-  data: { quantity?: number; low_stock_threshold?: number }
+  data: Partial<Pick<
+    InventoryItem,
+    | 'name'
+    | 'quantity'
+    | 'unit'
+    | 'low_stock_threshold'
+    | 'category'
+    | 'cost_price'
+    | 'sku'
+    | 'barcode'
+    | 'expiry_date'
+    | 'lot_number'
+    | 'pack_size'
+    | 'shelf_life_days'
+    | 'storage_type'
+  >>
 ): Promise<any> {
   return apiRequest(`/inventory/${id}`, {
     method: 'PUT',
@@ -752,7 +767,7 @@ export async function scanRestock(data: {
 
 export async function createInventoryItem(data: {
   name: string;
-  unit: string;
+  unit?: string;
   quantity?: number;
   low_stock_threshold?: number;
   cost_price?: number;

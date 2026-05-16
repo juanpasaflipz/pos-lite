@@ -379,11 +379,14 @@ router.put('/:id', requireAuth('manage_inventory'), async (req, res) => {
   try {
     const columns = await getInventoryColumns();
     const { id } = req.params;
-    const { quantity, low_stock_threshold, sku, barcode, expiry_date, lot_number, cost_price, unit, pack_size, shelf_life_days, storage_type } = req.body;
+    const { name, quantity, low_stock_threshold, category, sku, barcode, expiry_date, lot_number, cost_price, unit, pack_size, shelf_life_days, storage_type } = req.body;
 
     const item = await get('SELECT id FROM inventory_items WHERE id = $1', [id]);
     if (!item) {
       return res.status(404).json({ error: 'Inventory item not found' });
+    }
+    if (name !== undefined && !String(name).trim()) {
+      return res.status(400).json({ error: 'name is required' });
     }
 
     // Build dynamic SET clause for provided fields only
@@ -391,6 +394,10 @@ router.put('/:id', requireAuth('manage_inventory'), async (req, res) => {
     const params = [];
     let paramIdx = 1;
 
+    if (name !== undefined) {
+      sets.push(`name = $${paramIdx++}`);
+      params.push(String(name).trim());
+    }
     if (quantity !== undefined) {
       sets.push(`quantity = $${paramIdx++}`);
       params.push(quantity);
@@ -398,6 +405,10 @@ router.put('/:id', requireAuth('manage_inventory'), async (req, res) => {
     if (low_stock_threshold !== undefined) {
       sets.push(`low_stock_threshold = $${paramIdx++}`);
       params.push(low_stock_threshold);
+    }
+    if (category !== undefined) {
+      sets.push(`category = $${paramIdx++}`);
+      params.push(category || null);
     }
     if (sku !== undefined && columns.has('sku')) {
       sets.push(`sku = $${paramIdx++}`);
