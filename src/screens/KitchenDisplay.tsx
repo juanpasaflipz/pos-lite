@@ -387,6 +387,11 @@ function OrderCard({
               QR
             </span>
           )}
+          {order.source === 'customer_kiosk' && (
+            <span className="bg-emerald-600 text-white px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
+              KIOSK
+            </span>
+          )}
           {order.table_number && (
             <span className="bg-sky-600 text-white px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
               Table {order.table_number}

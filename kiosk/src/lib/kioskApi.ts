@@ -68,6 +68,8 @@ function authHeaders({ tenantId, kioskToken }: AuthHeaders): HeadersInit {
   };
 }
 
+export type KioskPaymentChoice = 'counter_cash' | 'terminal_card';
+
 export interface KioskMenuItem {
   id: number;
   name: string;
@@ -98,4 +100,71 @@ export async function fetchMenu(auth: AuthHeaders): Promise<{
     categories: await catsRes.json(),
     items: await itemsRes.json(),
   };
+}
+
+export interface CreateKioskOrderLine {
+  menu_item_id: number;
+  quantity: number;
+}
+
+export interface KioskOrderResponse {
+  id: number;
+  order_number: string | number;
+  subtotal: number;
+  tax: number;
+  total: number;
+  payment_status: string;
+  status: string;
+}
+
+export async function createKioskOrder(
+  auth: AuthHeaders,
+  items: CreateKioskOrderLine[],
+  paymentChoice: KioskPaymentChoice,
+): Promise<KioskOrderResponse> {
+  const res = await fetch(`${API_BASE}/api/kiosk/orders`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({ items, payment_choice: paymentChoice }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Order failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function sendKioskOrderToTerminal(
+  auth: AuthHeaders,
+  orderId: number,
+): Promise<{ success: boolean; mp_order_id: string; payment_status: string }> {
+  const res = await fetch(`${API_BASE}/api/kiosk/orders/${orderId}/mp-charge`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Terminal failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function fetchKioskOrderStatus(
+  auth: AuthHeaders,
+  orderId: number,
+): Promise<{
+  id: number;
+  order_number: string | number;
+  total: number;
+  payment_status: string;
+  invoice_token: string | null;
+}> {
+  const res = await fetch(`${API_BASE}/api/kiosk/orders/${orderId}/status`, {
+    headers: authHeaders(auth),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Status failed (${res.status})`);
+  }
+  return res.json();
 }

@@ -152,6 +152,9 @@ const MobileKitchenScreen: React.FC = () => {
                   {order.source === 'qr_order' && (
                     <span className="bg-violet-600 text-white px-2 py-0.5 rounded-full text-xs font-bold">QR</span>
                   )}
+                  {order.source === 'customer_kiosk' && (
+                    <span className="bg-emerald-600 text-white px-2 py-0.5 rounded-full text-xs font-bold">KIOSK</span>
+                  )}
                   {order.table_number && (
                     <span className="bg-sky-600 text-white px-2 py-0.5 rounded-full text-xs font-bold">Table {order.table_number}</span>
                   )}
