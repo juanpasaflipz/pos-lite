@@ -6,6 +6,7 @@ import path from 'path';
 
 export default defineConfig({
   root: path.resolve(__dirname, 'kiosk'),
+  base: '/kiosk/',
   plugins: [react()],
   publicDir: path.resolve(__dirname, 'kiosk/public'),
   css: {
