@@ -85,55 +85,55 @@ const KioskPaymentScreen: React.FC = () => {
 
   return (
     <div className="h-full w-full bg-neutral-950 text-white flex flex-col">
-      <header className="px-8 py-5 border-b border-neutral-800 flex items-center justify-between">
+      <header className="px-6 py-4 border-b border-neutral-800 flex items-center justify-between">
         <button
           disabled={!!busy}
           onClick={() => navigate('/cart')}
-          className="h-14 px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 disabled:opacity-50 text-base font-bold touch-manipulation inline-flex items-center gap-2"
+          className="h-16 px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 disabled:opacity-50 text-lg font-bold touch-manipulation inline-flex items-center gap-2"
         >
-          <ArrowLeft className="h-5 w-5" />
+          <ArrowLeft className="h-6 w-6" />
           Orden
         </button>
-        <h1 className="text-4xl font-black">Pagar</h1>
-        <div className="w-28" />
+        <h1 className="text-4xl font-black leading-none">Pagar</h1>
+        <div className="w-32" />
       </header>
 
-      <main className="flex-1 p-8 flex flex-col items-center justify-center gap-8">
+      <main className="flex-1 p-6 flex flex-col items-center justify-center gap-8">
         <div className="text-center">
-          <p className="text-neutral-400 text-xl font-bold">Total</p>
-          <p className="text-7xl font-black mt-2">{money.format(total)}</p>
+          <p className="text-neutral-400 text-2xl font-bold">Total</p>
+          <p className="text-[76px] font-black leading-none mt-3">{money.format(total)}</p>
         </div>
 
         {message && (
-          <div className="h-16 px-6 rounded-lg bg-amber-500 text-neutral-950 flex items-center gap-3 text-xl font-black">
-            <Loader2 className="h-7 w-7 animate-spin" />
+          <div className="min-h-20 px-6 rounded-lg bg-amber-500 text-neutral-950 flex items-center gap-3 text-2xl font-black">
+            <Loader2 className="h-8 w-8 animate-spin shrink-0" />
             {message}
           </div>
         )}
         {error && (
-          <div className="max-w-3xl rounded-lg bg-red-950 border border-red-700 px-6 py-4 text-xl font-bold text-red-100 text-center">
+          <div className="w-full max-w-[720px] rounded-lg bg-red-950 border border-red-700 px-6 py-5 text-2xl font-bold text-red-100 text-center">
             {error}
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-6 w-full max-w-4xl">
+        <div className="grid grid-cols-2 gap-5 w-full max-w-[760px]">
           <button
             disabled={!!busy || lines.length === 0}
             onClick={handleCard}
-            className="aspect-[4/3] bg-brand-600 active:bg-brand-700 disabled:opacity-50 rounded-lg text-3xl font-black touch-manipulation flex flex-col items-center justify-center gap-4"
+            className="min-h-[290px] bg-brand-600 active:bg-brand-700 disabled:opacity-50 rounded-lg text-4xl font-black touch-manipulation flex flex-col items-center justify-center gap-5"
           >
-            {busy === 'card' ? <Loader2 className="h-20 w-20 animate-spin" /> : <CreditCard className="h-20 w-20" />}
+            {busy === 'card' ? <Loader2 className="h-24 w-24 animate-spin" /> : <CreditCard className="h-24 w-24" />}
             Tarjeta
-            <span className="text-lg font-bold text-white/75">Mercado Pago</span>
+            <span className="text-xl font-bold text-white/75">Mercado Pago</span>
           </button>
           <button
             disabled={!!busy || lines.length === 0}
             onClick={handleCash}
-            className="aspect-[4/3] bg-neutral-800 active:bg-neutral-700 disabled:opacity-50 rounded-lg text-3xl font-black touch-manipulation flex flex-col items-center justify-center gap-4"
+            className="min-h-[290px] bg-neutral-800 active:bg-neutral-700 disabled:opacity-50 rounded-lg text-4xl font-black touch-manipulation flex flex-col items-center justify-center gap-5"
           >
-            {busy === 'cash' ? <Loader2 className="h-20 w-20 animate-spin" /> : <Banknote className="h-20 w-20" />}
+            {busy === 'cash' ? <Loader2 className="h-24 w-24 animate-spin" /> : <Banknote className="h-24 w-24" />}
             Caja
-            <span className="text-lg font-bold text-white/70">Efectivo o ayuda</span>
+            <span className="text-xl font-bold text-white/70">Efectivo o ayuda</span>
           </button>
         </div>
       </main>

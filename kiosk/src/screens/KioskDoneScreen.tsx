@@ -16,13 +16,13 @@ const KioskDoneScreen: React.FC = () => {
 
   return (
     <div className="h-full w-full bg-emerald-700 text-white flex flex-col items-center justify-center p-8 text-center">
-      <CheckCircle2 className="h-32 w-32 mb-8" />
-      <h1 className="text-6xl font-black mb-5">Orden enviada</h1>
+      <CheckCircle2 className="h-36 w-36 mb-8" />
+      <h1 className="text-[72px] font-black mb-6 leading-none">Orden enviada</h1>
       {lastOrder && (
-        <div className="mb-10">
-          <p className="text-8xl font-black">#{lastOrder.order_number}</p>
-          <p className="text-3xl font-black mt-4">{money.format(lastOrder.total)}</p>
-          <p className="text-2xl text-white/80 mt-3">
+        <div className="mb-12">
+          <p className="text-[104px] font-black leading-none">#{lastOrder.order_number}</p>
+          <p className="text-4xl font-black mt-5">{money.format(lastOrder.total)}</p>
+          <p className="text-3xl text-white/85 font-bold mt-4">
             {lastOrder.payment_choice === 'counter_cash' ? 'Paga en caja' : 'Pago aprobado'}
           </p>
         </div>
@@ -32,7 +32,7 @@ const KioskDoneScreen: React.FC = () => {
           setLastOrder(null);
           navigate('/');
         }}
-        className="h-16 px-10 rounded-lg bg-white text-emerald-800 text-xl font-black"
+        className="h-20 px-12 rounded-lg bg-white text-emerald-800 text-2xl font-black"
       >
         Listo
       </button>

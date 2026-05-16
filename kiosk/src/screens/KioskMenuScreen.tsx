@@ -52,24 +52,28 @@ const KioskMenuScreen: React.FC = () => {
 
   return (
     <div className="h-full w-full bg-neutral-950 text-white flex flex-col">
-      <header className="px-8 py-5 border-b border-neutral-800 flex items-center justify-between">
-        <h1 className="text-4xl font-black">Haz tu pedido</h1>
+      <header className="px-6 py-4 border-b border-neutral-800 flex items-center justify-between">
+        <div>
+          <p className="text-sm text-neutral-500 font-bold uppercase tracking-wider">Juanberto's</p>
+          <h1 className="text-4xl font-black leading-none">Haz tu pedido</h1>
+        </div>
         <button
           onClick={() => navigate('/')}
-          className="h-14 px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 text-base font-bold touch-manipulation inline-flex items-center gap-2"
+          className="h-16 px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 text-lg font-bold touch-manipulation inline-flex items-center gap-2"
         >
-          <ArrowLeft className="h-5 w-5" />
+          <ArrowLeft className="h-6 w-6" />
           Salir
         </button>
       </header>
 
-      <main className="flex-1 min-h-0 grid grid-cols-[220px_1fr]">
-        <aside className="border-r border-neutral-800 p-4 overflow-y-auto">
+      <main className="flex-1 min-h-0 flex flex-col">
+        <nav className="border-b border-neutral-800 px-4 py-3 overflow-x-auto">
+          <div className="flex gap-3 min-w-max">
           {categories.map((category) => (
             <button
               key={category.id}
               onClick={() => setActiveCategory(category.id)}
-              className={`w-full min-h-16 px-4 mb-3 rounded-lg text-left text-xl font-black touch-manipulation ${
+                className={`h-16 px-6 rounded-lg text-xl font-black touch-manipulation whitespace-nowrap ${
                 activeCategory === category.id
                   ? 'bg-brand-600 text-white'
                   : 'bg-neutral-900 text-neutral-200 active:bg-neutral-800'
@@ -78,9 +82,10 @@ const KioskMenuScreen: React.FC = () => {
               {category.name}
             </button>
           ))}
-        </aside>
+          </div>
+        </nav>
 
-        <section className="p-6 overflow-y-auto">
+        <section className="flex-1 min-h-0 p-5 overflow-y-auto">
           {loading && (
             <div className="h-full flex items-center justify-center text-2xl text-neutral-400">
               Cargando menu...
@@ -92,23 +97,23 @@ const KioskMenuScreen: React.FC = () => {
             </div>
           )}
           {!loading && !error && (
-            <div className="grid grid-cols-2 xl:grid-cols-3 gap-4 pb-4">
+            <div className="grid grid-cols-2 gap-4 pb-4">
               {visibleItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => addItem(item)}
-                  className="min-h-44 rounded-lg bg-neutral-900 border border-neutral-800 active:border-brand-500 p-5 text-left touch-manipulation flex flex-col"
+                  className="min-h-[218px] rounded-lg bg-neutral-900 border border-neutral-800 active:border-brand-500 p-5 text-left touch-manipulation flex flex-col"
                 >
                   <div className="flex-1">
-                    <h2 className="text-2xl font-black leading-tight mb-2">{item.name}</h2>
+                    <h2 className="text-[28px] font-black leading-[1.05] mb-3">{item.name}</h2>
                     {item.description && (
-                      <p className="text-neutral-400 text-base line-clamp-2">{item.description}</p>
+                      <p className="text-neutral-400 text-lg leading-snug line-clamp-3">{item.description}</p>
                     )}
                   </div>
                   <div className="flex items-center justify-between mt-5">
-                    <span className="text-2xl font-black text-brand-300">{money.format(Number(item.price))}</span>
-                    <span className="h-12 w-12 rounded-lg bg-brand-600 flex items-center justify-center">
-                      <Plus className="h-7 w-7" />
+                    <span className="text-[28px] font-black text-brand-300">{money.format(Number(item.price))}</span>
+                    <span className="h-14 w-14 rounded-lg bg-brand-600 flex items-center justify-center">
+                      <Plus className="h-8 w-8" />
                     </span>
                   </div>
                 </button>
@@ -118,17 +123,17 @@ const KioskMenuScreen: React.FC = () => {
         </section>
       </main>
 
-      <footer className="p-5 border-t border-neutral-800 bg-neutral-950">
+      <footer className="p-4 border-t border-neutral-800 bg-neutral-950">
         <button
           disabled={count === 0}
           onClick={() => navigate('/cart')}
-          className="w-full bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-500 rounded-lg py-5 px-6 text-2xl font-black touch-manipulation flex items-center justify-between"
+          className="w-full min-h-20 bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-500 rounded-lg py-4 px-6 text-2xl font-black touch-manipulation flex items-center justify-between gap-4"
         >
           <span className="inline-flex items-center gap-3">
             <ShoppingCart className="h-8 w-8" />
             Tu orden
           </span>
-          <span>{count} items · {money.format(total)}</span>
+          <span className="text-right">{count} productos · {money.format(total)}</span>
         </button>
       </footer>
     </div>

@@ -13,19 +13,22 @@ const KioskCartScreen: React.FC = () => {
 
   return (
     <div className="h-full w-full bg-neutral-950 text-white flex flex-col">
-      <header className="px-8 py-5 border-b border-neutral-800 flex items-center justify-between">
+      <header className="px-6 py-4 border-b border-neutral-800 grid grid-cols-[auto_1fr_auto] items-center gap-4">
         <button
           onClick={() => navigate('/menu')}
-          className="h-14 px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 text-base font-bold touch-manipulation inline-flex items-center gap-2"
+          className="h-16 px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 text-lg font-bold touch-manipulation inline-flex items-center gap-2"
         >
-          <ArrowLeft className="h-5 w-5" />
+          <ArrowLeft className="h-6 w-6" />
           Menu
         </button>
-        <h1 className="text-4xl font-black">Tu orden</h1>
-        <div className="w-28" />
+        <h1 className="text-4xl font-black text-center leading-none">Tu orden</h1>
+        <div className="text-right">
+          <p className="text-sm text-neutral-500 font-bold uppercase">Total</p>
+          <p className="text-2xl font-black text-brand-300">{money.format(total)}</p>
+        </div>
       </header>
 
-      <main className="flex-1 min-h-0 p-6 overflow-y-auto">
+      <main className="flex-1 min-h-0 p-5 overflow-y-auto">
         {lines.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center gap-6 text-neutral-400">
             <p className="text-3xl font-black">Tu orden esta vacia</p>
@@ -37,22 +40,24 @@ const KioskCartScreen: React.FC = () => {
             </button>
           </div>
         ) : (
-          <div className="max-w-5xl mx-auto space-y-4">
+          <div className="space-y-4">
             {lines.map((line) => (
-              <div key={line.menu_item_id} className="rounded-lg bg-neutral-900 border border-neutral-800 p-5 grid grid-cols-[1fr_auto] gap-4 items-center">
-                <div>
-                  <h2 className="text-3xl font-black leading-tight">{line.name}</h2>
-                  <p className="text-xl text-neutral-400 mt-1">{money.format(line.price)} c/u</p>
+              <div key={line.menu_item_id} className="rounded-lg bg-neutral-900 border border-neutral-800 p-5 grid grid-cols-[1fr_256px] gap-4 items-center">
+                <div className="min-w-0">
+                  <h2 className="text-[32px] font-black leading-[1.05]">{line.name}</h2>
+                  <p className="text-xl text-neutral-400 mt-2">
+                    {money.format(line.price)} c/u · {money.format(line.price * line.quantity)}
+                  </p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="grid grid-cols-[64px_72px_64px] gap-3 justify-end">
                   <button
                     onClick={() => decrementItem(line.menu_item_id)}
-                    className="h-14 w-14 rounded-lg bg-neutral-800 active:bg-neutral-700 flex items-center justify-center"
+                    className="h-16 w-16 rounded-lg bg-neutral-800 active:bg-neutral-700 flex items-center justify-center"
                     aria-label="Menos"
                   >
-                    <Minus className="h-7 w-7" />
+                    <Minus className="h-8 w-8" />
                   </button>
-                  <div className="h-14 w-16 rounded-lg bg-neutral-950 flex items-center justify-center text-2xl font-black">
+                  <div className="h-16 w-[72px] rounded-lg bg-neutral-950 flex items-center justify-center text-3xl font-black">
                     {line.quantity}
                   </div>
                   <button
@@ -65,17 +70,18 @@ const KioskCartScreen: React.FC = () => {
                       category_id: 0,
                       active: true,
                     })}
-                    className="h-14 w-14 rounded-lg bg-neutral-800 active:bg-neutral-700 flex items-center justify-center"
+                    className="h-16 w-16 rounded-lg bg-neutral-800 active:bg-neutral-700 flex items-center justify-center"
                     aria-label="Mas"
                   >
-                    <Plus className="h-7 w-7" />
+                    <Plus className="h-8 w-8" />
                   </button>
                   <button
                     onClick={() => removeItem(line.menu_item_id)}
-                    className="h-14 w-14 rounded-lg bg-red-900/70 active:bg-red-800 flex items-center justify-center"
+                    className="col-span-3 h-14 rounded-lg bg-red-900/70 active:bg-red-800 flex items-center justify-center gap-2 text-lg font-black"
                     aria-label="Quitar"
                   >
                     <Trash2 className="h-6 w-6" />
+                    Quitar
                   </button>
                 </div>
               </div>
@@ -84,11 +90,11 @@ const KioskCartScreen: React.FC = () => {
         )}
       </main>
 
-      <footer className="p-5 border-t border-neutral-800 bg-neutral-950">
+      <footer className="p-4 border-t border-neutral-800 bg-neutral-950">
         <button
           disabled={count === 0}
           onClick={() => navigate('/pay')}
-          className="w-full bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-500 rounded-lg py-5 px-6 text-2xl font-black touch-manipulation flex items-center justify-between"
+          className="w-full min-h-20 bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-500 rounded-lg py-4 px-6 text-3xl font-black touch-manipulation flex items-center justify-between gap-4"
         >
           <span>Continuar</span>
           <span>{money.format(total)}</span>
