@@ -90,6 +90,42 @@ export function getTenantId() {
   return store?.tenantId || null;
 }
 
+/**
+ * Run `fn` inside a tenant-scoped, RLS-enforced transaction.
+ *
+ * For routes that DON'T go through tenantMiddleware (e.g. the kiosk routes,
+ * which authenticate with a device token instead of a tenant subdomain) but
+ * still need to reuse tenant-scoped helpers (loyalty, menu, order history).
+ *
+ * Mirrors what tenantMiddleware does: reserve a connection from the tenant
+ * pool, BEGIN, set_config('app.tenant_id', ...) so RLS + column defaults
+ * resolve correctly, then run `fn` with that connection on AsyncLocalStorage
+ * so get()/all()/run() pick it up automatically.
+ */
+export async function withTenant(tenantId, fn) {
+  if (!tenantId || typeof tenantId !== 'string') {
+    throw new Error('withTenant requires a tenantId');
+  }
+  const conn = await Promise.race([
+    tenantSql.reserve(),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Connection pool exhausted')), 5000)
+    ),
+  ]);
+  try {
+    await conn`BEGIN`;
+    await conn`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
+    const result = await tenantContext.run({ conn, tenantId }, () => fn());
+    await conn`COMMIT`;
+    return result;
+  } catch (err) {
+    await conn`ROLLBACK`.catch(() => {});
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
 // ==================== Query Helpers ====================
 
 /**

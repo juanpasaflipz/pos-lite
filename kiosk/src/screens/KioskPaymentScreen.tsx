@@ -3,6 +3,7 @@ import { ArrowLeft, Banknote, CreditCard, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useKioskBinding } from '../context/KioskBindingContext';
 import { useKioskCart } from '../context/KioskCartContext';
+import { useKioskCustomer } from '../context/KioskCustomerContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
 import { createKioskOrder, fetchKioskOrderStatus, sendKioskOrderToTerminal } from '../lib/kioskApi';
 
@@ -13,6 +14,8 @@ const KioskPaymentScreen: React.FC = () => {
   const navigate = useNavigate();
   const { tenantId, kioskToken } = useKioskBinding();
   const { lines, total, clearCart, setLastOrder } = useKioskCart();
+  const { session } = useKioskCustomer();
+  const customerToken = session?.customerToken ?? null;
   const [busy, setBusy] = useState<'cash' | 'card' | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +33,7 @@ const KioskPaymentScreen: React.FC = () => {
     setBusy('cash');
     setError(null);
     try {
-      const order = await createKioskOrder(auth, orderPayload, 'counter_cash');
+      const order = await createKioskOrder(auth, orderPayload, 'counter_cash', customerToken);
       setLastOrder({
         id: order.id,
         order_number: order.order_number,
@@ -52,7 +55,7 @@ const KioskPaymentScreen: React.FC = () => {
     setError(null);
     try {
       setMessage('Enviando al terminal...');
-      const order = await createKioskOrder(auth, orderPayload, 'terminal_card');
+      const order = await createKioskOrder(auth, orderPayload, 'terminal_card', customerToken);
       await sendKioskOrderToTerminal(auth, order.id);
       setMessage('Paga en el terminal');
 

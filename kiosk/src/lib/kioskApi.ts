@@ -121,11 +121,16 @@ export async function createKioskOrder(
   auth: AuthHeaders,
   items: CreateKioskOrderLine[],
   paymentChoice: KioskPaymentChoice,
+  customerToken?: string | null,
 ): Promise<KioskOrderResponse> {
   const res = await fetch(`${API_BASE}/api/kiosk/orders`, {
     method: 'POST',
     headers: authHeaders(auth),
-    body: JSON.stringify({ items, payment_choice: paymentChoice }),
+    body: JSON.stringify({
+      items,
+      payment_choice: paymentChoice,
+      customer_token: customerToken || undefined,
+    }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -167,4 +172,115 @@ export async function fetchKioskOrderStatus(
     throw new Error(err.error || `Status failed (${res.status})`);
   }
   return res.json();
+}
+
+/* ==================== Customer identification & suggestions ==================== */
+
+export type SuggestionLane = 'for_you' | 'house' | 'popular' | 'usual';
+
+export interface SuggestionItem {
+  menu_item_id: number;
+  name: string;
+  price: number;
+  image_url: string | null;
+  category: string;
+  reason?: string;
+  lane: SuggestionLane;
+  source?: string;
+}
+
+export interface RepeatOrderLine {
+  menu_item_id: number;
+  name: string;
+  price: number;
+  image_url: string | null;
+  quantity: number;
+}
+
+export interface RepeatOrderSuggestion {
+  order_id: number;
+  reason: string;
+  total: number;
+  items: RepeatOrderLine[];
+}
+
+export interface KioskSuggestions {
+  usual: RepeatOrderSuggestion | null;
+  for_you: SuggestionItem[];
+  house: SuggestionItem | null;
+  popular: SuggestionItem[];
+}
+
+export interface StampStatus {
+  earned: number;
+  required: number;
+  completed: boolean;
+  reward_description: string;
+}
+
+export interface IdentifyResult {
+  found: boolean;
+  is_new?: boolean;
+  customer?: { id: number; name: string; first_name: string };
+  customer_token?: string;
+  stamp?: StampStatus | null;
+  ai_powered?: boolean;
+  visit_count?: number;
+  suggestions?: KioskSuggestions;
+}
+
+export interface IdentifyBody {
+  phone: string;
+  country_code?: string;
+  name?: string;
+  sms_opt_in?: boolean;
+}
+
+export async function identifyCustomer(
+  auth: AuthHeaders,
+  body: IdentifyBody,
+): Promise<IdentifyResult> {
+  const res = await fetch(`${API_BASE}/api/kiosk/identify`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Identify failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function fetchPopular(auth: AuthHeaders): Promise<SuggestionItem[]> {
+  const res = await fetch(`${API_BASE}/api/kiosk/popular`, {
+    headers: authHeaders(auth),
+  });
+  if (!res.ok) throw new Error(`Popular ${res.status}`);
+  const data = await res.json();
+  return data.popular || [];
+}
+
+export interface SuggestionEvent {
+  menu_item_id?: number | null;
+  lane: SuggestionLane;
+  source?: string;
+  event_type: 'tapped' | 'ordered';
+  reason?: string;
+}
+
+// Fire-and-forget telemetry — never throws, never blocks the order flow.
+export function logSuggestionEvents(
+  auth: AuthHeaders,
+  customerToken: string | null,
+  events: SuggestionEvent[],
+): void {
+  if (!events.length) return;
+  fetch(`${API_BASE}/api/kiosk/suggestion-event`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({ customer_token: customerToken || undefined, events }),
+  }).catch(() => {
+    /* telemetry is best-effort */
+  });
 }

@@ -2,9 +2,11 @@ import React from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { KioskBindingProvider, useKioskBinding } from './context/KioskBindingContext';
 import { KioskCartProvider } from './context/KioskCartContext';
+import { KioskCustomerProvider } from './context/KioskCustomerContext';
 import AttractScreen from './screens/AttractScreen';
 import BindDeviceScreen from './screens/BindDeviceScreen';
 import AdminBindScreen from './screens/AdminBindScreen';
+import KioskWelcomeScreen from './screens/KioskWelcomeScreen';
 import KioskMenuScreen from './screens/KioskMenuScreen';
 import KioskCartScreen from './screens/KioskCartScreen';
 import KioskPaymentScreen from './screens/KioskPaymentScreen';
@@ -26,6 +28,7 @@ const Routed: React.FC = () => {
   return (
     <Routes>
       <Route path="/" element={<AttractScreen />} />
+      <Route path="/welcome" element={<KioskWelcomeScreen />} />
       <Route path="/menu" element={<KioskMenuScreen />} />
       <Route path="/cart" element={<KioskCartScreen />} />
       <Route path="/pay" element={<KioskPaymentScreen />} />
@@ -38,9 +41,11 @@ const Routed: React.FC = () => {
 const App: React.FC = () => (
   <HashRouter>
     <KioskBindingProvider>
-      <KioskCartProvider>
-        <Routed />
-      </KioskCartProvider>
+      <KioskCustomerProvider>
+        <KioskCartProvider>
+          <Routed />
+        </KioskCartProvider>
+      </KioskCustomerProvider>
     </KioskBindingProvider>
   </HashRouter>
 );

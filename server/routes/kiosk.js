@@ -2,11 +2,27 @@ import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import rateLimit from 'express-rate-limit';
-import { adminSql } from '../db/index.js';
+import { adminSql, withTenant, get } from '../db/index.js';
 import { JWT_SECRET } from '../lib/constants.js';
 import { getTenant } from '../tenants.js';
 import { deductInventoryForOrder } from '../helpers/inventory.js';
 import { generateInvoiceToken } from '../helpers/facturapi.js';
+import {
+  normalizePhone,
+  findOrCreateCustomer,
+  getActiveStampCard,
+  addStampsForOrder,
+} from '../helpers/loyalty.js';
+import {
+  buildTasteProfile,
+  getRepeatOrder,
+  getActiveMenu,
+  buildBusinessFeed,
+  getPopularItems,
+  getDayContext,
+  synthesizeAISuggestions,
+  composeSuggestions,
+} from '../helpers/kioskSuggestions.js';
 import {
   ensureFreshToken,
   createPointOrder,
@@ -118,6 +134,118 @@ async function ensureCounterTable() {
   `);
 }
 
+// ==================== Customer suggestions / loyalty ====================
+
+// Short-lived token issued at /identify so order creation can attach the
+// customer without re-sending their phone number. Scoped to one tenant.
+function issueCustomerToken(tenantId, loyaltyCustomerId) {
+  return jwt.sign(
+    { tenantId, loyaltyCustomerId, type: 'kiosk_customer' },
+    JWT_SECRET,
+    { expiresIn: '30m' }
+  );
+}
+
+function verifyCustomerToken(token, tenantId) {
+  if (!token || typeof token !== 'string') return null;
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (
+      decoded?.type === 'kiosk_customer' &&
+      decoded?.tenantId === tenantId &&
+      decoded?.loyaltyCustomerId
+    ) {
+      return Number(decoded.loyaltyCustomerId);
+    }
+  } catch {
+    /* expired / tampered — treated as anonymous */
+  }
+  return null;
+}
+
+// Append-only learning log: which suggestions were shown and which converted.
+// Runtime-created (no RLS) and accessed with explicit tenant filtering, like
+// daily_order_counter above.
+async function ensureSuggestionTable() {
+  await adminSql.unsafe(`
+    CREATE TABLE IF NOT EXISTS kiosk_suggestion_events (
+      id BIGSERIAL PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      loyalty_customer_id INTEGER,
+      menu_item_id INTEGER,
+      lane TEXT NOT NULL,
+      source TEXT,
+      event_type TEXT NOT NULL,
+      reason TEXT,
+      order_id INTEGER,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await adminSql.unsafe(`
+    CREATE INDEX IF NOT EXISTS idx_kiosk_suggestion_events_tenant
+    ON kiosk_suggestion_events (tenant_id, created_at DESC)
+  `);
+  await adminSql.unsafe(`
+    CREATE INDEX IF NOT EXISTS idx_orders_loyalty_customer
+    ON orders (tenant_id, loyalty_customer_id)
+  `);
+}
+
+// Best-effort telemetry — never allowed to break the ordering flow.
+async function logSuggestionEvents(tenantId, rows) {
+  if (!rows || !rows.length) return;
+  try {
+    await ensureSuggestionTable();
+    const placeholders = rows
+      .map((_, i) => {
+        const o = i * 7;
+        return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7})`;
+      })
+      .join(',');
+    const params = rows.flatMap((r) => [
+      tenantId,
+      r.loyalty_customer_id ?? null,
+      r.menu_item_id ?? null,
+      r.lane,
+      r.source ?? null,
+      r.event_type,
+      r.reason ?? null,
+    ]);
+    await adminSql.unsafe(
+      `INSERT INTO kiosk_suggestion_events
+         (tenant_id, loyalty_customer_id, menu_item_id, lane, source, event_type, reason)
+       VALUES ${placeholders}`,
+      params
+    );
+  } catch (err) {
+    console.error('[kiosk/suggestion-event] log failed:', err.message);
+  }
+}
+
+// Award loyalty stamps for a paid kiosk order. Idempotent: a stamp_event keyed
+// to the order is the guard against double-stamping.
+async function awardKioskOrderStamps(orderId, tenantId) {
+  try {
+    const [order] = await adminSql`
+      SELECT loyalty_customer_id FROM orders
+      WHERE id = ${orderId} AND tenant_id = ${tenantId}
+    `;
+    if (!order?.loyalty_customer_id) return;
+
+    const [already] = await adminSql`
+      SELECT 1 FROM stamp_events WHERE order_id = ${orderId} LIMIT 1
+    `;
+    if (already) return;
+
+    const tenant = await getTenant(tenantId);
+    await withTenant(tenantId, () =>
+      addStampsForOrder(order.loyalty_customer_id, orderId, null, tenant?.name || 'us')
+    );
+  } catch (err) {
+    console.error('[kiosk/award-stamps] warning:', err.message);
+  }
+}
+
 async function nextOrderNumber(tenantId) {
   await ensureCounterTable();
   const dateStr = new Date().toISOString().split('T')[0];
@@ -175,6 +303,9 @@ async function markKioskOrderPaid(orderId, tenantId) {
   } catch (err) {
     console.error('[kiosk/order-paid] invoice token warning', err.message);
   }
+
+  // Award loyalty stamps if this kiosk order is tied to a customer.
+  await awardKioskOrderStamps(orderId, tenantId);
 
   return invoiceToken;
 }
@@ -235,10 +366,13 @@ router.post('/admin/bind', bindLimiter, async (req, res) => {
 router.post('/orders', verifyKioskToken, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
-    const { items, payment_choice = 'counter_cash' } = req.body || {};
+    const { items, payment_choice = 'counter_cash', customer_token } = req.body || {};
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Cart is empty' });
     }
+
+    // Optional: a /identify customer token links this order to a loyalty member.
+    const loyaltyCustomerId = verifyCustomerToken(customer_token, tenantId);
 
     const employeeId = await resolveKioskEmployee(tenantId, req.kiosk);
     if (!employeeId) {
@@ -284,11 +418,11 @@ router.post('/orders', verifyKioskToken, async (req, res) => {
     const [order] = await adminSql`
       INSERT INTO orders (
         tenant_id, order_number, employee_id, status, subtotal, tax, total,
-        payment_status, payment_method, source
+        payment_status, payment_method, source, loyalty_customer_id
       )
       VALUES (
         ${tenantId}, ${orderNumber}, ${employeeId}, 'pending', ${subtotal}, ${tax}, ${total},
-        ${paymentStatus}, ${paymentMethod}, 'customer_kiosk'
+        ${paymentStatus}, ${paymentMethod}, 'customer_kiosk', ${loyaltyCustomerId}
       )
       RETURNING id, order_number, subtotal, tax, total, payment_status, status
     `;
@@ -396,6 +530,208 @@ router.get('/orders/:id/status', verifyKioskToken, async (req, res) => {
   } catch (err) {
     console.error('[kiosk/status] error', err);
     res.status(500).json({ error: 'Failed to check order status' });
+  }
+});
+
+// POST /api/kiosk/identify — recognize a customer by phone, return their
+// loyalty status + personalized menu suggestions.
+//
+// Body: { phone, country_code?, name?, sms_opt_in? }
+//   - known phone        → returns customer + suggestions
+//   - unknown + name     → enrolls a new loyalty customer
+//   - unknown, no name   → { found: false } so the kiosk can ask for a name
+router.post('/identify', verifyKioskToken, async (req, res) => {
+  const tenantId = req.kioskTenantId;
+  try {
+    const { phone, country_code = 'MX', name, sms_opt_in = true } = req.body || {};
+    if (!phone || typeof phone !== 'string') {
+      return res.status(400).json({ error: 'Teléfono requerido' });
+    }
+
+    const cc = String(country_code || 'MX').toUpperCase();
+    const normalized = normalizePhone(phone, cc);
+    if (normalized.length < 10) {
+      return res.status(400).json({ error: 'Número de teléfono inválido' });
+    }
+
+    const tenant = await getTenant(tenantId);
+    const timezone = tenant?.timezone || 'UTC';
+    const isPro = tenant?.plan === 'pro';
+    const restaurantName = tenant?.name || 'la tienda';
+
+    // All DB work runs in a single tenant-scoped (RLS) transaction.
+    const data = await withTenant(tenantId, async () => {
+      let customer = await get(
+        'SELECT * FROM loyalty_customers WHERE phone = $1 AND country_code = $2',
+        [normalized, cc]
+      );
+      let created = false;
+
+      if (!customer) {
+        if (!name || typeof name !== 'string' || !name.trim()) {
+          return { found: false };
+        }
+        const result = await findOrCreateCustomer(
+          normalized,
+          name.trim(),
+          null,
+          !!sms_opt_in,
+          restaurantName,
+          cc
+        );
+        customer = result.customer;
+        created = result.created;
+      }
+
+      const card = await getActiveStampCard(customer.id);
+      const profile = await buildTasteProfile(customer.id, timezone);
+      const repeatOrder = await getRepeatOrder(customer.id);
+      const menu = await getActiveMenu();
+      const businessFeed = await buildBusinessFeed();
+      const popular = await getPopularItems(timezone, 6);
+      return { found: true, customer, created, card, profile, repeatOrder, menu, businessFeed, popular };
+    });
+
+    if (!data.found) {
+      return res.json({ found: false });
+    }
+
+    const { customer, created, card, profile, repeatOrder, menu, businessFeed, popular } = data;
+    const stamp = card
+      ? {
+          earned: card.stamps_earned,
+          required: card.stamps_required,
+          completed: card.completed,
+          reward_description: card.reward_description,
+        }
+      : null;
+    const dayCtx = getDayContext(timezone);
+
+    // Claude synthesis runs OUTSIDE the DB transaction (slow network call).
+    let aiResult = null;
+    if (isPro && process.env.ANTHROPIC_API_KEY && profile.orderCount > 0) {
+      aiResult = await synthesizeAISuggestions({
+        customer,
+        profile,
+        repeatOrder,
+        menu,
+        businessFeed,
+        dayCtx,
+        stamp,
+      });
+    }
+
+    const composed = composeSuggestions({ profile, repeatOrder, menu, businessFeed, aiResult });
+    const suggestions = {
+      usual: composed.usual,
+      for_you: composed.for_you,
+      house: composed.house,
+      popular: popular.map((p) => ({
+        menu_item_id: p.id,
+        name: p.name,
+        price: Number(p.price),
+        image_url: p.image_url,
+        category: p.category,
+        lane: 'popular',
+      })),
+    };
+
+    // Fire-and-forget: log which suggestions were shown (the learning loop).
+    const shown = suggestions.for_you.map((s) => ({
+      loyalty_customer_id: customer.id,
+      menu_item_id: s.menu_item_id,
+      lane: 'for_you',
+      source: s.source,
+      event_type: 'shown',
+      reason: s.reason,
+    }));
+    if (suggestions.house) {
+      shown.push({
+        loyalty_customer_id: customer.id,
+        menu_item_id: suggestions.house.menu_item_id,
+        lane: 'house',
+        source: suggestions.house.source,
+        event_type: 'shown',
+        reason: suggestions.house.reason,
+      });
+    }
+    if (suggestions.usual) {
+      shown.push({
+        loyalty_customer_id: customer.id,
+        lane: 'usual',
+        source: 'deterministic',
+        event_type: 'shown',
+      });
+    }
+    logSuggestionEvents(tenantId, shown);
+
+    res.json({
+      found: true,
+      is_new: created,
+      customer: {
+        id: customer.id,
+        name: customer.name,
+        first_name: String(customer.name || '').trim().split(/\s+/)[0] || customer.name,
+      },
+      customer_token: issueCustomerToken(tenantId, customer.id),
+      stamp,
+      ai_powered: !!aiResult,
+      visit_count: profile.orderCount,
+      suggestions,
+    });
+  } catch (err) {
+    console.error('[kiosk/identify] error', err);
+    res.status(500).json({ error: 'No se pudo identificar al cliente' });
+  }
+});
+
+// GET /api/kiosk/popular — time-of-day popular items (anonymous customers)
+router.get('/popular', verifyKioskToken, async (req, res) => {
+  const tenantId = req.kioskTenantId;
+  try {
+    const tenant = await getTenant(tenantId);
+    const timezone = tenant?.timezone || 'UTC';
+    const popular = await withTenant(tenantId, () => getPopularItems(timezone, 6));
+    res.json({
+      popular: popular.map((p) => ({
+        menu_item_id: p.id,
+        name: p.name,
+        price: Number(p.price),
+        image_url: p.image_url,
+        category: p.category,
+        lane: 'popular',
+      })),
+    });
+  } catch (err) {
+    console.error('[kiosk/popular] error', err);
+    res.status(500).json({ error: 'Failed to load popular items' });
+  }
+});
+
+// POST /api/kiosk/suggestion-event — log a tap/order on a suggestion
+// Body: { customer_token?, events: [{ menu_item_id, lane, source, event_type, reason }] }
+router.post('/suggestion-event', verifyKioskToken, async (req, res) => {
+  const tenantId = req.kioskTenantId;
+  try {
+    const { customer_token, events } = req.body || {};
+    if (!Array.isArray(events) || !events.length) {
+      return res.json({ ok: true });
+    }
+    const customerId = verifyCustomerToken(customer_token, tenantId);
+    const rows = events.slice(0, 20).map((e) => ({
+      loyalty_customer_id: customerId,
+      menu_item_id: Number.isInteger(Number(e?.menu_item_id)) ? Number(e.menu_item_id) : null,
+      lane: typeof e?.lane === 'string' ? e.lane.slice(0, 24) : 'unknown',
+      source: typeof e?.source === 'string' ? e.source.slice(0, 24) : null,
+      event_type: e?.event_type === 'ordered' ? 'ordered' : 'tapped',
+      reason: typeof e?.reason === 'string' ? e.reason.slice(0, 200) : null,
+    }));
+    await logSuggestionEvents(tenantId, rows);
+    res.json({ ok: true });
+  } catch (err) {
+    // Telemetry must never break the kiosk.
+    console.error('[kiosk/suggestion-event] error', err.message);
+    res.json({ ok: true });
   }
 });
 

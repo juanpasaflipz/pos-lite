@@ -308,6 +308,198 @@ Note: status pills (Tier 6) and dot+label colorblind variant already merged into
 
 ---
 
+## MP Terminal self-service onboarding (added 2026-05-11 after juanbertos terminal swap)
+
+**Context:** Swapping the juanbertos tenant from MP Point serial `...05551867` to `...05547243`
+took a half-day of manual debugging: API mode flip, stuck-queue cleanup across 6+ orphaned
+intents, prod-vs-local DATABASE_URL confusion, OAuth state inspection, MP support escalation,
+and two hard resets. The MP-side provisioning (30-45 min ticket + device boot loop) is
+unavoidable. **Everything else should be merchant-self-service.** Memories captured at
+`~/.claude/projects/-Users-juan-pos-lite/memory/mp-point-*.md`.
+
+Scripts left behind (`scripts/mp-terminals.sh`, `mp-cancel-intent.sh`, `mp-debug-prod.mjs`,
+`mp-unstick.mjs`, `mp-test-charge.mjs`) — operator-grade, not merchant-facing. Goal of this
+work is to fold their behavior into the AccountScreen UI.
+
+---
+
+### 10a. Add-terminal wizard (Account → MP)
+
+**What:**
+- New flow on `src/screens/AccountScreen.tsx` MP section: a **"+ Agregar terminal"** button
+  alongside the current dropdown.
+- Wizard steps (all client-side state, single modal):
+  1. **Detect** — call `GET /api/payments/mp/devices/all` (new endpoint, lists ALL devices
+     with current `operating_mode`, not just PDV like today's `GET /mp/terminals`).
+     Show table: serial, current mode, last seen.
+  2. **Pick** — merchant selects the new terminal from the list.
+  3. **Swap** — server runs the demote-old + promote-new sequence in correct order
+     (see [[mp-point-only-one-pdv-per-store]] — wrong order returns HTTP 400). New endpoint
+     `POST /api/payments/mp/devices/swap-default` body `{ new_device_id }`.
+     Atomic: if promote fails, restore old device to PDV.
+  4. **MP support handoff** — generate a pre-filled support message with this tenant's
+     `mp_user_id`, app number, and the chosen serial. One-click "Copiar mensaje" + link to
+     MP Point support chat URL. Explain to merchant: 30-45 min wait, device must stay
+     on/connected/charged. **Show this step every time** — even if it sometimes isn't needed,
+     it's safer than skipping and getting silently stuck in OPEN state.
+  5. **Verify** — after merchant says "MP confirmed", server runs a $5 test intent
+     (`POST /api/payments/mp/devices/preflight` body `{ device_id }`). Poll for
+     `ON_TERMINAL` within 60s, then auto-cancel. Show real-time state to merchant.
+  6. **Done** — only after preflight passes, write `mp_default_terminal_id` to tenant row.
+     Refuses to save a default that hasn't proven it can receive intents.
+
+**Why:** This eliminates 90% of the half-day spent on juanbertos. The remaining 10% is the
+30-45 min MP wait, which is inherent and the wizard sets correct expectations for.
+
+**Pros:**
+- Self-serve for merchants. Adding 2 more terminals tomorrow = 2 parallel wizard runs.
+- Captures all the gotchas (swap order, support message contents, preflight) the operator
+  team currently knows informally.
+- Prevents the "selected in UI but never saved to DB" failure mode — preflight gating
+  guarantees the save only happens when the terminal actually works.
+
+**Cons:**
+- Modal flow is multi-step and stateful — needs care to handle merchant abandoning mid-flow
+  (don't half-swap and leave them broken).
+- Preflight step burns $5 in test intents per terminal added (we cancel before charge, but
+  the merchant sees the prompt on screen). Could be confusing without copy explaining
+  "this is a test, do not insert card."
+
+**Depends on / blocked by:** None. Builds on existing `mp-terminals.sh` logic.
+
+**Trigger:** Now (2026-05-11). Juan asked, juanbertos just shipped, fresh in memory.
+
+**File-level scope:**
+- `server/routes/payments.js`:
+  - `GET /api/payments/mp/devices/all` — list all devices, not just PDV
+  - `POST /api/payments/mp/devices/swap-default` — atomic demote+promote, rollback on fail
+  - `POST /api/payments/mp/devices/preflight` — push $5 test intent, poll, cancel, return result
+  - `POST /api/payments/mp/devices/support-message` — return pre-filled MP support string
+- `src/screens/AccountScreen.tsx` — add "Agregar terminal" button + wizard modal
+- `src/components/settings/AddTerminalWizard.tsx` — new component (5-step state machine)
+- `src/api/index.ts` — typed client functions for the 4 new endpoints
+- i18n strings (es/en) for wizard copy
+
+**Tests:**
+- Swap atomic rollback when promote fails (mocked MP 400)
+- Preflight returns failure when intent stays OPEN > 60s
+- Preflight cancels test intent even on early abort
+- Wizard cannot save default without successful preflight
+- Cross-tenant: tenant A cannot list/swap tenant B's devices
+
+---
+
+### 10b. Auto-recovery from stuck MP queues
+
+**What:** When `mpCharge` fails with MP error `2205` ("There is already a queued intent for
+the device"), the backend automatically:
+1. Looks up any orders in `pending_terminal` state with `mp_order_id` set for this tenant
+2. DELETEs each intent on the current default device (gracefully handles 404 / 409)
+3. Resets those orders' `mp_order_id = NULL, payment_status = 'pending'`
+4. Retries the original charge **once**
+5. If the retry still fails 2205, returns a structured error to the frontend with a
+   "Limpiar terminal y reintentar" button that triggers the same recovery + retry
+   (so the merchant can self-recover for the edge case where #1-3 didn't cover it)
+
+**Why:** This is what the `mp-unstick.mjs` script does manually today. Bundling it into the
+charge flow means a transient stuck-queue event is invisible to the merchant — the second
+press of Pay → MP just works. No more "I spent half a day" for this class of failure.
+
+**Pros:**
+- Invisible recovery for the common case.
+- Even when invisible recovery isn't enough, the merchant has a one-click escape from the
+  modal instead of needing operator intervention.
+- Existing PaymentModal stays mostly unchanged.
+
+**Cons:**
+- Rate limiting: if many stuck intents exist (5+), the DELETE loop can hit MP's 429. Need
+  ~3s spacing between DELETE calls (proven during juanbertos debug). Means the recovery
+  step can take 15-30s in worst case — UX should show a spinner with progress.
+- Edge case: a stuck intent on the *old* (now-standalone) device after a swap. Recovery
+  needs to try both devices, not just the current default.
+
+**Depends on / blocked by:** None. Orthogonal to 10a.
+
+**Trigger:** Now. Even before any new merchants add terminals, this protects the current
+juanbertos setup from a repeat of today's queue accumulation.
+
+**File-level scope:**
+- `server/routes/payments.js` `/mp/charge` handler — wrap MP call in try/catch; on
+  error 2205, invoke recovery helper then retry
+- `server/services/mercadopago.js` — new `recoverStuckQueue(tenantId, accessToken, devices)`
+  helper that's a port of `scripts/mp-unstick.mjs`
+- `src/components/pos/PaymentModal.tsx` — handle new structured error
+  `{ error: 'queue_stuck', cleanup_endpoint }`; render "Limpiar terminal y reintentar" CTA
+
+**Tests:**
+- Recovery clears intents and retries when MP returns 2205 once
+- Recovery surfaces error to UI when 2205 persists after retry
+- Rate-limit handling: 429 from MP during DELETE → backoff + continue (don't abort)
+- Recovery touches both old and new device ids (post-swap edge case)
+- DB state: orders reset to `pending` with `mp_order_id = NULL`
+
+---
+
+### 10c. Follow-ups (not in this PR)
+
+Defer until 10a + 10b are merged and a second terminal swap proves the flow:
+
+- **Live device status panel** — online/offline indicator, mode (PDV/standalone), last
+  successful charge timestamp, current queue depth (estimated). Real-time via SSE or
+  short-poll on AccountScreen.
+- **Webhook for MP device state changes** — if MP ever exposes one, replace short-poll
+  with push.
+- **"Self-diagnose" diagnostic action** — merchant-visible "Run diagnostic" button that
+  runs preflight + queue inspection + token validity and prints a pasteable report for
+  support.
+
+**Trigger for 10c:** A second merchant adds a terminal and either hits a new failure mode
+or asks for a status view.
+
+---
+
+## Kiosk AI suggestions — follow-ups (added 2026-05-17)
+
+**Context:** The customer kiosk now identifies customers by phone, ties orders to
+loyalty (`orders.loyalty_customer_id`), and shows three AI-blended suggestion lanes
+("Tu de siempre" reorder, "Para ti", "Hoy en la casa"). Suggestions are synthesized
+by Claude (`server/helpers/kioskSuggestions.js`) — customer preference first,
+business priorities (slow movers, overstock) only as a tiebreaker. Pro plan gets
+Claude; Free plan gets the deterministic fallback. Shown/tapped telemetry lands in
+`kiosk_suggestion_events` (runtime-created, no RLS — same pattern as
+`daily_order_counter`).
+
+### 11a. Kiosk cash-order loyalty stamps
+
+**What:** Kiosk **card** orders auto-award stamps the moment they hit `paid`
+(`markKioskOrderPaid` → `awardKioskOrderStamps`, idempotent via a `stamp_events`
+row keyed to `order_id`). Kiosk **cash** orders are created `unpaid` and settled
+later at the POS counter — they are *linked* to the customer but stamps depend on
+whatever the POS settle flow does.
+
+**Why:** A kiosk cash customer should still earn stamps. Right now that only
+happens if the counter settle path calls `addStampsForOrder`.
+
+**Trigger:** Confirm the POS payment-settle flow stamps `source = 'customer_kiosk'`
+orders that carry a `loyalty_customer_id`; if it doesn't, route settle-to-paid
+through `awardKioskOrderStamps` (it is idempotent, so double-calling is safe).
+
+### 11b. Suggestion-conversion analytics + closed learning loop
+
+**What:** `kiosk_suggestion_events` records `shown` and `tapped` events per lane
+and per source (`ai` / `deterministic`). Build a merchant-facing view (a tab on
+`LoyaltyScreen` or a kiosk analytics panel) showing shown→tapped conversion per
+lane and AI-vs-deterministic lift. Then feed that conversion data back into the
+Claude prompt so the engine learns which suggestions actually convert.
+
+**Why:** The telemetry is being collected now but nothing reads it yet. The lift
+number is the whole justification for the AI spend.
+
+**Trigger:** After the kiosk has run in production for ~2 weeks (enough events to
+be meaningful), or when asked for the suggestion ROI number.
+
+---
+
 ## Carryover from design doc / CEO plan
 
 These were explicitly deferred in the original plan — re-listed here so TODOS.md

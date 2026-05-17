@@ -1,15 +1,26 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Hand } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useKioskBinding } from '../context/KioskBindingContext';
+import { useKioskCustomer } from '../context/KioskCustomerContext';
+import { useKioskCart } from '../context/KioskCartContext';
 
 const AttractScreen: React.FC = () => {
   const navigate = useNavigate();
   const { tenantName } = useKioskBinding();
+  const { clearSession } = useKioskCustomer();
+  const { clearCart } = useKioskCart();
+
+  // The attract screen is the start of every order — reset any leftover
+  // customer session or cart from a previous, abandoned interaction.
+  useEffect(() => {
+    clearSession();
+    clearCart();
+  }, [clearSession, clearCart]);
 
   return (
     <button
-      onClick={() => navigate('/menu')}
+      onClick={() => navigate('/welcome')}
       className="h-full w-full bg-brand-700 flex flex-col items-center justify-center text-white touch-manipulation px-8"
     >
       {tenantName && (
