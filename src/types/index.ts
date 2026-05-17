@@ -1449,26 +1449,58 @@ export interface ShiftEmployeeStub {
   role: string;
 }
 
+export interface CashDrawerCounts {
+  [denomination: string]: number;
+}
+
+export interface CashDrawerPreview {
+  opening_total: number;
+  cash_sales_total: number;
+  expected_cash_total: number;
+}
+
+export interface CashDrawerSession {
+  id: number;
+  shift_id: number;
+  employee_id: number;
+  opened_at: string;
+  closed_at: string | null;
+  opening_counts: CashDrawerCounts;
+  opening_total: number;
+  closing_counts: CashDrawerCounts | null;
+  closing_total: number | null;
+  cash_sales_total?: number;
+  expected_cash_total: number | null;
+  variance_total: number | null;
+  variance_note: string | null;
+}
+
 export interface OpenShift {
   id: number;
   clock_in_at: string;
   clock_out_at: string | null;
+  employee_id?: number;
+  cash_drawer?: CashDrawerSession | null;
+  cash_drawer_preview?: CashDrawerPreview | null;
 }
 
 export interface ShiftStatusResponse {
   employee: ShiftEmployeeStub;
   openShift: OpenShift | null;
+  supported_denominations?: number[];
 }
 
 export interface ClockInResponse {
   shift: OpenShift;
   employee: ShiftEmployeeStub;
   already_open?: boolean;
+  supported_denominations?: number[];
 }
 
 export interface ClockOutResponse {
   shift: OpenShift & { duration_seconds: number | null };
   employee: ShiftEmployeeStub;
+  supported_denominations?: number[];
 }
 
 export interface ActiveShift {
@@ -1493,6 +1525,8 @@ export interface ShiftRow {
   edited_by_name: string | null;
   duration_seconds: number | null;
   flagged_long_open: boolean;
+  cash_drawer?: CashDrawerSession | null;
+  cash_drawer_preview?: CashDrawerPreview | null;
 }
 
 export interface ApiResponse<T> {

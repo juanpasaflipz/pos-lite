@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Clock, AlertTriangle, Users, Save, X, Pencil } from 'lucide-react';
+import { ArrowLeft, Clock, AlertTriangle, Users, Save, X, Pencil, Wallet } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { getActiveShifts, getShifts, updateShift } from '../api';
-import type { ActiveShift, ShiftRow } from '../types';
+import { getActiveShifts, getShifts, updateShift, updateShiftCashDrawer } from '../api';
+import type { ActiveShift, CashDrawerCounts, ShiftRow } from '../types';
+import { formatPrice } from '../utils/currency';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RANGE_OPTIONS = [
@@ -15,6 +16,7 @@ const RANGE_OPTIONS = [
   { key: '14', days: 14 },
   { key: '30', days: 30 },
 ];
+const DENOMINATIONS = [1000, 500, 200, 100, 50, 20, 10, 5, 2, 1, 0.5];
 
 function formatDuration(seconds: number | null): string {
   if (seconds === null || seconds === undefined) return '—';
@@ -28,6 +30,11 @@ function formatDateTime(iso: string | null): string {
   return new Date(iso).toLocaleString([], {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
+}
+
+function formatMoney(amount: number | null | undefined): string {
+  if (amount == null) return '—';
+  return formatPrice(amount);
 }
 
 function toLocalInputValue(iso: string | null): string {
@@ -49,6 +56,38 @@ interface EditState {
   notes: string;
 }
 
+interface CashEditState {
+  shiftId: number;
+  employeeName: string;
+  isClosed: boolean;
+  hadClosingCounts: boolean;
+  openingCounts: CashDrawerCounts;
+  closingCounts: CashDrawerCounts;
+  varianceNote: string;
+  expectedCashTotal: number;
+}
+
+function zeroCounts(): CashDrawerCounts {
+  return Object.fromEntries(DENOMINATIONS.map((value) => [String(value), 0]));
+}
+
+function normalizeCounts(counts?: CashDrawerCounts | null): CashDrawerCounts {
+  return {
+    ...zeroCounts(),
+    ...(counts || {}),
+  };
+}
+
+function totalFromCounts(counts: CashDrawerCounts): number {
+  return Math.round(
+    Object.entries(counts).reduce((sum, [denomination, count]) => sum + Number(denomination) * Number(count || 0), 0) * 100
+  ) / 100;
+}
+
+function formatDenomination(value: number): string {
+  return `$${value >= 1 ? value.toLocaleString('en-US') : value.toFixed(2)}`;
+}
+
 export default function ShiftsScreen() {
   const { t } = useTranslation('common');
   const { currentEmployee } = useAuth();
@@ -62,6 +101,7 @@ export default function ShiftsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const [editing, setEditing] = useState<EditState | null>(null);
+  const [cashEditing, setCashEditing] = useState<CashEditState | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
 
   const load = async (days: number) => {
@@ -132,6 +172,19 @@ export default function ShiftsScreen() {
 
   const cancelEdit = () => setEditing(null);
 
+  const startCashEdit = (row: ShiftRow) => {
+    setCashEditing({
+      shiftId: row.id,
+      employeeName: row.employee_name,
+      isClosed: Boolean(row.clock_out_at),
+      hadClosingCounts: Boolean(row.cash_drawer?.closing_counts),
+      openingCounts: normalizeCounts(row.cash_drawer?.opening_counts),
+      closingCounts: normalizeCounts(row.cash_drawer?.closing_counts),
+      varianceNote: row.cash_drawer?.variance_note || '',
+      expectedCashTotal: row.cash_drawer?.expected_cash_total ?? row.cash_drawer_preview?.expected_cash_total ?? 0,
+    });
+  };
+
   const saveEdit = async () => {
     if (!editing) return;
     try {
@@ -152,6 +205,26 @@ export default function ShiftsScreen() {
       await load(rangeDays);
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Failed to update shift', 'error');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const saveCashEdit = async () => {
+    if (!cashEditing) return;
+    try {
+      setSavingEdit(true);
+      const shouldSendClosingCounts = cashEditing.isClosed || cashEditing.hadClosingCounts || totalFromCounts(cashEditing.closingCounts) > 0;
+      await updateShiftCashDrawer(cashEditing.shiftId, {
+        opening_counts: cashEditing.openingCounts,
+        closing_counts: shouldSendClosingCounts ? cashEditing.closingCounts : undefined,
+        variance_note: cashEditing.varianceNote || undefined,
+      });
+      addToast('Cash drawer updated', 'success');
+      setCashEditing(null);
+      await load(rangeDays);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Failed to update cash drawer', 'error');
     } finally {
       setSavingEdit(false);
     }
@@ -295,13 +368,13 @@ export default function ShiftsScreen() {
                     <th className="text-left px-4 py-3">Clock in</th>
                     <th className="text-left px-4 py-3">Clock out</th>
                     <th className="text-right px-4 py-3">Duration</th>
-                    <th className="text-left px-4 py-3">Notes</th>
+                    <th className="text-left px-4 py-3">Cash closeout</th>
                     {canEdit && <th className="px-4 py-3" />}
                   </tr>
                 </thead>
                 <tbody>
                   {shifts.map(row => (
-                    <tr key={row.id} className={`border-t border-neutral-800 ${row.flagged_long_open ? 'bg-amber-950/10' : ''}`}>
+                  <tr key={row.id} className={`border-t border-neutral-800 ${row.flagged_long_open ? 'bg-amber-950/10' : ''}`}>
                       <td className="px-4 py-3 text-white">{row.employee_name}</td>
                       <td className="px-4 py-3 text-neutral-300 tabular-nums">{formatDateTime(row.clock_in_at)}</td>
                       <td className="px-4 py-3 text-neutral-300 tabular-nums">
@@ -315,7 +388,25 @@ export default function ShiftsScreen() {
                         {formatDuration(row.duration_seconds)}
                       </td>
                       <td className="px-4 py-3 text-neutral-500 text-xs">
-                        {row.notes || ''}
+                        <div className="space-y-1">
+                          {row.cash_drawer ? (
+                            <>
+                              <span className="block text-neutral-400">Opening float: {formatMoney(row.cash_drawer.opening_total)}</span>
+                              <span className="block text-neutral-400">Cash sales: {formatMoney(row.cash_drawer.cash_sales_total)}</span>
+                              <span className="block text-neutral-400">Expected drawer: {formatMoney(row.cash_drawer.expected_cash_total)}</span>
+                              <span className="block text-neutral-400">Counted close: {formatMoney(row.cash_drawer.closing_total)}</span>
+                              <span className={`block font-semibold ${row.cash_drawer.variance_total === 0 ? 'text-neutral-300' : (row.cash_drawer.variance_total || 0) > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                Over / short: {row.cash_drawer.variance_total != null && row.cash_drawer.variance_total > 0 ? '+' : ''}{formatMoney(row.cash_drawer.variance_total)}
+                              </span>
+                              {row.cash_drawer.variance_note && (
+                                <span className="block text-[11px] text-amber-300">Manager note: {row.cash_drawer.variance_note}</span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="block text-neutral-600">No closeout recorded</span>
+                          )}
+                        </div>
+                        {row.notes && <span className="block mt-2">{row.notes}</span>}
                         {row.edited_by_name && (
                           <span className="block text-[10px] text-neutral-600 mt-0.5">
                             edited by {row.edited_by_name}
@@ -324,13 +415,22 @@ export default function ShiftsScreen() {
                       </td>
                       {canEdit && (
                         <td className="px-4 py-3 text-right">
-                          <button
-                            onClick={() => startEdit(row)}
-                            className="text-neutral-400 hover:text-white inline-flex items-center gap-1 text-xs"
-                          >
-                            <Pencil size={14} />
-                            Edit
-                          </button>
+                          <div className="flex items-center justify-end gap-3">
+                            <button
+                              onClick={() => startCashEdit(row)}
+                              className="text-neutral-400 hover:text-white inline-flex items-center gap-1 text-xs"
+                            >
+                              <Wallet size={14} />
+                              Closeout
+                            </button>
+                            <button
+                              onClick={() => startEdit(row)}
+                              className="text-neutral-400 hover:text-white inline-flex items-center gap-1 text-xs"
+                            >
+                              <Pencil size={14} />
+                              Edit
+                            </button>
+                          </div>
                         </td>
                       )}
                     </tr>
@@ -400,6 +500,103 @@ export default function ShiftsScreen() {
               >
                 <Save size={16} />
                 {savingEdit ? 'Saving...' : t('buttons.save')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cashEditing && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 max-w-3xl w-full p-6 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-xl font-bold text-white">Cash Closeout</h3>
+                <p className="text-sm text-neutral-400 mt-1">{cashEditing.employeeName}</p>
+              </div>
+              <button onClick={() => setCashEditing(null)} className="text-neutral-500 hover:text-neutral-300">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {([
+                ['Opening float', cashEditing.openingCounts, (counts: CashDrawerCounts) => setCashEditing({ ...cashEditing, openingCounts: counts })],
+                ['Closing drawer count', cashEditing.closingCounts, (counts: CashDrawerCounts) => setCashEditing({ ...cashEditing, closingCounts: counts })],
+              ] as const).map(([title, counts, setCounts]) => (
+                <div key={title} className="rounded-xl border border-neutral-800 bg-neutral-950 p-4">
+                  <h4 className="text-white font-semibold mb-3">{title}</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {DENOMINATIONS.map((denomination) => (
+                      <label key={`${title}-${denomination}`} className="rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2">
+                        <span className="block text-sm text-neutral-400">{denomination >= 20 ? 'Bill' : 'Coin'} {formatDenomination(denomination)}</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={counts[String(denomination)] ?? 0}
+                          onChange={(e) => setCounts({
+                            ...counts,
+                            [String(denomination)]: Math.max(0, Math.floor(Number(e.target.value || 0))) || 0,
+                          })}
+                          className="mt-2 w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-white"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-sm text-neutral-400 mt-3">Total: <span className="text-white font-semibold">{formatMoney(totalFromCounts(counts))}</span></p>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4 mt-6 space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-neutral-400">Expected drawer</span>
+                <span className="text-white">{formatMoney(cashEditing.expectedCashTotal)}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-neutral-400">Counted close</span>
+                <span className="text-white">{formatMoney(totalFromCounts(cashEditing.closingCounts))}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm border-t border-neutral-800 pt-2">
+                <span className="text-neutral-300 font-medium">Over / short</span>
+                {(() => {
+                  const variance = Math.round((totalFromCounts(cashEditing.closingCounts) - cashEditing.expectedCashTotal) * 100) / 100;
+                  return (
+                    <span className={`font-bold ${variance === 0 ? 'text-white' : variance > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {variance > 0 ? '+' : ''}{formatMoney(variance)}
+                    </span>
+                  );
+                })()}
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-neutral-300 mb-2">Manager note</label>
+              <textarea
+                value={cashEditing.varianceNote}
+                onChange={(e) => setCashEditing({ ...cashEditing, varianceNote: e.target.value })}
+                rows={3}
+                className="w-full px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-brand-500"
+                placeholder="Required if the counted close differs from the expected drawer total"
+              />
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setCashEditing(null)}
+                disabled={savingEdit}
+                className="flex-1 px-4 py-2 border border-neutral-700 text-neutral-300 rounded-lg hover:bg-neutral-800 transition-colors font-medium"
+              >
+                {t('buttons.cancel')}
+              </button>
+              <button
+                onClick={saveCashEdit}
+                disabled={savingEdit}
+                className="flex-1 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-500 transition-colors font-medium disabled:opacity-60 inline-flex items-center justify-center gap-2"
+              >
+                <Save size={16} />
+                {savingEdit ? 'Saving...' : 'Save closeout'}
               </button>
             </div>
           </div>

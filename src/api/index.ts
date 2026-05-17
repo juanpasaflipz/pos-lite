@@ -227,7 +227,8 @@ async function apiRequest<T>(
     } catch {
       // Use default error message if response is not JSON
     }
-    const err = new Error(errorMessage) as Error & { planUpgradeRequired?: boolean; requiredPlan?: string; feature?: string };
+    const err = new Error(errorMessage) as Error & { status?: number; planUpgradeRequired?: boolean; requiredPlan?: string; feature?: string };
+    err.status = response.status;
     if (response.status === 403 && errorData.error === 'PLAN_UPGRADE_REQUIRED') {
       err.planUpgradeRequired = true;
       err.requiredPlan = errorData.requiredPlan as string;
@@ -1002,6 +1003,20 @@ export async function updateShift(
   data: { clock_in_at?: string; clock_out_at?: string | null; notes?: string }
 ): Promise<ShiftRow> {
   return apiRequest<ShiftRow>(`/shifts/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateShiftCashDrawer(
+  id: number,
+  data: {
+    opening_counts?: Record<string, number>;
+    closing_counts?: Record<string, number>;
+    variance_note?: string;
+  }
+): Promise<ShiftRow> {
+  return apiRequest<ShiftRow>(`/shifts/${id}/cash-drawer`, {
     method: 'PATCH',
     body: JSON.stringify(data),
   });

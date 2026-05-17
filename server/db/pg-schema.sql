@@ -69,6 +69,23 @@ CREATE TABLE IF NOT EXISTS shifts (
 CREATE INDEX IF NOT EXISTS idx_shifts_tenant_employee ON shifts(tenant_id, employee_id, clock_in_at DESC);
 CREATE INDEX IF NOT EXISTS idx_shifts_open ON shifts(tenant_id, clock_out_at) WHERE clock_out_at IS NULL;
 
+CREATE TABLE IF NOT EXISTS cash_drawer_sessions (
+  id SERIAL PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
+  shift_id INTEGER NOT NULL UNIQUE REFERENCES shifts(id) ON DELETE CASCADE,
+  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  opening_counts JSONB NOT NULL DEFAULT '{}'::jsonb,
+  opening_total NUMERIC(10,2) NOT NULL DEFAULT 0,
+  closing_counts JSONB,
+  closing_total NUMERIC(10,2),
+  expected_cash_total NUMERIC(10,2),
+  variance_total NUMERIC(10,2),
+  variance_note TEXT,
+  opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  closed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS menu_categories (
   id SERIAL PRIMARY KEY,
   tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
@@ -701,6 +718,8 @@ CREATE INDEX IF NOT EXISTS idx_combo_definitions_tenant ON combo_definitions(ten
 CREATE INDEX IF NOT EXISTS idx_combo_slots_tenant ON combo_slots(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_order_payments_tenant ON order_payments(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_order_payments_order ON order_payments(tenant_id, order_id);
+CREATE INDEX IF NOT EXISTS idx_cash_drawer_sessions_tenant ON cash_drawer_sessions(tenant_id, opened_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cash_drawer_sessions_shift ON cash_drawer_sessions(tenant_id, shift_id);
 CREATE INDEX IF NOT EXISTS idx_printers_tenant ON printers(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_delivery_platforms_tenant ON delivery_platforms(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_delivery_orders_tenant ON delivery_orders(tenant_id);
@@ -742,7 +761,7 @@ DECLARE
 BEGIN
   FOR tbl IN
     SELECT unnest(ARRAY[
-      'employees', 'shifts', 'menu_categories', 'menu_items', 'orders', 'order_items',
+      'employees', 'shifts', 'cash_drawer_sessions', 'menu_categories', 'menu_items', 'orders', 'order_items',
       'inventory_items', 'menu_item_ingredients',
       'modifier_groups', 'modifiers', 'menu_item_modifier_groups', 'order_item_modifiers',
       'combo_definitions', 'combo_slots', 'order_payments', 'order_payment_items',

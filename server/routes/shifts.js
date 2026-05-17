@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
-import { all, get, run } from '../db/index.js';
+import { all, get, getConn } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { audit } from '../lib/auditLog.js';
 
 const router = Router();
+const CASH_DENOMINATIONS = [1000, 500, 200, 100, 50, 20, 10, 5, 2, 1, 0.5];
 
 const clockLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -40,6 +41,164 @@ function shiftDurationSeconds(clockIn, clockOut) {
   return Math.round((new Date(clockOut).getTime() - new Date(clockIn).getTime()) / 1000);
 }
 
+function zeroCounts() {
+  return Object.fromEntries(CASH_DENOMINATIONS.map((value) => [String(value), 0]));
+}
+
+function toMoney(value) {
+  return Math.round(Number(value || 0) * 100) / 100;
+}
+
+function normalizeCounts(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return null;
+  }
+
+  const counts = zeroCounts();
+  for (const denomination of CASH_DENOMINATIONS) {
+    const key = String(denomination);
+    const raw = input[key];
+    if (raw === undefined || raw === null || raw === '') continue;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 0 || !Number.isInteger(value)) {
+      return null;
+    }
+    counts[key] = value;
+  }
+  return counts;
+}
+
+function computeCountedTotal(counts) {
+  return toMoney(
+    Object.entries(counts || {}).reduce((sum, [denomination, count]) => {
+      return sum + Number(denomination) * Number(count || 0);
+    }, 0)
+  );
+}
+
+async function one(conn, sql, params = []) {
+  const rows = await conn.unsafe(sql, params);
+  return rows[0] || undefined;
+}
+
+async function many(conn, sql, params = []) {
+  const rows = await conn.unsafe(sql, params);
+  return Array.from(rows);
+}
+
+function serializeCounts(counts) {
+  return JSON.stringify(counts || zeroCounts());
+}
+
+async function ensureCashDrawerSession(conn, shift) {
+  let cashDrawer = await getCashDrawerSession(conn, shift.id);
+  if (cashDrawer) return cashDrawer;
+
+  const openingCounts = zeroCounts();
+  await conn.unsafe(
+    `INSERT INTO cash_drawer_sessions (shift_id, employee_id, opening_counts, opening_total, opened_at)
+     VALUES ($1, $2, $3::jsonb, 0, $4)`,
+    [shift.id, shift.employee_id, serializeCounts(openingCounts), shift.clock_in_at]
+  );
+  return getCashDrawerSession(conn, shift.id);
+}
+
+function mapCashDrawerSession(row) {
+  if (!row) return null;
+  const openingCounts = normalizeCounts(row.opening_counts) || zeroCounts();
+  const closingCounts = row.closing_counts ? (normalizeCounts(row.closing_counts) || zeroCounts()) : null;
+  return {
+    id: row.id,
+    shift_id: row.shift_id,
+    employee_id: row.employee_id,
+    opened_at: row.opened_at,
+    closed_at: row.closed_at,
+    opening_counts: openingCounts,
+    opening_total: toMoney(row.opening_total),
+    closing_counts: closingCounts,
+    closing_total: row.closing_total == null ? null : toMoney(row.closing_total),
+    expected_cash_total: row.expected_cash_total == null ? null : toMoney(row.expected_cash_total),
+    variance_total: row.variance_total == null ? null : toMoney(row.variance_total),
+    variance_note: row.variance_note || null,
+  };
+}
+
+async function getCashDrawerSession(conn, shiftId) {
+  const row = await one(conn, 'SELECT * FROM cash_drawer_sessions WHERE shift_id = $1', [shiftId]);
+  return mapCashDrawerSession(row);
+}
+
+async function getShiftCashSummary(conn, shift) {
+  const endAt = shift.clock_out_at || new Date().toISOString();
+  const row = await one(conn, `
+    SELECT
+      COALESCE((
+        SELECT SUM(COALESCE(o.total, 0) + COALESCE(o.tip, 0))
+        FROM orders o
+        WHERE o.employee_id = $1
+          AND o.payment_status = 'paid'
+          AND o.payment_method = 'cash'
+          AND o.created_at >= $2
+          AND o.created_at <= $3
+      ), 0) AS direct_cash_total,
+      COALESCE((
+        SELECT SUM(COALESCE(op.amount, 0) + COALESCE(op.tip, 0))
+        FROM order_payments op
+        JOIN orders o ON o.id = op.order_id
+        WHERE o.employee_id = $1
+          AND o.payment_method = 'split'
+          AND op.payment_method = 'cash'
+          AND op.status = 'paid'
+          AND op.created_at >= $2
+          AND op.created_at <= $3
+      ), 0) AS split_cash_total
+  `, [shift.employee_id, shift.clock_in_at, endAt]);
+
+  const cashSalesTotal = toMoney(Number(row?.direct_cash_total || 0) + Number(row?.split_cash_total || 0));
+  const openingTotal = toMoney(shift.cash_drawer?.opening_total || 0);
+
+  return {
+    opening_total: openingTotal,
+    cash_sales_total: cashSalesTotal,
+    expected_cash_total: toMoney(openingTotal + cashSalesTotal),
+  };
+}
+
+async function attachCashDrawers(conn, shifts) {
+  if (!shifts.length) return shifts;
+
+  const sessionRows = await many(conn, 'SELECT * FROM cash_drawer_sessions WHERE shift_id = ANY($1::int[])', [
+    shifts.map((shift) => shift.id),
+  ]);
+  const sessionMap = new Map(sessionRows.map((row) => [row.shift_id, mapCashDrawerSession(row)]));
+
+  const enriched = [];
+  for (const shift of shifts) {
+    const cashDrawer = sessionMap.get(shift.id) || null;
+    const withDrawer = { ...shift, cash_drawer: cashDrawer };
+    if (cashDrawer) {
+      const summary = await getShiftCashSummary(conn, withDrawer);
+      withDrawer.cash_drawer = {
+        ...cashDrawer,
+        cash_sales_total: summary.cash_sales_total,
+        expected_cash_total: cashDrawer.expected_cash_total == null
+          ? summary.expected_cash_total
+          : toMoney(cashDrawer.expected_cash_total),
+      };
+      withDrawer.cash_drawer_preview = summary;
+    } else {
+      withDrawer.cash_drawer_preview = {
+        opening_total: 0,
+        cash_sales_total: 0,
+        expected_cash_total: 0,
+      };
+    }
+    enriched.push(withDrawer);
+  }
+
+  return enriched;
+}
+
 /**
  * POST /api/shifts/status — body: { pin }
  * Returns { employee, openShift|null } so the UI can decide whether to show
@@ -53,7 +212,8 @@ router.post('/status', clockLimiter, async (req, res) => {
       return res.status(401).json({ error: 'Invalid PIN' });
     }
 
-    const openShift = await get(
+    const conn = getConn();
+    const openShift = await one(conn,
       `SELECT id, clock_in_at, clock_out_at
        FROM shifts
        WHERE employee_id = $1 AND clock_out_at IS NULL
@@ -62,9 +222,13 @@ router.post('/status', clockLimiter, async (req, res) => {
       [employee.id]
     );
 
+    const shifts = await attachCashDrawers(conn, openShift ? [{ ...openShift, employee_id: employee.id }] : []);
+    const decoratedOpenShift = shifts[0] || null;
+
     res.json({
       employee: { id: employee.id, name: employee.name, role: employee.role },
-      openShift: openShift || null,
+      openShift: decoratedOpenShift || null,
+      supported_denominations: CASH_DENOMINATIONS,
     });
   } catch (error) {
     console.error('Shift status error:', error);
@@ -85,7 +249,8 @@ router.post('/clock-in', clockLimiter, async (req, res) => {
       return res.status(401).json({ error: 'Invalid PIN' });
     }
 
-    const existing = await get(
+    const conn = getConn();
+    const existing = await one(conn,
       `SELECT id, clock_in_at FROM shifts
        WHERE employee_id = $1 AND clock_out_at IS NULL
        ORDER BY clock_in_at DESC LIMIT 1`,
@@ -93,16 +258,18 @@ router.post('/clock-in', clockLimiter, async (req, res) => {
     );
 
     if (existing) {
+      const [decoratedExisting] = await attachCashDrawers(conn, [{ ...existing, employee_id: employee.id, clock_out_at: null }]);
       return res.status(200).json({
         already_open: true,
-        shift: existing,
+        shift: decoratedExisting,
         employee: { id: employee.id, name: employee.name, role: employee.role },
+        supported_denominations: CASH_DENOMINATIONS,
       });
     }
 
-    const shift = await get(
+    const shift = await one(conn,
       `INSERT INTO shifts (employee_id) VALUES ($1)
-       RETURNING id, clock_in_at, clock_out_at`,
+       RETURNING id, employee_id, clock_in_at, clock_out_at`,
       [employee.id]
     );
 
@@ -139,7 +306,8 @@ router.post('/clock-out', clockLimiter, async (req, res) => {
       return res.status(401).json({ error: 'Invalid PIN' });
     }
 
-    const open = await get(
+    const conn = getConn();
+    const open = await one(conn,
       `SELECT id, clock_in_at FROM shifts
        WHERE employee_id = $1 AND clock_out_at IS NULL
        ORDER BY clock_in_at DESC LIMIT 1`,
@@ -150,10 +318,10 @@ router.post('/clock-out', clockLimiter, async (req, res) => {
       return res.status(409).json({ error: 'No open shift to clock out from' });
     }
 
-    const closed = await get(
+    const closed = await one(conn,
       `UPDATE shifts SET clock_out_at = NOW()
        WHERE id = $1
-       RETURNING id, clock_in_at, clock_out_at`,
+       RETURNING id, employee_id, clock_in_at, clock_out_at`,
       [open.id]
     );
 
@@ -212,6 +380,7 @@ router.get('/active', requireAuth(), async (req, res) => {
  */
 router.get('/', requireAuth(), async (req, res) => {
   try {
+    const conn = getConn();
     const to = req.query.to ? new Date(req.query.to) : new Date();
     const from = req.query.from
       ? new Date(req.query.from)
@@ -225,7 +394,7 @@ router.get('/', requireAuth(), async (req, res) => {
       where += ` AND s.employee_id = $${params.length}`;
     }
 
-    const rows = await all(`
+    const rows = await many(conn, `
       SELECT s.id, s.employee_id, e.name AS employee_name, e.role AS employee_role,
              s.clock_in_at, s.clock_out_at, s.notes,
              s.edited_by_employee_id, s.edited_at,
@@ -243,7 +412,7 @@ router.get('/', requireAuth(), async (req, res) => {
       ORDER BY s.clock_in_at DESC
     `, params);
 
-    res.json(rows);
+    res.json(await attachCashDrawers(conn, rows));
   } catch (error) {
     console.error('List shifts error:', error);
     res.status(500).json({ error: 'Failed to load shifts' });
@@ -316,6 +485,112 @@ router.patch('/:id', requireAuth('manage_employees'), async (req, res) => {
   } catch (error) {
     console.error('Edit shift error:', error);
     res.status(500).json({ error: 'Failed to edit shift' });
+  }
+});
+
+router.patch('/:id/cash-drawer', requireAuth('manage_employees'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { opening_counts, closing_counts, variance_note } = req.body || {};
+    const conn = getConn();
+
+    const shift = await one(conn,
+      `SELECT id, employee_id, clock_in_at, clock_out_at
+       FROM shifts
+       WHERE id = $1`,
+      [id]
+    );
+    if (!shift) {
+      return res.status(404).json({ error: 'Shift not found' });
+    }
+
+    const hasOpening = opening_counts !== undefined;
+    const hasClosing = closing_counts !== undefined;
+    const hasNote = variance_note !== undefined;
+    if (!hasOpening && !hasClosing && !hasNote) {
+      return res.status(400).json({ error: 'No cash drawer fields to update' });
+    }
+
+    const updatedShift = await conn.begin(async (sql) => {
+      const existingDrawer = await ensureCashDrawerSession(sql, shift);
+      const nextOpeningCounts = hasOpening ? normalizeCounts(opening_counts) : existingDrawer.opening_counts;
+      const nextClosingCounts = hasClosing ? normalizeCounts(closing_counts) : existingDrawer.closing_counts;
+      const nextNote = hasNote
+        ? (typeof variance_note === 'string' ? variance_note.trim() : '')
+        : (existingDrawer.variance_note || '');
+
+      if (hasOpening && !nextOpeningCounts) {
+        throw new Error('Valid opening_counts are required');
+      }
+      if (hasClosing && !nextClosingCounts) {
+        throw new Error('Valid closing_counts are required');
+      }
+
+      const openingTotal = computeCountedTotal(nextOpeningCounts || zeroCounts());
+      const summary = await getShiftCashSummary(sql, {
+        ...shift,
+        cash_drawer: { ...existingDrawer, opening_total: openingTotal },
+      });
+
+      let closingTotal = null;
+      let varianceTotal = null;
+      let closedAt = existingDrawer.closed_at;
+      if (nextClosingCounts) {
+        closingTotal = computeCountedTotal(nextClosingCounts);
+        varianceTotal = toMoney(closingTotal - summary.expected_cash_total);
+        if (varianceTotal !== 0 && !nextNote) {
+          throw new Error('variance_note is required when the closing count differs from expected cash');
+        }
+        closedAt = shift.clock_out_at || existingDrawer.closed_at || new Date().toISOString();
+      }
+
+      await sql.unsafe(
+        `UPDATE cash_drawer_sessions
+         SET opening_counts = $1::jsonb,
+             opening_total = $2,
+             closing_counts = $3::jsonb,
+             closing_total = $4,
+             expected_cash_total = $5,
+             variance_total = $6,
+             variance_note = $7,
+             closed_at = $8
+         WHERE shift_id = $9`,
+        [
+          serializeCounts(nextOpeningCounts || zeroCounts()),
+          openingTotal,
+          nextClosingCounts ? serializeCounts(nextClosingCounts) : null,
+          closingTotal,
+          summary.expected_cash_total,
+          varianceTotal,
+          nextNote || null,
+          closedAt,
+          shift.id,
+        ]
+      );
+
+      const [decoratedShift] = await attachCashDrawers(sql, [shift]);
+      return decoratedShift;
+    });
+
+    audit({
+      tenantId: req.tenant?.id || 'default',
+      actorType: 'employee',
+      actorId: req.employee.id,
+      action: 'shift_cash_drawer_edit',
+      resource: 'shift',
+      resourceId: id,
+      details: { changes: req.body },
+      ip: req.ip,
+    });
+
+    res.json(updatedShift);
+  } catch (error) {
+    console.error('Cash drawer edit error:', error);
+    const message = error instanceof Error ? error.message : '';
+    if (/opening_counts|closing_counts|variance_note/i.test(message)) {
+      return res.status(400).json({ error: message });
+    }
+    res.status(500).json({ error: 'Failed to update cash drawer' });
   }
 });
 

@@ -26,7 +26,7 @@ function formatDuration(seconds: number): string {
 }
 
 const TimeClockModal: React.FC<TimeClockModalProps> = ({ isOpen, onClose }) => {
-  const { t } = useTranslation();
+  const { t } = useTranslation('common');
   const [pin, setPin] = useState('');
   const [phase, setPhase] = useState<Phase>('pin');
   const [busy, setBusy] = useState(false);
@@ -75,7 +75,7 @@ const TimeClockModal: React.FC<TimeClockModalProps> = ({ isOpen, onClose }) => {
 
   const handleBackspace = () => {
     if (busy || phase !== 'pin') return;
-    setPin(prev => prev.slice(0, -1));
+    setPin((prev) => prev.slice(0, -1));
     setError('');
   };
 
@@ -146,7 +146,7 @@ const TimeClockModal: React.FC<TimeClockModalProps> = ({ isOpen, onClose }) => {
             </div>
             {error && <p className="text-center text-red-400 mb-4 font-medium">{error}</p>}
             <div className="grid grid-cols-3 gap-2 mb-3">
-              {['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map(d => (
+              {['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((d) => (
                 <button
                   key={d}
                   onClick={() => handleDigit(d)}
@@ -200,20 +200,14 @@ const TimeClockModal: React.FC<TimeClockModalProps> = ({ isOpen, onClose }) => {
               onClick={handleConfirm}
               disabled={busy}
               className={`w-full h-14 rounded-xl font-bold text-white text-lg flex items-center justify-center gap-2 transition-colors ${
-                status.openShift
-                  ? 'bg-red-600 hover:bg-red-500'
-                  : 'bg-brand-600 hover:bg-brand-500'
+                status.openShift ? 'bg-red-600 hover:bg-red-500' : 'bg-brand-600 hover:bg-brand-500'
               } disabled:opacity-60`}
             >
               {status.openShift ? <LogOut size={20} /> : <LogIn size={20} />}
               {status.openShift ? t('timeClock.clockOut') : t('timeClock.clockIn')}
             </button>
 
-            <button
-              onClick={reset}
-              disabled={busy}
-              className="mt-3 text-sm text-neutral-500 hover:text-neutral-300"
-            >
+            <button onClick={reset} disabled={busy} className="mt-3 text-sm text-neutral-500 hover:text-neutral-300">
               {t('buttons.cancel')}
             </button>
           </div>
@@ -232,7 +226,7 @@ const TimeClockModal: React.FC<TimeClockModalProps> = ({ isOpen, onClose }) => {
   );
 };
 
-function messageFor(err: unknown, t: (k: string) => string): string {
+function messageFor(err: unknown, t: (k: string, options?: Record<string, unknown>) => string): string {
   const message = err instanceof Error ? err.message : '';
   if (/Invalid PIN/i.test(message)) return t('timeClock.invalidPin');
   if (/Too many/i.test(message)) return t('timeClock.rateLimited');
