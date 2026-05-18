@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Gift, Plus, ShoppingCart, Sparkles } from 'lucide-react';
+import { ArrowLeft, Gift, Plus, ShoppingCart, Sparkles, UtensilsCrossed } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useKioskBinding } from '../context/KioskBindingContext';
 import { useKioskCart } from '../context/KioskCartContext';
@@ -240,28 +240,45 @@ const KioskMenuScreen: React.FC = () => {
             />
           )}
           {!loading && !error && activeCategory !== SUGGEST_TAB && (
-            <div className="grid grid-cols-2 gap-4 pb-4">
+            <div className="grid grid-cols-3 gap-4 pb-4">
               {visibleItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => addItem(item)}
-                  className="min-h-[218px] rounded-lg bg-neutral-900 border border-neutral-800 active:border-brand-500 p-5 text-left touch-manipulation flex flex-col"
+                  className="rounded-lg bg-neutral-900 border border-neutral-800 active:border-brand-500 text-left touch-manipulation flex flex-col overflow-hidden"
                 >
-                  <div className="flex-1">
-                    <h2 className="text-[28px] font-black leading-[1.05] mb-3">{item.name}</h2>
-                    {item.description && (
-                      <p className="text-neutral-400 text-lg leading-snug line-clamp-3">
-                        {item.description}
-                      </p>
+                  <div className="aspect-[4/3] w-full bg-gradient-to-br from-neutral-800 to-neutral-900 flex items-center justify-center overflow-hidden">
+                    {item.image_url ? (
+                      <img
+                        src={item.image_url}
+                        alt={item.name}
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <UtensilsCrossed className="h-12 w-12 text-neutral-600" />
                     )}
                   </div>
-                  <div className="flex items-center justify-between mt-5">
-                    <span className="text-[28px] font-black text-brand-300">
-                      {money.format(Number(item.price))}
-                    </span>
-                    <span className="h-14 w-14 rounded-lg bg-brand-600 flex items-center justify-center">
-                      <Plus className="h-8 w-8" />
-                    </span>
+                  <div className="p-4 flex-1 flex flex-col">
+                    <div className="flex-1">
+                      <h2 className="text-xl font-black leading-tight mb-1">{item.name}</h2>
+                      {item.description && (
+                        <p className="text-neutral-400 text-sm leading-snug line-clamp-2">
+                          {item.description}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between mt-3">
+                      <span className="text-2xl font-black text-brand-300">
+                        {money.format(Number(item.price))}
+                      </span>
+                      <span className="h-11 w-11 rounded-lg bg-brand-600 flex items-center justify-center">
+                        <Plus className="h-6 w-6" />
+                      </span>
+                    </div>
                   </div>
                 </button>
               ))}

@@ -15,7 +15,7 @@ const Pad: React.FC<{
   <button
     onClick={onClick}
     disabled={disabled}
-    className={`h-24 rounded-2xl text-3xl font-black touch-manipulation flex items-center justify-center transition-colors disabled:opacity-40 ${
+    className={`h-20 rounded-2xl text-3xl font-black touch-manipulation flex items-center justify-center transition-colors disabled:opacity-40 ${
       muted
         ? 'bg-neutral-800 active:bg-neutral-700 text-neutral-400'
         : 'bg-neutral-800 active:bg-neutral-700 text-white'
@@ -121,32 +121,41 @@ const KioskWelcomeScreen: React.FC = () => {
     );
   }
 
-  return (
-    <div className="h-full w-full bg-neutral-950 text-white flex flex-col items-center justify-center p-8">
-      {step === 'phone' && (
-        <>
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center gap-3 text-brand-300 mb-3">
-              <Gift className="h-9 w-9" />
-              <span className="text-xl font-black uppercase tracking-widest">Recompensas</span>
-            </div>
-            <h1 className="text-5xl font-black leading-tight">Identifícate y ordena más rápido</h1>
-            <p className="text-2xl text-neutral-400 font-bold mt-3 max-w-xl">
-              Acumula sellos y te recomendamos lo que más te gusta.
-            </p>
+  if (step === 'phone') {
+    return (
+      <div className="h-full w-full bg-neutral-950 text-white grid grid-cols-2 gap-8 px-10 py-8">
+        <div className="flex flex-col justify-center min-w-0">
+          <div className="inline-flex items-center gap-3 text-brand-300 mb-4">
+            <Gift className="h-7 w-7" />
+            <span className="text-base font-black uppercase tracking-widest">Recompensas</span>
           </div>
+          <h1 className="text-4xl xl:text-5xl font-black leading-[1.05]">
+            Identifícate y ordena más rápido
+          </h1>
+          <p className="text-xl text-neutral-400 font-bold mt-4 max-w-md">
+            Acumula sellos y te recomendamos lo que más te gusta.
+          </p>
 
-          <div className="h-20 mb-2 flex items-center justify-center">
-            <span className="text-6xl font-black tracking-wider tabular-nums">
+          <button
+            onClick={skip}
+            className="mt-10 h-16 w-fit px-6 rounded-2xl bg-neutral-800 active:bg-neutral-700 text-xl font-black text-neutral-200 touch-manipulation"
+          >
+            No, gracias — solo quiero ordenar
+          </button>
+        </div>
+
+        <div className="flex flex-col items-center justify-center">
+          <div className="h-16 mb-1 flex items-center justify-center">
+            <span className="text-5xl font-black tracking-wider tabular-nums">
               {formatPhone(phone) || <span className="text-neutral-700">55 0000 0000</span>}
             </span>
           </div>
 
-          <div className={`mb-4 h-7 text-lg font-bold ${error ? 'text-red-400' : 'text-transparent'}`}>
+          <div className={`mb-3 h-6 text-base font-bold ${error ? 'text-red-400' : 'text-transparent'}`}>
             {error || 'placeholder'}
           </div>
 
-          <div className="grid grid-cols-3 gap-3 w-[360px]">
+          <div className="grid grid-cols-3 gap-3 w-[320px]">
             {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
               <Pad key={d} label={d} onClick={() => onDigit(d)} />
             ))}
@@ -158,69 +167,62 @@ const KioskWelcomeScreen: React.FC = () => {
           <button
             onClick={submitPhone}
             disabled={phone.length !== 10}
-            className="mt-6 w-[360px] h-20 rounded-2xl bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-600 text-2xl font-black touch-manipulation"
+            className="mt-5 w-[320px] h-16 rounded-2xl bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-600 text-xl font-black touch-manipulation"
           >
             Continuar
           </button>
+        </div>
+      </div>
+    );
+  }
 
-          <button
-            onClick={skip}
-            className="mt-6 text-lg font-bold text-neutral-500 active:text-neutral-300 underline underline-offset-4 touch-manipulation"
-          >
-            Continuar sin registrarme
-          </button>
-        </>
-      )}
+  return (
+    <div className="h-full w-full bg-neutral-950 text-white flex flex-col items-center justify-center px-10 py-8">
+      <div className="text-center mb-6">
+        <h1 className="text-4xl font-black leading-tight">¡Bienvenido! 👋</h1>
+        <p className="text-xl text-neutral-400 font-bold mt-2 max-w-xl">
+          Es tu primera vez. ¿Cómo te llamas?
+        </p>
+      </div>
 
-      {step === 'name' && (
-        <>
-          <div className="text-center mb-8">
-            <h1 className="text-5xl font-black leading-tight">¡Bienvenido! 👋</h1>
-            <p className="text-2xl text-neutral-400 font-bold mt-3 max-w-xl">
-              Es tu primera vez. ¿Cómo te llamas?
-            </p>
-          </div>
+      <input
+        autoFocus
+        value={name}
+        onChange={(e) => {
+          setName(e.target.value);
+          setError(null);
+        }}
+        placeholder="Tu nombre"
+        maxLength={40}
+        className="w-[460px] h-20 rounded-2xl bg-neutral-900 border-2 border-neutral-700 focus:border-brand-500 outline-none text-center text-3xl font-black px-6"
+      />
 
-          <input
-            autoFocus
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value);
-              setError(null);
-            }}
-            placeholder="Tu nombre"
-            maxLength={40}
-            className="w-[460px] h-24 rounded-2xl bg-neutral-900 border-2 border-neutral-700 focus:border-brand-500 outline-none text-center text-4xl font-black px-6"
-          />
+      <div className={`my-3 h-6 text-base font-bold ${error ? 'text-red-400' : 'text-transparent'}`}>
+        {error || 'placeholder'}
+      </div>
 
-          <div className={`my-4 h-7 text-lg font-bold ${error ? 'text-red-400' : 'text-transparent'}`}>
-            {error || 'placeholder'}
-          </div>
+      <button
+        onClick={submitName}
+        disabled={!name.trim()}
+        className="w-[460px] h-16 rounded-2xl bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-600 text-xl font-black touch-manipulation"
+      >
+        Registrarme y ordenar
+      </button>
 
-          <button
-            onClick={submitName}
-            disabled={!name.trim()}
-            className="w-[460px] h-20 rounded-2xl bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-600 text-2xl font-black touch-manipulation"
-          >
-            Registrarme y ordenar
-          </button>
+      <p className="mt-3 text-sm text-neutral-500 font-bold max-w-md text-center">
+        Te enviaremos un SMS con tu tarjeta de recompensas.
+      </p>
 
-          <p className="mt-4 text-base text-neutral-500 font-bold max-w-md text-center">
-            Te enviaremos un SMS con tu tarjeta de recompensas.
-          </p>
-
-          <button
-            onClick={() => {
-              setStep('phone');
-              setError(null);
-            }}
-            className="mt-6 inline-flex items-center gap-2 text-lg font-bold text-neutral-500 active:text-neutral-300 touch-manipulation"
-          >
-            <ArrowLeft className="h-5 w-5" />
-            Cambiar número
-          </button>
-        </>
-      )}
+      <button
+        onClick={() => {
+          setStep('phone');
+          setError(null);
+        }}
+        className="mt-4 inline-flex items-center gap-2 text-base font-bold text-neutral-500 active:text-neutral-300 touch-manipulation"
+      >
+        <ArrowLeft className="h-5 w-5" />
+        Cambiar número
+      </button>
     </div>
   );
 };
