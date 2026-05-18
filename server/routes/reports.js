@@ -137,6 +137,175 @@ router.get('/top-items', async (req, res) => {
   }
 });
 
+// GET /api/reports/item-sales - exact item/category sales with operational filters
+router.get('/item-sales', async (req, res) => {
+  try {
+    const {
+      period = 'daily',
+      customer_id,
+      hour,
+      min_quantity,
+      related_item_id,
+    } = req.query;
+    const tz = req.tenant?.timezone || 'UTC';
+    const startDate = getDateRange(period, tz);
+    const today = tzToday(tz);
+
+    const where = [
+      `(COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date >= $1`,
+      `o.payment_status = 'paid'`,
+    ];
+    const params = [startDate, tz];
+
+    if (period === 'daily' || period === 'today') {
+      where.push(`(COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date <= $3`);
+      params.push(today);
+    }
+
+    if (customer_id && customer_id !== 'all') {
+      params.push(Number(customer_id));
+      where.push(`o.loyalty_customer_id = $${params.length}`);
+    }
+
+    if (hour !== undefined && hour !== null && hour !== '' && hour !== 'all') {
+      params.push(Number(hour));
+      where.push(`EXTRACT(HOUR FROM COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::int = $${params.length}`);
+    }
+
+    if (related_item_id && related_item_id !== 'all') {
+      params.push(Number(related_item_id));
+      where.push(`EXISTS (
+        SELECT 1
+        FROM order_items sibling
+        WHERE sibling.order_id = o.id
+          AND sibling.menu_item_id = $${params.length}
+      )`);
+    }
+
+    const whereSql = where.join(' AND ');
+    const havingSql = min_quantity && Number(min_quantity) > 0
+      ? `HAVING SUM(oi.quantity) >= ${Math.max(0, Math.floor(Number(min_quantity)))}`
+      : '';
+
+    const rows = await all(`
+      SELECT
+        COALESCE(mc.id, 0) as category_id,
+        COALESCE(mc.name, 'Uncategorized') as category_name,
+        COALESCE(mi.id, oi.menu_item_id, 0) as item_id,
+        oi.item_name,
+        SUM(oi.quantity)::int as quantity_sold,
+        COUNT(DISTINCT o.id)::int as orders_count,
+        COUNT(DISTINCT o.loyalty_customer_id) FILTER (WHERE o.loyalty_customer_id IS NOT NULL)::int as customer_count,
+        ROUND(SUM(oi.quantity * oi.unit_price), 2) as revenue,
+        ROUND(AVG(oi.unit_price), 2) as avg_unit_price
+      FROM order_items oi
+      JOIN orders o ON oi.order_id = o.id
+      LEFT JOIN menu_items mi ON oi.menu_item_id = mi.id
+      LEFT JOIN menu_categories mc ON mi.category_id = mc.id
+      WHERE ${whereSql}
+      GROUP BY COALESCE(mc.id, 0), COALESCE(mc.name, 'Uncategorized'), COALESCE(mi.id, oi.menu_item_id, 0), oi.item_name
+      ${havingSql}
+      ORDER BY quantity_sold DESC, revenue DESC, oi.item_name ASC
+    `, params);
+
+    const totalQuantity = rows.reduce((sum, row) => sum + Number(row.quantity_sold || 0), 0);
+    const totalRevenue = rows.reduce((sum, row) => sum + Number(row.revenue || 0), 0);
+    const categoryMap = new Map();
+
+    for (const row of rows) {
+      row.category_id = Number(row.category_id) || 0;
+      row.item_id = Number(row.item_id) || 0;
+      row.quantity_sold = Number(row.quantity_sold) || 0;
+      row.orders_count = Number(row.orders_count) || 0;
+      row.customer_count = Number(row.customer_count) || 0;
+      row.revenue = Number(row.revenue) || 0;
+      row.avg_unit_price = Number(row.avg_unit_price) || 0;
+      row.item_mix_percent = totalQuantity > 0
+        ? Math.round((row.quantity_sold / totalQuantity) * 1000) / 10
+        : 0;
+
+      const current = categoryMap.get(row.category_id) || {
+        category_id: row.category_id,
+        category_name: row.category_name,
+        quantity_sold: 0,
+        revenue: 0,
+        item_count: 0,
+        item_mix_percent: 0,
+      };
+      current.quantity_sold += row.quantity_sold;
+      current.revenue += row.revenue;
+      current.item_count += 1;
+      categoryMap.set(row.category_id, current);
+    }
+
+    const categories = Array.from(categoryMap.values())
+      .map(category => ({
+        ...category,
+        revenue: Math.round(category.revenue * 100) / 100,
+        item_mix_percent: totalQuantity > 0
+          ? Math.round((category.quantity_sold / totalQuantity) * 1000) / 10
+          : 0,
+      }))
+      .sort((a, b) => b.quantity_sold - a.quantity_sold || b.revenue - a.revenue);
+
+    const customers = await all(`
+      SELECT DISTINCT
+        lc.id,
+        lc.name,
+        lc.phone
+      FROM orders o
+      JOIN loyalty_customers lc ON lc.id = o.loyalty_customer_id
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date >= $1
+        AND o.payment_status = 'paid'
+      ORDER BY lc.name ASC
+      LIMIT 200
+    `, [startDate, tz]);
+
+    const itemOptions = await all(`
+      SELECT
+        COALESCE(mi.id, oi.menu_item_id, 0) as item_id,
+        oi.item_name,
+        SUM(oi.quantity)::int as quantity_sold
+      FROM order_items oi
+      JOIN orders o ON oi.order_id = o.id
+      LEFT JOIN menu_items mi ON oi.menu_item_id = mi.id
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date >= $1
+        AND o.payment_status = 'paid'
+        AND oi.menu_item_id IS NOT NULL
+      GROUP BY COALESCE(mi.id, oi.menu_item_id, 0), oi.item_name
+      ORDER BY quantity_sold DESC, oi.item_name ASC
+      LIMIT 200
+    `, [startDate, tz]);
+
+    res.json({
+      period,
+      startDate,
+      filters: {
+        customer_id: customer_id || 'all',
+        hour: hour || 'all',
+        min_quantity: Number(min_quantity) || 0,
+        related_item_id: related_item_id || 'all',
+      },
+      totals: {
+        quantity_sold: totalQuantity,
+        revenue: Math.round(totalRevenue * 100) / 100,
+        unique_items: rows.length,
+      },
+      categories,
+      items: rows,
+      customers,
+      item_options: itemOptions.map(item => ({
+        item_id: Number(item.item_id) || 0,
+        item_name: item.item_name,
+        quantity_sold: Number(item.quantity_sold) || 0,
+      })),
+    });
+  } catch (error) {
+    console.error('Error fetching item sales report:', error);
+    res.status(500).json({ error: 'Failed to fetch item sales report' });
+  }
+});
+
 // GET /api/reports/employee-performance - sales by employee
 router.get('/employee-performance', async (req, res) => {
   try {

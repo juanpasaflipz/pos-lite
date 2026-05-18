@@ -10,6 +10,7 @@ import {
   PaymentStatus,
   SalesReport,
   TopItemsReport,
+  ItemSalesReport,
   EmployeePerformanceReport,
   HourlyReport,
   CashCardBreakdown,
@@ -487,6 +488,30 @@ export async function getOrders(filters?: OrderFilters): Promise<Order[]> {
 
 export async function getOrder(id: number): Promise<Order> {
   return apiRequest<Order>(`/orders/${id}`);
+}
+
+export interface KioskHeldOrder {
+  id: number;
+  order_number: string | number;
+  total: number;
+  created_at: string;
+  loyalty_customer_id: number | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  items: Array<{
+    menu_item_id: number;
+    item_name: string;
+    quantity: number;
+    unit_price: number;
+  }>;
+}
+
+export async function getKioskHeldOrders(): Promise<KioskHeldOrder[]> {
+  return apiRequest<KioskHeldOrder[]>('/orders/kiosk-held');
+}
+
+export async function claimKioskOrder(id: number): Promise<{ id: number; status: string }> {
+  return apiRequest(`/orders/${id}/claim`, { method: 'POST' });
 }
 
 interface DiscountPayload {
@@ -1039,6 +1064,33 @@ export async function getTopItems(
   return apiRequest<TopItemsReport[]>(
     `/reports/top-items?period=${period}&limit=${limit}`
   );
+}
+
+export interface ItemSalesReportFilters {
+  customerId?: number | 'all';
+  hour?: number | 'all';
+  minQuantity?: number;
+  relatedItemId?: number | 'all';
+}
+
+export async function getItemSalesReport(
+  period: string,
+  filters: ItemSalesReportFilters = {}
+): Promise<ItemSalesReport> {
+  const params = new URLSearchParams({ period });
+  if (filters.customerId && filters.customerId !== 'all') {
+    params.set('customer_id', String(filters.customerId));
+  }
+  if (filters.hour !== undefined && filters.hour !== 'all') {
+    params.set('hour', String(filters.hour));
+  }
+  if (filters.minQuantity && filters.minQuantity > 0) {
+    params.set('min_quantity', String(filters.minQuantity));
+  }
+  if (filters.relatedItemId && filters.relatedItemId !== 'all') {
+    params.set('related_item_id', String(filters.relatedItemId));
+  }
+  return apiRequest<ItemSalesReport>(`/reports/item-sales?${params.toString()}`);
 }
 
 export async function getEmployeePerformance(

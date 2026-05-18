@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Download, X } from 'lucide-react';
 import {
   getSalesReport,
-  getTopItems,
+  getItemSalesReport,
   getEmployeePerformance,
   getHourlyReport,
   getCashCardBreakdown,
@@ -25,7 +25,7 @@ import BrandLogo from '../components/BrandLogo';
 import { usePlan } from '../context/PlanContext';
 import {
   SalesReport,
-  TopItemsReport,
+  ItemSalesReport,
   EmployeePerformanceReport,
   HourlyReport,
   CashCardBreakdown,
@@ -58,7 +58,7 @@ export default function ReportsScreen() {
   const [period, setPeriod] = useState<Period>('today');
   const [tab, setTab] = useState<Tab>('overview');
   const [salesData, setSalesData] = useState<SalesReport | null>(null);
-  const [topItems, setTopItems] = useState<TopItemsReport[]>([]);
+  const [itemSales, setItemSales] = useState<ItemSalesReport | null>(null);
   const [employeePerf, setEmployeePerf] = useState<EmployeePerformanceReport[]>([]);
   const [hourlyData, setHourlyData] = useState<HourlyReport[]>([]);
   const [cashCard, setCashCard] = useState<CashCardBreakdown | null>(null);
@@ -72,13 +72,19 @@ export default function ReportsScreen() {
   const [financialData, setFinancialData] = useState<FinancialProjection | null>(null);
   const [engineeringData, setEngineeringData] = useState<MenuEngineeringReport | null>(null);
   const [financialMonth, setFinancialMonth] = useState(() => todayInTz(tenantTz).slice(0, 7));
+  const [itemSalesFilters, setItemSalesFilters] = useState({
+    customerId: 'all' as number | 'all',
+    hour: 'all' as number | 'all',
+    minQuantity: 0,
+    relatedItemId: 'all' as number | 'all',
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const canEditFinancials = !!(currentEmployee && ['admin', 'manager'].includes(currentEmployee.role) && limits.reports.editVariables);
 
   useEffect(() => {
     fetchReportData();
-  }, [period, tab, financialMonth]);
+  }, [period, tab, financialMonth, itemSalesFilters]);
 
   const fetchReportData = async () => {
     try {
@@ -86,14 +92,14 @@ export default function ReportsScreen() {
       setError(null);
 
       if (tab === 'overview') {
-        const [sales, items, perf, hourly] = await Promise.all([
+        const [sales, itemSalesData, perf, hourly] = await Promise.all([
           getSalesReport(period),
-          getTopItems(period, 10),
+          getItemSalesReport(period, itemSalesFilters),
           getEmployeePerformance(period),
           getHourlyReport(),
         ]);
         setSalesData(sales);
-        setTopItems(items);
+        setItemSales(itemSalesData);
         setEmployeePerf(perf);
         setHourlyData(hourly);
       } else if (tab === 'cashcard') {
@@ -287,7 +293,14 @@ export default function ReportsScreen() {
         ) : (
           <>
             {tab === 'overview' && (
-              <OverviewTab salesData={salesData} topItems={topItems} employeePerf={employeePerf} hourlyData={hourlyData} />
+              <OverviewTab
+                salesData={salesData}
+                itemSales={itemSales}
+                employeePerf={employeePerf}
+                hourlyData={hourlyData}
+                itemSalesFilters={itemSalesFilters}
+                onItemSalesFiltersChange={setItemSalesFilters}
+              />
             )}
             {tab === 'cashcard' && cashCard && (
               <CashCardTab cashCard={cashCard} />

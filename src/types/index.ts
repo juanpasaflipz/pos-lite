@@ -301,6 +301,52 @@ export interface TopItemsReport {
   revenue: number;
 }
 
+export interface ItemSalesReport {
+  period: string;
+  startDate: string;
+  filters: {
+    customer_id: number | 'all';
+    hour: number | 'all';
+    min_quantity: number;
+    related_item_id: number | 'all';
+  };
+  totals: {
+    quantity_sold: number;
+    revenue: number;
+    unique_items: number;
+  };
+  categories: Array<{
+    category_id: number;
+    category_name: string;
+    quantity_sold: number;
+    revenue: number;
+    item_count: number;
+    item_mix_percent: number;
+  }>;
+  items: Array<{
+    category_id: number;
+    category_name: string;
+    item_id: number;
+    item_name: string;
+    quantity_sold: number;
+    orders_count: number;
+    customer_count: number;
+    revenue: number;
+    avg_unit_price: number;
+    item_mix_percent: number;
+  }>;
+  customers: Array<{
+    id: number;
+    name: string;
+    phone?: string;
+  }>;
+  item_options: Array<{
+    item_id: number;
+    item_name: string;
+    quantity_sold: number;
+  }>;
+}
+
 export interface EmployeePerformanceReport {
   employee_id: number;
   employee_name: string;
