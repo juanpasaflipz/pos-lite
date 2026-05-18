@@ -102,6 +102,24 @@ function toE164SMS(phone, countryCode = 'MX') {
   return `+521${digits.slice(-10)}`;
 }
 
+// Strip characters that aren't in the GSM-7 base alphabet so the message stays
+// single-segment (160 chars vs 70 in UCS-2). á/í/ó/ú, smart quotes, em dashes,
+// and ellipsis all force UCS-2 → MX carriers split the message across rotated
+// senders and it arrives truncated. ñ, é, è, à, ä, ö, ü, ç, ¡, ¿ are GSM-7 base
+// and pass through unchanged.
+const GSM7_REPLACEMENTS = {
+  'á': 'a', 'í': 'i', 'ó': 'o', 'ú': 'u',
+  'Á': 'A', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
+  '—': '-', '–': '-',
+  '\u2018': "'", '\u2019': "'",
+  '\u201C': '"', '\u201D': '"',
+  '…': '...',
+};
+function sanitizeForGsm7(text) {
+  if (!text) return text;
+  return String(text).replace(/[áíóúÁÍÓÚ—–\u2018\u2019\u201C\u201D…]/g, (c) => GSM7_REPLACEMENTS[c] || c);
+}
+
 /**
  * Send a free-form SMS via Twilio REST API. Loyalty wrappers pass customerId +
  * messageType so each delivery is logged to loyalty_messages for tracking.
@@ -116,7 +134,12 @@ export async function sendSMS(to, body, customerId = null, messageType = 'genera
   const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
   const auth = Buffer.from(`${sid}:${token}`).toString('base64');
 
-  const params = new URLSearchParams({ To: e164, From: from, Body: body });
+  const cleanBody = sanitizeForGsm7(body);
+  if (cleanBody.length > 160) {
+    console.warn(`[Twilio] ${messageType} SMS is ${cleanBody.length} chars — will split into multiple segments and may be sender-rotated by MX carriers.`);
+  }
+
+  const params = new URLSearchParams({ To: e164, From: from, Body: cleanBody });
 
   try {
     const res = await fetch(url, {
@@ -220,24 +243,30 @@ export async function sendWhatsAppTemplate(to, messageType, variables, customerI
 // Kept tight (no emoji, short prefix) so we stay within a single GSM-7 segment
 // after appending — multi-segment MX A2P traffic gets sender-rotated by the
 // carrier and arrives as separate conversations on iOS.
+// Append the review CTA only if the combined body stays single-segment (160
+// GSM-7 chars). When a long reward description or restaurant name pushes us
+// over, drop the CTA rather than ship a 2-segment message that MX carriers
+// sender-rotate and deliver truncated.
 function withReviewCta(body, reviewUrl) {
   const url = (reviewUrl || '').trim();
   if (!url) return body;
-  return `${body} Reseña: ${url}`;
+  const withCta = `${body} Resena: ${url}`;
+  return withCta.length <= 160 ? withCta : body;
 }
 
-// Bodies are plain GSM-7 (no emoji, no special chars beyond Spanish accents).
-// Why: emoji forces UCS-2 → 70 chars/segment → 3-segment messages that the MX
-// carrier pool splits across different sender numbers, looking spammy.
+// Bodies must be GSM-7 base alphabet only — sendSMS sanitizes á/í/ó/ú and em
+// dashes, but keep them out of literals so the strings here match what ships.
+// Budget: 160 chars after variable substitution. Restaurant names of ~20 chars
+// and reward descriptions of ~30 chars are typical worst case.
 
 export async function sendWelcomeMessage(phone, name, referralCode, restaurantName = 'Our', countryCode = 'MX') {
-  const body = `¡Bienvenido a ${restaurantName} Rewards, ${name}! Gana un sello con cada visita. Comparte tu código ${referralCode} con amigos — ambos ganan 2 sellos extra.`;
+  const body = `Hola ${name}! Bienvenido a ${restaurantName} Rewards. Gana sellos en cada visita. Tu codigo: ${referralCode}. Compartelo y ambos ganan 2 sellos extra.`;
   return sendSMS(phone, body, null, 'welcome', countryCode);
 }
 
 export async function sendStampEarnedMessage(phone, name, earned, required, customerId, restaurantName = 'us', countryCode = 'MX', reviewUrl = null) {
   const body = withReviewCta(
-    `¡Hola ${name}! Ganaste un sello en ${restaurantName} (${earned}/${required}). ¡Sigue así!`,
+    `Hola ${name}! Sello ganado en ${restaurantName}: ${earned}/${required}. Sigue asi!`,
     reviewUrl,
   );
   return sendSMS(phone, body, customerId, 'stamp_earned', countryCode);
@@ -245,14 +274,14 @@ export async function sendStampEarnedMessage(phone, name, earned, required, cust
 
 export async function sendCardCompletedMessage(phone, name, reward, customerId, restaurantName = 'us', countryCode = 'MX', reviewUrl = null) {
   const body = withReviewCta(
-    `¡Felicidades ${name}! Tarjeta completa en ${restaurantName}. Recompensa: ${reward}. Canjéala en tu próxima visita.`,
+    `${name}, tarjeta llena en ${restaurantName}! Premio: ${reward}. Canjea en tu siguiente visita.`,
     reviewUrl,
   );
   return sendSMS(phone, body, customerId, 'card_completed', countryCode);
 }
 
 export async function sendReferralSuccessMessage(phone, name, refereeName, bonus, customerId, restaurantName = 'Our', countryCode = 'MX') {
-  const body = `¡Hola ${name}! Tu amigo ${refereeName} se unió a ${restaurantName} Rewards con tu código. Ambos ganaron ${bonus} sellos extra. ¡Gracias!`;
+  const body = `Hola ${name}! ${refereeName} se unio a ${restaurantName} Rewards con tu codigo. Ambos ganan ${bonus} sellos extra. Gracias!`;
   return sendSMS(phone, body, customerId, 'referral_success', countryCode);
 }
 
