@@ -1,0 +1,46 @@
+name: POSLiteKiosk
+options:
+  bundleIdPrefix: kitchen.desktop
+  deploymentTarget:
+    iOS: "26.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+    TARGETED_DEVICE_FAMILY: "2"
+    SUPPORTS_MACCATALYST: NO
+targets:
+  POSLiteKiosk:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: POSLiteKiosk
+    info:
+      path: POSLiteKiosk/Info.plist
+      properties:
+        CFBundleDisplayName: Kiosk
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIStatusBarHidden: true
+        UIViewControllerBasedStatusBarAppearance: false
+        UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: kitchen.desktop.poslitekiosk
+        TARGETED_DEVICE_FAMILY: "2"
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_PREVIEWS: YES
+        DEVELOPMENT_ASSET_PATHS: "\"POSLiteKiosk/Preview Content\""
+        GENERATE_INFOPLIST_FILE: NO
+        DEVELOPMENT_TEAM: U76V8DL3W4
+        CODE_SIGN_STYLE: Automatic

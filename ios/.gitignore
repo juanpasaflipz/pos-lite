@@ -1,0 +1,32 @@
+## XcodeGen-generated project (regenerate with `xcodegen`)
+POSLiteKiosk.xcodeproj/
+
+## Xcode user state
+xcuserdata/
+*.xcworkspace/xcuserdata/
+**/xcshareddata/WorkspaceSettings.xcsettings
+
+## Build artifacts
+build/
+DerivedData/
+*.dSYM.zip
+*.dSYM
+*.ipa
+
+## Swift Package Manager
+.build/
+.swiftpm/
+Packages/
+Package.resolved
+
+## CocoaPods (unused, just in case)
+Pods/
+
+## Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+## macOS
+.DS_Store
