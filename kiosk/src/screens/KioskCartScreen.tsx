@@ -6,6 +6,7 @@ import { useKioskCart } from '../context/KioskCartContext';
 import { useKioskCustomer } from '../context/KioskCustomerContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
 import { holdKioskOrder } from '../lib/kioskApi';
+import CartUpsellStrip from '../components/CartUpsellStrip';
 
 const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
 
@@ -118,6 +119,7 @@ const KioskCartScreen: React.FC = () => {
                 </div>
               </div>
             ))}
+            <CartUpsellStrip />
           </div>
         )}
       </main>

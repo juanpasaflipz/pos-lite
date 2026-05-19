@@ -4,16 +4,14 @@ import { useNavigate } from 'react-router-dom';
 import { useKioskBinding } from '../context/KioskBindingContext';
 import { useKioskCart } from '../context/KioskCartContext';
 import { useKioskCustomer } from '../context/KioskCustomerContext';
+import { useKioskSuggestions } from '../context/KioskSuggestionsContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
 import {
   fetchMenu,
-  fetchModifierMap,
-  fetchPopular,
   logSuggestionEvents,
   type KioskMenuCategory,
   type KioskMenuItem,
   type KioskModifier,
-  type KioskModifierMap,
   type KioskSuggestions,
   type RepeatOrderSuggestion,
   type StampStatus,
@@ -61,13 +59,12 @@ const KioskMenuScreen: React.FC = () => {
   const { tenantId, kioskToken } = useKioskBinding();
   const { addItem, count, total } = useKioskCart();
   const { session } = useKioskCustomer();
+  const { modifierMap, anonPopular } = useKioskSuggestions();
   const [categories, setCategories] = useState<KioskMenuCategory[]>([]);
   const [items, setItems] = useState<KioskMenuItem[]>([]);
   const [activeCategory, setActiveCategory] = useState<number | 'all'>(SUGGEST_TAB);
-  const [anonPopular, setAnonPopular] = useState<SuggestionItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [modifierMap, setModifierMap] = useState<KioskModifierMap>({});
   const [modifierItem, setModifierItem] = useState<KioskMenuItem | null>(null);
   useIdleTimer(() => navigate('/'), 60_000);
 
@@ -80,14 +77,13 @@ const KioskMenuScreen: React.FC = () => {
     if (!auth) return;
     let alive = true;
     setLoading(true);
-    Promise.all([fetchMenu(auth), fetchModifierMap(auth).catch(() => ({}))])
-      .then(([data, modMap]) => {
+    fetchMenu(auth)
+      .then((data) => {
         if (!alive) return;
         const activeItems = data.items.filter((item) => item.active);
         const usedCategories = new Set(activeItems.map((item) => item.category_id));
         setCategories(data.categories.filter((cat) => usedCategories.has(cat.id)));
         setItems(activeItems);
-        setModifierMap(modMap as KioskModifierMap);
         setError(null);
       })
       .catch((err) => {
@@ -100,22 +96,6 @@ const KioskMenuScreen: React.FC = () => {
       alive = false;
     };
   }, [auth]);
-
-  // Anonymous customers still get time-of-day popular picks.
-  useEffect(() => {
-    if (session || !auth) return;
-    let alive = true;
-    fetchPopular(auth)
-      .then((popular) => {
-        if (alive) setAnonPopular(popular);
-      })
-      .catch(() => {
-        /* popular is a nice-to-have */
-      });
-    return () => {
-      alive = false;
-    };
-  }, [session, auth]);
 
   const itemsById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
 

@@ -3,6 +3,7 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { KioskBindingProvider, useKioskBinding } from './context/KioskBindingContext';
 import { KioskCartProvider } from './context/KioskCartContext';
 import { KioskCustomerProvider } from './context/KioskCustomerContext';
+import { KioskSuggestionsProvider } from './context/KioskSuggestionsContext';
 import AttractScreen from './screens/AttractScreen';
 import BindDeviceScreen from './screens/BindDeviceScreen';
 import AdminBindScreen from './screens/AdminBindScreen';
@@ -43,11 +44,13 @@ const Routed: React.FC = () => {
 const App: React.FC = () => (
   <HashRouter>
     <KioskBindingProvider>
-      <KioskCustomerProvider>
-        <KioskCartProvider>
-          <Routed />
-        </KioskCartProvider>
-      </KioskCustomerProvider>
+      <KioskSuggestionsProvider>
+        <KioskCustomerProvider>
+          <KioskCartProvider>
+            <Routed />
+          </KioskCartProvider>
+        </KioskCustomerProvider>
+      </KioskSuggestionsProvider>
     </KioskBindingProvider>
   </HashRouter>
 );
