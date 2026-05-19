@@ -7,6 +7,7 @@ import { useKioskCustomer } from '../context/KioskCustomerContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
 import { holdKioskOrder } from '../lib/kioskApi';
 import CartUpsellStrip from '../components/CartUpsellStrip';
+import KioskCallNameModal from '../components/KioskCallNameModal';
 
 const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
 
@@ -14,9 +15,10 @@ const KioskCartScreen: React.FC = () => {
   const navigate = useNavigate();
   const { tenantId, kioskToken } = useKioskBinding();
   const { session } = useKioskCustomer();
-  const { lines, count, total, incrementLine, decrementLine, removeLine } = useKioskCart();
+  const { lines, count, total, callName, incrementLine, decrementLine, removeLine, setCallName } = useKioskCart();
   const [holding, setHolding] = useState(false);
   const [holdError, setHoldError] = useState<string | null>(null);
+  const [askingName, setAskingName] = useState(false);
   useIdleTimer(() => navigate('/'), 60_000);
 
   const sendToRegister = async () => {
@@ -130,7 +132,13 @@ const KioskCartScreen: React.FC = () => {
         )}
         <button
           disabled={count === 0 || holding}
-          onClick={() => navigate('/pay')}
+          onClick={() => {
+            if (!session && !callName) {
+              setAskingName(true);
+            } else {
+              navigate('/pay');
+            }
+          }}
           className="w-full min-h-20 bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-500 rounded-lg py-4 px-6 text-3xl font-black touch-manipulation flex items-center justify-between gap-4"
         >
           <span>Pagar ahora</span>
@@ -147,6 +155,20 @@ const KioskCartScreen: React.FC = () => {
           </button>
         )}
       </footer>
+
+      {askingName && (
+        <KioskCallNameModal
+          onSkip={() => {
+            setAskingName(false);
+            navigate('/pay');
+          }}
+          onConfirm={(name) => {
+            setCallName(name);
+            setAskingName(false);
+            navigate('/pay');
+          }}
+        />
+      )}
     </div>
   );
 };

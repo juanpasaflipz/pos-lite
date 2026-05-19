@@ -220,7 +220,7 @@ router.get('/', async (req, res) => {
       SELECT o.id, o.order_number, o.employee_id, o.status, o.subtotal, o.tax, o.tip, o.total,
              o.payment_status, o.payment_method, o.paid_at, o.source, o.created_at,
              o.loyalty_customer_id, e.name as employee_name,
-             c.name as customer_name
+             COALESCE(c.name, o.customer_call_name) as customer_name
       FROM orders o
       JOIN employees e ON o.employee_id = e.id
       LEFT JOIN loyalty_customers c ON c.id = o.loyalty_customer_id
@@ -268,7 +268,7 @@ router.get('/kiosk-held', requireAuth('pos_access'), async (req, res) => {
                WHEN o.status = 'draft_kiosk' THEN 'held'
                ELSE 'stranded_terminal'
              END AS kind,
-             c.name AS customer_name, c.phone AS customer_phone,
+             COALESCE(c.name, o.customer_call_name) AS customer_name, c.phone AS customer_phone,
              COALESCE(
                (SELECT json_agg(json_build_object(
                  'menu_item_id', oi.menu_item_id,

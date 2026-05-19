@@ -138,7 +138,8 @@ CREATE TABLE IF NOT EXISTS orders (
   discount_amount NUMERIC(10,2) DEFAULT 0,
   discount_type TEXT,
   discount_reason TEXT,
-  discount_authorized_by INTEGER REFERENCES employees(id)
+  discount_authorized_by INTEGER REFERENCES employees(id),
+  customer_call_name TEXT
 );
 
 CREATE TABLE IF NOT EXISTS order_items (

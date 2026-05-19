@@ -13,7 +13,7 @@ const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve,
 const KioskPaymentScreen: React.FC = () => {
   const navigate = useNavigate();
   const { tenantId, kioskToken } = useKioskBinding();
-  const { lines, total, clearCart, setLastOrder } = useKioskCart();
+  const { lines, total, callName, clearCart, setLastOrder } = useKioskCart();
   const { session } = useKioskCustomer();
   const customerToken = session?.customerToken ?? null;
   const [busy, setBusy] = useState<'cash' | 'card' | null>(null);
@@ -34,7 +34,7 @@ const KioskPaymentScreen: React.FC = () => {
     setBusy('cash');
     setError(null);
     try {
-      const order = await createKioskOrder(auth, orderPayload, 'counter_cash', customerToken);
+      const order = await createKioskOrder(auth, orderPayload, 'counter_cash', customerToken, callName);
       setLastOrder({
         id: order.id,
         order_number: order.order_number,
@@ -56,7 +56,7 @@ const KioskPaymentScreen: React.FC = () => {
     setError(null);
     try {
       setMessage('Enviando al terminal...');
-      const order = await createKioskOrder(auth, orderPayload, 'terminal_card', customerToken);
+      const order = await createKioskOrder(auth, orderPayload, 'terminal_card', customerToken, callName);
       await sendKioskOrderToTerminal(auth, order.id);
       setMessage('Paga en el terminal');
 

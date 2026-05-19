@@ -9,11 +9,13 @@ const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN
 
 const KioskDoneScreen: React.FC = () => {
   const navigate = useNavigate();
-  const { lastOrder, setLastOrder } = useKioskCart();
+  const { lastOrder, callName, setLastOrder, setCallName } = useKioskCart();
   const { session, clearSession } = useKioskCustomer();
+  const greetingName = session?.firstName || callName;
 
   const finish = () => {
     setLastOrder(null);
+    setCallName(null);
     clearSession();
     navigate('/');
   };
@@ -24,7 +26,7 @@ const KioskDoneScreen: React.FC = () => {
     <div className="h-full w-full bg-emerald-700 text-white flex flex-col items-center justify-center p-8 text-center">
       <CheckCircle2 className="h-36 w-36 mb-8" />
       <h1 className="text-[72px] font-black mb-6 leading-none">
-        {session ? `¡Gracias, ${session.firstName}!` : 'Orden enviada'}
+        {greetingName ? `¡Gracias, ${greetingName}!` : 'Orden enviada'}
       </h1>
       {lastOrder && (
         <div className="mb-10">

@@ -150,6 +150,7 @@ export async function createKioskOrder(
   items: CreateKioskOrderLine[],
   paymentChoice: KioskPaymentChoice,
   customerToken?: string | null,
+  customerCallName?: string | null,
 ): Promise<KioskOrderResponse> {
   const res = await fetch(`${API_BASE}/api/kiosk/orders`, {
     method: 'POST',
@@ -158,6 +159,7 @@ export async function createKioskOrder(
       items,
       payment_choice: paymentChoice,
       customer_token: customerToken || undefined,
+      customer_call_name: customerCallName || undefined,
     }),
   });
   if (!res.ok) {

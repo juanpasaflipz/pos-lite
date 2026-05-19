@@ -530,13 +530,19 @@ router.post('/admin/bind', bindLimiter, async (req, res) => {
 router.post('/orders', verifyKioskToken, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
-    const { items, payment_choice = 'counter_cash', customer_token } = req.body || {};
+    const { items, payment_choice = 'counter_cash', customer_token, customer_call_name } = req.body || {};
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Cart is empty' });
     }
 
     // Optional: a /identify customer token links this order to a loyalty member.
     const loyaltyCustomerId = verifyCustomerToken(customer_token, tenantId);
+
+    // Anonymous customers can leave a name for callout. Identified customers
+    // already have a loyalty name, so we ignore call_name when a token verified.
+    const callName = loyaltyCustomerId
+      ? null
+      : (typeof customer_call_name === 'string' ? customer_call_name.trim().slice(0, 40) || null : null);
 
     const employeeId = await resolveKioskEmployee(tenantId, req.kiosk);
     if (!employeeId) {
@@ -559,11 +565,11 @@ router.post('/orders', verifyKioskToken, async (req, res) => {
     const [order] = await adminSql`
       INSERT INTO orders (
         tenant_id, order_number, employee_id, status, subtotal, tax, total,
-        payment_status, payment_method, source, loyalty_customer_id
+        payment_status, payment_method, source, loyalty_customer_id, customer_call_name
       )
       VALUES (
         ${tenantId}, ${orderNumber}, ${employeeId}, 'pending', ${subtotal}, ${tax}, ${total},
-        ${paymentStatus}, ${paymentMethod}, 'customer_kiosk', ${loyaltyCustomerId}
+        ${paymentStatus}, ${paymentMethod}, 'customer_kiosk', ${loyaltyCustomerId}, ${callName}
       )
       RETURNING id, order_number, subtotal, tax, total, payment_status, status
     `;

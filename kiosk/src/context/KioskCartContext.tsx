@@ -30,6 +30,7 @@ interface KioskCartState {
   count: number;
   total: number;
   lastOrder: KioskLastOrder | null;
+  callName: string | null;
   addItem: (item: KioskMenuItem, modifiers?: KioskModifier[]) => void;
   incrementLine: (lineKey: string) => void;
   decrementLine: (lineKey: string) => void;
@@ -37,6 +38,7 @@ interface KioskCartState {
   clearCart: () => void;
   replaceLines: (next: KioskCartLine[]) => void;
   setLastOrder: (order: KioskLastOrder | null) => void;
+  setCallName: (name: string | null) => void;
 }
 
 const Ctx = createContext<KioskCartState | null>(null);
@@ -44,6 +46,7 @@ const Ctx = createContext<KioskCartState | null>(null);
 export const KioskCartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [lines, setLines] = useState<KioskCartLine[]>([]);
   const [lastOrder, setLastOrder] = useState<KioskLastOrder | null>(null);
+  const [callName, setCallName] = useState<string | null>(null);
 
   const addItem = useCallback((item: KioskMenuItem, modifiers: KioskModifier[] = []) => {
     const lineKey = modifierKey(item.id, modifiers);
@@ -90,7 +93,10 @@ export const KioskCartProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setLines((current) => current.filter((line) => line.line_key !== lineKey));
   }, []);
 
-  const clearCart = useCallback(() => setLines([]), []);
+  const clearCart = useCallback(() => {
+    setLines([]);
+    setCallName(null);
+  }, []);
 
   const replaceLines = useCallback((next: KioskCartLine[]) => {
     setLines(next.map((line) => {
@@ -114,6 +120,7 @@ export const KioskCartProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       count,
       total,
       lastOrder,
+      callName,
       addItem,
       incrementLine,
       decrementLine,
@@ -121,8 +128,9 @@ export const KioskCartProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       clearCart,
       replaceLines,
       setLastOrder,
+      setCallName,
     };
-  }, [addItem, clearCart, decrementLine, incrementLine, lastOrder, lines, removeLine, replaceLines]);
+  }, [addItem, callName, clearCart, decrementLine, incrementLine, lastOrder, lines, removeLine, replaceLines]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 };
