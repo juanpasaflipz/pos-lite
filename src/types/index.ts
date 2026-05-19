@@ -107,6 +107,8 @@ export interface Order {
   payment_status: 'unpaid' | 'processing' | 'paid' | 'completed' | 'failed' | 'refunded' | 'pending_oxxo' | 'pending_spei' | 'pending_terminal' | 'expired';
   payment_method?: 'card' | 'cash' | 'split' | 'transfer' | 'oxxo' | 'spei' | 'getnet_card' | 'getnet_tap' | null;
   source?: 'pos' | 'uber_eats' | 'rappi' | 'didi_food' | 'qr_order' | 'customer_kiosk';
+  loyalty_customer_id?: number | null;
+  customer_name?: string | null;
   table_number?: string | null;
   invoice_token?: string;
   cfdi_invoice_id?: number;

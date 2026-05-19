@@ -18,7 +18,8 @@
     "noItemsFound": "No items found",
     "lowStockWarning": "Warning: {{name}} uses a low-stock ingredient",
     "unpaidOrders": "Unpaid orders",
-    "charge": "Charge"
+    "charge": "Charge",
+    "fromKiosk": "From the kiosk"
   },
   "totals": {
     "total": "Total:",

@@ -18,7 +18,8 @@
     "noItemsFound": "No se encontraron productos",
     "lowStockWarning": "Aviso: {{name}} usa un ingrediente con poco stock",
     "unpaidOrders": "Pedidos por cobrar",
-    "charge": "Cobrar"
+    "charge": "Cobrar",
+    "fromKiosk": "Vino del kiosko"
   },
   "totals": {
     "total": "Total:",

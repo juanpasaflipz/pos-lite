@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { ClipboardList, Trash2, PauseCircle, Percent } from 'lucide-react';
+import { ClipboardList, Smartphone, Trash2, PauseCircle, Percent, User } from 'lucide-react';
 import { CartItem, Order, LoyaltyCustomer, ComboDefinition, Discount } from '../../types';
 import { formatPrice, TAX_LABEL } from '../../utils/currency';
 import { formatTime } from '../../utils/dateFormat';
@@ -127,8 +127,25 @@ export default function CartPanel({
                   key={order.id}
                   className="flex items-center justify-between bg-neutral-800 rounded-lg px-3 py-2 border border-neutral-700"
                 >
-                  <div>
-                    <p className="text-white font-bold text-sm">#{order.order_number}</p>
+                  <div className="min-w-0 flex-1 mr-2">
+                    <div className="flex items-center gap-2">
+                      <p className="text-white font-bold text-sm">#{order.order_number}</p>
+                      {order.source === 'customer_kiosk' && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full bg-brand-600/20 border border-brand-600/40 text-brand-200 text-[10px] font-black uppercase px-1.5 py-0.5 tracking-wide"
+                          title={t('cart.fromKiosk')}
+                        >
+                          <Smartphone className="h-3 w-3" />
+                          Kiosko
+                        </span>
+                      )}
+                    </div>
+                    {order.customer_name && (
+                      <p className="text-neutral-300 text-xs truncate inline-flex items-center gap-1">
+                        <User className="h-3 w-3 text-neutral-500 shrink-0" />
+                        {order.customer_name}
+                      </p>
+                    )}
                     <p className="text-neutral-400 text-xs">{formatPrice(order.total)}</p>
                   </div>
                   <div className="flex items-center gap-2">

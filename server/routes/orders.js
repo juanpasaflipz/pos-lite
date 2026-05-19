@@ -218,9 +218,12 @@ router.get('/', async (req, res) => {
     const { status, date, payment_status } = req.query;
     let query = `
       SELECT o.id, o.order_number, o.employee_id, o.status, o.subtotal, o.tax, o.tip, o.total,
-             o.payment_status, o.payment_method, o.paid_at, o.source, o.created_at, e.name as employee_name
+             o.payment_status, o.payment_method, o.paid_at, o.source, o.created_at,
+             o.loyalty_customer_id, e.name as employee_name,
+             c.name as customer_name
       FROM orders o
       JOIN employees e ON o.employee_id = e.id
+      LEFT JOIN loyalty_customers c ON c.id = o.loyalty_customer_id
       WHERE 1=1
     `;
     const params = [];
