@@ -263,7 +263,17 @@ router.get('/kiosk-held', requireAuth('pos_access'), async (req, res) => {
                  'menu_item_id', oi.menu_item_id,
                  'item_name', oi.item_name,
                  'quantity', oi.quantity,
-                 'unit_price', oi.unit_price
+                 'unit_price', oi.unit_price,
+                 'modifiers', COALESCE(
+                   (SELECT json_agg(json_build_object(
+                     'id', oim.modifier_id,
+                     'name', oim.modifier_name,
+                     'price_adjustment', oim.price_adjustment
+                   ) ORDER BY oim.id)
+                    FROM order_item_modifiers oim
+                    WHERE oim.order_item_id = oi.id),
+                   '[]'::json
+                 )
                ) ORDER BY oi.id)
                 FROM order_items oi
                 WHERE oi.order_id = o.id),

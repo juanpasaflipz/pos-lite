@@ -7,15 +7,19 @@ import { useKioskCustomer } from '../context/KioskCustomerContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
 import {
   fetchMenu,
+  fetchModifierMap,
   fetchPopular,
   logSuggestionEvents,
   type KioskMenuCategory,
   type KioskMenuItem,
+  type KioskModifier,
+  type KioskModifierMap,
   type KioskSuggestions,
   type RepeatOrderSuggestion,
   type StampStatus,
   type SuggestionItem,
 } from '../lib/kioskApi';
+import KioskModifierModal from '../components/KioskModifierModal';
 import SuggestionsPanel from '../components/SuggestionsPanel';
 
 const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
@@ -63,6 +67,8 @@ const KioskMenuScreen: React.FC = () => {
   const [anonPopular, setAnonPopular] = useState<SuggestionItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [modifierMap, setModifierMap] = useState<KioskModifierMap>({});
+  const [modifierItem, setModifierItem] = useState<KioskMenuItem | null>(null);
   useIdleTimer(() => navigate('/'), 60_000);
 
   const auth = useMemo(
@@ -74,13 +80,14 @@ const KioskMenuScreen: React.FC = () => {
     if (!auth) return;
     let alive = true;
     setLoading(true);
-    fetchMenu(auth)
-      .then((data) => {
+    Promise.all([fetchMenu(auth), fetchModifierMap(auth).catch(() => ({}))])
+      .then(([data, modMap]) => {
         if (!alive) return;
         const activeItems = data.items.filter((item) => item.active);
         const usedCategories = new Set(activeItems.map((item) => item.category_id));
         setCategories(data.categories.filter((cat) => usedCategories.has(cat.id)));
         setItems(activeItems);
+        setModifierMap(modMap as KioskModifierMap);
         setError(null);
       })
       .catch((err) => {
@@ -124,6 +131,21 @@ const KioskMenuScreen: React.FC = () => {
     if (activeCategory === 'all' || activeCategory === SUGGEST_TAB) return items;
     return items.filter((item) => item.category_id === activeCategory);
   }, [activeCategory, items]);
+
+  const handleItemTap = (item: KioskMenuItem) => {
+    const groups = modifierMap[item.id];
+    if (groups && groups.length) {
+      setModifierItem(item);
+    } else {
+      addItem(item);
+    }
+  };
+
+  const confirmModifierAdd = (modifiers: KioskModifier[]) => {
+    if (!modifierItem) return;
+    addItem(modifierItem, modifiers);
+    setModifierItem(null);
+  };
 
   const handlePickItem = (s: SuggestionItem) => {
     const item = itemsById.get(s.menu_item_id);
@@ -241,10 +263,12 @@ const KioskMenuScreen: React.FC = () => {
           )}
           {!loading && !error && activeCategory !== SUGGEST_TAB && (
             <div className="grid grid-cols-3 gap-4 pb-4">
-              {visibleItems.map((item) => (
+              {visibleItems.map((item) => {
+                const hasModifiers = !!(modifierMap[item.id] && modifierMap[item.id].length);
+                return (
                 <button
                   key={item.id}
-                  onClick={() => addItem(item)}
+                  onClick={() => handleItemTap(item)}
                   className="rounded-lg bg-neutral-900 border border-neutral-800 active:border-brand-500 text-left touch-manipulation flex flex-col overflow-hidden"
                 >
                   <div className="aspect-[4/3] w-full bg-gradient-to-br from-neutral-800 to-neutral-900 flex items-center justify-center overflow-hidden">
@@ -270,6 +294,9 @@ const KioskMenuScreen: React.FC = () => {
                           {item.description}
                         </p>
                       )}
+                      {hasModifiers && (
+                        <p className="text-xs font-bold text-brand-300 mt-1">Personaliza tu orden</p>
+                      )}
                     </div>
                     <div className="flex items-center justify-between mt-3">
                       <span className="text-2xl font-black text-brand-300">
@@ -281,7 +308,8 @@ const KioskMenuScreen: React.FC = () => {
                     </div>
                   </div>
                 </button>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
@@ -302,6 +330,15 @@ const KioskMenuScreen: React.FC = () => {
           </span>
         </button>
       </footer>
+
+      {modifierItem && (
+        <KioskModifierModal
+          item={modifierItem}
+          groups={modifierMap[modifierItem.id] || []}
+          onCancel={() => setModifierItem(null)}
+          onConfirm={confirmModifierAdd}
+        />
+      )}
     </div>
   );
 };

@@ -284,6 +284,170 @@ async function resolveKioskEmployee(tenantId, kioskTokenPayload) {
   return fallback?.id || null;
 }
 
+/**
+ * Build validated order line items from a kiosk cart payload, including
+ * modifier price adjustments. Returns { orderItems, total } where each
+ * orderItem carries its modifier list to be persisted into
+ * order_item_modifiers after the parent order_items row is inserted.
+ * Throws an Error with .status for client-facing failures.
+ */
+async function buildKioskOrderItems(tenantId, items) {
+  const menuIds = items.map((item) => Number(item.menu_item_id)).filter(Number.isInteger);
+  if (menuIds.length !== items.length) {
+    const err = new Error('Invalid menu item');
+    err.status = 400;
+    throw err;
+  }
+
+  const menuRows = await adminSql.unsafe(`
+    SELECT id, name, price
+    FROM menu_items
+    WHERE tenant_id = $1 AND active = true AND id = ANY($2::int[])
+  `, [tenantId, menuIds]);
+  const menuById = new Map(menuRows.map((row) => [Number(row.id), row]));
+
+  // Collect every modifier id across all lines, look them up once.
+  const allModifierIds = [];
+  for (const item of items) {
+    if (Array.isArray(item.modifier_ids)) {
+      for (const id of item.modifier_ids) {
+        const n = Number(id);
+        if (Number.isInteger(n)) allModifierIds.push(n);
+      }
+    }
+  }
+  let modifierById = new Map();
+  if (allModifierIds.length) {
+    const modRows = await adminSql.unsafe(`
+      SELECT id, name, price_adjustment, group_id
+      FROM modifiers
+      WHERE tenant_id = $1 AND id = ANY($2::int[]) AND active = true
+    `, [tenantId, Array.from(new Set(allModifierIds))]);
+    modifierById = new Map(modRows.map((row) => [Number(row.id), {
+      id: Number(row.id),
+      name: row.name,
+      price_adjustment: Number(row.price_adjustment),
+      group_id: Number(row.group_id),
+    }]));
+  }
+
+  // Load the modifier groups attached to each requested menu item so we can
+  // enforce required / min / max constraints and reject modifiers that don't
+  // belong to a group attached to that item.
+  const groupRows = await adminSql.unsafe(`
+    SELECT mimg.menu_item_id, mg.id, mg.name, mg.selection_type, mg.required, mg.min_selections, mg.max_selections
+    FROM menu_item_modifier_groups mimg
+    JOIN modifier_groups mg ON mg.id = mimg.modifier_group_id AND mg.tenant_id = $1 AND mg.active = true
+    WHERE mimg.tenant_id = $1 AND mimg.menu_item_id = ANY($2::int[])
+  `, [tenantId, menuIds]);
+  const groupsByItemId = new Map();
+  for (const row of groupRows) {
+    const itemId = Number(row.menu_item_id);
+    if (!groupsByItemId.has(itemId)) groupsByItemId.set(itemId, []);
+    groupsByItemId.get(itemId).push({
+      id: Number(row.id),
+      name: row.name,
+      selection_type: row.selection_type,
+      required: !!row.required,
+      min_selections: Number(row.min_selections) || 0,
+      max_selections: Number(row.max_selections) || 1,
+    });
+  }
+
+  const orderItems = [];
+  let total = 0;
+  for (const item of items) {
+    const menuItem = menuById.get(Number(item.menu_item_id));
+    if (!menuItem) {
+      const err = new Error(`Menu item ${item.menu_item_id} not found`);
+      err.status = 404;
+      throw err;
+    }
+    const quantity = Math.max(1, Math.min(20, Number(item.quantity) || 0));
+
+    const attachedGroups = groupsByItemId.get(Number(menuItem.id)) || [];
+    const attachedGroupIds = new Set(attachedGroups.map((g) => g.id));
+
+    const lineModifiers = [];
+    const countsByGroup = new Map();
+    if (Array.isArray(item.modifier_ids)) {
+      for (const rawId of item.modifier_ids) {
+        const m = modifierById.get(Number(rawId));
+        if (!m) {
+          const err = new Error(`Modifier ${rawId} not found or inactive`);
+          err.status = 400;
+          throw err;
+        }
+        if (!attachedGroupIds.has(m.group_id)) {
+          const err = new Error(`Modifier "${m.name}" is not available for "${menuItem.name}"`);
+          err.status = 400;
+          throw err;
+        }
+        lineModifiers.push(m);
+        countsByGroup.set(m.group_id, (countsByGroup.get(m.group_id) || 0) + 1);
+      }
+    }
+
+    for (const group of attachedGroups) {
+      const count = countsByGroup.get(group.id) || 0;
+      if (group.required && count === 0) {
+        const err = new Error(`"${group.name}" requires a selection`);
+        err.status = 400;
+        throw err;
+      }
+      if (count > 0 && count < group.min_selections) {
+        const err = new Error(`"${group.name}" requires at least ${group.min_selections} selection(s)`);
+        err.status = 400;
+        throw err;
+      }
+      if (count > group.max_selections) {
+        const err = new Error(`"${group.name}" allows at most ${group.max_selections} selection(s)`);
+        err.status = 400;
+        throw err;
+      }
+    }
+
+    const modifierTotal = lineModifiers.reduce((sum, m) => sum + m.price_adjustment, 0);
+    const unitPrice = Math.round((Number(menuItem.price) + modifierTotal) * 100) / 100;
+    total += unitPrice * quantity;
+
+    orderItems.push({
+      menu_item_id: Number(menuItem.id),
+      item_name: menuItem.name,
+      quantity,
+      unit_price: unitPrice,
+      modifiers: lineModifiers,
+    });
+  }
+
+  total = Math.round(total * 100) / 100;
+  return { orderItems, total };
+}
+
+/**
+ * Insert order_items + their order_item_modifiers for a kiosk order.
+ * Returns the inserted order_items rows in input order.
+ */
+async function insertKioskOrderItems(tenantId, orderId, orderItems) {
+  const lines = [];
+  for (const item of orderItems) {
+    const [row] = await adminSql`
+      INSERT INTO order_items (tenant_id, order_id, menu_item_id, item_name, quantity, unit_price, notes)
+      VALUES (${tenantId}, ${orderId}, ${item.menu_item_id}, ${item.item_name}, ${item.quantity}, ${item.unit_price}, ${null})
+      RETURNING id
+    `;
+    lines.push({ ...item, order_item_id: row.id });
+
+    for (const mod of item.modifiers) {
+      await adminSql`
+        INSERT INTO order_item_modifiers (tenant_id, order_item_id, modifier_id, modifier_name, price_adjustment)
+        VALUES (${tenantId}, ${row.id}, ${mod.id}, ${mod.name}, ${mod.price_adjustment})
+      `;
+    }
+  }
+  return lines;
+}
+
 async function markKioskOrderPaid(orderId, tenantId) {
   await adminSql`
     UPDATE orders
@@ -379,36 +543,13 @@ router.post('/orders', verifyKioskToken, async (req, res) => {
       return res.status(400).json({ error: 'No active employee available for kiosk orders' });
     }
 
-    const menuIds = items.map((item) => Number(item.menu_item_id)).filter(Number.isInteger);
-    if (menuIds.length !== items.length) {
-      return res.status(400).json({ error: 'Invalid menu item' });
+    let orderItems, total;
+    try {
+      ({ orderItems, total } = await buildKioskOrderItems(tenantId, items));
+    } catch (err) {
+      return res.status(err.status || 500).json({ error: err.message });
     }
 
-    const menuRows = await adminSql.unsafe(`
-      SELECT id, name, price
-      FROM menu_items
-      WHERE tenant_id = $1 AND active = true AND id = ANY($2::int[])
-    `, [tenantId, menuIds]);
-    const menuById = new Map(menuRows.map((row) => [Number(row.id), row]));
-
-    const orderItems = [];
-    let total = 0;
-    for (const item of items) {
-      const menuItem = menuById.get(Number(item.menu_item_id));
-      const quantity = Math.max(1, Math.min(20, Number(item.quantity) || 0));
-      if (!menuItem) return res.status(404).json({ error: `Menu item ${item.menu_item_id} not found` });
-
-      const unitPrice = Number(menuItem.price);
-      total += unitPrice * quantity;
-      orderItems.push({
-        menu_item_id: Number(menuItem.id),
-        item_name: menuItem.name,
-        quantity,
-        unit_price: unitPrice,
-      });
-    }
-
-    total = Math.round(total * 100) / 100;
     const tax = Math.round((total - total / (1 + TAX_RATE)) * 100) / 100;
     const subtotal = Math.round((total - tax) * 100) / 100;
     const orderNumber = await nextOrderNumber(tenantId);
@@ -427,19 +568,7 @@ router.post('/orders', verifyKioskToken, async (req, res) => {
       RETURNING id, order_number, subtotal, tax, total, payment_status, status
     `;
 
-    const values = orderItems.map((_, i) => {
-      const o = i * 7;
-      return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7})`;
-    }).join(',');
-    const params = orderItems.flatMap((item) => [
-      tenantId, order.id, item.menu_item_id, item.item_name, item.quantity, item.unit_price, null,
-    ]);
-    await adminSql.unsafe(`
-      INSERT INTO order_items (
-        tenant_id, order_id, menu_item_id, item_name, quantity, unit_price, notes
-      )
-      VALUES ${values}
-    `, params);
+    await insertKioskOrderItems(tenantId, order.id, orderItems);
 
     res.status(201).json({ ...order, source: 'customer_kiosk', items: orderItems });
   } catch (err) {
@@ -468,41 +597,29 @@ router.post('/orders/hold', verifyKioskToken, async (req, res) => {
       return res.status(400).json({ error: 'No active employee available for kiosk orders' });
     }
 
-    const menuIds = items.map((item) => Number(item.menu_item_id)).filter(Number.isInteger);
-    if (menuIds.length !== items.length) {
-      return res.status(400).json({ error: 'Invalid menu item' });
+    let orderItems, total;
+    try {
+      ({ orderItems, total } = await buildKioskOrderItems(tenantId, items));
+    } catch (err) {
+      return res.status(err.status || 500).json({ error: err.message });
     }
 
-    const menuRows = await adminSql.unsafe(`
-      SELECT id, name, price
-      FROM menu_items
-      WHERE tenant_id = $1 AND active = true AND id = ANY($2::int[])
-    `, [tenantId, menuIds]);
-    const menuById = new Map(menuRows.map((row) => [Number(row.id), row]));
-
-    const orderItems = [];
-    let total = 0;
-    for (const item of items) {
-      const menuItem = menuById.get(Number(item.menu_item_id));
-      const quantity = Math.max(1, Math.min(20, Number(item.quantity) || 0));
-      if (!menuItem) return res.status(404).json({ error: `Menu item ${item.menu_item_id} not found` });
-
-      const unitPrice = Number(menuItem.price);
-      total += unitPrice * quantity;
-      orderItems.push({
-        menu_item_id: Number(menuItem.id),
-        item_name: menuItem.name,
-        quantity,
-        unit_price: unitPrice,
-      });
-    }
-
-    total = Math.round(total * 100) / 100;
     const tax = Math.round((total - total / (1 + TAX_RATE)) * 100) / 100;
     const subtotal = Math.round((total - tax) * 100) / 100;
     const orderNumber = await nextOrderNumber(tenantId);
 
     // Supersede any existing held drafts for this customer — only one active hold at a time.
+    await adminSql`
+      DELETE FROM order_item_modifiers
+      WHERE tenant_id = ${tenantId}
+        AND order_item_id IN (
+          SELECT oi.id FROM order_items oi
+          JOIN orders o ON o.id = oi.order_id
+          WHERE o.tenant_id = ${tenantId}
+            AND o.loyalty_customer_id = ${loyaltyCustomerId}
+            AND o.status = 'draft_kiosk'
+        )
+    `;
     await adminSql`
       DELETE FROM order_items
       WHERE tenant_id = ${tenantId}
@@ -532,19 +649,7 @@ router.post('/orders/hold', verifyKioskToken, async (req, res) => {
       RETURNING id, order_number, subtotal, tax, total, status
     `;
 
-    const values = orderItems.map((_, i) => {
-      const o = i * 7;
-      return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7})`;
-    }).join(',');
-    const params = orderItems.flatMap((item) => [
-      tenantId, order.id, item.menu_item_id, item.item_name, item.quantity, item.unit_price, null,
-    ]);
-    await adminSql.unsafe(`
-      INSERT INTO order_items (
-        tenant_id, order_id, menu_item_id, item_name, quantity, unit_price, notes
-      )
-      VALUES ${values}
-    `, params);
+    await insertKioskOrderItems(tenantId, order.id, orderItems);
 
     res.status(201).json({ ...order, items: orderItems });
   } catch (err) {
@@ -574,10 +679,25 @@ router.get('/orders/active', verifyKioskToken, async (req, res) => {
     if (!order) return res.json({ active: null });
 
     const items = await adminSql`
-      SELECT menu_item_id, item_name, quantity, unit_price
-      FROM order_items
-      WHERE tenant_id = ${tenantId} AND order_id = ${order.id}
-      ORDER BY id
+      SELECT
+        oi.id AS order_item_id,
+        oi.menu_item_id,
+        oi.item_name,
+        oi.quantity,
+        oi.unit_price,
+        COALESCE(
+          (SELECT json_agg(json_build_object(
+            'id', m.modifier_id,
+            'name', m.modifier_name,
+            'price_adjustment', m.price_adjustment
+          ) ORDER BY m.id)
+           FROM order_item_modifiers m
+           WHERE m.tenant_id = ${tenantId} AND m.order_item_id = oi.id),
+          '[]'::json
+        ) AS modifiers
+      FROM order_items oi
+      WHERE oi.tenant_id = ${tenantId} AND oi.order_id = ${order.id}
+      ORDER BY oi.id
     `;
     res.json({ active: { ...order, items } });
   } catch (err) {
@@ -607,12 +727,31 @@ router.post('/orders/:id/resume', verifyKioskToken, async (req, res) => {
     if (!order) return res.status(404).json({ error: 'No held order to resume' });
 
     const items = await adminSql`
-      SELECT menu_item_id, item_name, quantity, unit_price
-      FROM order_items
-      WHERE tenant_id = ${tenantId} AND order_id = ${orderId}
-      ORDER BY id
+      SELECT
+        oi.menu_item_id,
+        oi.item_name,
+        oi.quantity,
+        oi.unit_price,
+        COALESCE(
+          (SELECT json_agg(json_build_object(
+            'id', m.modifier_id,
+            'name', m.modifier_name,
+            'price_adjustment', m.price_adjustment
+          ) ORDER BY m.id)
+           FROM order_item_modifiers m
+           WHERE m.tenant_id = ${tenantId} AND m.order_item_id = oi.id),
+          '[]'::json
+        ) AS modifiers
+      FROM order_items oi
+      WHERE oi.tenant_id = ${tenantId} AND oi.order_id = ${orderId}
+      ORDER BY oi.id
     `;
 
+    await adminSql`
+      DELETE FROM order_item_modifiers
+      WHERE tenant_id = ${tenantId}
+        AND order_item_id IN (SELECT id FROM order_items WHERE tenant_id = ${tenantId} AND order_id = ${orderId})
+    `;
     await adminSql`DELETE FROM order_items WHERE tenant_id = ${tenantId} AND order_id = ${orderId}`;
     await adminSql`DELETE FROM orders WHERE tenant_id = ${tenantId} AND id = ${orderId}`;
 
@@ -857,6 +996,66 @@ router.post('/identify', verifyKioskToken, async (req, res) => {
   } catch (err) {
     console.error('[kiosk/identify] error', err);
     res.status(500).json({ error: 'No se pudo identificar al cliente' });
+  }
+});
+
+// GET /api/kiosk/modifier-map — full {menu_item_id: ModifierGroup[]} map for the kiosk
+// so the customer-facing modal opens instantly without per-tap network calls.
+router.get('/modifier-map', verifyKioskToken, async (req, res) => {
+  const tenantId = req.kioskTenantId;
+  try {
+    const rows = await adminSql`
+      SELECT
+        mimg.menu_item_id,
+        mg.id AS group_id,
+        mg.name AS group_name,
+        mg.selection_type,
+        mg.required,
+        mg.min_selections,
+        mg.max_selections,
+        mg.sort_order AS group_sort,
+        m.id AS modifier_id,
+        m.name AS modifier_name,
+        m.price_adjustment,
+        m.sort_order AS modifier_sort
+      FROM menu_item_modifier_groups mimg
+      JOIN modifier_groups mg ON mg.id = mimg.modifier_group_id AND mg.tenant_id = ${tenantId}
+      JOIN modifiers m ON m.group_id = mg.id AND m.tenant_id = ${tenantId} AND m.active = true
+      WHERE mimg.tenant_id = ${tenantId} AND mg.active = true
+      ORDER BY mimg.menu_item_id, mg.sort_order, m.sort_order
+    `;
+
+    const map = {};
+    const groupCache = new Map();
+    for (const row of rows) {
+      const itemId = Number(row.menu_item_id);
+      if (!map[itemId]) map[itemId] = [];
+      const cacheKey = `${itemId}:${row.group_id}`;
+      let group = groupCache.get(cacheKey);
+      if (!group) {
+        group = {
+          id: Number(row.group_id),
+          name: row.group_name,
+          selection_type: row.selection_type,
+          required: !!row.required,
+          min_selections: row.min_selections,
+          max_selections: row.max_selections,
+          modifiers: [],
+        };
+        groupCache.set(cacheKey, group);
+        map[itemId].push(group);
+      }
+      group.modifiers.push({
+        id: Number(row.modifier_id),
+        name: row.modifier_name,
+        price_adjustment: Number(row.price_adjustment),
+      });
+    }
+
+    res.json({ map });
+  } catch (err) {
+    console.error('[kiosk/modifier-map] error', err);
+    res.status(500).json({ error: 'Failed to load modifiers' });
   }
 });
 

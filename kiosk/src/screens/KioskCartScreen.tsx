@@ -13,7 +13,7 @@ const KioskCartScreen: React.FC = () => {
   const navigate = useNavigate();
   const { tenantId, kioskToken } = useKioskBinding();
   const { session } = useKioskCustomer();
-  const { lines, count, total, addItem, decrementItem, removeItem } = useKioskCart();
+  const { lines, count, total, incrementLine, decrementLine, removeLine } = useKioskCart();
   const [holding, setHolding] = useState(false);
   const [holdError, setHoldError] = useState<string | null>(null);
   useIdleTimer(() => navigate('/'), 60_000);
@@ -25,7 +25,11 @@ const KioskCartScreen: React.FC = () => {
     try {
       const order = await holdKioskOrder(
         { tenantId, kioskToken },
-        lines.map((line) => ({ menu_item_id: line.menu_item_id, quantity: line.quantity })),
+        lines.map((line) => ({
+          menu_item_id: line.menu_item_id,
+          quantity: line.quantity,
+          modifier_ids: line.modifiers.map((m) => m.id),
+        })),
         session.customerToken,
       );
       navigate('/hold-confirmed', {
@@ -73,16 +77,21 @@ const KioskCartScreen: React.FC = () => {
         ) : (
           <div className="space-y-4">
             {lines.map((line) => (
-              <div key={line.menu_item_id} className="rounded-lg bg-neutral-900 border border-neutral-800 p-5 grid grid-cols-[1fr_256px] gap-4 items-center">
+              <div key={line.line_key} className="rounded-lg bg-neutral-900 border border-neutral-800 p-5 grid grid-cols-[1fr_256px] gap-4 items-center">
                 <div className="min-w-0">
                   <h2 className="text-[32px] font-black leading-[1.05]">{line.name}</h2>
+                  {line.modifiers.length > 0 && (
+                    <p className="text-base text-neutral-400 mt-1">
+                      {line.modifiers.map((m) => m.name).join(' · ')}
+                    </p>
+                  )}
                   <p className="text-xl text-neutral-400 mt-2">
                     {money.format(line.price)} c/u · {money.format(line.price * line.quantity)}
                   </p>
                 </div>
                 <div className="grid grid-cols-[64px_72px_64px] gap-3 justify-end">
                   <button
-                    onClick={() => decrementItem(line.menu_item_id)}
+                    onClick={() => decrementLine(line.line_key)}
                     className="h-16 w-16 rounded-lg bg-neutral-800 active:bg-neutral-700 flex items-center justify-center"
                     aria-label="Menos"
                   >
@@ -92,22 +101,14 @@ const KioskCartScreen: React.FC = () => {
                     {line.quantity}
                   </div>
                   <button
-                    onClick={() => addItem({
-                      id: line.menu_item_id,
-                      name: line.name,
-                      price: line.price,
-                      description: null,
-                      image_url: null,
-                      category_id: 0,
-                      active: true,
-                    })}
+                    onClick={() => incrementLine(line.line_key)}
                     className="h-16 w-16 rounded-lg bg-neutral-800 active:bg-neutral-700 flex items-center justify-center"
                     aria-label="Mas"
                   >
                     <Plus className="h-8 w-8" />
                   </button>
                   <button
-                    onClick={() => removeItem(line.menu_item_id)}
+                    onClick={() => removeLine(line.line_key)}
                     className="col-span-3 h-14 rounded-lg bg-red-900/70 active:bg-red-800 flex items-center justify-center gap-2 text-lg font-black"
                     aria-label="Quitar"
                   >

@@ -26,6 +26,7 @@ const KioskPaymentScreen: React.FC = () => {
   const orderPayload = lines.map((line) => ({
     menu_item_id: line.menu_item_id,
     quantity: line.quantity,
+    modifier_ids: line.modifiers.map((m) => m.id),
   }));
 
   const handleCash = async () => {

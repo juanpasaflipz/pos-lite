@@ -105,6 +105,34 @@ export async function fetchMenu(auth: AuthHeaders): Promise<{
 export interface CreateKioskOrderLine {
   menu_item_id: number;
   quantity: number;
+  modifier_ids?: number[];
+}
+
+export interface KioskModifier {
+  id: number;
+  name: string;
+  price_adjustment: number;
+}
+
+export interface KioskModifierGroup {
+  id: number;
+  name: string;
+  selection_type: 'single' | 'multiple';
+  required: boolean;
+  min_selections: number;
+  max_selections: number;
+  modifiers: KioskModifier[];
+}
+
+export type KioskModifierMap = Record<number, KioskModifierGroup[]>;
+
+export async function fetchModifierMap(auth: AuthHeaders): Promise<KioskModifierMap> {
+  const res = await fetch(`${API_BASE}/api/kiosk/modifier-map`, { headers: authHeaders(auth) });
+  if (!res.ok) {
+    throw new Error(`Modifiers fetch failed (${res.status})`);
+  }
+  const body = await res.json();
+  return body.map || {};
 }
 
 export interface KioskOrderResponse {
@@ -174,6 +202,7 @@ export interface KioskActiveDraft {
     item_name: string;
     quantity: number;
     unit_price: number;
+    modifiers: KioskModifier[];
   }>;
 }
 
