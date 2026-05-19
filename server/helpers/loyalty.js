@@ -86,7 +86,16 @@ export async function getActiveStampCard(customerId) {
 
 /* ==================== Customer Operations ==================== */
 
-export async function findOrCreateCustomer(phone, name, referralCodeUsed, smsOptIn = false, restaurantName = 'Our', countryCode = 'MX') {
+export async function findOrCreateCustomer(
+  phone,
+  name,
+  referralCodeUsed,
+  smsOptIn = false,
+  restaurantName = 'Our',
+  countryCode = 'MX',
+  options = {},
+) {
+  const { sendWelcomeSms = true } = options;
   const cc = (countryCode || 'MX').toUpperCase();
   const normalized = normalizePhone(phone, cc);
   let customer = await get(
@@ -116,7 +125,7 @@ export async function findOrCreateCustomer(phone, name, referralCodeUsed, smsOpt
 
   // Send welcome SMS (non-blocking)
   const smsEnabled = await getConfigValue('sms_enabled', 'true');
-  if (customer.sms_opt_in && smsEnabled === 'true') {
+  if (sendWelcomeSms && customer.sms_opt_in && smsEnabled === 'true') {
     sendWelcomeMessage(normalized, name, referralCode, restaurantName, cc).catch(() => {});
   }
 
@@ -125,7 +134,8 @@ export async function findOrCreateCustomer(phone, name, referralCodeUsed, smsOpt
 
 /* ==================== Stamp Operations ==================== */
 
-export async function addStampsForOrder(customerId, orderId, count = null, restaurantName = 'us') {
+export async function addStampsForOrder(customerId, orderId, count = null, restaurantName = 'us', options = {}) {
+  const { sendSms = true } = options;
   // count=null → compute from order total: 1 base stamp + 1 extra per stamp_bonus_threshold spent.
   // Falls back to 1 stamp if the order can't be loaded.
   if (count === null || count === undefined) {
@@ -173,7 +183,7 @@ export async function addStampsForOrder(customerId, orderId, count = null, resta
 
   // Send SMS notifications (non-blocking)
   const smsEnabled = await getConfigValue('sms_enabled', 'true');
-  if (customer.sms_opt_in && smsEnabled === 'true') {
+  if (sendSms && customer.sms_opt_in && smsEnabled === 'true') {
     const reviewUrl = await getConfigValue('google_review_url', '');
     if (cardCompleted) {
       sendCardCompletedMessage(customer.phone, customer.name, updatedCard.reward_description, customerId, restaurantName, customer.country_code, reviewUrl).catch(() => {});

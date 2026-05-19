@@ -120,6 +120,16 @@ function sanitizeForGsm7(text) {
   return String(text).replace(/[áíóúÁÍÓÚ—–\u2018\u2019\u201C\u201D…]/g, (c) => GSM7_REPLACEMENTS[c] || c);
 }
 
+const SINGLE_SMS_LIMIT = 160;
+
+function firstSingleSegment(candidates) {
+  for (const candidate of candidates) {
+    const clean = sanitizeForGsm7(candidate);
+    if (clean.length <= SINGLE_SMS_LIMIT) return candidate;
+  }
+  return candidates[candidates.length - 1];
+}
+
 /**
  * Send a free-form SMS via Twilio REST API. Loyalty wrappers pass customerId +
  * messageType so each delivery is logged to loyalty_messages for tracking.
@@ -291,4 +301,26 @@ export async function sendReferralSuccessMessage(phone, name, refereeName, bonus
 export async function sendReceiptMessage(phone, orderNumber, totalFormatted, url, restaurantName = 'us', countryCode = 'MX') {
   const body = `${restaurantName}: Recibo #${orderNumber} ${totalFormatted}. Ver: ${url}`;
   return sendSMS(phone, body, null, 'receipt', countryCode);
+}
+
+export async function sendReceiptLoyaltyMessage(
+  phone,
+  orderNumber,
+  totalFormatted,
+  url,
+  loyalty,
+  restaurantName = 'us',
+  countryCode = 'MX',
+) {
+  const progress = loyalty.cardCompleted
+    ? 'premio listo'
+    : `${loyalty.stampsEarned}/${loyalty.stampsRequired} sellos`;
+  const code = loyalty.referralCode ? ` Codigo ${loyalty.referralCode}.` : '';
+  const body = firstSingleSegment([
+    `${restaurantName}: recibo #${orderNumber} ${totalFormatted}: ${url}. Rewards: ${progress}.${code}`,
+    `Recibo #${orderNumber}: ${url}. Rewards: ${progress}.${code}`,
+    `Recibo ${url}. Rewards: ${progress}.${code}`,
+    `Recibo ${url}`,
+  ]);
+  return sendSMS(phone, body, loyalty.customerId || null, 'receipt_loyalty', countryCode);
 }
