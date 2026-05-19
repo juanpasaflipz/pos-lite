@@ -11,6 +11,7 @@ import KioskMenuScreen from './screens/KioskMenuScreen';
 import KioskCartScreen from './screens/KioskCartScreen';
 import KioskPaymentScreen from './screens/KioskPaymentScreen';
 import KioskDoneScreen from './screens/KioskDoneScreen';
+import KioskHoldConfirmationScreen from './screens/KioskHoldConfirmationScreen';
 
 const Routed: React.FC = () => {
   const { tenantId, kioskToken } = useKioskBinding();
@@ -33,6 +34,7 @@ const Routed: React.FC = () => {
       <Route path="/cart" element={<KioskCartScreen />} />
       <Route path="/pay" element={<KioskPaymentScreen />} />
       <Route path="/done" element={<KioskDoneScreen />} />
+      <Route path="/hold-confirmed" element={<KioskHoldConfirmationScreen />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

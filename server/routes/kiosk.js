@@ -448,6 +448,181 @@ router.post('/orders', verifyKioskToken, async (req, res) => {
   }
 });
 
+// POST /api/kiosk/orders/hold — park a kiosk cart server-side (status='draft_kiosk')
+// so the customer can resume on the iPad and the POS can claim it. Requires customer_token.
+router.post('/orders/hold', verifyKioskToken, async (req, res) => {
+  const tenantId = req.kioskTenantId;
+  try {
+    const { items, customer_token } = req.body || {};
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Cart is empty' });
+    }
+
+    const loyaltyCustomerId = verifyCustomerToken(customer_token, tenantId);
+    if (!loyaltyCustomerId) {
+      return res.status(401).json({ error: 'Identified customer required to hold an order' });
+    }
+
+    const employeeId = await resolveKioskEmployee(tenantId, req.kiosk);
+    if (!employeeId) {
+      return res.status(400).json({ error: 'No active employee available for kiosk orders' });
+    }
+
+    const menuIds = items.map((item) => Number(item.menu_item_id)).filter(Number.isInteger);
+    if (menuIds.length !== items.length) {
+      return res.status(400).json({ error: 'Invalid menu item' });
+    }
+
+    const menuRows = await adminSql.unsafe(`
+      SELECT id, name, price
+      FROM menu_items
+      WHERE tenant_id = $1 AND active = true AND id = ANY($2::int[])
+    `, [tenantId, menuIds]);
+    const menuById = new Map(menuRows.map((row) => [Number(row.id), row]));
+
+    const orderItems = [];
+    let total = 0;
+    for (const item of items) {
+      const menuItem = menuById.get(Number(item.menu_item_id));
+      const quantity = Math.max(1, Math.min(20, Number(item.quantity) || 0));
+      if (!menuItem) return res.status(404).json({ error: `Menu item ${item.menu_item_id} not found` });
+
+      const unitPrice = Number(menuItem.price);
+      total += unitPrice * quantity;
+      orderItems.push({
+        menu_item_id: Number(menuItem.id),
+        item_name: menuItem.name,
+        quantity,
+        unit_price: unitPrice,
+      });
+    }
+
+    total = Math.round(total * 100) / 100;
+    const tax = Math.round((total - total / (1 + TAX_RATE)) * 100) / 100;
+    const subtotal = Math.round((total - tax) * 100) / 100;
+    const orderNumber = await nextOrderNumber(tenantId);
+
+    // Supersede any existing held drafts for this customer — only one active hold at a time.
+    await adminSql`
+      DELETE FROM order_items
+      WHERE tenant_id = ${tenantId}
+        AND order_id IN (
+          SELECT id FROM orders
+          WHERE tenant_id = ${tenantId}
+            AND loyalty_customer_id = ${loyaltyCustomerId}
+            AND status = 'draft_kiosk'
+        )
+    `;
+    await adminSql`
+      DELETE FROM orders
+      WHERE tenant_id = ${tenantId}
+        AND loyalty_customer_id = ${loyaltyCustomerId}
+        AND status = 'draft_kiosk'
+    `;
+
+    const [order] = await adminSql`
+      INSERT INTO orders (
+        tenant_id, order_number, employee_id, status, subtotal, tax, total,
+        payment_status, source, loyalty_customer_id
+      )
+      VALUES (
+        ${tenantId}, ${orderNumber}, ${employeeId}, 'draft_kiosk', ${subtotal}, ${tax}, ${total},
+        'unpaid', 'customer_kiosk', ${loyaltyCustomerId}
+      )
+      RETURNING id, order_number, subtotal, tax, total, status
+    `;
+
+    const values = orderItems.map((_, i) => {
+      const o = i * 7;
+      return `($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},$${o + 6},$${o + 7})`;
+    }).join(',');
+    const params = orderItems.flatMap((item) => [
+      tenantId, order.id, item.menu_item_id, item.item_name, item.quantity, item.unit_price, null,
+    ]);
+    await adminSql.unsafe(`
+      INSERT INTO order_items (
+        tenant_id, order_id, menu_item_id, item_name, quantity, unit_price, notes
+      )
+      VALUES ${values}
+    `, params);
+
+    res.status(201).json({ ...order, items: orderItems });
+  } catch (err) {
+    console.error('[kiosk/orders/hold] error', err);
+    res.status(500).json({ error: 'Failed to hold kiosk order' });
+  }
+});
+
+// GET /api/kiosk/orders/active?customer_token=... — does this customer have a held draft?
+router.get('/orders/active', verifyKioskToken, async (req, res) => {
+  const tenantId = req.kioskTenantId;
+  try {
+    const customerToken = req.query.customer_token;
+    const loyaltyCustomerId = verifyCustomerToken(customerToken, tenantId);
+    if (!loyaltyCustomerId) {
+      return res.status(401).json({ error: 'Identified customer required' });
+    }
+    const [order] = await adminSql`
+      SELECT id, order_number, total, created_at
+      FROM orders
+      WHERE tenant_id = ${tenantId}
+        AND loyalty_customer_id = ${loyaltyCustomerId}
+        AND status = 'draft_kiosk'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    if (!order) return res.json({ active: null });
+
+    const items = await adminSql`
+      SELECT menu_item_id, item_name, quantity, unit_price
+      FROM order_items
+      WHERE tenant_id = ${tenantId} AND order_id = ${order.id}
+      ORDER BY id
+    `;
+    res.json({ active: { ...order, items } });
+  } catch (err) {
+    console.error('[kiosk/orders/active] error', err);
+    res.status(500).json({ error: 'Failed to fetch active order' });
+  }
+});
+
+// POST /api/kiosk/orders/:id/resume — restore items to kiosk and delete the draft.
+// The kiosk treats the restored items as a fresh local cart; next hold creates a new draft.
+router.post('/orders/:id/resume', verifyKioskToken, async (req, res) => {
+  const tenantId = req.kioskTenantId;
+  const orderId = Number(req.params.id);
+  try {
+    const { customer_token } = req.body || {};
+    const loyaltyCustomerId = verifyCustomerToken(customer_token, tenantId);
+    if (!loyaltyCustomerId) {
+      return res.status(401).json({ error: 'Identified customer required' });
+    }
+    const [order] = await adminSql`
+      SELECT id FROM orders
+      WHERE tenant_id = ${tenantId}
+        AND id = ${orderId}
+        AND loyalty_customer_id = ${loyaltyCustomerId}
+        AND status = 'draft_kiosk'
+    `;
+    if (!order) return res.status(404).json({ error: 'No held order to resume' });
+
+    const items = await adminSql`
+      SELECT menu_item_id, item_name, quantity, unit_price
+      FROM order_items
+      WHERE tenant_id = ${tenantId} AND order_id = ${orderId}
+      ORDER BY id
+    `;
+
+    await adminSql`DELETE FROM order_items WHERE tenant_id = ${tenantId} AND order_id = ${orderId}`;
+    await adminSql`DELETE FROM orders WHERE tenant_id = ${tenantId} AND id = ${orderId}`;
+
+    res.json({ items });
+  } catch (err) {
+    console.error('[kiosk/orders/resume] error', err);
+    res.status(500).json({ error: 'Failed to resume order' });
+  }
+});
+
 // POST /api/kiosk/orders/:id/mp-charge — push kiosk order to default Mercado Pago terminal
 router.post('/orders/:id/mp-charge', verifyKioskToken, async (req, res) => {
   const tenantId = req.kioskTenantId;

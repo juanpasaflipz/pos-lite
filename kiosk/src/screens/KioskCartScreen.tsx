@@ -1,15 +1,46 @@
-import React from 'react';
-import { ArrowLeft, Minus, Plus, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { ArrowLeft, Minus, Plus, Store, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useKioskBinding } from '../context/KioskBindingContext';
 import { useKioskCart } from '../context/KioskCartContext';
+import { useKioskCustomer } from '../context/KioskCustomerContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
+import { holdKioskOrder } from '../lib/kioskApi';
 
 const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
 
 const KioskCartScreen: React.FC = () => {
   const navigate = useNavigate();
+  const { tenantId, kioskToken } = useKioskBinding();
+  const { session } = useKioskCustomer();
   const { lines, count, total, addItem, decrementItem, removeItem } = useKioskCart();
+  const [holding, setHolding] = useState(false);
+  const [holdError, setHoldError] = useState<string | null>(null);
   useIdleTimer(() => navigate('/'), 60_000);
+
+  const sendToRegister = async () => {
+    if (!session || !tenantId || !kioskToken || lines.length === 0 || holding) return;
+    setHolding(true);
+    setHoldError(null);
+    try {
+      const order = await holdKioskOrder(
+        { tenantId, kioskToken },
+        lines.map((line) => ({ menu_item_id: line.menu_item_id, quantity: line.quantity })),
+        session.customerToken,
+      );
+      navigate('/hold-confirmed', {
+        replace: true,
+        state: {
+          orderNumber: order.order_number,
+          total: order.total,
+          firstName: session.firstName,
+        },
+      });
+    } catch (err) {
+      setHoldError(err instanceof Error ? err.message : 'No se pudo enviar a la caja');
+      setHolding(false);
+    }
+  };
 
   return (
     <div className="h-full w-full bg-neutral-950 text-white flex flex-col">
@@ -90,15 +121,28 @@ const KioskCartScreen: React.FC = () => {
         )}
       </main>
 
-      <footer className="p-4 border-t border-neutral-800 bg-neutral-950">
+      <footer className="p-4 border-t border-neutral-800 bg-neutral-950 space-y-3">
+        {holdError && (
+          <p className="text-red-400 text-base font-bold text-center">{holdError}</p>
+        )}
         <button
-          disabled={count === 0}
+          disabled={count === 0 || holding}
           onClick={() => navigate('/pay')}
           className="w-full min-h-20 bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-500 rounded-lg py-4 px-6 text-3xl font-black touch-manipulation flex items-center justify-between gap-4"
         >
           <span>Continuar</span>
           <span>{money.format(total)}</span>
         </button>
+        {session && (
+          <button
+            disabled={count === 0 || holding}
+            onClick={sendToRegister}
+            className="w-full h-16 rounded-lg bg-neutral-800 active:bg-neutral-700 disabled:opacity-40 text-xl font-black touch-manipulation flex items-center justify-center gap-3"
+          >
+            <Store className="h-6 w-6" />
+            {holding ? 'Enviando…' : 'Enviar a caja y pagar después'}
+          </button>
+        )}
       </footer>
     </div>
   );

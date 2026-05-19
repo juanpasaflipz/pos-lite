@@ -7,7 +7,7 @@ import { adminSql } from '../db/index.js';
 const recordOrderItemPairs = () => {};
 import { requireAuth } from '../middleware/auth.js';
 import { audit } from '../lib/auditLog.js';
-import { sendReceiptMessage } from '../helpers/twilio.js';
+import { sendReceiptMessage, sendReceiptLoyaltyMessage } from '../helpers/twilio.js';
 import { findOrCreateCustomer, addStampsForOrder } from '../helpers/loyalty.js';
 
 const router = Router();
@@ -248,6 +248,68 @@ router.get('/', async (req, res) => {
   } catch (error) {
     console.error('Error fetching orders:', error);
     res.status(500).json({ error: 'Failed to fetch orders' });
+  }
+});
+
+// GET /api/orders/kiosk-held - draft orders parked from the customer-facing kiosk
+router.get('/kiosk-held', requireAuth('pos_access'), async (req, res) => {
+  try {
+    const orders = await all(`
+      SELECT o.id, o.order_number, o.total, o.created_at,
+             o.loyalty_customer_id,
+             c.name AS customer_name, c.phone AS customer_phone,
+             COALESCE(
+               (SELECT json_agg(json_build_object(
+                 'menu_item_id', oi.menu_item_id,
+                 'item_name', oi.item_name,
+                 'quantity', oi.quantity,
+                 'unit_price', oi.unit_price
+               ) ORDER BY oi.id)
+                FROM order_items oi
+                WHERE oi.order_id = o.id),
+               '[]'::json
+             ) AS items
+      FROM orders o
+      LEFT JOIN loyalty_customers c ON c.id = o.loyalty_customer_id
+      WHERE o.status = 'draft_kiosk'
+      ORDER BY o.created_at DESC
+      LIMIT 50
+    `);
+    res.json(orders);
+  } catch (error) {
+    console.error('Error fetching kiosk-held orders:', error);
+    res.status(500).json({ error: 'Failed to fetch held orders' });
+  }
+});
+
+// POST /api/orders/:id/claim - cashier pulls a held kiosk order into the register
+router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
+  try {
+    const orderId = Number(req.params.id);
+    if (!Number.isInteger(orderId)) {
+      return res.status(400).json({ error: 'Invalid order id' });
+    }
+    const employeeId = req.user?.id;
+    if (!employeeId) {
+      return res.status(401).json({ error: 'Authenticated employee required' });
+    }
+    const existing = await get(
+      `SELECT id, status FROM orders WHERE id = $1`,
+      [orderId],
+    );
+    if (!existing) return res.status(404).json({ error: 'Order not found' });
+    if (existing.status !== 'draft_kiosk') {
+      return res.status(409).json({ error: 'Order is not held from kiosk' });
+    }
+    await run(
+      `UPDATE orders SET status = 'pending', employee_id = $1 WHERE id = $2`,
+      [employeeId, orderId],
+    );
+    audit(req, 'order.claimed_from_kiosk', { order_id: orderId });
+    res.json({ id: orderId, status: 'pending' });
+  } catch (error) {
+    console.error('Error claiming kiosk order:', error);
+    res.status(500).json({ error: 'Failed to claim order' });
   }
 });
 
@@ -776,13 +838,15 @@ router.post('/:id/sms-receipt', requireAuth('pos_access'), async (req, res) => {
           true,
           restaurantName,
           country_code,
+          { sendWelcomeSms: false },
         );
-        const stampOutcome = await addStampsForOrder(customer.id, order.id, null, restaurantName);
+        const stampOutcome = await addStampsForOrder(customer.id, order.id, null, restaurantName, { sendSms: false });
         loyaltyResult = {
           customer_id: customer.id,
           stamps_earned: stampOutcome.stampCard?.stamps_earned,
           stamps_required: stampOutcome.stampCard?.stamps_required,
           card_completed: stampOutcome.cardCompleted,
+          referral_code: customer.referral_code,
         };
       } catch (err) {
         console.error('[sms-receipt] loyalty enrollment failed (continuing with receipt):', err.message);
@@ -815,14 +879,30 @@ router.post('/:id/sms-receipt', requireAuth('pos_access'), async (req, res) => {
     const restaurantName = req.tenant?.name || req.tenant?.subdomain || 'Recibo';
     const totalFormatted = `$${Number(order.total).toFixed(2)} MXN`;
 
-    const sid = await sendReceiptMessage(
-      phone,
-      order.order_number,
-      totalFormatted,
-      url,
-      restaurantName,
-      country_code,
-    );
+    const sid = loyaltyResult
+      ? await sendReceiptLoyaltyMessage(
+          phone,
+          order.order_number,
+          totalFormatted,
+          url,
+          {
+            customerId: loyaltyResult.customer_id,
+            stampsEarned: loyaltyResult.stamps_earned,
+            stampsRequired: loyaltyResult.stamps_required,
+            cardCompleted: loyaltyResult.card_completed,
+            referralCode: loyaltyResult.referral_code,
+          },
+          restaurantName,
+          country_code,
+        )
+      : await sendReceiptMessage(
+          phone,
+          order.order_number,
+          totalFormatted,
+          url,
+          restaurantName,
+          country_code,
+        );
 
     if (!sid) {
       return res.status(502).json({ error: 'SMS send failed. Check Twilio credentials and try again.' });

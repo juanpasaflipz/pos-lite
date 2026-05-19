@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Gift, Loader2, Sparkles } from 'lucide-react';
+import { ArrowLeft, Gift, Loader2, ShoppingBag, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useKioskBinding } from '../context/KioskBindingContext';
+import { useKioskCart } from '../context/KioskCartContext';
 import { useKioskCustomer } from '../context/KioskCustomerContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
-import { identifyCustomer } from '../lib/kioskApi';
+import { fetchActiveDraft, identifyCustomer, resumeDraft, type KioskActiveDraft } from '../lib/kioskApi';
 
 const Pad: React.FC<{
   label: React.ReactNode;
@@ -36,12 +37,18 @@ const KioskWelcomeScreen: React.FC = () => {
   const navigate = useNavigate();
   const { tenantId, kioskToken } = useKioskBinding();
   const { setSessionFromIdentify } = useKioskCustomer();
+  const { replaceLines } = useKioskCart();
 
-  const [step, setStep] = useState<'phone' | 'name'>('phone');
+  const [step, setStep] = useState<'phone' | 'name' | 'resume'>('phone');
   const [phone, setPhone] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [resumeData, setResumeData] = useState<{
+    draft: KioskActiveDraft;
+    customerToken: string;
+    firstName: string;
+  } | null>(null);
 
   useIdleTimer(() => navigate('/'), 60_000);
 
@@ -63,6 +70,24 @@ const KioskWelcomeScreen: React.FC = () => {
 
   const goToMenu = () => navigate('/menu');
 
+  const afterIdentify = async (sess: ReturnType<typeof setSessionFromIdentify>) => {
+    if (!sess || !auth) {
+      goToMenu();
+      return;
+    }
+    try {
+      const draft = await fetchActiveDraft(auth, sess.customerToken);
+      if (draft) {
+        setResumeData({ draft, customerToken: sess.customerToken, firstName: sess.firstName });
+        setStep('resume');
+        return;
+      }
+    } catch {
+      // Drafts are a nice-to-have — if the check fails, just proceed to menu.
+    }
+    goToMenu();
+  };
+
   const submitPhone = async () => {
     if (!auth || busy || phone.length !== 10) return;
     setBusy(true);
@@ -70,8 +95,8 @@ const KioskWelcomeScreen: React.FC = () => {
     try {
       const result = await identifyCustomer(auth, { phone, country_code: 'MX' });
       if (result.found) {
-        setSessionFromIdentify(result);
-        goToMenu();
+        const sess = setSessionFromIdentify(result);
+        await afterIdentify(sess);
         return;
       }
       // Unknown number — collect a name to enroll them.
@@ -95,8 +120,8 @@ const KioskWelcomeScreen: React.FC = () => {
         sms_opt_in: true,
       });
       if (result.found) {
-        setSessionFromIdentify(result);
-        goToMenu();
+        const sess = setSessionFromIdentify(result);
+        await afterIdentify(sess);
         return;
       }
       setError('No se pudo registrar. Intenta de nuevo.');
@@ -105,6 +130,31 @@ const KioskWelcomeScreen: React.FC = () => {
     } finally {
       setBusy(false);
     }
+  };
+
+  const confirmResume = async () => {
+    if (!auth || !resumeData || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const items = await resumeDraft(auth, resumeData.draft.id, resumeData.customerToken);
+      replaceLines(items.map((item) => ({
+        menu_item_id: item.menu_item_id,
+        name: item.item_name,
+        price: Number(item.unit_price),
+        quantity: item.quantity,
+      })));
+      navigate('/cart');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo reanudar');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const declineResume = () => {
+    setResumeData(null);
+    goToMenu();
   };
 
   if (busy) {
@@ -117,6 +167,55 @@ const KioskWelcomeScreen: React.FC = () => {
         <p className="text-2xl text-neutral-400 font-bold">
           Estamos preparando tus recomendaciones <Sparkles className="inline h-6 w-6 text-brand-400" />
         </p>
+      </div>
+    );
+  }
+
+  if (step === 'resume' && resumeData) {
+    const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
+    const itemCount = resumeData.draft.items.reduce((sum, item) => sum + item.quantity, 0);
+    return (
+      <div className="h-full w-full bg-neutral-950 text-white flex flex-col items-center justify-center px-10 py-8 text-center">
+        <ShoppingBag className="h-20 w-20 text-brand-400 mb-6" />
+        <h1 className="text-4xl font-black leading-tight">
+          ¡Hola de nuevo, {resumeData.firstName}!
+        </h1>
+        <p className="text-xl text-neutral-300 font-bold mt-3 max-w-xl">
+          Tienes una orden pendiente con {itemCount} {itemCount === 1 ? 'producto' : 'productos'} por {money.format(Number(resumeData.draft.total))}.
+        </p>
+
+        <div className="mt-8 w-full max-w-md space-y-2 rounded-2xl bg-neutral-900 border border-neutral-800 p-5">
+          {resumeData.draft.items.slice(0, 5).map((item) => (
+            <div key={item.menu_item_id} className="flex justify-between text-lg font-bold">
+              <span className="truncate">{item.quantity}× {item.item_name}</span>
+              <span className="text-neutral-400">{money.format(Number(item.unit_price) * item.quantity)}</span>
+            </div>
+          ))}
+          {resumeData.draft.items.length > 5 && (
+            <p className="text-sm text-neutral-500 font-bold pt-2 border-t border-neutral-800">
+              + {resumeData.draft.items.length - 5} más
+            </p>
+          )}
+        </div>
+
+        <div className="mt-8 flex flex-col gap-3 w-full max-w-md">
+          <button
+            onClick={confirmResume}
+            disabled={busy}
+            className="h-16 rounded-2xl bg-brand-600 active:bg-brand-700 disabled:opacity-50 text-xl font-black touch-manipulation"
+          >
+            Continuar mi orden
+          </button>
+          <button
+            onClick={declineResume}
+            disabled={busy}
+            className="h-14 rounded-2xl bg-neutral-800 active:bg-neutral-700 disabled:opacity-50 text-lg font-black text-neutral-300 touch-manipulation"
+          >
+            Empezar de nuevo
+          </button>
+        </div>
+
+        {error && <p className="mt-4 text-red-400 text-base font-bold">{error}</p>}
       </div>
     );
   }

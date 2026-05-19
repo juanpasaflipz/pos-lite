@@ -139,6 +139,76 @@ export async function createKioskOrder(
   return res.json();
 }
 
+export interface KioskHoldResponse {
+  id: number;
+  order_number: string | number;
+  total: number;
+  status: string;
+  items: CreateKioskOrderLine[];
+}
+
+export async function holdKioskOrder(
+  auth: AuthHeaders,
+  items: CreateKioskOrderLine[],
+  customerToken: string,
+): Promise<KioskHoldResponse> {
+  const res = await fetch(`${API_BASE}/api/kiosk/orders/hold`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({ items, customer_token: customerToken }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Hold failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export interface KioskActiveDraft {
+  id: number;
+  order_number: string | number;
+  total: number;
+  created_at: string;
+  items: Array<{
+    menu_item_id: number;
+    item_name: string;
+    quantity: number;
+    unit_price: number;
+  }>;
+}
+
+export async function fetchActiveDraft(
+  auth: AuthHeaders,
+  customerToken: string,
+): Promise<KioskActiveDraft | null> {
+  const url = `${API_BASE}/api/kiosk/orders/active?customer_token=${encodeURIComponent(customerToken)}`;
+  const res = await fetch(url, { headers: authHeaders(auth) });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Active fetch failed (${res.status})`);
+  }
+  const body = await res.json();
+  return body.active || null;
+}
+
+export async function resumeDraft(
+  auth: AuthHeaders,
+  orderId: number,
+  customerToken: string,
+): Promise<KioskActiveDraft['items']> {
+  const res = await fetch(`${API_BASE}/api/kiosk/orders/${orderId}/resume`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({ customer_token: customerToken }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Resume failed (${res.status})`);
+  }
+  const body = await res.json();
+  return body.items;
+}
+
 export async function sendKioskOrderToTerminal(
   auth: AuthHeaders,
   orderId: number,

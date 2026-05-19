@@ -25,6 +25,7 @@ interface KioskCartState {
   decrementItem: (menuItemId: number) => void;
   removeItem: (menuItemId: number) => void;
   clearCart: () => void;
+  replaceLines: (next: KioskCartLine[]) => void;
   setLastOrder: (order: KioskLastOrder | null) => void;
 }
 
@@ -67,6 +68,15 @@ export const KioskCartProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const clearCart = useCallback(() => setLines([]), []);
 
+  const replaceLines = useCallback((next: KioskCartLine[]) => {
+    setLines(next.map((line) => ({
+      menu_item_id: line.menu_item_id,
+      name: line.name,
+      price: Number(line.price),
+      quantity: Math.max(1, Math.min(20, line.quantity)),
+    })));
+  }, []);
+
   const value = useMemo(() => {
     const count = lines.reduce((sum, line) => sum + line.quantity, 0);
     const total = Math.round(lines.reduce((sum, line) => sum + line.price * line.quantity, 0) * 100) / 100;
@@ -79,9 +89,10 @@ export const KioskCartProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       decrementItem,
       removeItem,
       clearCart,
+      replaceLines,
       setLastOrder,
     };
-  }, [addItem, clearCart, decrementItem, lastOrder, lines, removeItem]);
+  }, [addItem, clearCart, decrementItem, lastOrder, lines, removeItem, replaceLines]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 };

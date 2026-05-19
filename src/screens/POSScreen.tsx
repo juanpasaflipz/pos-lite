@@ -31,6 +31,8 @@ import {
 } from '../lib/menuCache';
 import { MenuCategory, MenuItem, CartItem, Order, AISuggestion, LoyaltyCustomer, ComboDefinition, OrderTemplate, VirtualBrand, Discount } from '../types';
 import RefundModal from '../components/RefundModal';
+import KioskHeldOrdersBanner from '../components/pos/KioskHeldOrdersBanner';
+import type { KioskHeldOrder } from '../api';
 import NotesModal from '../components/pos/NotesModal';
 import DiscountModal from '../components/pos/DiscountModal';
 import PaymentModal from '../components/pos/PaymentModal';
@@ -548,6 +550,32 @@ const POSScreen: React.FC = () => {
     setCartDiscount(null);
   };
 
+  const handleClaimKioskOrder = (order: KioskHeldOrder) => {
+    const claimed: CartItem[] = order.items.map((item) => ({
+      cart_id: generateCartId(),
+      menu_item_id: item.menu_item_id,
+      item_name: item.item_name,
+      quantity: item.quantity,
+      unit_price: Number(item.unit_price),
+    }));
+    setCart(claimed);
+    setCartDiscount(null);
+    if (order.loyalty_customer_id && order.customer_name && order.customer_phone) {
+      setLinkedCustomer({
+        id: order.loyalty_customer_id,
+        phone: order.customer_phone,
+        name: order.customer_name,
+        referral_code: '',
+        referred_by: null,
+        store_id: 1,
+        stamps_earned: 0,
+        orders_count: 0,
+        total_spent: 0,
+      } as LoyaltyCustomer);
+    }
+    addToast(`Orden #${order.order_number} cargada del kiosko`, 'success');
+  };
+
   const applyLineDiscount = (cartId: string, discount: Discount | null) => {
     setCart((prev) => prev.map((ci) => (ci.cart_id === cartId ? { ...ci, discount } : ci)));
   };
@@ -930,6 +958,11 @@ const POSScreen: React.FC = () => {
         {currentEmployee && ['admin', 'manager'].includes(currentEmployee.role) && (
           <SetupChecklistBanner />
         )}
+
+        <KioskHeldOrdersBanner
+          onClaim={handleClaimKioskOrder}
+          onError={(msg) => addToast(msg, 'error')}
+        />
 
         <AISuggestionBanner
           suggestions={cartSuggestions}
