@@ -133,7 +133,7 @@ const KioskCartScreen: React.FC = () => {
           onClick={() => navigate('/pay')}
           className="w-full min-h-20 bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-500 rounded-lg py-4 px-6 text-3xl font-black touch-manipulation flex items-center justify-between gap-4"
         >
-          <span>Continuar</span>
+          <span>Pagar ahora</span>
           <span>{money.format(total)}</span>
         </button>
         {session && (

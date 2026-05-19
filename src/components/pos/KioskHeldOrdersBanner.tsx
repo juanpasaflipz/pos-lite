@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Smartphone, X } from 'lucide-react';
+import { AlertTriangle, Smartphone, X } from 'lucide-react';
 import { claimKioskOrder, getKioskHeldOrders, type KioskHeldOrder } from '../../api';
 
 interface Props {
@@ -47,22 +47,33 @@ export default function KioskHeldOrdersBanner({ onClaim, onError }: Props) {
 
   if (orders.length === 0) return null;
 
+  const hasStranded = orders.some((o) => o.kind === 'stranded_terminal');
+  const bannerTone = hasStranded
+    ? 'bg-amber-500/15 border-amber-500/50 hover:bg-amber-500/25'
+    : 'bg-brand-600/15 border-brand-600/40 hover:bg-brand-600/25';
+  const headlineTone = hasStranded ? 'text-amber-200' : 'text-brand-200';
+  const subline = hasStranded
+    ? 'Una o más necesitan rescate del terminal'
+    : 'Toca para reclamar a la caja';
+
   return (
     <>
       <button
         onClick={() => setShowList(true)}
-        className="mx-4 mt-2 mb-1 flex items-center gap-3 rounded-lg bg-brand-600/15 border border-brand-600/40 px-4 py-2 text-left hover:bg-brand-600/25 transition-colors"
+        className={`mx-4 mt-2 mb-1 flex items-center gap-3 rounded-lg border px-4 py-2 text-left transition-colors ${bannerTone}`}
       >
-        <Smartphone className="h-5 w-5 text-brand-400 shrink-0" />
+        {hasStranded ? (
+          <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0" />
+        ) : (
+          <Smartphone className="h-5 w-5 text-brand-400 shrink-0" />
+        )}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-brand-200">
+          <p className={`text-sm font-bold ${headlineTone}`}>
             {orders.length === 1
               ? '1 orden esperando del kiosko'
               : `${orders.length} órdenes esperando del kiosko`}
           </p>
-          <p className="text-xs text-neutral-400 truncate">
-            Toca para reclamar a la caja
-          </p>
+          <p className="text-xs text-neutral-400 truncate">{subline}</p>
         </div>
       </button>
 
@@ -84,15 +95,28 @@ export default function KioskHeldOrdersBanner({ onClaim, onError }: Props) {
             <div className="overflow-y-auto p-4 space-y-3">
               {orders.map((order) => {
                 const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0);
+                const stranded = order.kind === 'stranded_terminal';
                 return (
                   <div
                     key={order.id}
-                    className="rounded-lg bg-neutral-800 border border-neutral-700 p-4 flex items-center gap-4"
+                    className={`rounded-lg border p-4 flex items-center gap-4 ${
+                      stranded
+                        ? 'bg-amber-950/40 border-amber-700/60'
+                        : 'bg-neutral-800 border-neutral-700'
+                    }`}
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="text-white font-bold truncate">
-                        {order.customer_name || 'Cliente'}
-                      </p>
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="text-white font-bold truncate">
+                          {order.customer_name || 'Cliente'}
+                        </p>
+                        {stranded && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-200 text-[10px] font-black uppercase px-2 py-0.5 tracking-wide">
+                            <AlertTriangle className="h-3 w-3" />
+                            Terminal expiró
+                          </span>
+                        )}
+                      </div>
                       <p className="text-sm text-neutral-400">
                         Orden #{order.order_number} · {itemCount} {itemCount === 1 ? 'producto' : 'productos'}
                       </p>
@@ -105,9 +129,15 @@ export default function KioskHeldOrdersBanner({ onClaim, onError }: Props) {
                       <button
                         onClick={() => handleClaim(order)}
                         disabled={claiming === order.id}
-                        className="mt-2 px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-sm font-bold min-h-[40px]"
+                        className={`mt-2 px-4 py-2 rounded-lg disabled:opacity-50 text-white text-sm font-bold min-h-[40px] ${
+                          stranded
+                            ? 'bg-amber-600 hover:bg-amber-700'
+                            : 'bg-brand-600 hover:bg-brand-700'
+                        }`}
                       >
-                        {claiming === order.id ? 'Reclamando…' : 'Llevar a caja'}
+                        {claiming === order.id
+                          ? (stranded ? 'Rescatando…' : 'Reclamando…')
+                          : (stranded ? 'Rescatar en caja' : 'Llevar a caja')}
                       </button>
                     </div>
                   </div>

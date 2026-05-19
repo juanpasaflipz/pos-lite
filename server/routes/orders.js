@@ -251,12 +251,20 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/orders/kiosk-held - draft orders parked from the customer-facing kiosk
+// GET /api/orders/kiosk-held - orders waiting for cashier intervention:
+//   - status='draft_kiosk' → customer chose "pay at register" on the kiosk
+//   - payment_status='pending_terminal' older than 3 minutes → terminal flow
+//     stalled (likely terminal offline or customer walked away); cashier needs
+//     to rescue manually so the order doesn't get orphaned.
 router.get('/kiosk-held', requireAuth('pos_access'), async (req, res) => {
   try {
     const orders = await all(`
       SELECT o.id, o.order_number, o.total, o.created_at,
-             o.loyalty_customer_id,
+             o.loyalty_customer_id, o.status, o.payment_status,
+             CASE
+               WHEN o.status = 'draft_kiosk' THEN 'held'
+               ELSE 'stranded_terminal'
+             END AS kind,
              c.name AS customer_name, c.phone AS customer_phone,
              COALESCE(
                (SELECT json_agg(json_build_object(
@@ -281,7 +289,15 @@ router.get('/kiosk-held', requireAuth('pos_access'), async (req, res) => {
              ) AS items
       FROM orders o
       LEFT JOIN loyalty_customers c ON c.id = o.loyalty_customer_id
-      WHERE o.status = 'draft_kiosk'
+      WHERE o.source = 'customer_kiosk'
+        AND (
+          o.status = 'draft_kiosk'
+          OR (
+            o.status = 'pending'
+            AND o.payment_status = 'pending_terminal'
+            AND o.created_at < NOW() - INTERVAL '3 minutes'
+          )
+        )
       ORDER BY o.created_at DESC
       LIMIT 50
     `);
@@ -292,7 +308,10 @@ router.get('/kiosk-held', requireAuth('pos_access'), async (req, res) => {
   }
 });
 
-// POST /api/orders/:id/claim - cashier pulls a held kiosk order into the register
+// POST /api/orders/:id/claim - cashier pulls a held or stranded kiosk order into
+// the register. For draft_kiosk it just flips to pending; for a stranded
+// terminal attempt it also wipes the failed card payment state so the cashier
+// can charge fresh (cash or a new card swipe).
 router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
   try {
     const orderId = Number(req.params.id);
@@ -304,18 +323,36 @@ router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
       return res.status(401).json({ error: 'Authenticated employee required' });
     }
     const existing = await get(
-      `SELECT id, status FROM orders WHERE id = $1`,
+      `SELECT id, status, payment_status, source FROM orders WHERE id = $1`,
       [orderId],
     );
     if (!existing) return res.status(404).json({ error: 'Order not found' });
-    if (existing.status !== 'draft_kiosk') {
-      return res.status(409).json({ error: 'Order is not held from kiosk' });
+
+    const isHeld = existing.status === 'draft_kiosk';
+    const isStrandedTerminal =
+      existing.source === 'customer_kiosk'
+      && existing.status === 'pending'
+      && existing.payment_status === 'pending_terminal';
+
+    if (!isHeld && !isStrandedTerminal) {
+      return res.status(409).json({ error: 'Order is not claimable from kiosk' });
     }
-    await run(
-      `UPDATE orders SET status = 'pending', employee_id = $1 WHERE id = $2`,
-      [employeeId, orderId],
-    );
-    audit(req, 'order.claimed_from_kiosk', { order_id: orderId });
+
+    if (isHeld) {
+      await run(
+        `UPDATE orders SET status = 'pending', employee_id = $1 WHERE id = $2`,
+        [employeeId, orderId],
+      );
+      audit(req, 'order.claimed_from_kiosk', { order_id: orderId });
+    } else {
+      await run(
+        `UPDATE orders
+         SET payment_status = 'unpaid', payment_method = NULL, employee_id = $1
+         WHERE id = $2`,
+        [employeeId, orderId],
+      );
+      audit(req, 'order.rescued_from_terminal', { order_id: orderId });
+    }
     res.json({ id: orderId, status: 'pending' });
   } catch (error) {
     console.error('Error claiming kiosk order:', error);

@@ -498,6 +498,9 @@ export interface KioskHeldOrder {
   loyalty_customer_id: number | null;
   customer_name: string | null;
   customer_phone: string | null;
+  status: string;
+  payment_status: string;
+  kind: 'held' | 'stranded_terminal';
   items: Array<{
     menu_item_id: number;
     item_name: string;
