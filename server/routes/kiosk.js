@@ -33,6 +33,10 @@ import {
 const router = Router();
 const TAX_RATE = 0.16;
 
+function normalizeKioskFulfillmentType(value) {
+  return value === 'for_here' || value === 'to_go' ? value : 'to_go';
+}
+
 const bindLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,
@@ -530,7 +534,7 @@ router.post('/admin/bind', bindLimiter, async (req, res) => {
 router.post('/orders', verifyKioskToken, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
-    const { items, payment_choice = 'counter_cash', customer_token, customer_call_name } = req.body || {};
+    const { items, payment_choice = 'counter_cash', customer_token, customer_call_name, fulfillment_type } = req.body || {};
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Cart is empty' });
     }
@@ -561,17 +565,18 @@ router.post('/orders', verifyKioskToken, async (req, res) => {
     const orderNumber = await nextOrderNumber(tenantId);
     const paymentStatus = 'unpaid';
     const paymentMethod = payment_choice === 'counter_cash' ? null : 'card';
+    const fulfillmentType = normalizeKioskFulfillmentType(fulfillment_type);
 
     const [order] = await adminSql`
       INSERT INTO orders (
         tenant_id, order_number, employee_id, status, subtotal, tax, total,
-        payment_status, payment_method, source, loyalty_customer_id, customer_call_name
+        payment_status, payment_method, source, loyalty_customer_id, customer_call_name, order_fulfillment_type
       )
       VALUES (
         ${tenantId}, ${orderNumber}, ${employeeId}, 'pending', ${subtotal}, ${tax}, ${total},
-        ${paymentStatus}, ${paymentMethod}, 'customer_kiosk', ${loyaltyCustomerId}, ${callName}
+        ${paymentStatus}, ${paymentMethod}, 'customer_kiosk', ${loyaltyCustomerId}, ${callName}, ${fulfillmentType}
       )
-      RETURNING id, order_number, subtotal, tax, total, payment_status, status
+      RETURNING id, order_number, subtotal, tax, total, payment_status, status, order_fulfillment_type
     `;
 
     await insertKioskOrderItems(tenantId, order.id, orderItems);
@@ -588,7 +593,7 @@ router.post('/orders', verifyKioskToken, async (req, res) => {
 router.post('/orders/hold', verifyKioskToken, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
-    const { items, customer_token } = req.body || {};
+    const { items, customer_token, fulfillment_type } = req.body || {};
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Cart is empty' });
     }
@@ -613,6 +618,7 @@ router.post('/orders/hold', verifyKioskToken, async (req, res) => {
     const tax = Math.round((total - total / (1 + TAX_RATE)) * 100) / 100;
     const subtotal = Math.round((total - tax) * 100) / 100;
     const orderNumber = await nextOrderNumber(tenantId);
+    const fulfillmentType = normalizeKioskFulfillmentType(fulfillment_type);
 
     // Supersede any existing held drafts for this customer — only one active hold at a time.
     await adminSql`
@@ -646,13 +652,13 @@ router.post('/orders/hold', verifyKioskToken, async (req, res) => {
     const [order] = await adminSql`
       INSERT INTO orders (
         tenant_id, order_number, employee_id, status, subtotal, tax, total,
-        payment_status, source, loyalty_customer_id
+        payment_status, source, loyalty_customer_id, order_fulfillment_type
       )
       VALUES (
         ${tenantId}, ${orderNumber}, ${employeeId}, 'draft_kiosk', ${subtotal}, ${tax}, ${total},
-        'unpaid', 'customer_kiosk', ${loyaltyCustomerId}
+        'unpaid', 'customer_kiosk', ${loyaltyCustomerId}, ${fulfillmentType}
       )
-      RETURNING id, order_number, subtotal, tax, total, status
+      RETURNING id, order_number, subtotal, tax, total, status, order_fulfillment_type
     `;
 
     await insertKioskOrderItems(tenantId, order.id, orderItems);

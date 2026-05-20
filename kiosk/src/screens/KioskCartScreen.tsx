@@ -15,7 +15,7 @@ const KioskCartScreen: React.FC = () => {
   const navigate = useNavigate();
   const { tenantId, kioskToken } = useKioskBinding();
   const { session } = useKioskCustomer();
-  const { lines, count, total, callName, incrementLine, decrementLine, removeLine, setCallName } = useKioskCart();
+  const { lines, count, total, callName, fulfillmentType, incrementLine, decrementLine, removeLine, setCallName } = useKioskCart();
   const [holding, setHolding] = useState(false);
   const [holdError, setHoldError] = useState<string | null>(null);
   const [askingName, setAskingName] = useState(false);
@@ -34,6 +34,7 @@ const KioskCartScreen: React.FC = () => {
           modifier_ids: line.modifiers.map((m) => m.id),
         })),
         session.customerToken,
+        fulfillmentType,
       );
       navigate('/hold-confirmed', {
         replace: true,

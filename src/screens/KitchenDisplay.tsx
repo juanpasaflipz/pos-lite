@@ -392,6 +392,11 @@ function OrderCard({
               KIOSK
             </span>
           )}
+          {order.source === 'customer_kiosk' && order.order_fulfillment_type && (
+            <span className="bg-amber-500 text-neutral-950 px-2.5 py-1.5 rounded-full font-black text-xs whitespace-nowrap">
+              {order.order_fulfillment_type === 'for_here' ? 'FOR HERE' : 'TO GO'}
+            </span>
+          )}
           {order.table_number && (
             <span className="bg-sky-600 text-white px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
               Table {order.table_number}

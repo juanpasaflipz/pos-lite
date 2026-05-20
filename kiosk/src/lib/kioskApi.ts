@@ -69,6 +69,7 @@ function authHeaders({ tenantId, kioskToken }: AuthHeaders): HeadersInit {
 }
 
 export type KioskPaymentChoice = 'counter_cash' | 'terminal_card';
+export type KioskFulfillmentType = 'for_here' | 'to_go';
 
 export interface KioskMenuItem {
   id: number;
@@ -151,6 +152,7 @@ export async function createKioskOrder(
   paymentChoice: KioskPaymentChoice,
   customerToken?: string | null,
   customerCallName?: string | null,
+  fulfillmentType?: KioskFulfillmentType | null,
 ): Promise<KioskOrderResponse> {
   const res = await fetch(`${API_BASE}/api/kiosk/orders`, {
     method: 'POST',
@@ -160,6 +162,7 @@ export async function createKioskOrder(
       payment_choice: paymentChoice,
       customer_token: customerToken || undefined,
       customer_call_name: customerCallName || undefined,
+      fulfillment_type: fulfillmentType || undefined,
     }),
   });
   if (!res.ok) {
@@ -181,11 +184,12 @@ export async function holdKioskOrder(
   auth: AuthHeaders,
   items: CreateKioskOrderLine[],
   customerToken: string,
+  fulfillmentType?: KioskFulfillmentType | null,
 ): Promise<KioskHoldResponse> {
   const res = await fetch(`${API_BASE}/api/kiosk/orders/hold`, {
     method: 'POST',
     headers: authHeaders(auth),
-    body: JSON.stringify({ items, customer_token: customerToken }),
+    body: JSON.stringify({ items, customer_token: customerToken, fulfillment_type: fulfillmentType || undefined }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

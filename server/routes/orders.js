@@ -7,8 +7,8 @@ import { adminSql } from '../db/index.js';
 const recordOrderItemPairs = () => {};
 import { requireAuth } from '../middleware/auth.js';
 import { audit } from '../lib/auditLog.js';
-import { sendReceiptMessage, sendReceiptLoyaltyMessage } from '../helpers/twilio.js';
-import { findOrCreateCustomer, addStampsForOrder } from '../helpers/loyalty.js';
+import { sendReceiptMessage, sendReceiptLoyaltyMessage, sendOrderReadyMessage } from '../helpers/twilio.js';
+import { findOrCreateCustomer, addStampsForOrder, getConfigValue } from '../helpers/loyalty.js';
 
 const router = Router();
 
@@ -22,6 +22,38 @@ const orderCreateLimiter = rateLimit({
 });
 
 const TAX_RATE = 0.16; // 16% IVA (Mexico) — prices already include tax
+
+async function notifyKioskOrderReady(orderId, restaurantName = 'us') {
+  try {
+    const smsEnabled = await getConfigValue('sms_enabled', 'true');
+    if (smsEnabled !== 'true') return;
+
+    const order = await get(`
+      SELECT o.id, o.order_number, o.source,
+             c.id AS customer_id, c.phone, c.name, c.country_code, c.sms_opt_in
+      FROM orders o
+      JOIN loyalty_customers c ON c.id = o.loyalty_customer_id
+      WHERE o.id = $1
+    `, [orderId]);
+
+    if (order?.source !== 'customer_kiosk' || !order.sms_opt_in || !order.phone) return;
+
+    const sid = await sendOrderReadyMessage(
+      order.phone,
+      order.name,
+      order.order_number,
+      order.customer_id,
+      restaurantName,
+      order.country_code || 'MX',
+    );
+
+    if (!sid) {
+      console.warn(`[order-ready-sms] skipped or failed for order ${orderId}`);
+    }
+  } catch (err) {
+    console.error('[order-ready-sms] warning:', err.message);
+  }
+}
 
 /**
  * Calculate estimated prep time for an order.
@@ -720,6 +752,10 @@ router.put('/:id/status', async (req, res) => {
       `, [status, completedAt, id]);
     }
 
+    if (status === 'ready') {
+      await notifyKioskOrderReady(id, req.tenant?.name || req.tenant?.subdomain || 'Tu restaurante');
+    }
+
     res.json({ id, status });
   } catch (error) {
     console.error('Error updating order status:', error);
@@ -732,7 +768,7 @@ router.get('/kitchen/active', async (req, res) => {
   try {
     // Single query: fetch orders + items + modifiers in one round trip
     const rows = await all(`
-      SELECT o.id AS order_id, o.order_number, o.status, o.payment_method, o.source, o.created_at,
+      SELECT o.id AS order_id, o.order_number, o.status, o.payment_method, o.source, o.order_fulfillment_type, o.created_at,
              o.estimated_ready_minutes, o.table_number,
              e.name AS employee_name,
              oi.id AS item_id, oi.item_name, oi.quantity, oi.notes, oi.combo_instance_id,
@@ -757,6 +793,7 @@ router.get('/kitchen/active', async (req, res) => {
           status: row.status,
           payment_method: row.payment_method,
           source: row.source,
+          order_fulfillment_type: row.order_fulfillment_type,
           created_at: row.created_at,
           estimated_ready_minutes: row.estimated_ready_minutes,
           table_number: row.table_number,

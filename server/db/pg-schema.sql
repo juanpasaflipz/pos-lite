@@ -139,7 +139,8 @@ CREATE TABLE IF NOT EXISTS orders (
   discount_type TEXT,
   discount_reason TEXT,
   discount_authorized_by INTEGER REFERENCES employees(id),
-  customer_call_name TEXT
+  customer_call_name TEXT,
+  order_fulfillment_type TEXT DEFAULT 'to_go'
 );
 
 CREATE TABLE IF NOT EXISTS order_items (

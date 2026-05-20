@@ -303,6 +303,16 @@ export async function sendReceiptMessage(phone, orderNumber, totalFormatted, url
   return sendSMS(phone, body, null, 'receipt', countryCode);
 }
 
+export async function sendOrderReadyMessage(phone, name, orderNumber, customerId, restaurantName = 'us', countryCode = 'MX') {
+  const greeting = name ? `Hola ${String(name).split(/\s+/)[0]}! ` : '';
+  const body = firstSingleSegment([
+    `${greeting}${restaurantName}: tu orden #${orderNumber} esta lista para recoger.`,
+    `Orden #${orderNumber} lista para recoger en ${restaurantName}.`,
+    `Orden #${orderNumber} lista para recoger.`,
+  ]);
+  return sendSMS(phone, body, customerId, 'order_ready', countryCode);
+}
+
 export async function sendReceiptLoyaltyMessage(
   phone,
   orderNumber,

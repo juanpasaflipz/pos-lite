@@ -25,12 +25,15 @@ export interface KioskLastOrder {
   payment_choice: 'counter_cash' | 'terminal_card';
 }
 
+export type KioskFulfillmentType = 'for_here' | 'to_go';
+
 interface KioskCartState {
   lines: KioskCartLine[];
   count: number;
   total: number;
   lastOrder: KioskLastOrder | null;
   callName: string | null;
+  fulfillmentType: KioskFulfillmentType | null;
   addItem: (item: KioskMenuItem, modifiers?: KioskModifier[]) => void;
   incrementLine: (lineKey: string) => void;
   decrementLine: (lineKey: string) => void;
@@ -39,6 +42,7 @@ interface KioskCartState {
   replaceLines: (next: KioskCartLine[]) => void;
   setLastOrder: (order: KioskLastOrder | null) => void;
   setCallName: (name: string | null) => void;
+  setFulfillmentType: (type: KioskFulfillmentType | null) => void;
 }
 
 const Ctx = createContext<KioskCartState | null>(null);
@@ -47,6 +51,7 @@ export const KioskCartProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [lines, setLines] = useState<KioskCartLine[]>([]);
   const [lastOrder, setLastOrder] = useState<KioskLastOrder | null>(null);
   const [callName, setCallName] = useState<string | null>(null);
+  const [fulfillmentType, setFulfillmentType] = useState<KioskFulfillmentType | null>(null);
 
   const addItem = useCallback((item: KioskMenuItem, modifiers: KioskModifier[] = []) => {
     const lineKey = modifierKey(item.id, modifiers);
@@ -96,6 +101,7 @@ export const KioskCartProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const clearCart = useCallback(() => {
     setLines([]);
     setCallName(null);
+    setFulfillmentType(null);
   }, []);
 
   const replaceLines = useCallback((next: KioskCartLine[]) => {
@@ -121,6 +127,7 @@ export const KioskCartProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       total,
       lastOrder,
       callName,
+      fulfillmentType,
       addItem,
       incrementLine,
       decrementLine,
@@ -129,8 +136,9 @@ export const KioskCartProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       replaceLines,
       setLastOrder,
       setCallName,
+      setFulfillmentType,
     };
-  }, [addItem, callName, clearCart, decrementLine, incrementLine, lastOrder, lines, removeLine, replaceLines]);
+  }, [addItem, callName, clearCart, decrementLine, fulfillmentType, incrementLine, lastOrder, lines, removeLine, replaceLines]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 };
