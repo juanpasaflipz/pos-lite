@@ -40,6 +40,7 @@
   "errors": {
     "fetchFailed": "Failed to fetch orders",
     "startFailed": "Failed to start order",
-    "readyFailed": "Failed to mark order as ready"
+    "readyFailed": "Failed to mark order as ready",
+    "stale": "No update from server in {{seconds}}s — orders shown may be out of date"
   }
 }

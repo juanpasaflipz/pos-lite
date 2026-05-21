@@ -15,11 +15,16 @@ import {
   Maximize,
   Wine,
   ChefHat,
+  WifiOff,
 } from 'lucide-react';
 
 interface OrderWithElapsed extends Order {
   elapsedSeconds: number;
 }
+
+// Show the stale banner if no successful fetch in this long. Polling
+// interval is 5s, so 15s gives us two missed polls before warning.
+const STALE_THRESHOLD_MS = 15_000;
 
 export default function KitchenDisplay() {
   const navigate = useNavigate();
@@ -29,7 +34,7 @@ export default function KitchenDisplay() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [lastOrderCount, setLastOrderCount] = useState(0);
+  const [lastSuccessAt, setLastSuccessAt] = useState<number | null>(null);
   const [displayFilter, setDisplayFilter] = useState<'all' | 'kitchen' | 'bar'>(
     currentEmployee?.role === 'bar' ? 'bar' : 'all'
   );
@@ -37,6 +42,11 @@ export default function KitchenDisplay() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const timeIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Track which pending order ids we've already chimed for, so each new
+  // order beeps exactly once — instead of using a count comparison that
+  // misses concurrent transitions and false-fires on initial load.
+  const chimedOrderIdsRef = useRef<Set<number>>(new Set());
+  const isFirstFetchRef = useRef<boolean>(true);
 
   // Load category roles for filtering
   useEffect(() => {
@@ -100,11 +110,24 @@ export default function KitchenDisplay() {
 
       setOrders(sortedOrders);
 
-      const newOrderCount = sortedOrders.filter((o) => o.status === 'pending').length;
-      if (newOrderCount > lastOrderCount) {
-        playAudioAlert();
+      // Chime per genuinely new pending order id. Seed the set on the first
+      // fetch so existing tickets at mount don't beep.
+      const pendingIds = sortedOrders.filter((o) => o.status === 'pending').map((o) => o.id);
+      if (isFirstFetchRef.current) {
+        chimedOrderIdsRef.current = new Set(pendingIds);
+        isFirstFetchRef.current = false;
+      } else {
+        let newCount = 0;
+        for (const id of pendingIds) {
+          if (!chimedOrderIdsRef.current.has(id)) {
+            chimedOrderIdsRef.current.add(id);
+            newCount++;
+          }
+        }
+        if (newCount > 0) playAudioAlert();
       }
-      setLastOrderCount(newOrderCount);
+
+      setLastSuccessAt(Date.now());
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errors.fetchFailed'));
@@ -112,7 +135,7 @@ export default function KitchenDisplay() {
     } finally {
       setLoading(false);
     }
-  }, [calculateElapsedSeconds, lastOrderCount, playAudioAlert]);
+  }, [calculateElapsedSeconds, playAudioAlert, t]);
 
   useEffect(() => {
     fetchOrders();
@@ -222,6 +245,10 @@ export default function KitchenDisplay() {
   };
 
   const pendingCount = orders.filter((o) => o.status === 'pending').length;
+  // Re-evaluated each tick of currentTime (1s interval) so the banner
+  // appears within ~1s of crossing the staleness threshold.
+  const staleSinceMs = lastSuccessAt ? currentTime.getTime() - lastSuccessAt : 0;
+  const isStale = lastSuccessAt !== null && staleSinceMs > STALE_THRESHOLD_MS;
 
   return (
     <div className="min-h-screen bg-neutral-950 text-white">
@@ -294,6 +321,18 @@ export default function KitchenDisplay() {
         <div className="bg-brand-900/50 border-b border-brand-800 px-6 py-3 text-brand-200 flex items-center gap-3">
           <Volume2 size={20} />
           <span>{error}</span>
+        </div>
+      )}
+
+      {/* Stale banner — we haven't successfully polled in a while. Stays up
+          until the next successful fetch, regardless of whether the latest
+          attempt errored or just hung. */}
+      {isStale && (
+        <div className="bg-amber-900/60 border-b border-amber-700 px-6 py-3 text-amber-100 flex items-center gap-3 font-semibold">
+          <WifiOff size={20} />
+          <span>
+            {t('errors.stale', { seconds: Math.round(staleSinceMs / 1000) })}
+          </span>
         </div>
       )}
 

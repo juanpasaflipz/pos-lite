@@ -40,6 +40,7 @@
   "errors": {
     "fetchFailed": "Error al cargar órdenes",
     "startFailed": "Error al iniciar orden",
-    "readyFailed": "Error al marcar orden como lista"
+    "readyFailed": "Error al marcar orden como lista",
+    "stale": "Sin actualización del servidor hace {{seconds}}s — las órdenes pueden estar desactualizadas"
   }
 }

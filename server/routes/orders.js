@@ -866,10 +866,20 @@ router.put('/:id/status', async (req, res) => {
 // GET /api/orders/kitchen/active - get pending+preparing orders for kitchen display
 router.get('/kitchen/active', async (req, res) => {
   try {
+    // Stamp first_kds_seen_at on any active orders the KDS hasn't seen yet.
+    // Single UPDATE — costs effectively nothing once the index is warm,
+    // and gives us the audit trail to answer "did the kitchen see X?"
+    await run(`
+      UPDATE orders
+      SET first_kds_seen_at = NOW()
+      WHERE status IN ('pending', 'confirmed', 'preparing')
+        AND first_kds_seen_at IS NULL
+    `);
+
     // Single query: fetch orders + items + modifiers in one round trip
     const rows = await all(`
       SELECT o.id AS order_id, o.order_number, o.status, o.payment_method, o.source, o.order_fulfillment_type, o.created_at,
-             o.estimated_ready_minutes, o.table_number,
+             o.estimated_ready_minutes, o.table_number, o.first_kds_seen_at,
              e.name AS employee_name,
              oi.id AS item_id, oi.item_name, oi.quantity, oi.notes, oi.combo_instance_id,
              oi.virtual_brand_id, vb.name AS brand_name, vb.primary_color AS brand_color,
