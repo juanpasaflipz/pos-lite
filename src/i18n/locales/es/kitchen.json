@@ -13,7 +13,9 @@
     "noPending": "Sin órdenes pendientes",
     "noItems": "Sin productos",
     "orderId": "ID de Orden: {{id}}",
-    "combo": "Combo"
+    "combo": "Combo",
+    "forHere": "PARA AQUÍ",
+    "toGo": "PARA LLEVAR"
   },
   "status": {
     "pending": "PENDIENTE",

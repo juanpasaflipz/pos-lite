@@ -13,7 +13,9 @@
     "noPending": "No pending orders",
     "noItems": "No items",
     "orderId": "Order ID: {{id}}",
-    "combo": "Combo"
+    "combo": "Combo",
+    "forHere": "FOR HERE",
+    "toGo": "TO GO"
   },
   "status": {
     "pending": "PENDING",

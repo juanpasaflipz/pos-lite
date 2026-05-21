@@ -433,7 +433,7 @@ function OrderCard({
           )}
           {order.source === 'customer_kiosk' && order.order_fulfillment_type && (
             <span className="bg-amber-500 text-neutral-950 px-2.5 py-1.5 rounded-full font-black text-xs whitespace-nowrap">
-              {order.order_fulfillment_type === 'for_here' ? 'FOR HERE' : 'TO GO'}
+              {order.order_fulfillment_type === 'for_here' ? t('orders.forHere') : t('orders.toGo')}
             </span>
           )}
           {order.table_number && (
