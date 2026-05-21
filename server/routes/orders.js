@@ -610,10 +610,12 @@ async function buildOrderFromRequest(req) {
 
   // Atomic order number generation + insert. Two concurrent requests with the
   // same offline_temp_id can both pass the dedup SELECT above; the unique
-  // index then rejects the second INSERT with 23505. Recover by returning the
-  // winning row instead of erroring.
+  // index then rejects the second INSERT with 23505. Wrap in a SAVEPOINT so
+  // we can recover — otherwise the outer transaction (set up by the tenant
+  // middleware) is poisoned and any subsequent SELECT also fails.
   const conn = getConn();
   let orderId, orderNumber;
+  await conn.unsafe('SAVEPOINT order_insert');
   try {
     ({ orderId, orderNumber } = await insertOrderWithNumber(conn, {
       employee_id, subtotal, tax, total, offline_temp_id,
@@ -623,7 +625,9 @@ async function buildOrderFromRequest(req) {
       discount_reason: orderDiscountAmount > 0 ? (orderDiscount?.reason || null) : null,
       discount_authorized_by: orderAuthorizedBy,
     }));
+    await conn.unsafe('RELEASE SAVEPOINT order_insert');
   } catch (err) {
+    await conn.unsafe('ROLLBACK TO SAVEPOINT order_insert').catch(() => {});
     if (err.code === '23505' && offline_temp_id) {
       const existing = await fetchExistingByOfflineTempId(offline_temp_id);
       if (existing) return { status: 'duplicate', body: existing };
