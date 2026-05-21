@@ -11,6 +11,7 @@ import {
   getCombos,
   createCombo,
   updateCombo,
+  deleteCombo,
   getCategories,
   getMenuItems,
 } from '../api';
@@ -264,6 +265,17 @@ export default function ModifierManagement() {
       fetchData();
     } catch (err) {
       console.error('Failed to toggle combo:', err);
+    }
+  };
+
+  const handleDeleteCombo = async (combo: ComboDefinition) => {
+    if (!window.confirm(t('modifiers.combos.deleteConfirm', { name: combo.name }))) return;
+    try {
+      await deleteCombo(combo.id);
+      fetchData();
+    } catch (err) {
+      console.error('Failed to delete combo:', err);
+      window.alert(t('modifiers.combos.failedDelete'));
     }
   };
 
@@ -579,6 +591,13 @@ export default function ModifierManagement() {
                       className="p-2 text-neutral-400 hover:text-white hover:bg-neutral-800 rounded-lg transition-colors"
                     >
                       <Edit2 size={18} />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteCombo(combo)}
+                      title={t('modifiers.combos.deleteCombo')}
+                      className="p-2 text-neutral-400 hover:text-red-400 hover:bg-neutral-800 rounded-lg transition-colors"
+                    >
+                      <Trash2 size={18} />
                     </button>
                     <button
                       onClick={() => handleToggleCombo(combo)}

@@ -485,6 +485,9 @@
       "pricePositive": "El precio debe ser mayor a 0",
       "slotRequired": "Se requiere al menos un espacio con nombre",
       "failedSave": "Error al guardar combo",
+      "deleteCombo": "Eliminar combo",
+      "deleteConfirm": "¿Eliminar \"{{name}}\"? Esta acción no se puede deshacer.",
+      "failedDelete": "Error al eliminar combo",
       "form": {
         "name": "Nombre del combo",
         "description": "Descripción",

@@ -122,4 +122,21 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// DELETE /api/combos/:id - hard delete combo and its slots
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = await get('SELECT id FROM combo_definitions WHERE id = $1', [id]);
+    if (!existing) return res.status(404).json({ error: 'Combo not found' });
+
+    await run('DELETE FROM combo_slots WHERE combo_id = $1', [id]);
+    await run('DELETE FROM combo_definitions WHERE id = $1', [id]);
+
+    res.json({ id, message: 'Deleted' });
+  } catch (error) {
+    console.error('Error deleting combo:', error);
+    res.status(500).json({ error: 'Failed to delete combo' });
+  }
+});
+
 export default router;

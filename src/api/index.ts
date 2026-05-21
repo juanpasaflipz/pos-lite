@@ -1241,6 +1241,10 @@ export async function updateCombo(id: number, data: Partial<ComboDefinition>): P
   });
 }
 
+export async function deleteCombo(id: number): Promise<any> {
+  return apiRequest(`/combos/${id}`, { method: 'DELETE' });
+}
+
 /* ==================== Split Payment Endpoints ==================== */
 
 export async function splitPayment(data: {

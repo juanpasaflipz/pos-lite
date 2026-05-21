@@ -485,6 +485,9 @@
       "pricePositive": "Price must be greater than 0",
       "slotRequired": "At least one slot with a label is required",
       "failedSave": "Failed to save combo",
+      "deleteCombo": "Delete combo",
+      "deleteConfirm": "Delete \"{{name}}\"? This cannot be undone.",
+      "failedDelete": "Failed to delete combo",
       "form": {
         "name": "Combo name",
         "description": "Description",
