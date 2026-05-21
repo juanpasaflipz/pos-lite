@@ -250,7 +250,7 @@ router.get('/', async (req, res) => {
     const { status, date, payment_status } = req.query;
     let query = `
       SELECT o.id, o.order_number, o.employee_id, o.status, o.subtotal, o.tax, o.tip, o.total,
-             o.payment_status, o.payment_method, o.paid_at, o.source, o.created_at,
+             o.payment_status, o.payment_method, o.paid_at, o.source, o.order_fulfillment_type, o.created_at,
              o.loyalty_customer_id, e.name as employee_name,
              COALESCE(c.name, o.customer_call_name) as customer_name
       FROM orders o

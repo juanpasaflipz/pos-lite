@@ -19,7 +19,9 @@
     "lowStockWarning": "Warning: {{name}} uses a low-stock ingredient",
     "unpaidOrders": "Unpaid orders",
     "charge": "Charge",
-    "fromKiosk": "From the kiosk"
+    "fromKiosk": "From the kiosk",
+    "forHere": "For here",
+    "toGo": "To go"
   },
   "totals": {
     "total": "Total:",

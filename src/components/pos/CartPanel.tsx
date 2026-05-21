@@ -139,6 +139,11 @@ export default function CartPanel({
                           Kiosko
                         </span>
                       )}
+                      {order.order_fulfillment_type && (
+                        <span className="inline-flex items-center rounded-full bg-amber-500 text-neutral-950 text-[10px] font-black uppercase px-1.5 py-0.5 tracking-wide whitespace-nowrap">
+                          {order.order_fulfillment_type === 'for_here' ? t('cart.forHere') : t('cart.toGo')}
+                        </span>
+                      )}
                     </div>
                     {order.customer_name && (
                       <p className="text-neutral-300 text-xs truncate inline-flex items-center gap-1">

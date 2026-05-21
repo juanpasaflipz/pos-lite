@@ -19,7 +19,9 @@
     "lowStockWarning": "Aviso: {{name}} usa un ingrediente con poco stock",
     "unpaidOrders": "Pedidos por cobrar",
     "charge": "Cobrar",
-    "fromKiosk": "Vino del kiosko"
+    "fromKiosk": "Vino del kiosko",
+    "forHere": "Para aquí",
+    "toGo": "Para llevar"
   },
   "totals": {
     "total": "Total:",
