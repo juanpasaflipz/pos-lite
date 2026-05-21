@@ -153,7 +153,8 @@ const KioskMenuScreen: React.FC = () => {
     for (const line of r.items) {
       const item = itemsById.get(line.menu_item_id);
       if (!item) continue;
-      for (let n = 0; n < line.quantity; n += 1) addItem(item);
+      const modifiers = line.modifiers ?? [];
+      for (let n = 0; n < line.quantity; n += 1) addItem(item, modifiers);
     }
     if (auth) {
       logSuggestionEvents(auth, session?.customerToken ?? null, [

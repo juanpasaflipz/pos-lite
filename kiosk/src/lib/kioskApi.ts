@@ -300,6 +300,7 @@ export interface RepeatOrderLine {
   price: number;
   image_url: string | null;
   quantity: number;
+  modifiers?: KioskModifier[];
 }
 
 export interface RepeatOrderSuggestion {

@@ -172,7 +172,18 @@ export async function getRepeatOrder(customerId) {
             mi.name        AS item_name,
             oi.quantity,
             mi.price::float AS price,
-            mi.image_url
+            mi.image_url,
+            COALESCE(
+              (SELECT json_agg(json_build_object(
+                        'id', oim.modifier_id,
+                        'name', oim.modifier_name,
+                        'price_adjustment', oim.price_adjustment::float
+                      ))
+                 FROM order_item_modifiers oim
+                WHERE oim.order_item_id = oi.id
+                  AND oim.modifier_id IS NOT NULL),
+              '[]'::json
+            ) AS modifiers
        FROM order_items oi
        JOIN menu_items mi ON mi.id = oi.menu_item_id
       WHERE oi.order_id = $1
@@ -526,6 +537,7 @@ export function composeSuggestions({ profile, repeatOrder, menu, businessFeed, a
       price: round2(i.price),
       image_url: i.image_url,
       quantity: i.quantity,
+      modifiers: Array.isArray(i.modifiers) ? i.modifiers : [],
     }));
     usual = {
       order_id: repeatOrder.orderId,
