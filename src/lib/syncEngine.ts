@@ -1,5 +1,5 @@
 import { offlineDb, type OfflineOrder } from './offlineDb';
-import { createOrder, cashPayment } from '../api';
+import { syncOfflineOrder } from '../api';
 
 const MAX_SYNC_ATTEMPTS = 5;
 const BACKOFF_BASE_MS = 5_000; // 5s, 15s, 45s, 135s, 405s
@@ -83,8 +83,10 @@ export class SyncEngine {
     // Mark as syncing
     await offlineDb.offlineOrders.update(order.id!, { status: 'syncing' });
 
-    // 1. Create order on server
-    const serverOrder = await createOrder({
+    // Single atomic call: order + cash payment in one transaction on the
+    // server. Replaces the prior two-call flow that could leave an unpaid
+    // orphan if the second call failed.
+    const serverOrder = await syncOfflineOrder({
       employee_id: order.employeeId,
       items: order.items.map((item) => ({
         menu_item_id: item.menu_item_id,
@@ -95,16 +97,10 @@ export class SyncEngine {
         virtual_brand_id: item.virtual_brand_id || null,
       })),
       offline_temp_id: order.tempId,
-    } as any);
-
-    // 2. Process cash payment
-    await cashPayment({
-      order_id: serverOrder.id,
       tip: order.tip,
       amount_received: order.amountReceived,
-    });
+    } as any);
 
-    // 3. Mark as synced
     await offlineDb.offlineOrders.update(order.id!, {
       status: 'synced',
       serverId: serverOrder.id,

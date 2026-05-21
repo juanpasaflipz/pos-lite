@@ -451,233 +451,266 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/orders - create order
-router.post('/', orderCreateLimiter, requireAuth('pos_access'), async (req, res) => {
+async function fetchExistingByOfflineTempId(offline_temp_id) {
+  const existing = await get(`
+    SELECT o.id, o.order_number, o.employee_id, o.status, o.subtotal, o.tax, o.tip, o.total,
+           o.payment_status, o.payment_method, o.source, o.created_at
+    FROM orders o WHERE o.offline_temp_id = $1
+  `, [offline_temp_id]);
+  if (!existing) return null;
+  const existingItems = await all(`
+    SELECT id, order_id, menu_item_id, item_name, quantity, unit_price, notes, combo_instance_id
+    FROM order_items WHERE order_id = $1
+  `, [existing.id]);
+  return { ...existing, items: existingItems };
+}
+
+/**
+ * Core order creation: validates input, resolves items/modifiers/discounts,
+ * inserts the order + child rows, and returns the response payload.
+ *
+ * Used by POST /api/orders and POST /api/orders/sync. Both run inside the
+ * tenant middleware's BEGIN/COMMIT, so any throw causes a full rollback.
+ *
+ * Returns { status: 'created', body } for a new order, or
+ * { status: 'duplicate', body } when offline_temp_id already exists.
+ */
+async function buildOrderFromRequest(req) {
+  const { employee_id, items, offline_temp_id, discount: orderDiscount } = req.body;
+
+  if (!employee_id || !items || items.length === 0) {
+    const err = new Error('Missing required fields');
+    err.status = 400;
+    throw err;
+  }
+
+  // Idempotent dedup: if offline_temp_id already exists, return existing order.
+  // The unique index on (tenant_id, offline_temp_id) also guards against the
+  // race where two concurrent requests both pass this SELECT — the second
+  // INSERT will hit 23505 and we recover below.
+  if (offline_temp_id) {
+    const existing = await fetchExistingByOfflineTempId(offline_temp_id);
+    if (existing) return { status: 'duplicate', body: existing };
+  }
+
+  // Validate item quantities
+  for (const item of items) {
+    if (!item.quantity || item.quantity <= 0) {
+      const err = new Error(`Invalid quantity for item ${item.menu_item_id}. Quantity must be greater than 0.`);
+      err.status = 400;
+      throw err;
+    }
+  }
+
+  // Verify employee exists
+  const employee = await get('SELECT id FROM employees WHERE id = $1', [employee_id]);
+  if (!employee) {
+    const err = new Error('Employee not found');
+    err.status = 404;
+    throw err;
+  }
+
+  // Calculate totals (prices include IVA)
+  let itemsTotal = 0;
+  const orderItems = [];
+
+  for (const item of items) {
+    const menuItem = await get('SELECT id, name, price FROM menu_items WHERE id = $1', [item.menu_item_id]);
+    if (!menuItem) {
+      const err = new Error(`Menu item ${item.menu_item_id} not found`);
+      err.status = 404;
+      throw err;
+    }
+
+    // Calculate modifier price adjustments
+    let modifierTotal = 0;
+    const resolvedModifiers = [];
+    if (item.modifiers && item.modifiers.length > 0) {
+      for (const modId of item.modifiers) {
+        const mod = await get('SELECT id, name, price_adjustment FROM modifiers WHERE id = $1', [modId]);
+        if (mod) {
+          modifierTotal += Number(mod.price_adjustment);
+          resolvedModifiers.push(mod);
+        }
+      }
+    }
+
+    // Resolve brand-specific name/price if virtual_brand_id present
+    let itemName = menuItem.name;
+    let basePrice = Number(menuItem.price);
+    const virtualBrandId = item.virtual_brand_id || null;
+
+    if (virtualBrandId) {
+      const brandItem = await get(
+        'SELECT custom_name, custom_price FROM virtual_brand_items WHERE virtual_brand_id = $1 AND menu_item_id = $2',
+        [virtualBrandId, item.menu_item_id]
+      );
+      if (brandItem) {
+        if (brandItem.custom_name) itemName = brandItem.custom_name;
+        if (brandItem.custom_price != null) basePrice = Number(brandItem.custom_price);
+      }
+    }
+
+    const unitPrice = basePrice + modifierTotal;
+    const lineBase = unitPrice * item.quantity;
+
+    // Per-line discount
+    let lineDiscountAmount = 0;
+    let lineDiscountType = null;
+    let lineDiscountReason = null;
+    if (item.discount) {
+      lineDiscountAmount = resolveDiscountAmount(item.discount, lineBase);
+      lineDiscountType = item.discount.type;
+      lineDiscountReason = item.discount.reason || null;
+    }
+
+    const lineTotal = lineBase - lineDiscountAmount;
+    itemsTotal += lineTotal;
+
+    orderItems.push({
+      menu_item_id: item.menu_item_id,
+      item_name: itemName,
+      quantity: item.quantity,
+      unit_price: unitPrice,
+      notes: item.notes || null,
+      combo_instance_id: item.combo_instance_id || null,
+      modifiers: resolvedModifiers,
+      virtual_brand_id: virtualBrandId,
+      discount_amount: lineDiscountAmount,
+      discount_type: lineDiscountType,
+      discount_reason: lineDiscountReason,
+      _lineHasDiscount: lineDiscountAmount > 0,
+    });
+  }
+
+  // Order-level discount applied on top of line-level discounts
+  const orderDiscountAmount = resolveDiscountAmount(orderDiscount, itemsTotal);
+  const total = Math.round((itemsTotal - orderDiscountAmount) * 100) / 100;
+
+  // Authorize discounts (line-level or order-level)
+  const anyLineDiscount = orderItems.some((it) => it._lineHasDiscount);
+  let lineAuthorizedBy = null;
+  let orderAuthorizedBy = null;
+  if (anyLineDiscount) {
+    lineAuthorizedBy = await authorizeDiscount({
+      actorEmployee: req.employee,
+      authorizedByEmployeeId: items.find((i) => i.discount)?.discount?.authorized_by_employee_id || null,
+    });
+  }
+  if (orderDiscountAmount > 0) {
+    orderAuthorizedBy = await authorizeDiscount({
+      actorEmployee: req.employee,
+      authorizedByEmployeeId: orderDiscount?.authorized_by_employee_id || null,
+    });
+  }
+
+  // Prices already include IVA — extract tax from the total
+  const tax = Math.round((total - total / (1 + TAX_RATE)) * 100) / 100;
+  const subtotal = Math.round((total - tax) * 100) / 100;
+
+  // Atomic order number generation + insert. Two concurrent requests with the
+  // same offline_temp_id can both pass the dedup SELECT above; the unique
+  // index then rejects the second INSERT with 23505. Recover by returning the
+  // winning row instead of erroring.
+  const conn = getConn();
+  let orderId, orderNumber;
   try {
-    const { employee_id, items, offline_temp_id, discount: orderDiscount } = req.body;
-
-    if (!employee_id || !items || items.length === 0) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-
-    // Idempotent dedup: if offline_temp_id already exists, return existing order
-    if (offline_temp_id) {
-      const existing = await get(`
-        SELECT o.id, o.order_number, o.employee_id, o.status, o.subtotal, o.tax, o.tip, o.total,
-               o.payment_status, o.payment_method, o.source, o.created_at
-        FROM orders o WHERE o.offline_temp_id = $1
-      `, [offline_temp_id]);
-      if (existing) {
-        const existingItems = await all(`
-          SELECT id, order_id, menu_item_id, item_name, quantity, unit_price, notes, combo_instance_id
-          FROM order_items WHERE order_id = $1
-        `, [existing.id]);
-        return res.status(200).json({ ...existing, items: existingItems });
-      }
-    }
-
-    // Validate item quantities
-    for (const item of items) {
-      if (!item.quantity || item.quantity <= 0) {
-        return res.status(400).json({ error: `Invalid quantity for item ${item.menu_item_id}. Quantity must be greater than 0.` });
-      }
-    }
-
-    // Verify employee exists
-    const employee = await get('SELECT id FROM employees WHERE id = $1', [employee_id]);
-    if (!employee) {
-      return res.status(404).json({ error: 'Employee not found' });
-    }
-
-    // Calculate totals (prices include IVA)
-    let itemsTotal = 0;
-    const orderItems = [];
-
-    for (const item of items) {
-      const menuItem = await get('SELECT id, name, price FROM menu_items WHERE id = $1', [item.menu_item_id]);
-      if (!menuItem) {
-        return res.status(404).json({ error: `Menu item ${item.menu_item_id} not found` });
-      }
-
-      // Calculate modifier price adjustments
-      let modifierTotal = 0;
-      const resolvedModifiers = [];
-      if (item.modifiers && item.modifiers.length > 0) {
-        for (const modId of item.modifiers) {
-          const mod = await get('SELECT id, name, price_adjustment FROM modifiers WHERE id = $1', [modId]);
-          if (mod) {
-            modifierTotal += Number(mod.price_adjustment);
-            resolvedModifiers.push(mod);
-          }
-        }
-      }
-
-      // Resolve brand-specific name/price if virtual_brand_id present
-      let itemName = menuItem.name;
-      let basePrice = Number(menuItem.price);
-      const virtualBrandId = item.virtual_brand_id || null;
-
-      if (virtualBrandId) {
-        const brandItem = await get(
-          'SELECT custom_name, custom_price FROM virtual_brand_items WHERE virtual_brand_id = $1 AND menu_item_id = $2',
-          [virtualBrandId, item.menu_item_id]
-        );
-        if (brandItem) {
-          if (brandItem.custom_name) itemName = brandItem.custom_name;
-          if (brandItem.custom_price != null) basePrice = Number(brandItem.custom_price);
-        }
-      }
-
-      const unitPrice = basePrice + modifierTotal;
-      const lineBase = unitPrice * item.quantity;
-
-      // Per-line discount
-      let lineDiscountAmount = 0;
-      let lineDiscountType = null;
-      let lineDiscountReason = null;
-      if (item.discount) {
-        lineDiscountAmount = resolveDiscountAmount(item.discount, lineBase);
-        lineDiscountType = item.discount.type;
-        lineDiscountReason = item.discount.reason || null;
-      }
-
-      const lineTotal = lineBase - lineDiscountAmount;
-      itemsTotal += lineTotal;
-
-      orderItems.push({
-        menu_item_id: item.menu_item_id,
-        item_name: itemName,
-        quantity: item.quantity,
-        unit_price: unitPrice,
-        notes: item.notes || null,
-        combo_instance_id: item.combo_instance_id || null,
-        modifiers: resolvedModifiers,
-        virtual_brand_id: virtualBrandId,
-        discount_amount: lineDiscountAmount,
-        discount_type: lineDiscountType,
-        discount_reason: lineDiscountReason,
-        _lineHasDiscount: lineDiscountAmount > 0,
-      });
-    }
-
-    // Order-level discount applied on top of line-level discounts
-    const orderDiscountAmount = resolveDiscountAmount(orderDiscount, itemsTotal);
-    const total = Math.round((itemsTotal - orderDiscountAmount) * 100) / 100;
-
-    // Authorize discounts (line-level or order-level)
-    const anyLineDiscount = orderItems.some((it) => it._lineHasDiscount);
-    let lineAuthorizedBy = null;
-    let orderAuthorizedBy = null;
-    try {
-      if (anyLineDiscount) {
-        lineAuthorizedBy = await authorizeDiscount({
-          actorEmployee: req.employee,
-          authorizedByEmployeeId: items.find((i) => i.discount)?.discount?.authorized_by_employee_id || null,
-        });
-      }
-      if (orderDiscountAmount > 0) {
-        orderAuthorizedBy = await authorizeDiscount({
-          actorEmployee: req.employee,
-          authorizedByEmployeeId: orderDiscount?.authorized_by_employee_id || null,
-        });
-      }
-    } catch (err) {
-      return res.status(err.status || 403).json({ error: err.message });
-    }
-
-    // Prices already include IVA — extract tax from the total
-    const tax = Math.round((total - total / (1 + TAX_RATE)) * 100) / 100;
-    const subtotal = Math.round((total - tax) * 100) / 100;
-
-    // Atomic order number generation + insert (prevents duplicate order numbers under concurrency)
-    const conn = getConn();
-    const { orderId, orderNumber } = await insertOrderWithNumber(conn, {
+    ({ orderId, orderNumber } = await insertOrderWithNumber(conn, {
       employee_id, subtotal, tax, total, offline_temp_id,
       tenantId: req.tenant?.id,
       discount_amount: orderDiscountAmount,
       discount_type: orderDiscountAmount > 0 ? (orderDiscount?.type || null) : null,
       discount_reason: orderDiscountAmount > 0 ? (orderDiscount?.reason || null) : null,
       discount_authorized_by: orderAuthorizedBy,
-    });
+    }));
+  } catch (err) {
+    if (err.code === '23505' && offline_temp_id) {
+      const existing = await fetchExistingByOfflineTempId(offline_temp_id);
+      if (existing) return { status: 'duplicate', body: existing };
+    }
+    throw err;
+  }
 
-    // Calculate estimated prep time
-    const itemMenuIds = orderItems.map(i => i.menu_item_id);
-    const prepEstimate = await estimatePrepTime(conn, itemMenuIds, req.tenant?.id);
-    await conn.unsafe(
-      `UPDATE orders SET estimated_ready_minutes = $1 WHERE id = $2`,
-      [prepEstimate.estimate, orderId]
-    );
+  // Calculate estimated prep time
+  const itemMenuIds = orderItems.map(i => i.menu_item_id);
+  const prepEstimate = await estimatePrepTime(conn, itemMenuIds, req.tenant?.id);
+  await conn.unsafe(
+    `UPDATE orders SET estimated_ready_minutes = $1 WHERE id = $2`,
+    [prepEstimate.estimate, orderId]
+  );
 
-    // Batch insert all order items (1 query instead of N)
-    const tenantId = req.tenant?.id || null;
-    const itemColCount = 13;
-    const itemValues = orderItems.map((_, i) => {
-      const o = i * itemColCount;
-      return `($${o+1},$${o+2},$${o+3},$${o+4},$${o+5},$${o+6},$${o+7},$${o+8},$${o+9},$${o+10},$${o+11},$${o+12},$${o+13})`;
+  // Batch insert all order items (1 query instead of N)
+  const tenantId = req.tenant?.id || null;
+  const itemColCount = 13;
+  const itemValues = orderItems.map((_, i) => {
+    const o = i * itemColCount;
+    return `($${o+1},$${o+2},$${o+3},$${o+4},$${o+5},$${o+6},$${o+7},$${o+8},$${o+9},$${o+10},$${o+11},$${o+12},$${o+13})`;
+  }).join(',');
+  const itemParams = orderItems.flatMap(item => [
+    tenantId, orderId, item.menu_item_id, item.item_name,
+    item.quantity, item.unit_price, item.notes, item.combo_instance_id, item.virtual_brand_id || null,
+    item.discount_amount || 0,
+    item.discount_type,
+    item.discount_reason,
+    item._lineHasDiscount ? lineAuthorizedBy : null,
+  ]);
+
+  const insertedItems = await conn.unsafe(`
+    INSERT INTO order_items (
+      tenant_id, order_id, menu_item_id, item_name, quantity, unit_price,
+      notes, combo_instance_id, virtual_brand_id,
+      discount_amount, discount_type, discount_reason, discount_authorized_by
+    )
+    VALUES ${itemValues}
+    RETURNING id
+  `, itemParams);
+
+  // Correlate by index — Postgres preserves VALUES order in RETURNING
+  for (let i = 0; i < orderItems.length; i++) {
+    orderItems[i]._orderItemId = insertedItems[i].id;
+  }
+
+  // Batch insert all modifiers (1 query instead of M)
+  const allMods = orderItems.flatMap(item =>
+    (item.modifiers || []).map(mod => ({
+      orderItemId: item._orderItemId,
+      id: mod.id,
+      name: mod.name,
+      price_adjustment: mod.price_adjustment,
+    }))
+  );
+
+  if (allMods.length > 0) {
+    const modColCount = 5;
+    const modValues = allMods.map((_, i) => {
+      const o = i * modColCount;
+      return `($${o+1},$${o+2},$${o+3},$${o+4},$${o+5})`;
     }).join(',');
-    const itemParams = orderItems.flatMap(item => [
-      tenantId, orderId, item.menu_item_id, item.item_name,
-      item.quantity, item.unit_price, item.notes, item.combo_instance_id, item.virtual_brand_id || null,
-      item.discount_amount || 0,
-      item.discount_type,
-      item.discount_reason,
-      item._lineHasDiscount ? lineAuthorizedBy : null,
+    const modParams = allMods.flatMap(m => [
+      tenantId, m.orderItemId, m.id, m.name, m.price_adjustment,
     ]);
+    await conn.unsafe(`
+      INSERT INTO order_item_modifiers (tenant_id, order_item_id, modifier_id, modifier_name, price_adjustment)
+      VALUES ${modValues}
+    `, modParams);
+  }
 
-    const insertedItems = await conn.unsafe(`
-      INSERT INTO order_items (
-        tenant_id, order_id, menu_item_id, item_name, quantity, unit_price,
-        notes, combo_instance_id, virtual_brand_id,
-        discount_amount, discount_type, discount_reason, discount_authorized_by
-      )
-      VALUES ${itemValues}
-      RETURNING id
-    `, itemParams);
+  // Fire-and-forget: record item pairs for AI analysis
+  setImmediate(() => recordOrderItemPairs(orderId, tenantId));
 
-    // Correlate by index — Postgres preserves VALUES order in RETURNING
-    for (let i = 0; i < orderItems.length; i++) {
-      orderItems[i]._orderItemId = insertedItems[i].id;
-    }
+  audit({
+    tenantId: req.tenant?.id || 'default',
+    actorType: 'employee',
+    actorId: String(employee_id),
+    action: 'create',
+    resource: 'order',
+    resourceId: String(orderId),
+    ip: req.ip,
+  });
 
-    // Batch insert all modifiers (1 query instead of M)
-    const allMods = orderItems.flatMap(item =>
-      (item.modifiers || []).map(mod => ({
-        orderItemId: item._orderItemId,
-        id: mod.id,
-        name: mod.name,
-        price_adjustment: mod.price_adjustment,
-      }))
-    );
-
-    if (allMods.length > 0) {
-      const modColCount = 5;
-      const modValues = allMods.map((_, i) => {
-        const o = i * modColCount;
-        return `($${o+1},$${o+2},$${o+3},$${o+4},$${o+5})`;
-      }).join(',');
-      const modParams = allMods.flatMap(m => [
-        tenantId, m.orderItemId, m.id, m.name, m.price_adjustment,
-      ]);
-      await conn.unsafe(`
-        INSERT INTO order_item_modifiers (tenant_id, order_item_id, modifier_id, modifier_name, price_adjustment)
-        VALUES ${modValues}
-      `, modParams);
-    }
-
-    // Fire-and-forget: record item pairs for AI analysis
-    setImmediate(() => recordOrderItemPairs(orderId, tenantId));
-
-    audit({
-      tenantId: req.tenant?.id || 'default',
-      actorType: 'employee',
-      actorId: String(employee_id),
-      action: 'create',
-      resource: 'order',
-      resourceId: String(orderId),
-      ip: req.ip,
-    });
-
-    res.status(201).json({
+  return {
+    status: 'created',
+    body: {
       id: orderId,
       order_number: orderNumber,
       employee_id,
@@ -694,10 +727,73 @@ router.post('/', orderCreateLimiter, requireAuth('pos_access'), async (req, res)
       discount_authorized_by: orderAuthorizedBy,
       estimated_ready_minutes: prepEstimate.estimate,
       estimated_ready_range: { low: prepEstimate.low, high: prepEstimate.high },
+    },
+  };
+}
+
+function handleOrderError(error, res) {
+  if (error?.status) {
+    return res.status(error.status).json({ error: error.message });
+  }
+  console.error('Error creating order:', error);
+  return res.status(500).json({ error: 'Failed to create order' });
+}
+
+// POST /api/orders - create order
+router.post('/', orderCreateLimiter, requireAuth('pos_access'), async (req, res) => {
+  try {
+    const result = await buildOrderFromRequest(req);
+    const status = result.status === 'duplicate' ? 200 : 201;
+    res.status(status).json(result.body);
+  } catch (error) {
+    handleOrderError(error, res);
+  }
+});
+
+// POST /api/orders/sync — atomic offline sync: create order + cash payment
+// in one transaction. Replaces the two-call createOrder + cashPayment flow
+// that could leave an unpaid orphan if the second request failed.
+router.post('/sync', orderCreateLimiter, requireAuth('pos_access'), async (req, res) => {
+  try {
+    const { tip = 0, amount_received = 0 } = req.body || {};
+    if (typeof tip !== 'number' || tip < 0) {
+      return res.status(400).json({ error: 'Invalid tip' });
+    }
+
+    const result = await buildOrderFromRequest(req);
+
+    // If we returned the existing dupe, don't double-pay it. The caller
+    // already saw 'synced' from the prior attempt; surface what we have.
+    if (result.status === 'duplicate') {
+      return res.status(200).json(result.body);
+    }
+
+    const orderId = result.body.id;
+    const conn = getConn();
+    const finalTotal = Number(result.body.total) + Number(tip);
+    const changeDue = amount_received > 0 ? Math.max(0, amount_received - finalTotal) : 0;
+
+    await conn.unsafe(`
+      UPDATE orders
+      SET payment_status = 'paid',
+          status = 'preparing',
+          payment_method = 'cash',
+          tip = $1,
+          paid_at = NOW()
+      WHERE id = $2
+    `, [Number(tip), orderId]);
+
+    res.status(201).json({
+      ...result.body,
+      tip: Number(tip),
+      total: Math.round(finalTotal * 100) / 100,
+      payment_status: 'paid',
+      payment_method: 'cash',
+      status: 'preparing',
+      change_due: Math.round(changeDue * 100) / 100,
     });
   } catch (error) {
-    console.error('Error creating order:', error);
-    res.status(500).json({ error: 'Failed to create order' });
+    handleOrderError(error, res);
   }
 });
 

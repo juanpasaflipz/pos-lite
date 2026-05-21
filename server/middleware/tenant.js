@@ -77,7 +77,13 @@ export async function tenantMiddleware(req, res, next) {
       return res.status(503).json({ error: 'Service temporarily unavailable. Please try again.' });
     }
 
-    // Double-release guard
+    // Double-release guard.
+    //
+    // We COMMIT only on successful responses (statusCode < 400). On 4xx/5xx
+    // we ROLLBACK so that partial DML from a caught error (e.g. a route that
+    // inserted an order row, then threw and responded 500) doesn't persist.
+    // Without this, every route in the app was silently committing partial
+    // state on errors.
     let released = false;
     const releaseConn = (shouldCommit) => {
       if (!released) {
@@ -89,7 +95,7 @@ export async function tenantMiddleware(req, res, next) {
       }
     };
 
-    res.on('finish', () => releaseConn(true));
+    res.on('finish', () => releaseConn(res.statusCode < 400));
     res.on('close', () => {
       if (!res.writableFinished) releaseConn(false);
     });

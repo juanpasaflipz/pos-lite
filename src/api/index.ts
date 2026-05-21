@@ -545,6 +545,15 @@ export async function createOrder(data: CreateOrderData): Promise<Order> {
   });
 }
 
+export async function syncOfflineOrder(
+  data: CreateOrderData & { tip?: number; amount_received?: number },
+): Promise<Order> {
+  return apiRequest<Order>('/orders/sync', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
 export async function managerApprove(
   pin: string,
   permission: string
