@@ -129,7 +129,6 @@ const KioskMenuScreen: React.FC = () => {
 
   const handlePickItem = (s: SuggestionItem) => {
     const item = itemsById.get(s.menu_item_id);
-    if (item) addItem(item);
     if (auth) {
       logSuggestionEvents(auth, session?.customerToken ?? null, [
         {
@@ -140,6 +139,13 @@ const KioskMenuScreen: React.FC = () => {
           reason: s.reason,
         },
       ]);
+    }
+    if (!item) return;
+    const groups = modifierMap[item.id];
+    if (groups && groups.length) {
+      setModifierItem(item);
+    } else {
+      addItem(item);
     }
   };
 
