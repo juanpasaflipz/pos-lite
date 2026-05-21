@@ -67,6 +67,13 @@ export default function ModifierManagement() {
   const [newModName, setNewModName] = useState('');
   const [newModPrice, setNewModPrice] = useState('0');
 
+  // Inline edit state
+  const [editingModId, setEditingModId] = useState<number | null>(null);
+  const [editModName, setEditModName] = useState('');
+  const [editModPrice, setEditModPrice] = useState('0');
+  const [editingGroupId, setEditingGroupId] = useState<number | null>(null);
+  const [editGroupName, setEditGroupName] = useState('');
+
   // Combo form state
   const [showComboForm, setShowComboForm] = useState(false);
   const [editingComboId, setEditingComboId] = useState<number | null>(null);
@@ -166,6 +173,55 @@ export default function ModifierManagement() {
     } catch (err) {
       console.error('Failed to delete modifier:', err);
       window.alert(t('modifiers.failedDeleteModifier'));
+    }
+  };
+
+  const startEditMod = (mod: { id: number; name: string; price_adjustment: number }) => {
+    setEditingModId(mod.id);
+    setEditModName(mod.name);
+    setEditModPrice(String(mod.price_adjustment));
+  };
+
+  const cancelEditMod = () => {
+    setEditingModId(null);
+    setEditModName('');
+    setEditModPrice('0');
+  };
+
+  const handleSaveMod = async (modId: number) => {
+    if (!editModName.trim()) return;
+    try {
+      await updateModifier(modId, {
+        name: editModName.trim(),
+        price_adjustment: parseFloat(editModPrice) || 0,
+      });
+      cancelEditMod();
+      fetchData();
+    } catch (err) {
+      console.error('Failed to update modifier:', err);
+      window.alert(t('modifiers.failedSaveModifier'));
+    }
+  };
+
+  const startEditGroup = (group: ModifierGroup) => {
+    setEditingGroupId(group.id);
+    setEditGroupName(group.name);
+  };
+
+  const cancelEditGroup = () => {
+    setEditingGroupId(null);
+    setEditGroupName('');
+  };
+
+  const handleSaveGroup = async (groupId: number) => {
+    if (!editGroupName.trim()) return;
+    try {
+      await updateModifierGroup(groupId, { name: editGroupName.trim() });
+      cancelEditGroup();
+      fetchData();
+    } catch (err) {
+      console.error('Failed to update group:', err);
+      window.alert(t('modifiers.failedSaveGroup'));
     }
   };
 
@@ -397,57 +453,122 @@ export default function ModifierManagement() {
             {groups.map(group => (
               <div key={group.id} className={`bg-neutral-900 rounded-lg border border-neutral-800 overflow-hidden ${!group.active ? 'opacity-50' : ''}`}>
                 <div className="p-4 flex items-center justify-between border-b border-neutral-800">
-                  <div>
-                    <h3 className="text-lg font-bold text-white">{group.name}</h3>
-                    <p className="text-sm text-neutral-400">
-                      {group.selection_type === 'single' ? t('modifiers.singleSelectLabel') : t('modifiers.multiSelectLabel')}
-                      {group.required ? ` (${t('modifiers.required')})` : ` (${t('modifiers.optional')})`}
-                      {' — '}{group.modifiers?.length || 0} {t('modifiers.optionsCount')}
-                    </p>
+                  <div className="flex-1 min-w-0">
+                    {editingGroupId === group.id ? (
+                      <div className="flex gap-2 items-center">
+                        <input
+                          autoFocus
+                          value={editGroupName}
+                          onChange={(e) => setEditGroupName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveGroup(group.id);
+                            if (e.key === 'Escape') cancelEditGroup();
+                          }}
+                          className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg p-2 text-white font-bold focus:outline-none focus:border-brand-600"
+                        />
+                        <button onClick={() => handleSaveGroup(group.id)} title={t('common:buttons.save')} className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700"><Check size={16} /></button>
+                        <button onClick={cancelEditGroup} title={t('common:buttons.cancel')} className="p-2 bg-neutral-700 text-white rounded-lg hover:bg-neutral-600"><X size={16} /></button>
+                      </div>
+                    ) : (
+                      <>
+                        <h3 className="text-lg font-bold text-white">{group.name}</h3>
+                        <p className="text-sm text-neutral-400">
+                          {group.selection_type === 'single' ? t('modifiers.singleSelectLabel') : t('modifiers.multiSelectLabel')}
+                          {group.required ? ` (${t('modifiers.required')})` : ` (${t('modifiers.optional')})`}
+                          {' — '}{group.modifiers?.length || 0} {t('modifiers.optionsCount')}
+                        </p>
+                      </>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleToggleGroup(group)}
-                      className={`px-3 py-1 rounded-lg text-sm font-medium ${group.active ? 'bg-green-900/30 text-green-400' : 'bg-neutral-800 text-neutral-500'}`}
-                    >
-                      {group.active ? t('menu.active') : t('menu.inactive')}
-                    </button>
-                    <button
-                      onClick={() => handleDeleteGroup(group)}
-                      title={t('modifiers.deleteGroup')}
-                      className="p-2 text-neutral-400 hover:text-red-400 hover:bg-neutral-800 rounded-lg transition-colors"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
+                  {editingGroupId !== group.id && (
+                    <div className="flex items-center gap-2 ml-3">
+                      <button
+                        onClick={() => startEditGroup(group)}
+                        title={t('modifiers.editGroup')}
+                        className="p-2 text-neutral-400 hover:text-white hover:bg-neutral-800 rounded-lg transition-colors"
+                      >
+                        <Edit2 size={18} />
+                      </button>
+                      <button
+                        onClick={() => handleToggleGroup(group)}
+                        className={`px-3 py-1 rounded-lg text-sm font-medium ${group.active ? 'bg-green-900/30 text-green-400' : 'bg-neutral-800 text-neutral-500'}`}
+                      >
+                        {group.active ? t('menu.active') : t('menu.inactive')}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteGroup(group)}
+                        title={t('modifiers.deleteGroup')}
+                        className="p-2 text-neutral-400 hover:text-red-400 hover:bg-neutral-800 rounded-lg transition-colors"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="p-4 space-y-2">
                   {group.modifiers?.map(mod => (
                     <div key={mod.id} className="flex items-center justify-between p-2 bg-neutral-800/50 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <span className={`text-white ${!mod.active ? 'line-through text-neutral-500' : ''}`}>{mod.name}</span>
-                        {mod.price_adjustment !== 0 && (
-                          <span className="text-xs font-bold text-amber-400">
-                            {mod.price_adjustment > 0 ? '+' : ''}{formatPrice(mod.price_adjustment)}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleToggleModifier(mod.id, mod.active)}
-                          className="text-xs text-neutral-500 hover:text-white"
-                        >
-                          {mod.active ? t('common:buttons.disable') : t('common:buttons.enable')}
-                        </button>
-                        <button
-                          onClick={() => handleDeleteModifier(mod.id, mod.name)}
-                          title={t('modifiers.deleteModifier')}
-                          className="p-1 text-neutral-500 hover:text-red-400 transition-colors"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
+                      {editingModId === mod.id ? (
+                        <div className="flex gap-2 items-center flex-1">
+                          <input
+                            autoFocus
+                            value={editModName}
+                            onChange={(e) => setEditModName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveMod(mod.id);
+                              if (e.key === 'Escape') cancelEditMod();
+                            }}
+                            className="flex-1 bg-neutral-700 border border-neutral-600 rounded-lg p-1.5 text-white text-sm focus:outline-none focus:border-brand-600"
+                          />
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={editModPrice}
+                            onChange={(e) => setEditModPrice(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveMod(mod.id);
+                              if (e.key === 'Escape') cancelEditMod();
+                            }}
+                            className="w-24 bg-neutral-700 border border-neutral-600 rounded-lg p-1.5 text-white text-sm focus:outline-none focus:border-brand-600"
+                          />
+                          <button onClick={() => handleSaveMod(mod.id)} title={t('common:buttons.save')} className="p-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700"><Check size={14} /></button>
+                          <button onClick={cancelEditMod} title={t('common:buttons.cancel')} className="p-1.5 bg-neutral-700 text-white rounded-lg hover:bg-neutral-600"><X size={14} /></button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-3">
+                            <span className={`text-white ${!mod.active ? 'line-through text-neutral-500' : ''}`}>{mod.name}</span>
+                            {mod.price_adjustment !== 0 && (
+                              <span className="text-xs font-bold text-amber-400">
+                                {mod.price_adjustment > 0 ? '+' : ''}{formatPrice(mod.price_adjustment)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => startEditMod(mod)}
+                              title={t('modifiers.editModifier')}
+                              className="p-1 text-neutral-500 hover:text-white transition-colors"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button
+                              onClick={() => handleToggleModifier(mod.id, mod.active)}
+                              className="text-xs text-neutral-500 hover:text-white"
+                            >
+                              {mod.active ? t('common:buttons.disable') : t('common:buttons.enable')}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteModifier(mod.id, mod.name)}
+                              title={t('modifiers.deleteModifier')}
+                              className="p-1 text-neutral-500 hover:text-red-400 transition-colors"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   ))}
 
