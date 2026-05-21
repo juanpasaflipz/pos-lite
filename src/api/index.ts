@@ -1183,6 +1183,14 @@ export async function updateModifier(id: number, data: Partial<{ name: string; p
   });
 }
 
+export async function deleteModifier(id: number): Promise<any> {
+  return apiRequest(`/modifiers/${id}`, { method: 'DELETE' });
+}
+
+export async function deleteModifierGroup(id: number): Promise<any> {
+  return apiRequest(`/modifiers/groups/${id}`, { method: 'DELETE' });
+}
+
 export async function assignModifierGroupToItem(menuItemId: number, groupId: number): Promise<any> {
   return apiRequest('/modifiers/assign', {
     method: 'POST',

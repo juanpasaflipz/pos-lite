@@ -473,6 +473,12 @@
     "modifierNamePlaceholder": "Nombre del modificador",
     "priceAdj": "Ajuste $",
     "addModifier": "Agregar modificador",
+    "deleteModifier": "Eliminar modificador",
+    "deleteGroup": "Eliminar grupo",
+    "deleteModifierConfirm": "¿Eliminar el modificador \"{{name}}\"? Esta acción no se puede deshacer.",
+    "deleteGroupConfirm": "¿Eliminar el grupo \"{{name}}\" y sus {{count}} opciones? Esta acción no se puede deshacer.",
+    "failedDeleteModifier": "Error al eliminar modificador",
+    "failedDeleteGroup": "Error al eliminar grupo de modificadores",
     "combos": {
       "title": "Combos",
       "newCombo": "Nuevo Combo",

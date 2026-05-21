@@ -6,8 +6,10 @@ import {
   getModifierGroups,
   createModifierGroup,
   updateModifierGroup,
+  deleteModifierGroup,
   createModifier,
   updateModifier,
+  deleteModifier,
   getCombos,
   createCombo,
   updateCombo,
@@ -153,6 +155,29 @@ export default function ModifierManagement() {
       fetchData();
     } catch (err) {
       console.error('Failed to toggle modifier:', err);
+    }
+  };
+
+  const handleDeleteModifier = async (modId: number, modName: string) => {
+    if (!window.confirm(t('modifiers.deleteModifierConfirm', { name: modName }))) return;
+    try {
+      await deleteModifier(modId);
+      fetchData();
+    } catch (err) {
+      console.error('Failed to delete modifier:', err);
+      window.alert(t('modifiers.failedDeleteModifier'));
+    }
+  };
+
+  const handleDeleteGroup = async (group: ModifierGroup) => {
+    const count = group.modifiers?.length || 0;
+    if (!window.confirm(t('modifiers.deleteGroupConfirm', { name: group.name, count }))) return;
+    try {
+      await deleteModifierGroup(group.id);
+      fetchData();
+    } catch (err) {
+      console.error('Failed to delete group:', err);
+      window.alert(t('modifiers.failedDeleteGroup'));
     }
   };
 
@@ -380,12 +405,21 @@ export default function ModifierManagement() {
                       {' — '}{group.modifiers?.length || 0} {t('modifiers.optionsCount')}
                     </p>
                   </div>
-                  <button
-                    onClick={() => handleToggleGroup(group)}
-                    className={`px-3 py-1 rounded-lg text-sm font-medium ${group.active ? 'bg-green-900/30 text-green-400' : 'bg-neutral-800 text-neutral-500'}`}
-                  >
-                    {group.active ? t('menu.active') : t('menu.inactive')}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleToggleGroup(group)}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium ${group.active ? 'bg-green-900/30 text-green-400' : 'bg-neutral-800 text-neutral-500'}`}
+                    >
+                      {group.active ? t('menu.active') : t('menu.inactive')}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteGroup(group)}
+                      title={t('modifiers.deleteGroup')}
+                      className="p-2 text-neutral-400 hover:text-red-400 hover:bg-neutral-800 rounded-lg transition-colors"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="p-4 space-y-2">
@@ -399,12 +433,21 @@ export default function ModifierManagement() {
                           </span>
                         )}
                       </div>
-                      <button
-                        onClick={() => handleToggleModifier(mod.id, mod.active)}
-                        className="text-xs text-neutral-500 hover:text-white"
-                      >
-                        {mod.active ? t('common:buttons.disable') : t('common:buttons.enable')}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleToggleModifier(mod.id, mod.active)}
+                          className="text-xs text-neutral-500 hover:text-white"
+                        >
+                          {mod.active ? t('common:buttons.disable') : t('common:buttons.enable')}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteModifier(mod.id, mod.name)}
+                          title={t('modifiers.deleteModifier')}
+                          className="p-1 text-neutral-500 hover:text-red-400 transition-colors"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
                   ))}
 

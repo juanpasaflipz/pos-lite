@@ -182,6 +182,41 @@ router.put('/:id', requireAuth('manage_modifiers'), async (req, res) => {
   }
 });
 
+// DELETE /api/modifiers/:id - hard delete a single modifier option
+router.delete('/:id', requireAuth('manage_modifiers'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = await get('SELECT id FROM modifiers WHERE id = $1', [id]);
+    if (!existing) return res.status(404).json({ error: 'Modifier not found' });
+
+    // order_item_modifiers.modifier_id has no FK and modifier_name is captured
+    // on the order line, so historical orders survive deletion.
+    await run('DELETE FROM modifiers WHERE id = $1', [id]);
+    res.json({ id, message: 'Deleted' });
+  } catch (error) {
+    console.error('Error deleting modifier:', error);
+    res.status(500).json({ error: 'Failed to delete modifier' });
+  }
+});
+
+// DELETE /api/modifiers/groups/:id - hard delete a group and all its modifiers
+router.delete('/groups/:id', requireAuth('manage_modifiers'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = await get('SELECT id FROM modifier_groups WHERE id = $1', [id]);
+    if (!existing) return res.status(404).json({ error: 'Modifier group not found' });
+
+    await run('DELETE FROM menu_item_modifier_groups WHERE modifier_group_id = $1', [id]);
+    await run('DELETE FROM modifiers WHERE group_id = $1', [id]);
+    await run('DELETE FROM modifier_groups WHERE id = $1', [id]);
+
+    res.json({ id, message: 'Deleted' });
+  } catch (error) {
+    console.error('Error deleting modifier group:', error);
+    res.status(500).json({ error: 'Failed to delete modifier group' });
+  }
+});
+
 // POST /api/modifiers/assign - assign modifier group to menu item
 router.post('/assign', requireAuth('manage_modifiers'), async (req, res) => {
   try {

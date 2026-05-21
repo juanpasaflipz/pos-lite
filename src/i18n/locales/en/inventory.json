@@ -473,6 +473,12 @@
     "modifierNamePlaceholder": "Modifier name",
     "priceAdj": "Price adj",
     "addModifier": "Add modifier",
+    "deleteModifier": "Delete modifier",
+    "deleteGroup": "Delete group",
+    "deleteModifierConfirm": "Delete modifier \"{{name}}\"? This cannot be undone.",
+    "deleteGroupConfirm": "Delete group \"{{name}}\" and its {{count}} options? This cannot be undone.",
+    "failedDeleteModifier": "Failed to delete modifier",
+    "failedDeleteGroup": "Failed to delete modifier group",
     "combos": {
       "title": "Combos",
       "newCombo": "New Combo",
