@@ -12,7 +12,8 @@
     "build:client": "vite build",
     "build:kiosk": "vite build --config vite.kiosk.config.ts",
     "start": "NODE_ENV=production node server/index.js",
-    "smoketest:orders": "node scripts/load-test-orders.mjs"
+    "smoketest:orders": "node scripts/load-test-orders.mjs",
+    "smoketest:kds": "node scripts/verify-kds-seen.mjs"
   },
   "dependencies": {
     "@stripe/react-stripe-js": "^5.6.1",

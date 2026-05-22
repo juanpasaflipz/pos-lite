@@ -907,6 +907,7 @@ router.get('/kitchen/active', async (req, res) => {
           created_at: row.created_at,
           estimated_ready_minutes: row.estimated_ready_minutes,
           table_number: row.table_number,
+          first_kds_seen_at: row.first_kds_seen_at,
           employee_name: row.employee_name,
           items: new Map(),
         });
