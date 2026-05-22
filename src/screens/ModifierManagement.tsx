@@ -450,7 +450,7 @@ export default function ModifierManagement() {
               </div>
             )}
 
-            {groups.map(group => (
+            {[...groups].sort((a, b) => a.name.localeCompare(b.name)).map(group => (
               <div key={group.id} className={`bg-neutral-900 rounded-lg border border-neutral-800 overflow-hidden ${!group.active ? 'opacity-50' : ''}`}>
                 <div className="p-4 flex items-center justify-between border-b border-neutral-800">
                   <div className="flex-1 min-w-0">
@@ -507,7 +507,7 @@ export default function ModifierManagement() {
                 </div>
 
                 <div className="p-4 space-y-2">
-                  {group.modifiers?.map(mod => (
+                  {[...(group.modifiers ?? [])].sort((a, b) => a.name.localeCompare(b.name)).map(mod => (
                     <div key={mod.id} className="flex items-center justify-between p-2 bg-neutral-800/50 rounded-lg">
                       {editingModId === mod.id ? (
                         <div className="flex gap-2 items-center flex-1">
@@ -741,7 +741,7 @@ export default function ModifierManagement() {
             )}
 
             {/* Combo List */}
-            {combos.map(combo => (
+            {[...combos].sort((a, b) => a.name.localeCompare(b.name)).map(combo => (
               <div key={combo.id} className={`bg-neutral-900 rounded-lg border border-neutral-800 p-6 ${!combo.active ? 'opacity-50' : ''}`}>
                 <div className="flex items-start justify-between mb-3">
                   <div>
