@@ -49,7 +49,7 @@ const PublicReceiptScreen: React.FC = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-neutral-50 p-6">
         <div className="bg-white rounded-2xl shadow p-8 text-center max-w-sm">
-          <p className="text-red-600 font-semibold mb-2">No pudimos cargar el recibo</p>
+          <p className="text-cockpit-red font-semibold mb-2">No pudimos cargar el recibo</p>
           <p className="text-neutral-500 text-sm">{state.message}</p>
         </div>
       </div>
@@ -72,7 +72,7 @@ const PublicReceiptScreen: React.FC = () => {
             <p className="font-bold text-lg">Pedido #{order.order_number}</p>
             <p className="text-neutral-600">{formatDateTime(order.created_at)}</p>
             {paid && (
-              <span className="inline-block mt-2 px-3 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full">
+              <span className="inline-block mt-2 px-3 py-0.5 bg-cockpit-green text-white text-xs font-bold rounded-full">
                 PAGADO {order.payment_method ? `· ${order.payment_method.toUpperCase()}` : ''}
               </span>
             )}

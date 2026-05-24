@@ -271,8 +271,8 @@ const PublicInvoiceScreen: React.FC = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 max-w-md w-full p-8 text-center">
-          <div className="mx-auto w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mb-4">
-            <svg className="w-7 h-7 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <div className="mx-auto w-14 h-14 bg-cockpit-red/10 rounded-full flex items-center justify-center mb-4">
+            <svg className="w-7 h-7 text-cockpit-red" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
@@ -420,13 +420,13 @@ const PublicInvoiceScreen: React.FC = () => {
 
         {/* Error banner (when order is loaded but submission failed) */}
         {pageState === 'error' && errorInfo && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-            <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <div className="bg-cockpit-red/10 border border-cockpit-red/30 rounded-lg p-4 flex items-start gap-3">
+            <svg className="w-5 h-5 text-cockpit-red flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <div>
-              <p className="text-sm text-red-800 font-medium">Error al generar la factura</p>
-              <p className="text-sm text-red-600 mt-1">{errorInfo.message}</p>
+              <p className="text-sm text-cockpit-red font-semibold">Error al generar la factura</p>
+              <p className="text-sm text-cockpit-red/80 mt-1">{errorInfo.message}</p>
               <button
                 type="button"
                 onClick={() => { setPageState('form'); setErrorInfo(null); }}
@@ -456,13 +456,13 @@ const PublicInvoiceScreen: React.FC = () => {
               value={form.rfc}
               onChange={e => updateField('rfc', e.target.value.toUpperCase())}
               className={`w-full rounded-lg border px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 transition-colors ${
-                formErrors.rfc ? 'border-red-300 focus:ring-red-400' : 'border-gray-300 focus:ring-opacity-50'
+                formErrors.rfc ? 'border-cockpit-red/50 focus:ring-cockpit-red/60' : 'border-gray-300 focus:ring-opacity-50'
               }`}
               style={!formErrors.rfc ? { '--tw-ring-color': accentColor } as React.CSSProperties : undefined}
               autoComplete="off"
               autoCapitalize="characters"
             />
-            {formErrors.rfc && <p className="text-xs text-red-500 mt-1">{formErrors.rfc}</p>}
+            {formErrors.rfc && <p className="text-xs text-cockpit-red mt-1">{formErrors.rfc}</p>}
           </div>
 
           {/* Razon Social */}
@@ -477,12 +477,12 @@ const PublicInvoiceScreen: React.FC = () => {
               value={form.name}
               onChange={e => updateField('name', e.target.value)}
               className={`w-full rounded-lg border px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 transition-colors ${
-                formErrors.name ? 'border-red-300 focus:ring-red-400' : 'border-gray-300 focus:ring-opacity-50'
+                formErrors.name ? 'border-cockpit-red/50 focus:ring-cockpit-red/60' : 'border-gray-300 focus:ring-opacity-50'
               }`}
               style={!formErrors.name ? { '--tw-ring-color': accentColor } as React.CSSProperties : undefined}
               autoComplete="off"
             />
-            {formErrors.name && <p className="text-xs text-red-500 mt-1">{formErrors.name}</p>}
+            {formErrors.name && <p className="text-xs text-cockpit-red mt-1">{formErrors.name}</p>}
           </div>
 
           {/* Regimen Fiscal */}
@@ -495,7 +495,7 @@ const PublicInvoiceScreen: React.FC = () => {
               value={form.tax_regime}
               onChange={e => updateField('tax_regime', e.target.value)}
               className={`w-full rounded-lg border px-3 py-2.5 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 transition-colors ${
-                formErrors.tax_regime ? 'border-red-300 focus:ring-red-400' : 'border-gray-300 focus:ring-opacity-50'
+                formErrors.tax_regime ? 'border-cockpit-red/50 focus:ring-cockpit-red/60' : 'border-gray-300 focus:ring-opacity-50'
               }`}
               style={!formErrors.tax_regime ? { '--tw-ring-color': accentColor } as React.CSSProperties : undefined}
             >
@@ -505,7 +505,7 @@ const PublicInvoiceScreen: React.FC = () => {
                 </option>
               ))}
             </select>
-            {formErrors.tax_regime && <p className="text-xs text-red-500 mt-1">{formErrors.tax_regime}</p>}
+            {formErrors.tax_regime && <p className="text-xs text-cockpit-red mt-1">{formErrors.tax_regime}</p>}
           </div>
 
           {/* Codigo Postal */}
@@ -522,12 +522,12 @@ const PublicInvoiceScreen: React.FC = () => {
               value={form.postal_code}
               onChange={e => updateField('postal_code', e.target.value.replace(/\D/g, ''))}
               className={`w-full rounded-lg border px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 transition-colors ${
-                formErrors.postal_code ? 'border-red-300 focus:ring-red-400' : 'border-gray-300 focus:ring-opacity-50'
+                formErrors.postal_code ? 'border-cockpit-red/50 focus:ring-cockpit-red/60' : 'border-gray-300 focus:ring-opacity-50'
               }`}
               style={!formErrors.postal_code ? { '--tw-ring-color': accentColor } as React.CSSProperties : undefined}
               autoComplete="postal-code"
             />
-            {formErrors.postal_code && <p className="text-xs text-red-500 mt-1">{formErrors.postal_code}</p>}
+            {formErrors.postal_code && <p className="text-xs text-cockpit-red mt-1">{formErrors.postal_code}</p>}
           </div>
 
           {/* Uso de CFDI */}
@@ -540,7 +540,7 @@ const PublicInvoiceScreen: React.FC = () => {
               value={form.uso_cfdi}
               onChange={e => updateField('uso_cfdi', e.target.value)}
               className={`w-full rounded-lg border px-3 py-2.5 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 transition-colors ${
-                formErrors.uso_cfdi ? 'border-red-300 focus:ring-red-400' : 'border-gray-300 focus:ring-opacity-50'
+                formErrors.uso_cfdi ? 'border-cockpit-red/50 focus:ring-cockpit-red/60' : 'border-gray-300 focus:ring-opacity-50'
               }`}
               style={!formErrors.uso_cfdi ? { '--tw-ring-color': accentColor } as React.CSSProperties : undefined}
             >
@@ -550,7 +550,7 @@ const PublicInvoiceScreen: React.FC = () => {
                 </option>
               ))}
             </select>
-            {formErrors.uso_cfdi && <p className="text-xs text-red-500 mt-1">{formErrors.uso_cfdi}</p>}
+            {formErrors.uso_cfdi && <p className="text-xs text-cockpit-red mt-1">{formErrors.uso_cfdi}</p>}
           </div>
 
           {/* Submit */}

@@ -316,7 +316,7 @@ export default function KitchenDisplay() {
           until the next successful fetch, regardless of whether the latest
           attempt errored or just hung. */}
       {isStale && (
-        <div className="bg-amber-900/60 border-b border-amber-700 px-6 py-3 text-amber-100 flex items-center gap-3 font-semibold">
+        <div className="bg-cockpit-yellow/20 border-b border-cockpit-yellow/60 px-6 py-3 text-cockpit-yellow flex items-center gap-3 font-semibold">
           <WifiOff size={20} />
           <span>
             {t('errors.stale', { seconds: Math.round(staleSinceMs / 1000) })}
@@ -338,7 +338,7 @@ export default function KitchenDisplay() {
         ) : orders.length === 0 ? (
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="text-center">
-              <p className="text-3xl font-bold text-green-400 mb-2">{t('orders.allClear')}</p>
+              <p className="text-3xl font-bold text-cockpit-green mb-2">{t('orders.allClear')}</p>
               <p className="text-xl text-neutral-500">{t('orders.noPending')}</p>
             </div>
           </div>
@@ -411,22 +411,22 @@ function OrderCard({
         </div>
         <div className="flex items-center gap-2">
           {order.source === 'qr_order' && (
-            <span className="bg-violet-600 text-white px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
+            <span className="bg-cockpit-blue text-white px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
               QR
             </span>
           )}
           {order.source === 'customer_kiosk' && (
-            <span className="bg-emerald-600 text-white px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
+            <span className="bg-cockpit-blue text-white px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
               KIOSK
             </span>
           )}
           {order.source === 'customer_kiosk' && order.order_fulfillment_type && (
-            <span className="bg-amber-500 text-neutral-950 px-2.5 py-1.5 rounded-full font-black text-xs whitespace-nowrap">
+            <span className="bg-cockpit-yellow text-neutral-950 px-2.5 py-1.5 rounded-full font-black text-xs whitespace-nowrap">
               {order.order_fulfillment_type === 'for_here' ? t('orders.forHere') : t('orders.toGo')}
             </span>
           )}
           {order.table_number && (
-            <span className="bg-sky-600 text-white px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
+            <span className="bg-cockpit-blue text-white px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
               Table {order.table_number}
             </span>
           )}
@@ -475,8 +475,8 @@ function OrderCard({
                   <ItemDisplay key={`reg-${index}`} item={item} />
                 ))}
                 {Object.entries(comboGroups).map(([comboId, items]) => (
-                  <div key={comboId} className="border border-amber-700/50 rounded-lg p-2 bg-amber-900/10">
-                    <p className="text-xs font-bold text-amber-400 uppercase mb-2">{t('orders.combo')}</p>
+                  <div key={comboId} className="border border-cockpit-yellow/40 rounded-lg p-2 bg-cockpit-yellow/5">
+                    <p className="text-xs font-bold text-cockpit-yellow uppercase mb-2">{t('orders.combo')}</p>
                     {items.map((item, index) => (
                       <ItemDisplay key={`combo-${index}`} item={item} />
                     ))}
@@ -509,7 +509,7 @@ function OrderCard({
           <button
             onClick={() => handleAction('ready')}
             disabled={isLoading}
-            className="bg-green-600 hover:bg-green-500 disabled:bg-green-700 disabled:opacity-50 text-white font-bold py-3 px-4 rounded-lg transition-colors text-lg min-h-[48px] flex items-center justify-center col-span-2"
+            className="bg-cockpit-green hover:bg-cockpit-green/90 disabled:bg-cockpit-green/50 disabled:opacity-50 text-white font-bold py-3 px-4 rounded-lg transition-colors text-lg min-h-[48px] flex items-center justify-center col-span-2"
           >
             {isLoading ? (
               <span className="animate-pulse">{t('actions.markingReady')}</span>
