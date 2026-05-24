@@ -44,8 +44,8 @@ export default function FeesTab({ feesData }: FeesTabProps) {
               <YAxis stroke="#888" />
               <Tooltip contentStyle={{ backgroundColor: '#171717', border: '1px solid #333', borderRadius: '8px' }} />
               <Legend />
-              <Bar dataKey="revenue" fill="#16a34a" name={t('sales.fees.chartRevenue')} />
-              <Bar dataKey="fees" fill="#0d9488" name={t('sales.fees.chartFees')} />
+              <Bar dataKey="revenue" fill="#1F5B34" name={t('sales.fees.chartRevenue')} />
+              <Bar dataKey="fees" fill="#C94B1B" name={t('sales.fees.chartFees')} />
             </BarChart>
           </ResponsiveContainer>
         </div>

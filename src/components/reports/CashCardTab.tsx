@@ -2,8 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { CashCardBreakdown } from '../../types';
-
-const COLORS = ['#0d9488', '#16a34a', '#2563eb', '#ca8a04', '#7c3aed', '#ea580c'];
+import { CHART_PALETTE_6 as COLORS } from '../../utils/chartPalette';
 const fmt = (v: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(v);
 const methodLabel = (method: CashCardBreakdown['breakdown'][number], t: ReturnType<typeof useTranslation<'reports'>>['t']) => {
   if (method.display_name) return method.display_name;

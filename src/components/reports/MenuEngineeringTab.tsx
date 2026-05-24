@@ -9,11 +9,19 @@ import { MenuEngineeringReport, MenuEngineeringItem } from '../../types';
 
 const fmt = (v: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(v);
 
+// BCG matrix mapped onto cockpit semantic zones:
+//   star      → cockpit.in        (healthy, money in)
+//   workhorse → cockpit.system    (stable infrastructure)
+//   puzzle    → cockpit.attention (investigate)
+//   dog       → cockpit.out       (loss / pressure)
+// `color` is the chart-marker fill (cockpit primary). Badge bg/border use the
+// primary at low opacity; label text uses the `-text` sibling shade so it's
+// legible on dark surfaces while staying in the same hue family.
 const CLASSIFICATION_CONFIG = {
-  star: { labelKey: 'star', icon: Star, color: '#22c55e', bgColor: 'bg-green-500/10', textColor: 'text-green-400', borderColor: 'border-green-500/30', emoji: '⭐' },
-  workhorse: { labelKey: 'workhorse', icon: TrendingUp, color: '#3b82f6', bgColor: 'bg-blue-500/10', textColor: 'text-blue-400', borderColor: 'border-blue-500/30', emoji: '🐎' },
-  puzzle: { labelKey: 'puzzle', icon: HelpCircle, color: '#f59e0b', bgColor: 'bg-amber-500/10', textColor: 'text-amber-400', borderColor: 'border-amber-500/30', emoji: '🧩' },
-  dog: { labelKey: 'dog', icon: XCircle, color: '#ef4444', bgColor: 'bg-red-500/10', textColor: 'text-red-400', borderColor: 'border-red-500/30', emoji: '🐕' },
+  star:      { labelKey: 'star',      icon: Star,       color: '#1F5B34', bgColor: 'bg-cockpit-in/10',        textColor: 'text-cockpit-in-text',        borderColor: 'border-cockpit-in/40',        emoji: '⭐' },
+  workhorse: { labelKey: 'workhorse', icon: TrendingUp, color: '#2E5EAA', bgColor: 'bg-cockpit-system/10',    textColor: 'text-cockpit-system-text',    borderColor: 'border-cockpit-system/40',    emoji: '🐎' },
+  puzzle:    { labelKey: 'puzzle',    icon: HelpCircle, color: '#D9A021', bgColor: 'bg-cockpit-attention/10', textColor: 'text-cockpit-attention-text', borderColor: 'border-cockpit-attention/40', emoji: '🧩' },
+  dog:       { labelKey: 'dog',       icon: XCircle,    color: '#C94B1B', bgColor: 'bg-cockpit-out/10',       textColor: 'text-cockpit-out-text',       borderColor: 'border-cockpit-out/40',       emoji: '🐕' },
 };
 
 interface MenuEngineeringTabProps {
@@ -42,8 +50,8 @@ function CustomTooltip({ active, payload }: any) {
       <p className="text-neutral-400 text-xs mb-2">{item.category_name}</p>
       <div className="space-y-1 text-xs">
         <div className="flex justify-between gap-4"><span className="text-neutral-400">{t('menuEngineering.tooltip.price')}</span><span className="text-white">{fmt(item.price)}</span></div>
-        <div className="flex justify-between gap-4"><span className="text-neutral-400">{t('menuEngineering.tooltip.cost')}</span><span className="text-amber-400">{fmt(item.cogs_per_unit)}</span></div>
-        <div className="flex justify-between gap-4"><span className="text-neutral-400">{t('menuEngineering.tooltip.margin')}</span><span className="text-green-400">{fmt(item.contribution_margin)}</span></div>
+        <div className="flex justify-between gap-4"><span className="text-neutral-400">{t('menuEngineering.tooltip.cost')}</span><span className="text-cockpit-out-text">{fmt(item.cogs_per_unit)}</span></div>
+        <div className="flex justify-between gap-4"><span className="text-neutral-400">{t('menuEngineering.tooltip.margin')}</span><span className="text-cockpit-in-text">{fmt(item.contribution_margin)}</span></div>
         <div className="flex justify-between gap-4"><span className="text-neutral-400">{t('menuEngineering.tooltip.sold')}</span><span className="text-white">{item.quantity_sold}</span></div>
         <div className="flex justify-between gap-4"><span className="text-neutral-400">{t('menuEngineering.tooltip.popularity')}</span><span className="text-white">{item.popularity_index}%</span></div>
         <div className="flex justify-between gap-4"><span className="text-neutral-400">{t('menuEngineering.tooltip.classification')}</span><span className={config.textColor}>{config.emoji} {t('menuEngineering.classifications.' + config.labelKey)}</span></div>
@@ -95,7 +103,7 @@ export default function MenuEngineeringTab({ data }: MenuEngineeringTabProps) {
       {/* Summary bar */}
       <div className="bg-neutral-900 p-4 rounded-lg border border-neutral-800 flex flex-wrap gap-6 text-sm">
         <div><span className="text-neutral-400">{t('menuEngineering.summary.totalRevenue')}</span> <span className="text-white font-bold">{fmt(summary.total_revenue)}</span></div>
-        <div><span className="text-neutral-400">{t('menuEngineering.summary.totalContribution')}</span> <span className="text-green-400 font-bold">{fmt(summary.total_contribution)}</span></div>
+        <div><span className="text-neutral-400">{t('menuEngineering.summary.totalContribution')}</span> <span className="text-cockpit-in-text font-bold">{fmt(summary.total_contribution)}</span></div>
         <div><span className="text-neutral-400">{t('menuEngineering.summary.avgMargin')}</span> <span className="text-white font-bold">{fmt(summary.avg_contribution_margin)}</span></div>
         <div><span className="text-neutral-400">{t('menuEngineering.summary.itemsAnalyzed')}</span> <span className="text-white font-bold">{summary.total_items}</span></div>
       </div>
@@ -238,16 +246,16 @@ export default function MenuEngineeringTab({ data }: MenuEngineeringTabProps) {
                     <td className="px-3 py-2 text-neutral-400">{item.category_name}</td>
                     <td className="px-3 py-2 text-center"><ClassificationBadge classification={item.classification} /></td>
                     <td className="px-3 py-2 text-right text-white">{fmt(item.price)}</td>
-                    <td className="px-3 py-2 text-right text-amber-400">{fmt(item.cogs_per_unit)}</td>
-                    <td className="px-3 py-2 text-right text-green-400">{fmt(item.contribution_margin)}</td>
+                    <td className="px-3 py-2 text-right text-cockpit-out-text">{fmt(item.cogs_per_unit)}</td>
+                    <td className="px-3 py-2 text-right text-cockpit-in-text">{fmt(item.contribution_margin)}</td>
                     <td className="px-3 py-2 text-right">
-                      <span className={marginPercent >= 60 ? 'text-green-400' : marginPercent >= 40 ? 'text-amber-400' : 'text-red-400'}>
+                      <span className={marginPercent >= 60 ? 'text-cockpit-in-text' : marginPercent >= 40 ? 'text-cockpit-attention-text' : 'text-cockpit-out-text'}>
                         {marginPercent}%
                       </span>
                     </td>
                     <td className="px-3 py-2 text-right text-white">{item.quantity_sold}</td>
                     <td className="px-3 py-2 text-right text-white">{item.popularity_index}%</td>
-                    <td className="px-3 py-2 text-right text-green-400 font-bold">{fmt(item.total_contribution)}</td>
+                    <td className="px-3 py-2 text-right text-cockpit-in-text font-bold">{fmt(item.total_contribution)}</td>
                   </tr>
                 );
               })}

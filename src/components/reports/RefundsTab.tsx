@@ -6,8 +6,7 @@ import {
 } from 'recharts';
 import { RefundSummary } from '../../types';
 import { formatPrice } from '../../utils/currency';
-
-const COLORS = ['#0d9488', '#16a34a', '#2563eb', '#ca8a04', '#7c3aed', '#ea580c'];
+import { CHART_PALETTE_6 as COLORS } from '../../utils/chartPalette';
 
 interface RefundsTabProps {
   refundData: RefundSummary;
@@ -79,8 +78,8 @@ export default function RefundsTab({ refundData }: RefundsTabProps) {
               <XAxis dataKey="date" stroke="#888" tick={{ fontSize: 12 }} />
               <YAxis stroke="#888" />
               <Tooltip contentStyle={{ backgroundColor: '#171717', border: '1px solid #333', borderRadius: '8px' }} />
-              <Line type="monotone" dataKey="amount" stroke="#0d9488" strokeWidth={2} name={t('sales.refunds.amount')} />
-              <Line type="monotone" dataKey="count" stroke="#ca8a04" strokeWidth={2} name={t('sales.refunds.count')} />
+              <Line type="monotone" dataKey="amount" stroke="#C94B1B" strokeWidth={2} name={t('sales.refunds.amount')} />
+              <Line type="monotone" dataKey="count" stroke="#D9A021" strokeWidth={2} name={t('sales.refunds.count')} />
             </LineChart>
           </ResponsiveContainer>
         </div>

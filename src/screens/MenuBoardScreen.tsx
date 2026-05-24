@@ -101,8 +101,8 @@ export default function MenuBoardScreen() {
     };
   }, []);
 
-  // Single platform brand (cockpit-blue) — per-tenant color overrides were removed.
-  const accentColor = '#4285F4';
+  // Single platform brand (cockpit-system / enamel blue) — per-tenant color overrides were removed.
+  const accentColor = '#2E5EAA';
   const mainCategory = data?.categories[0] || null;
   const secondaryCategories = data?.categories.slice(1) || [];
   const rotationIndex = useRotation(data?.atmosphere.assets.length || 0, data?.layout.rotationSeconds || 30);

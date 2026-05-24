@@ -25,9 +25,9 @@ export default function CategoriesTab({ categoryData }: CategoriesTabProps) {
             <YAxis stroke="#737373" />
             <Tooltip formatter={(value) => fmt(value as number)} contentStyle={{ backgroundColor: '#171717', border: '1px solid #404040', borderRadius: '8px' }} />
             <Legend />
-            <Bar dataKey="revenue" fill="#0d9488" name={t('sales.chartLegend.revenue')} />
-            <Bar dataKey="cogs" fill="#d97706" name={t('sales.chartLegend.cogs')} />
-            <Bar dataKey="margin" fill="#16a34a" name={t('sales.chartLegend.margin')} />
+            <Bar dataKey="revenue" fill="#2E5EAA" name={t('sales.chartLegend.revenue')} />
+            <Bar dataKey="cogs" fill="#C94B1B" name={t('sales.chartLegend.cogs')} />
+            <Bar dataKey="margin" fill="#1F5B34" name={t('sales.chartLegend.margin')} />
           </BarChart>
         </ResponsiveContainer>
       </div>

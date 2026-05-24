@@ -25,9 +25,9 @@ export default function MarginTab({ marginData }: MarginTabProps) {
             <YAxis stroke="#737373" />
             <Tooltip formatter={(value) => fmt(value as number)} contentStyle={{ backgroundColor: '#171717', border: '1px solid #404040', borderRadius: '8px' }} />
             <Legend />
-            <Line type="monotone" dataKey="revenue" stroke="#0d9488" strokeWidth={2} name={t('sales.chartLegend.revenue')} />
-            <Line type="monotone" dataKey="cogs" stroke="#d97706" strokeWidth={2} name={t('sales.chartLegend.cogs')} />
-            <Line type="monotone" dataKey="contribution_margin" stroke="#16a34a" strokeWidth={3} name={t('sales.chartLegend.contributionMargin')} />
+            <Line type="monotone" dataKey="revenue" stroke="#2E5EAA" strokeWidth={2} name={t('sales.chartLegend.revenue')} />
+            <Line type="monotone" dataKey="cogs" stroke="#C94B1B" strokeWidth={2} name={t('sales.chartLegend.cogs')} />
+            <Line type="monotone" dataKey="contribution_margin" stroke="#1F5B34" strokeWidth={3} name={t('sales.chartLegend.contributionMargin')} />
           </LineChart>
         </ResponsiveContainer>
       </div>

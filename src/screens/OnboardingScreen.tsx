@@ -309,7 +309,7 @@ const OnboardingScreen: React.FC = () => {
               </div>
               <h1 style={styles.successTitle}>{t('onboarding.youreLive')}</h1>
               <p style={styles.successSub}>
-                <strong style={{ color: '#f0fdf4' }}>{form.restaurant_name}</strong> {t('onboarding.readyToTakeOrders')}
+                <strong style={{ color: '#F5F1E8' }}>{form.restaurant_name}</strong> {t('onboarding.readyToTakeOrders')}
               </p>
 
               <div style={styles.pinBlock}>
@@ -323,7 +323,7 @@ const OnboardingScreen: React.FC = () => {
                   {pinCopied ? <><Check size={13} /> {t('onboarding.copied')}</> : t('onboarding.copyPin')}
                 </button>
                 <p style={styles.pinHint}>
-                  {t('onboarding.alsoSentTo')} <span style={{ color: '#86efac' }}>{form.email}</span>
+                  {t('onboarding.alsoSentTo')} <span style={{ color: '#5FA47C' }}>{form.email}</span>
                 </p>
               </div>
 
@@ -356,7 +356,7 @@ const OnboardingScreen: React.FC = () => {
 
               {templateLoading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
-                  <Loader2 size={28} color="#0d9488" style={styles.spin} />
+                  <Loader2 size={28} color="#2E5EAA" style={styles.spin} />
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -373,7 +373,7 @@ const OnboardingScreen: React.FC = () => {
                         cursor: 'pointer',
                         transition: 'border-color 0.15s',
                       }}
-                      onMouseEnter={e => (e.currentTarget.style.borderColor = '#0d9488')}
+                      onMouseEnter={e => (e.currentTarget.style.borderColor = '#2E5EAA')}
                       onMouseLeave={e => (e.currentTarget.style.borderColor = '#2a2a2a')}
                     >
                       <div style={{ fontSize: 28, marginBottom: 6 }}>{TEMPLATE_ICONS[tmpl.icon] || '\uD83C\uDF7D\uFE0F'}</div>
@@ -386,7 +386,7 @@ const OnboardingScreen: React.FC = () => {
 
               <button
                 onClick={() => { setPostStep('ai-input'); setAiText(''); setAiError(''); }}
-                style={{ width: '100%', background: 'none', border: 'none', color: '#0d9488', cursor: 'pointer', fontSize: 13, padding: '10px 0 2px', fontWeight: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                style={{ width: '100%', background: 'none', border: 'none', color: '#2E5EAA', cursor: 'pointer', fontSize: 13, padding: '10px 0 2px', fontWeight: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
               >
                 <Sparkles size={13} /> {t('onboarding.orDescribeMenu')}
               </button>
@@ -448,7 +448,7 @@ const OnboardingScreen: React.FC = () => {
           {/* Step: AI parsing */}
           {postStep === 'ai-parsing' && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '48px 0' }}>
-              <Loader2 size={36} color="#0d9488" style={styles.spin} />
+              <Loader2 size={36} color="#2E5EAA" style={styles.spin} />
               <p style={{ color: '#9ca3af', fontSize: 14, marginTop: 16 }}>{t('onboarding.buildingMenu')}</p>
             </div>
           )}
@@ -473,7 +473,7 @@ const OnboardingScreen: React.FC = () => {
           {/* Step: Applying template */}
           {postStep === 'applying' && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '48px 0' }}>
-              <Loader2 size={36} color="#0d9488" style={styles.spin} />
+              <Loader2 size={36} color="#2E5EAA" style={styles.spin} />
               <p style={{ color: '#9ca3af', fontSize: 14, marginTop: 16 }}>{t('onboarding.creatingMenu')}</p>
             </div>
           )}
@@ -509,7 +509,7 @@ const OnboardingScreen: React.FC = () => {
         {/* Header */}
         <div style={styles.header}>
           <div style={styles.logoMark}>
-            <ChefHat size={22} color="#0d9488" />
+            <ChefHat size={22} color="#2E5EAA" />
           </div>
           <span style={styles.logoText}>Desktop Kitchen</span>
         </div>
@@ -560,7 +560,7 @@ const OnboardingScreen: React.FC = () => {
           />
 
           {/* Financing consent — optional */}
-          <div style={{ marginBottom: 16, background: 'rgba(13,148,136,0.06)', border: '1px solid rgba(13,148,136,0.15)', borderRadius: 10, padding: '14px 14px 12px' }}>
+          <div style={{ marginBottom: 16, background: 'rgba(46,94,170,0.06)', border: '1px solid rgba(46,94,170,0.15)', borderRadius: 10, padding: '14px 14px 12px' }}>
             <p style={{ color: '#d1d5db', fontSize: 13, fontWeight: 600, margin: '0 0 4px' }}>{t('onboarding.workingCapital')}</p>
             <p style={{ color: '#6b7280', fontSize: 12, margin: '0 0 10px' }}>{t('onboarding.workingCapitalDesc')}</p>
             <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}>
@@ -568,7 +568,7 @@ const OnboardingScreen: React.FC = () => {
                 type="checkbox"
                 checked={financingConsent}
                 onChange={e => setFinancingConsent(e.target.checked)}
-                style={{ marginTop: 2, accentColor: '#0d9488' }}
+                style={{ marginTop: 2, accentColor: '#2E5EAA' }}
               />
               <span style={{ color: '#9ca3af', fontSize: 12 }}>{t('onboarding.agreeDataAnalysis')}</span>
             </label>
@@ -637,7 +637,7 @@ const OnboardingScreen: React.FC = () => {
         <div style={styles.trustRow}>
           {[t('onboarding.freeForever'), t('onboarding.noCreditCard'), t('onboarding.upgradeAnytime')].map(chip => (
             <span key={chip} style={styles.trustChip}>
-              <Check size={10} color="#0d9488" strokeWidth={3} style={{ flexShrink: 0 }} />
+              <Check size={10} color="#2E5EAA" strokeWidth={3} style={{ flexShrink: 0 }} />
               {chip}
             </span>
           ))}
@@ -688,8 +688,8 @@ const Field: React.FC<FieldProps> = ({
         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onEnter?.(); } }}
         style={{
           ...styles.input,
-          borderColor: error ? '#f87171' : focused ? '#0d9488' : '#2a2a2a',
-          boxShadow: focused ? '0 0 0 3px rgba(13,148,136,0.15)' : 'none',
+          borderColor: error ? '#C94B1B' : focused ? '#2E5EAA' : '#2a2a2a',
+          boxShadow: focused ? '0 0 0 3px rgba(46,94,170,0.18)' : 'none',
         }}
       />
       {error && <p style={styles.fieldError}>{error}</p>}
@@ -718,9 +718,9 @@ const PromoSection: React.FC<PromoSectionProps> = ({
   if (state === 'valid') {
     return (
       <div style={styles.promoValid}>
-        <Tag size={13} color="#4ade80" />
-        <span style={{ color: '#4ade80', fontWeight: 700, fontSize: 13 }}>{code}</span>
-        <span style={{ color: '#86efac', fontSize: 13, flex: 1 }}>— {description}</span>
+        <Tag size={13} color="#5FA47C" />
+        <span style={{ color: '#5FA47C', fontWeight: 700, fontSize: 13 }}>{code}</span>
+        <span style={{ color: '#5FA47C', fontSize: 13, flex: 1 }}>— {description}</span>
         <button style={styles.iconBtn} onClick={onRemove}><X size={13} /></button>
       </div>
     );
@@ -802,8 +802,8 @@ const styles: Record<string, React.CSSProperties> = {
   logoMark: {
     width: 36,
     height: 36,
-    background: 'rgba(13,148,136,0.1)',
-    border: '1px solid rgba(13,148,136,0.25)',
+    background: 'rgba(46,94,170,0.1)',
+    border: '1px solid rgba(46,94,170,0.25)',
     borderRadius: 10,
     display: 'flex',
     alignItems: 'center',
@@ -854,7 +854,7 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box',
   },
   fieldError: {
-    color: '#f87171',
+    color: '#E6885F',
     fontSize: 12,
     margin: '4px 0 0',
   },
@@ -865,7 +865,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
     width: '100%',
     padding: '13px 20px',
-    background: '#0d9488',
+    background: '#2E5EAA',
     border: 'none',
     borderRadius: 12,
     color: '#fff',
@@ -877,23 +877,23 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: '-0.01em',
   },
   errorBox: {
-    background: 'rgba(248,113,113,0.08)',
-    border: '1px solid rgba(248,113,113,0.3)',
+    background: 'rgba(201,75,27,0.08)',
+    border: '1px solid rgba(201,75,27,0.3)',
     borderRadius: 8,
-    color: '#f87171',
+    color: '#E6885F',
     fontSize: 13,
     padding: '10px 12px',
     marginBottom: 12,
   },
   conflictBox: {
-    background: 'rgba(251,191,36,0.06)',
-    border: '1px solid rgba(251,191,36,0.25)',
+    background: 'rgba(217,160,33,0.06)',
+    border: '1px solid rgba(217,160,33,0.25)',
     borderRadius: 10,
     padding: '14px 16px',
     marginBottom: 12,
   },
   conflictText: {
-    color: '#fbbf24',
+    color: '#E8C26A',
     fontSize: 13,
     fontWeight: 600,
     margin: '0 0 12px',
@@ -910,7 +910,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 6,
     width: '100%',
     padding: '10px 16px',
-    background: '#0d9488',
+    background: '#2E5EAA',
     border: 'none',
     borderRadius: 8,
     color: '#fff',
@@ -958,7 +958,7 @@ const styles: Record<string, React.CSSProperties> = {
   link: {
     background: 'none',
     border: 'none',
-    color: '#0d9488',
+    color: '#2E5EAA',
     cursor: 'pointer',
     fontSize: 13,
     padding: 0,
@@ -984,7 +984,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   promoApplyBtn: {
     padding: '10px 14px',
-    background: '#0d9488',
+    background: '#2E5EAA',
     border: 'none',
     borderRadius: 10,
     color: '#fff',
@@ -1027,12 +1027,12 @@ const styles: Record<string, React.CSSProperties> = {
     width: 64,
     height: 64,
     borderRadius: '50%',
-    background: 'linear-gradient(135deg, #0d9488, #059669)',
+    background: 'linear-gradient(135deg, #2E5EAA, #4B7AC7)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     margin: '0 auto 20px',
-    boxShadow: '0 0 40px rgba(13,148,136,0.4)',
+    boxShadow: '0 0 40px rgba(46,94,170,0.4)',
   },
   successTitle: {
     color: '#fff',
@@ -1105,8 +1105,8 @@ const styles: Record<string, React.CSSProperties> = {
     margin: 0,
   },
   urlBlock: {
-    background: 'rgba(13,148,136,0.06)',
-    border: '1px solid rgba(13,148,136,0.2)',
+    background: 'rgba(46,94,170,0.06)',
+    border: '1px solid rgba(46,94,170,0.2)',
     borderRadius: 10,
     padding: '12px 16px',
     textAlign: 'center',
@@ -1121,7 +1121,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin: '0 0 4px',
   },
   urlValue: {
-    color: '#5eead4',
+    color: '#6E97DB',
     fontSize: 14,
     fontWeight: 600,
     margin: 0,

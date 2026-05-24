@@ -9,29 +9,62 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Single platform brand across every tenant (Tailwind blue, anchored
-        // on cockpit-blue #4285F4 ≈ blue-500 #3b82f6). Used to be a per-tenant
-        // CSS-variable override; the override mechanism was removed when we
-        // unified the look. Keep using `brand-*` classes everywhere — they
-        // now resolve to one shared blue scale.
+        // Brand = enamel blue (vintage Mexican signage / workwear), anchored on
+        // SYSTEM primary #2E5EAA. This is the single platform brand across every
+        // tenant — used for primary actions everywhere. Distinct from cockpit
+        // semantics; same hex as cockpit.system to keep the operator's mental
+        // model coherent (infrastructure actions wear infrastructure color).
         brand: {
-          50:  '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
+          50:  '#eef3fa',
+          100: '#d7e2f2',
+          200: '#b0c5e5',
+          300: '#87a8d8',
+          400: '#6e97db', // SYSTEM hover
+          500: '#4b7ac7', // SYSTEM secondary
+          600: '#2e5eaa', // SYSTEM primary
+          700: '#244a88',
+          800: '#1b3766',
+          900: '#122448',
+          950: '#0f1728', // SYSTEM dark bg
         },
-        // Cockpit zone palette (Google 4-color: blue/red/yellow/green)
+        // Cockpit zone palette — semantic operational meanings, not aesthetic
+        // choices. Each color carries exactly one meaning so operators can scan
+        // a screen in <1 second and know what's going on.
+        //
+        // The `-text` variants are SAME-meaning, different rendering context:
+        // luminance-boosted siblings tuned for legible text on dark surfaces.
+        // The cockpit primaries are saturated mid-darks designed for fills,
+        // borders, and chart markers — they don't have enough contrast on dark
+        // for inline text. Use `-text` shades whenever the color appears as
+        // text on a dark background (table cells, tooltip values, label spans).
         cockpit: {
-          blue:   '#4285F4', // SYSTEM
-          red:    '#EA4335', // OUT
-          yellow: '#FBBC05', // reserved for warnings
-          green:  '#34A853', // IN
+          // Semantic aliases — prefer these in new code.
+          in:               '#1F5B34', // Burrito Green — money in, success, healthy
+          'in-text':        '#5FA47C', // text-on-dark sibling of `in`
+          out:              '#C94B1B', // Burnt Orange — pressure, loss, heat
+          'out-text':       '#E6885F', // text-on-dark sibling of `out`
+          system:           '#2E5EAA', // Enamel Blue — infrastructure, primary action
+          'system-text':    '#6E97DB', // = brand-400 hover; text-on-dark sibling of `system`
+          attention:        '#D9A021', // Mustard Yellow — pending/warning/caution (single layer)
+          'attention-text': '#E8C26A', // text-on-dark sibling of `attention`
+          // Legacy keys (kept so existing cockpit-blue/-red/-yellow/-green
+          // classes keep resolving). Same hexes as the semantic aliases above.
+          blue:   '#2E5EAA',
+          red:    '#C94B1B',
+          yellow: '#D9A021',
+          green:  '#1F5B34',
+        },
+        // Environmental palette — atmosphere, NOT semantic meaning.
+        // Use for backgrounds/surfaces/borders/ambient text. Never use these
+        // to communicate operational state (that's what cockpit-* is for).
+        surface: {
+          bg:     '#0A0A0A', // main canvas
+          warm:   '#15120E', // warm card / panel
+          border: '#2A2A2A', // soft divider
+          cream:  '#D8C7A3', // tortilla cream — accent surface, not a zone
+        },
+        ink: {
+          warm: '#F5F1E8', // warm white text on dark
         },
         // Override neutral palette with CSS variables for theme switching
         neutral: {

@@ -42,7 +42,8 @@ function PlanBadge({ plan }: { plan: string }) {
 function UsageBar({ label, current, limit, unlimitedText }: { label: string; current: number; limit: number; unlimitedText: string }) {
   const isUnlimited = !isFinite(limit);
   const pct = isUnlimited ? 0 : Math.min((current / limit) * 100, 100);
-  const color = pct > 90 ? '#ef4444' : pct > 70 ? '#f59e0b' : '#0d9488';
+  // Usage tier mapped to cockpit zones: >90% = OUT (critical), >70% = ATTENTION (watch), else = IN (healthy).
+  const color = pct > 90 ? '#C94B1B' : pct > 70 ? '#D9A021' : '#1F5B34';
 
   return (
     <div>

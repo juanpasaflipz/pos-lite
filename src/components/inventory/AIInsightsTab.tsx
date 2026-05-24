@@ -27,11 +27,7 @@ import {
   Legend,
 } from 'recharts';
 import { InventoryInsights } from '../../types';
-
-const VELOCITY_COLORS = [
-  '#0d9488', '#f59e0b', '#ef4444', '#8b5cf6', '#3b82f6',
-  '#ec4899', '#10b981', '#f97316', '#06b6d4', '#84cc16',
-];
+import { CHART_PALETTE_10 as VELOCITY_COLORS } from '../../utils/chartPalette';
 
 interface AIInsightsTabProps {
   limits: { ai: { mode: string } };
@@ -334,7 +330,7 @@ export default function AIInsightsTab({
                 labelStyle={{ color: '#ccc' }}
                 formatter={(value: number) => [`$${value.toFixed(2)}`, 'Cost']}
               />
-              <Bar dataKey="total_cost" fill="#ef4444" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="total_cost" fill="#C94B1B" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         ) : (

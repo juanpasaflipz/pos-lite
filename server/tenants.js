@@ -152,12 +152,12 @@ async function seedTenantDefaults(tenantId) {
   try {
     await adminSql`
       INSERT INTO virtual_brands (tenant_id, name, slug, description, primary_color, show_in_pos, display_type, active)
-      VALUES (${tenantId}, 'Brand 1', 'brand-1', 'Your first brand', '#0d9488', true, 'menu_board', true)
+      VALUES (${tenantId}, 'Brand 1', 'brand-1', 'Your first brand', '#2E5EAA', true, 'menu_board', true)
       ON CONFLICT DO NOTHING
     `;
     await adminSql`
       INSERT INTO virtual_brands (tenant_id, name, slug, description, primary_color, show_in_pos, display_type, active)
-      VALUES (${tenantId}, 'Brand 2', 'brand-2', 'Your second brand', '#3b82f6', true, 'menu_board', true)
+      VALUES (${tenantId}, 'Brand 2', 'brand-2', 'Your second brand', '#1F5B34', true, 'menu_board', true)
       ON CONFLICT DO NOTHING
     `;
   } catch (err) {
