@@ -21,6 +21,13 @@ export default {
           800: 'var(--brand-800, #115e59)',
           900: 'var(--brand-900, #134e4a)',
         },
+        // Cockpit zone palette (Google 4-color: blue/red/yellow/green)
+        cockpit: {
+          blue:   '#4285F4', // SYSTEM
+          red:    '#EA4335', // OUT
+          yellow: '#FBBC05', // reserved for warnings
+          green:  '#34A853', // IN
+        },
         // Override neutral palette with CSS variables for theme switching
         neutral: {
           50:  'rgb(var(--n-50)  / <alpha-value>)',

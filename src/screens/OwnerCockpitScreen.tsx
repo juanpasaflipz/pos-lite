@@ -76,24 +76,24 @@ type Tone = 'in' | 'out' | 'system';
 const TONE_STYLES: Record<Tone, { primary: string; secondary: string; icon: string }> = {
   in: {
     primary:
-      'bg-emerald-950/60 border-emerald-500/70 hover:border-emerald-400 hover:bg-emerald-900/60 shadow-[0_0_24px_-8px_rgba(16,185,129,0.55)] hover:shadow-[0_0_36px_-6px_rgba(16,185,129,0.7)]',
+      'bg-cockpit-green/15 border-cockpit-green/70 hover:border-cockpit-green hover:bg-cockpit-green/25 shadow-[0_0_24px_-8px_rgba(52,168,83,0.55)] hover:shadow-[0_0_36px_-6px_rgba(52,168,83,0.7)]',
     secondary:
-      'bg-emerald-950/30 border-emerald-800/60 hover:border-emerald-600 hover:bg-emerald-900/40',
-    icon: 'text-emerald-400 group-hover:text-emerald-300',
+      'bg-cockpit-green/5 border-cockpit-green/30 hover:border-cockpit-green/60 hover:bg-cockpit-green/10',
+    icon: 'text-cockpit-green',
   },
   out: {
     primary:
-      'bg-rose-950/60 border-rose-500/70 hover:border-rose-400 hover:bg-rose-900/60 shadow-[0_0_24px_-8px_rgba(244,63,94,0.55)] hover:shadow-[0_0_36px_-6px_rgba(244,63,94,0.7)]',
+      'bg-cockpit-red/15 border-cockpit-red/70 hover:border-cockpit-red hover:bg-cockpit-red/25 shadow-[0_0_24px_-8px_rgba(234,67,53,0.55)] hover:shadow-[0_0_36px_-6px_rgba(234,67,53,0.7)]',
     secondary:
-      'bg-rose-950/30 border-rose-800/60 hover:border-rose-600 hover:bg-rose-900/40',
-    icon: 'text-rose-400 group-hover:text-rose-300',
+      'bg-cockpit-red/5 border-cockpit-red/30 hover:border-cockpit-red/60 hover:bg-cockpit-red/10',
+    icon: 'text-cockpit-red',
   },
   system: {
     primary:
-      'bg-violet-950/60 border-violet-500/70 hover:border-violet-400 hover:bg-violet-900/60 shadow-[0_0_24px_-8px_rgba(139,92,246,0.55)] hover:shadow-[0_0_36px_-6px_rgba(139,92,246,0.7)]',
+      'bg-cockpit-blue/15 border-cockpit-blue/70 hover:border-cockpit-blue hover:bg-cockpit-blue/25 shadow-[0_0_24px_-8px_rgba(66,133,244,0.55)] hover:shadow-[0_0_36px_-6px_rgba(66,133,244,0.7)]',
     secondary:
-      'bg-violet-950/30 border-violet-800/60 hover:border-violet-600 hover:bg-violet-900/40',
-    icon: 'text-violet-400 group-hover:text-violet-300',
+      'bg-cockpit-blue/5 border-cockpit-blue/30 hover:border-cockpit-blue/60 hover:bg-cockpit-blue/10',
+    icon: 'text-cockpit-blue',
   },
 };
 
@@ -187,8 +187,8 @@ export default function OwnerCockpitScreen() {
           tone="in"
           title="IN"
           description="Money and demand entering the business."
-          badgeIcon={<ArrowDownCircle size={26} className="text-emerald-300" />}
-          badgeColor="bg-emerald-900/60 border border-emerald-500/60"
+          badgeIcon={<ArrowDownCircle size={26} className="text-cockpit-green" />}
+          badgeColor="bg-cockpit-green/15 border border-cockpit-green/60"
           cards={IN_CARDS}
         />
 
@@ -196,8 +196,8 @@ export default function OwnerCockpitScreen() {
           tone="out"
           title="OUT"
           description="Costs, labor, waste, and pressure leaving the business."
-          badgeIcon={<ArrowUpCircle size={26} className="text-rose-300" />}
-          badgeColor="bg-rose-900/60 border border-rose-500/60"
+          badgeIcon={<ArrowUpCircle size={26} className="text-cockpit-red" />}
+          badgeColor="bg-cockpit-red/15 border border-cockpit-red/60"
           cards={OUT_CARDS}
         />
 
@@ -205,8 +205,8 @@ export default function OwnerCockpitScreen() {
           tone="system"
           title="SYSTEM"
           description="Reports, connections, controls, and setup."
-          badgeIcon={<Settings size={26} className="text-violet-300" />}
-          badgeColor="bg-violet-900/60 border border-violet-500/60"
+          badgeIcon={<Settings size={26} className="text-cockpit-blue" />}
+          badgeColor="bg-cockpit-blue/15 border border-cockpit-blue/60"
           cards={SYSTEM_CARDS}
         />
 
