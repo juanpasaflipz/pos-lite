@@ -9,6 +9,9 @@
   },
   "cart": {
     "orderNumber": "Orden #{{number}}",
+    "newOrder": "Nueva orden",
+    "itemCount": "{{count}} producto(s)",
+    "pendingLabel": "Por cobrar",
     "noItems": "Sin productos en la orden",
     "selectItems": "Selecciona productos del menú",
     "combo": "Combo",
@@ -518,7 +521,19 @@
     "starting": "Iniciando...",
     "startPreparing": "Iniciar Preparación",
     "marking": "Marcando...",
-    "readyForPickup": "Listo para Recoger"
+    "readyForPickup": "Listo para Recoger",
+    "paid": "PAGADO",
+    "unpaid": "SIN PAGAR"
+  },
+  "ordersPanel": {
+    "title": "Órdenes en vivo",
+    "empty": "Sin órdenes activas",
+    "paid": "PAGADO",
+    "unpaid": "SIN PAGAR",
+    "charge": "Cobrar",
+    "start": "Iniciar",
+    "markReady": "Marcar Listo",
+    "complete": "Completar"
   },
   "mobileOrders": {
     "title": "Órdenes",

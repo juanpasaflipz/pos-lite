@@ -76,14 +76,36 @@ export default function CartPanel({
 }: CartPanelProps) {
   const { t } = useTranslation('pos');
 
+  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const pendingTotal = unpaidOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+
   return (
     <div className="hidden lg:flex w-96 bg-neutral-900 border-l border-neutral-800 flex-col">
       <div className="bg-brand-600 text-white p-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xl font-bold">{t('cart.orderNumber', { number: '1001' })}</p>
+            <p className="text-xl font-bold">
+              {cart.length === 0
+                ? t('cart.newOrder')
+                : t('cart.itemCount', { count: cartCount })}
+            </p>
             <p className="text-sm text-brand-200">{formatTime(new Date())}</p>
           </div>
+          {unpaidOrders.length > 0 && (
+            <button
+              onClick={onToggleUnpaidOrders}
+              className="flex flex-col items-end bg-brand-700/60 hover:bg-brand-700 rounded-lg px-3 py-1.5 transition-all"
+            >
+              <span className="flex items-center gap-1.5 text-sm font-bold">
+                <span className="bg-white text-brand-700 rounded-full px-1.5 min-w-5 text-center text-xs">
+                  {unpaidOrders.length}
+                </span>
+                {t('cart.pendingLabel')}
+                <span className="text-brand-200 text-[10px]">{showUnpaidOrders ? '▲' : '▼'}</span>
+              </span>
+              <span className="text-xs text-brand-200 mt-0.5">{formatPrice(pendingTotal)}</span>
+            </button>
+          )}
         </div>
         {linkedCustomer && (
           <div className="mt-2 flex items-center justify-between bg-brand-700/50 rounded-lg px-3 py-2">
@@ -105,75 +127,64 @@ export default function CartPanel({
         )}
       </div>
 
-      {/* Unpaid orders banner */}
-      {unpaidOrders.length > 0 && (
-        <div className="border-b border-neutral-800">
-          <button
-            onClick={onToggleUnpaidOrders}
-            className="w-full flex items-center justify-between px-4 py-3 bg-amber-900/30 hover:bg-amber-900/40 transition-all"
-          >
-            <div className="flex items-center gap-2">
-              <span className="bg-amber-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                {unpaidOrders.length}
-              </span>
-              <span className="text-amber-200 font-bold text-sm">{t('cart.unpaidOrders')}</span>
-            </div>
-            <span className="text-amber-400 text-xs">{showUnpaidOrders ? '\u25B2' : '\u25BC'}</span>
-          </button>
-          {showUnpaidOrders && (
-            <div className="px-4 pb-3 space-y-2 max-h-48 overflow-y-auto">
-              {unpaidOrders.map((order) => (
-                <div
-                  key={order.id}
-                  className="flex items-center justify-between bg-neutral-800 rounded-lg px-3 py-2 border border-neutral-700"
-                >
-                  <div className="min-w-0 flex-1 mr-2">
-                    <div className="flex items-center gap-2">
-                      <p className="text-white font-bold text-sm">#{order.order_number}</p>
-                      {order.source === 'customer_kiosk' && (
-                        <span
-                          className="inline-flex items-center gap-1 rounded-full bg-brand-600/20 border border-brand-600/40 text-brand-200 text-[10px] font-black uppercase px-1.5 py-0.5 tracking-wide"
-                          title={t('cart.fromKiosk')}
-                        >
-                          <Smartphone className="h-3 w-3" />
-                          Kiosko
-                        </span>
-                      )}
-                      {order.order_fulfillment_type && (
-                        <span className="inline-flex items-center rounded-full bg-amber-500 text-neutral-950 text-[10px] font-black uppercase px-1.5 py-0.5 tracking-wide whitespace-nowrap">
-                          {order.order_fulfillment_type === 'for_here' ? t('cart.forHere') : t('cart.toGo')}
-                        </span>
-                      )}
-                    </div>
-                    {order.customer_name && (
-                      <p className="text-neutral-300 text-xs truncate inline-flex items-center gap-1">
-                        <User className="h-3 w-3 text-neutral-500 shrink-0" />
-                        {order.customer_name}
-                      </p>
-                    )}
-                    <p className="text-neutral-400 text-xs">{formatPrice(order.total)}</p>
-                  </div>
+      {/* Unpaid orders list \u2014 toggled from the header pending badge */}
+      {unpaidOrders.length > 0 && showUnpaidOrders && (
+        <div className="border-b border-neutral-800 bg-amber-900/10">
+          <div className="flex items-center justify-between px-4 pt-3 pb-1">
+            <span className="text-amber-200 font-bold text-sm">{t('cart.unpaidOrders')}</span>
+          </div>
+          <div className="px-4 pb-3 space-y-2 max-h-48 overflow-y-auto">
+            {unpaidOrders.map((order) => (
+              <div
+                key={order.id}
+                className="flex items-center justify-between bg-neutral-800 rounded-lg px-3 py-2 border border-neutral-700"
+              >
+                <div className="min-w-0 flex-1 mr-2">
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => onCobrar(order)}
-                      className="px-3 py-1.5 bg-brand-600 text-white text-xs font-bold rounded-lg hover:bg-brand-700 transition-all"
-                    >
-                      {t('cart.charge')}
-                    </button>
-                    {onDeleteUnpaidOrder && (
-                      <button
-                        onClick={() => onDeleteUnpaidOrder(order)}
-                        title="Delete order"
-                        className="p-1.5 text-neutral-400 hover:text-red-400 hover:bg-neutral-700 rounded-lg transition-all"
+                    <p className="text-white font-bold text-sm">#{order.order_number}</p>
+                    {order.source === 'customer_kiosk' && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full bg-brand-600/20 border border-brand-600/40 text-brand-200 text-[10px] font-black uppercase px-1.5 py-0.5 tracking-wide"
+                        title={t('cart.fromKiosk')}
                       >
-                        <Trash2 size={14} />
-                      </button>
+                        <Smartphone className="h-3 w-3" />
+                        Kiosko
+                      </span>
+                    )}
+                    {order.order_fulfillment_type && (
+                      <span className="inline-flex items-center rounded-full bg-amber-500 text-neutral-950 text-[10px] font-black uppercase px-1.5 py-0.5 tracking-wide whitespace-nowrap">
+                        {order.order_fulfillment_type === 'for_here' ? t('cart.forHere') : t('cart.toGo')}
+                      </span>
                     )}
                   </div>
+                  {order.customer_name && (
+                    <p className="text-neutral-300 text-xs truncate inline-flex items-center gap-1">
+                      <User className="h-3 w-3 text-neutral-500 shrink-0" />
+                      {order.customer_name}
+                    </p>
+                  )}
+                  <p className="text-neutral-400 text-xs">{formatPrice(order.total)}</p>
                 </div>
-              ))}
-            </div>
-          )}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => onCobrar(order)}
+                    className="px-3 py-1.5 bg-brand-600 text-white text-xs font-bold rounded-lg hover:bg-brand-700 transition-all"
+                  >
+                    {t('cart.charge')}
+                  </button>
+                  {onDeleteUnpaidOrder && (
+                    <button
+                      onClick={() => onDeleteUnpaidOrder(order)}
+                      title="Delete order"
+                      className="p-1.5 text-neutral-400 hover:text-red-400 hover:bg-neutral-700 rounded-lg transition-all"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

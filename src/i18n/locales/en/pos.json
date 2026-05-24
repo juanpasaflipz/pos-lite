@@ -9,6 +9,9 @@
   },
   "cart": {
     "orderNumber": "Order #{{number}}",
+    "newOrder": "New order",
+    "itemCount": "{{count}} item(s)",
+    "pendingLabel": "Pending",
     "noItems": "No items in cart",
     "selectItems": "Select items from the menu",
     "combo": "Combo",
@@ -518,7 +521,19 @@
     "starting": "Starting...",
     "startPreparing": "Start Preparing",
     "marking": "Marking...",
-    "readyForPickup": "Ready for Pickup"
+    "readyForPickup": "Ready for Pickup",
+    "paid": "PAID",
+    "unpaid": "UNPAID"
+  },
+  "ordersPanel": {
+    "title": "Live Orders",
+    "empty": "No active orders",
+    "paid": "PAID",
+    "unpaid": "UNPAID",
+    "charge": "Charge",
+    "start": "Start",
+    "markReady": "Mark Ready",
+    "complete": "Complete"
   },
   "mobileOrders": {
     "title": "Orders",

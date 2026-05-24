@@ -24,7 +24,9 @@
     "ready": "READY",
     "completed": "COMPLETED",
     "cancelled": "CANCELLED",
-    "urgent": "URGENT"
+    "urgent": "URGENT",
+    "paid": "PAID",
+    "unpaid": "UNPAID"
   },
   "actions": {
     "start": "Start",

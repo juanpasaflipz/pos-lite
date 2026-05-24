@@ -587,8 +587,9 @@ export async function purgeUnpaidOrders(): Promise<{ success: boolean; deleted_c
   return apiRequest('/orders/purge-unpaid', { method: 'POST' });
 }
 
-export async function getKitchenOrders(): Promise<Order[]> {
-  return apiRequest<Order[]>('/orders/kitchen/active');
+export async function getKitchenOrders(opts?: { includeReady?: boolean }): Promise<Order[]> {
+  const query = opts?.includeReady ? '?include_ready=1' : '';
+  return apiRequest<Order[]>(`/orders/kitchen/active${query}`);
 }
 
 export async function confirmOrderPayment(

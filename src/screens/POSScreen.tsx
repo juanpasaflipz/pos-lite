@@ -68,6 +68,7 @@ import CategorySidebar from '../components/pos/CategorySidebar';
 import POSHeaderBar from '../components/pos/POSHeaderBar';
 import MenuGrid from '../components/pos/MenuGrid';
 import CartPanel from '../components/pos/CartPanel';
+import CashierOrdersPanel from '../components/pos/CashierOrdersPanel';
 import QuickOrdersModal from '../components/pos/QuickOrdersModal';
 import ParkedCartsModal from '../components/pos/ParkedCartsModal';
 
@@ -144,6 +145,9 @@ const POSScreen: React.FC = () => {
   const [showUnpaidOrders, setShowUnpaidOrders] = useState(false);
   const [paymentOrder, setPaymentOrder] = useState<Order | null>(null);
   const [showPaymentConfirmation, setShowPaymentConfirmation] = useState(false);
+
+  // Cashier live-orders board (slide-over)
+  const [showOrdersPanel, setShowOrdersPanel] = useState(false);
 
   // AI Suggestions
   const cartItemIds = useMemo(() => cart.map((c) => c.menu_item_id), [cart]);

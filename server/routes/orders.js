@@ -863,7 +863,8 @@ router.put('/:id/status', async (req, res) => {
   }
 });
 
-// GET /api/orders/kitchen/active - get pending+preparing orders for kitchen display
+// GET /api/orders/kitchen/active - get active orders for kitchen display.
+// Pass ?include_ready=1 to also include 'ready' orders (cashier order board).
 router.get('/kitchen/active', async (req, res) => {
   try {
     // Stamp first_kds_seen_at on any active orders the KDS hasn't seen yet.
@@ -876,10 +877,15 @@ router.get('/kitchen/active', async (req, res) => {
         AND first_kds_seen_at IS NULL
     `);
 
+    const includeReady = req.query.include_ready === '1' || req.query.include_ready === 'true';
+    const statuses = includeReady
+      ? ['pending', 'confirmed', 'preparing', 'ready']
+      : ['pending', 'confirmed', 'preparing'];
+
     // Single query: fetch orders + items + modifiers in one round trip
     const rows = await all(`
       SELECT o.id AS order_id, o.order_number, o.status, o.payment_method, o.source, o.order_fulfillment_type, o.created_at,
-             o.estimated_ready_minutes, o.table_number, o.first_kds_seen_at,
+             o.estimated_ready_minutes, o.table_number, o.first_kds_seen_at, o.payment_status, o.paid_at, o.total,
              e.name AS employee_name,
              oi.id AS item_id, oi.item_name, oi.quantity, oi.notes, oi.combo_instance_id,
              oi.virtual_brand_id, vb.name AS brand_name, vb.primary_color AS brand_color,
@@ -889,9 +895,9 @@ router.get('/kitchen/active', async (req, res) => {
       LEFT JOIN order_items oi ON oi.order_id = o.id
       LEFT JOIN virtual_brands vb ON oi.virtual_brand_id = vb.id
       LEFT JOIN order_item_modifiers oim ON oim.order_item_id = oi.id
-      WHERE o.status IN ('pending', 'confirmed', 'preparing')
+      WHERE o.status = ANY($1::text[])
       ORDER BY o.created_at ASC, oi.id ASC
-    `);
+    `, [statuses]);
 
     // Assemble nested structure from flat rows
     const orderMap = new Map();
@@ -902,6 +908,9 @@ router.get('/kitchen/active', async (req, res) => {
           order_number: row.order_number,
           status: row.status,
           payment_method: row.payment_method,
+          payment_status: row.payment_status,
+          paid_at: row.paid_at,
+          total: row.total,
           source: row.source,
           order_fulfillment_type: row.order_fulfillment_type,
           created_at: row.created_at,

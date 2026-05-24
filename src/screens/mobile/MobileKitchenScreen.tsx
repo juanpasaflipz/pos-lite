@@ -2,12 +2,25 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getKitchenOrders, updateOrderStatus } from '../../api';
 import { Order } from '../../types';
+import { getTimeTier, isPaid, type TimeTier } from '../../lib/orderUrgency';
 import MobileHeader from '../../components/mobile/MobileHeader';
 import { Clock, RefreshCw } from 'lucide-react';
 
 interface OrderWithElapsed extends Order {
   elapsedSeconds: number;
 }
+
+const TIER_BORDER_CLASS: Record<TimeTier, string> = {
+  fresh: 'border-green-600/50',
+  warning: 'border-yellow-400',
+  critical: 'border-red-500',
+};
+
+const TIER_TIME_TEXT_CLASS: Record<TimeTier, string> = {
+  fresh: 'text-green-400',
+  warning: 'text-yellow-400',
+  critical: 'text-red-400',
+};
 
 const MobileKitchenScreen: React.FC = () => {
   const { t } = useTranslation('pos');
@@ -102,8 +115,6 @@ const MobileKitchenScreen: React.FC = () => {
     }
   };
 
-  const isUrgent = (s: number) => s > 600;
-
   return (
     <>
       <MobileHeader
@@ -129,15 +140,24 @@ const MobileKitchenScreen: React.FC = () => {
             <p className="text-neutral-500 mt-1">{t('mobileKitchen.noPendingOrders')}</p>
           </div>
         ) : (
-          orders.map((order) => (
+          orders.map((order) => {
+            const tier = getTimeTier(order.elapsedSeconds);
+            const paid = isPaid(order);
+            return (
             <div
               key={order.id}
-              className={`bg-neutral-900 border rounded-xl overflow-hidden ${
-                isUrgent(order.elapsedSeconds) && order.status !== 'completed'
-                  ? 'border-brand-500'
-                  : 'border-neutral-800'
+              className={`relative bg-neutral-900 border-2 rounded-xl overflow-hidden ${TIER_BORDER_CLASS[tier]} ${
+                tier === 'critical' ? 'bg-red-950/20' : ''
               }`}
             >
+              {/* Blinking red ring for the critical tier (8+ min) */}
+              {tier === 'critical' && (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 rounded-xl ring-2 ring-inset ring-red-500/80 animate-pulse"
+                />
+              )}
+
               {/* Order header */}
               <div className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -149,6 +169,15 @@ const MobileKitchenScreen: React.FC = () => {
                   }`}>
                     {t(`common:orderStatus.${order.status}`, order.status)}
                   </span>
+                  {paid ? (
+                    <span className="bg-green-600 text-white px-2 py-0.5 rounded-full text-xs font-bold">
+                      {t('mobileKitchen.paid')}
+                    </span>
+                  ) : (
+                    <span className="bg-amber-500 text-neutral-900 px-2 py-0.5 rounded-full text-xs font-bold">
+                      {t('mobileKitchen.unpaid')}
+                    </span>
+                  )}
                   {order.source === 'qr_order' && (
                     <span className="bg-violet-600 text-white px-2 py-0.5 rounded-full text-xs font-bold">QR</span>
                   )}
@@ -159,9 +188,7 @@ const MobileKitchenScreen: React.FC = () => {
                     <span className="bg-sky-600 text-white px-2 py-0.5 rounded-full text-xs font-bold">Table {order.table_number}</span>
                   )}
                 </div>
-                <div className={`flex items-center gap-1 text-sm font-semibold ${
-                  isUrgent(order.elapsedSeconds) ? 'text-brand-400' : 'text-neutral-400'
-                }`}>
+                <div className={`flex items-center gap-1 text-sm font-semibold ${TIER_TIME_TEXT_CLASS[tier]}`}>
                   <Clock className="w-4 h-4" />
                   {formatElapsed(order.elapsedSeconds)}
                 </div>
@@ -215,7 +242,8 @@ const MobileKitchenScreen: React.FC = () => {
                 )}
               </div>
             </div>
-          ))
+            );
+          })
         )}
       </div>
     </>

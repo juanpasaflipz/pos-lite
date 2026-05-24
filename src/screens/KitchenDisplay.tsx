@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { getKitchenOrders, updateOrderStatus, getCategoryRoles } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { Order, OrderItem, CategoryRole } from '../types';
+import { getTimeTier, isPaid, type TimeTier } from '../lib/orderUrgency';
 import { formatTime, formatDate } from '../utils/dateFormat';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import BrandLogo from '../components/BrandLogo';
@@ -16,6 +17,7 @@ import {
   Wine,
   ChefHat,
   WifiOff,
+  Check,
 } from 'lucide-react';
 
 interface OrderWithElapsed extends Order {
@@ -25,6 +27,18 @@ interface OrderWithElapsed extends Order {
 // Show the stale banner if no successful fetch in this long. Polling
 // interval is 5s, so 15s gives us two missed polls before warning.
 const STALE_THRESHOLD_MS = 15_000;
+
+const TIER_CARD_CLASS: Record<TimeTier, string> = {
+  fresh: 'border-green-600/50',
+  warning: 'border-yellow-400',
+  critical: 'border-red-500 bg-red-950/20',
+};
+
+const TIER_TIME_TEXT_CLASS: Record<TimeTier, string> = {
+  fresh: 'text-green-400',
+  warning: 'text-yellow-400',
+  critical: 'text-red-400',
+};
 
 export default function KitchenDisplay() {
   const navigate = useNavigate();
@@ -218,32 +232,6 @@ export default function KitchenDisplay() {
     return t('time.hoursMinutesAgo', { hours, minutes: minutes % 60 });
   };
 
-  const getStatusColor = (status: Order['status']): string => {
-    switch (status) {
-      case 'pending':
-        return 'border-l-4 border-l-brand-500';
-      case 'preparing':
-        return 'border-l-4 border-l-amber-500';
-      default:
-        return 'border-l-4 border-l-neutral-600';
-    }
-  };
-
-  const getStatusBgColor = (status: Order['status']): string => {
-    return 'bg-neutral-900';
-  };
-
-  const isUrgent = (elapsedSeconds: number): boolean => {
-    return elapsedSeconds > 600;
-  };
-
-  const getUrgentColor = (elapsedSeconds: number, status: Order['status']): string => {
-    if (isUrgent(elapsedSeconds) && status !== 'completed') {
-      return 'border-l-4 border-l-brand-500';
-    }
-    return getStatusColor(status);
-  };
-
   const pendingCount = orders.filter((o) => o.status === 'pending').length;
   // Re-evaluated each tick of currentTime (1s interval) so the banner
   // appears within ~1s of crossing the staleness threshold.
@@ -363,9 +351,6 @@ export default function KitchenDisplay() {
                 onStart={handleStartOrder}
                 onReady={handleReadyOrder}
                 formatTime={formatElapsedTime}
-                getStatusColor={getUrgentColor}
-                getStatusBgColor={getStatusBgColor}
-                isUrgent={isUrgent}
               />
             ))}
           </div>
@@ -380,9 +365,6 @@ interface OrderCardProps {
   onStart: (orderId: number) => void;
   onReady: (orderId: number) => void;
   formatTime: (seconds: number) => string;
-  getStatusColor: (elapsedSeconds: number, status: Order['status']) => string;
-  getStatusBgColor: (status: Order['status']) => string;
-  isUrgent: (elapsedSeconds: number) => boolean;
 }
 
 function OrderCard({
@@ -390,12 +372,11 @@ function OrderCard({
   onStart,
   onReady,
   formatTime,
-  getStatusColor,
-  getStatusBgColor,
-  isUrgent,
 }: OrderCardProps) {
   const { t } = useTranslation('kitchen');
   const [isLoading, setIsLoading] = useState(false);
+  const tier = getTimeTier(order.elapsedSeconds);
+  const paid = isPaid(order);
 
   const handleAction = async (action: 'start' | 'ready') => {
     setIsLoading(true);
@@ -412,8 +393,16 @@ function OrderCard({
 
   return (
     <div
-      className={`${getStatusColor(order.elapsedSeconds, order.status)} ${getStatusBgColor(order.status)} rounded-lg p-6 shadow-lg flex flex-col h-full transition-all duration-300 border border-neutral-800`}
+      className={`relative ${TIER_CARD_CLASS[tier]} bg-neutral-900 rounded-lg p-6 shadow-lg flex flex-col h-full transition-all duration-300 border-2`}
     >
+      {/* Blinking red ring for the critical tier (8+ min) */}
+      {tier === 'critical' && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-lg ring-4 ring-inset ring-red-500/80 animate-pulse"
+        />
+      )}
+
       {/* Order Header */}
       <div className="flex items-start justify-between mb-4 border-b border-neutral-800 pb-4">
         <div>
@@ -441,19 +430,28 @@ function OrderCard({
               Table {order.table_number}
             </span>
           )}
+          {paid ? (
+            <span className="bg-green-600 text-white px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap flex items-center gap-1">
+              <Check size={14} strokeWidth={3} /> {t('status.paid')}
+            </span>
+          ) : (
+            <span className="bg-amber-500 text-neutral-900 px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
+              {t('status.unpaid')}
+            </span>
+          )}
           <StatusPill status={order.status} size="lg" />
         </div>
       </div>
 
       {/* Time Elapsed */}
-      <div
-        className={`flex items-center gap-2 mb-4 text-lg font-semibold ${
-          isUrgent(order.elapsedSeconds) ? 'text-brand-400' : 'text-neutral-400'
-        }`}
-      >
+      <div className={`flex items-center gap-2 mb-4 text-lg font-semibold ${TIER_TIME_TEXT_CLASS[tier]}`}>
         <Clock size={24} />
         <span>{formatTime(order.elapsedSeconds)}</span>
-        {isUrgent(order.elapsedSeconds) && <span className="text-brand-500">{t('status.urgent')}</span>}
+        {tier === 'critical' && (
+          <span className="ml-1 bg-red-500 text-white px-2 py-0.5 rounded text-sm font-black uppercase tracking-wide animate-pulse">
+            {t('status.urgent')}
+          </span>
+        )}
       </div>
 
       {/* Items List */}
