@@ -7,21 +7,9 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { getCurrentEmployeeToken } from '../api';
 import BrandLogo from '../components/BrandLogo';
-import { generatePalette, type BrandPalette } from '../lib/colorUtils';
 import { usePlan } from '../context/PlanContext';
 import UpgradePrompt from '../components/UpgradePrompt';
 import BackToSetupButton from '../components/BackToSetupButton';
-
-const PRESET_COLORS = [
-  '#0d9488', // teal
-  '#ea580c', // orange
-  '#ca8a04', // yellow
-  '#16a34a', // green
-  '#0891b2', // cyan
-  '#2563eb', // blue
-  '#7c3aed', // violet
-  '#db2777', // pink
-];
 
 const TIMEZONE_OPTIONS = [
   'America/Mexico_City',
@@ -56,23 +44,18 @@ export default function BrandingSettingsScreen() {
   const [tagline, setTagline] = useState('');
   const [address, setAddress] = useState('');
   const [tz, setTz] = useState<string>('UTC');
-  const [primaryColor, setPrimaryColor] = useState('#0d9488');
-  const [customHex, setCustomHex] = useState('');
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
-  const [previewPalette, setPreviewPalette] = useState<BrandPalette | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Initialize from current branding
   useEffect(() => {
     if (branding) {
       setRestaurantName(branding.restaurantName || '');
       setTagline(branding.tagline || '');
       setAddress(branding.address || '');
-      setPrimaryColor(branding.primaryColor || '#0d9488');
       setLogoPreview(branding.logoUrl || null);
     }
   }, [branding]);
@@ -80,23 +63,6 @@ export default function BrandingSettingsScreen() {
   useEffect(() => {
     setTz(timezone || 'UTC');
   }, [timezone]);
-
-  // Update preview palette when color changes
-  useEffect(() => {
-    setPreviewPalette(generatePalette(primaryColor));
-  }, [primaryColor]);
-
-  const handleColorSelect = (color: string) => {
-    setPrimaryColor(color);
-    setCustomHex(color);
-  };
-
-  const handleCustomHexChange = (value: string) => {
-    setCustomHex(value);
-    if (/^#[0-9a-fA-F]{6}$/.test(value)) {
-      setPrimaryColor(value);
-    }
-  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -153,7 +119,7 @@ export default function BrandingSettingsScreen() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
           ...(!isCap2 && tid2 ? { 'X-Tenant-ID': tid2 } : {}),
         },
-        body: JSON.stringify({ primaryColor, restaurantName, tagline, address }),
+        body: JSON.stringify({ restaurantName, tagline, address }),
       });
 
       if (!settingsRes.ok) {
@@ -332,83 +298,6 @@ export default function BrandingSettingsScreen() {
                 <span className="text-sm font-medium">{label}</span>
               </button>
             ))}
-          </div>
-        </div>
-
-        {/* Color Picker */}
-        <div className="bg-neutral-900 rounded-lg border border-neutral-800 p-6">
-          <label className="block text-sm font-medium text-neutral-400 mb-4">
-            {t('branding.primaryColor')}
-          </label>
-          <div className="flex flex-wrap gap-3 mb-4">
-            {PRESET_COLORS.map((color) => (
-              <button
-                key={color}
-                onClick={() => handleColorSelect(color)}
-                className={`w-10 h-10 rounded-full border-2 transition-all ${
-                  primaryColor === color
-                    ? 'border-white scale-110'
-                    : 'border-neutral-700 hover:border-neutral-500'
-                }`}
-                style={{ backgroundColor: color }}
-              />
-            ))}
-          </div>
-          <div className="flex items-center gap-3">
-            <label className="text-sm text-neutral-500">{t('branding.customHex')}</label>
-            <input
-              type="text"
-              value={customHex || primaryColor}
-              onChange={(e) => handleCustomHexChange(e.target.value)}
-              className="w-28 bg-neutral-800 text-white rounded-lg px-3 py-2 border border-neutral-700 focus:border-brand-500 focus:outline-none text-sm font-mono"
-              placeholder={t('branding.hexPlaceholder')}
-              maxLength={7}
-            />
-            <div
-              className="w-8 h-8 rounded-full border border-neutral-700"
-              style={{ backgroundColor: primaryColor }}
-            />
-          </div>
-        </div>
-
-        {/* Live Preview */}
-        <div className="bg-neutral-900 rounded-lg border border-neutral-800 p-6">
-          <label className="block text-sm font-medium text-neutral-400 mb-4">
-            {t('branding.preview')}
-          </label>
-          <div className="bg-neutral-950 rounded-lg p-8 text-center border border-neutral-800">
-            <div className="flex justify-center mb-4">
-              {logoPreview ? (
-                <img src={logoPreview} alt="Preview" className="h-16 object-contain" />
-              ) : (
-                <div className="w-16 h-16 rounded-lg flex items-center justify-center" style={{ backgroundColor: previewPalette?.['600'] || primaryColor }}>
-                  <span className="text-white text-2xl font-black">{(restaurantName || 'R')[0]}</span>
-                </div>
-              )}
-            </div>
-            <h3 className="text-2xl font-black tracking-tighter text-white mb-1">
-              {restaurantName || t('branding.namePreview')}
-            </h3>
-            <p className="font-semibold" style={{ color: previewPalette?.['600'] || primaryColor }}>
-              {tagline || t('branding.taglinePreview')}
-            </p>
-            <div className="mt-4 flex justify-center gap-2">
-              <span
-                className="px-4 py-2 rounded-lg text-white text-sm font-bold"
-                style={{ backgroundColor: previewPalette?.['600'] || primaryColor }}
-              >
-                {t('branding.previewButton')}
-              </span>
-              <span
-                className="px-4 py-2 rounded-lg text-sm font-bold border"
-                style={{
-                  color: previewPalette?.['600'] || primaryColor,
-                  borderColor: previewPalette?.['600'] || primaryColor,
-                }}
-              >
-                {t('branding.previewOutline')}
-              </span>
-            </div>
           </div>
         </div>
 

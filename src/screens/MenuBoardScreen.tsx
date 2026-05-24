@@ -101,7 +101,8 @@ export default function MenuBoardScreen() {
     };
   }, []);
 
-  const accentColor = data?.shop.primaryColor || '#0d9488';
+  // Single platform brand (cockpit-blue) — per-tenant color overrides were removed.
+  const accentColor = '#4285F4';
   const mainCategory = data?.categories[0] || null;
   const secondaryCategories = data?.categories.slice(1) || [];
   const rotationIndex = useRotation(data?.atmosphere.assets.length || 0, data?.layout.rotationSeconds || 30);

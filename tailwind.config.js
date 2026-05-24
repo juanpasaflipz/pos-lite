@@ -9,17 +9,22 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Single platform brand across every tenant (Tailwind blue, anchored
+        // on cockpit-blue #4285F4 ≈ blue-500 #3b82f6). Used to be a per-tenant
+        // CSS-variable override; the override mechanism was removed when we
+        // unified the look. Keep using `brand-*` classes everywhere — they
+        // now resolve to one shared blue scale.
         brand: {
-          50: 'var(--brand-50, #f0fdfa)',
-          100: 'var(--brand-100, #ccfbf1)',
-          200: 'var(--brand-200, #99f6e4)',
-          300: 'var(--brand-300, #5eead4)',
-          400: 'var(--brand-400, #2dd4bf)',
-          500: 'var(--brand-500, #14b8a6)',
-          600: 'var(--brand-600, #0d9488)',
-          700: 'var(--brand-700, #0f766e)',
-          800: 'var(--brand-800, #115e59)',
-          900: 'var(--brand-900, #134e4a)',
+          50:  '#eff6ff',
+          100: '#dbeafe',
+          200: '#bfdbfe',
+          300: '#93c5fd',
+          400: '#60a5fa',
+          500: '#3b82f6',
+          600: '#2563eb',
+          700: '#1d4ed8',
+          800: '#1e40af',
+          900: '#1e3a8a',
         },
         // Cockpit zone palette (Google 4-color: blue/red/yellow/green)
         cockpit: {

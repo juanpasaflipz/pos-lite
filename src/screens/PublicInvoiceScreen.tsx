@@ -125,7 +125,8 @@ const PublicInvoiceScreen: React.FC = () => {
 
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof FormData, string>>>({});
 
-  const accentColor = order?.tenant_color || '#0d9488';
+  // Single platform brand (cockpit-blue) — per-tenant color overrides were removed.
+  const accentColor = '#4285F4';
 
   /* --- Fetch order on mount --- */
   useEffect(() => {

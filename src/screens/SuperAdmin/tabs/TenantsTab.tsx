@@ -361,7 +361,6 @@ const CreateTenantModal: React.FC<{
     owner_email: '',
     owner_password: '',
     plan: 'free',
-    branding_json: { primaryColor: '#0d9488' },
   });
   const [result, setResult] = useState<{ pin: string; email: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -432,22 +431,12 @@ const CreateTenantModal: React.FC<{
           <input required type="text" minLength={8} value={form.owner_password} onChange={(e) => update({ owner_password: e.target.value })} className={inputCls} />
         </Field>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Field label={t('tenantManagement.plan')}>
-            <select value={form.plan} onChange={(e) => update({ plan: e.target.value })} className={inputCls}>
-              <option value="free">{t('tenantManagement.free')}</option>
-              <option value="pro">{t('tenantManagement.pro')}</option>
-            </select>
-          </Field>
-          <Field label={t('tenantManagement.brandColor')}>
-            <input
-              type="color"
-              value={form.branding_json?.primaryColor || '#0d9488'}
-              onChange={(e) => update({ branding_json: { primaryColor: e.target.value } })}
-              className="w-full h-10 bg-neutral-950 border border-neutral-700 rounded cursor-pointer"
-            />
-          </Field>
-        </div>
+        <Field label={t('tenantManagement.plan')}>
+          <select value={form.plan} onChange={(e) => update({ plan: e.target.value })} className={inputCls}>
+            <option value="free">{t('tenantManagement.free')}</option>
+            <option value="pro">{t('tenantManagement.pro')}</option>
+          </select>
+        </Field>
 
         {err && <div className="text-sm text-red-400">{err}</div>}
 
