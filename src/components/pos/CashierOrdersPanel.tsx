@@ -22,22 +22,22 @@ const STATUS_RANK: Record<string, number> = {
 };
 
 const STATUS_BADGE: Record<string, string> = {
-  pending: 'bg-brand-600 text-white',
-  confirmed: 'bg-blue-600 text-white',
-  preparing: 'bg-amber-500 text-neutral-900',
-  ready: 'bg-green-600 text-white',
+  pending: 'bg-cockpit-blue text-white',
+  confirmed: 'bg-cockpit-blue text-white',
+  preparing: 'bg-cockpit-yellow text-neutral-900',
+  ready: 'bg-cockpit-green text-neutral-900',
 };
 
 const TIER_ACCENT: Record<TimeTier, string> = {
-  fresh: 'border-l-green-500',
-  warning: 'border-l-yellow-400',
-  critical: 'border-l-red-500',
+  fresh: 'border-l-cockpit-green',
+  warning: 'border-l-cockpit-yellow',
+  critical: 'border-l-cockpit-red',
 };
 
 const TIER_TIME_TEXT: Record<TimeTier, string> = {
-  fresh: 'text-green-400',
-  warning: 'text-yellow-400',
-  critical: 'text-red-400',
+  fresh: 'text-cockpit-green',
+  warning: 'text-cockpit-yellow',
+  critical: 'text-cockpit-red',
 };
 
 function formatElapsed(seconds: number): string {
@@ -189,7 +189,7 @@ export default function CashierOrdersPanel({ isOpen, onClose, onCharge }: Cashie
                 <div
                   key={order.id}
                   className={`bg-neutral-900 rounded-lg border border-neutral-800 border-l-4 ${TIER_ACCENT[tier]} ${
-                    tier === 'critical' ? 'ring-1 ring-red-500/40' : ''
+                    tier === 'critical' ? 'ring-1 ring-cockpit-red/40' : ''
                   }`}
                 >
                   {/* Header row */}
@@ -200,16 +200,16 @@ export default function CashierOrdersPanel({ isOpen, onClose, onCharge }: Cashie
                         {t(`common:orderStatus.${order.status}`, order.status)}
                       </span>
                       {paid ? (
-                        <span className="bg-green-600 text-white px-2 py-0.5 rounded-full text-xs font-bold flex items-center gap-1">
+                        <span className="bg-cockpit-green text-neutral-900 px-2 py-0.5 rounded-full text-xs font-bold flex items-center gap-1">
                           <Check size={12} strokeWidth={3} /> {t('ordersPanel.paid')}
                         </span>
                       ) : (
-                        <span className="bg-amber-500 text-neutral-900 px-2 py-0.5 rounded-full text-xs font-bold">
+                        <span className="bg-cockpit-yellow text-neutral-900 px-2 py-0.5 rounded-full text-xs font-bold">
                           {t('ordersPanel.unpaid')}
                         </span>
                       )}
                       {order.table_number && (
-                        <span className="bg-sky-600 text-white px-2 py-0.5 rounded-full text-xs font-bold">
+                        <span className="bg-cockpit-blue text-white px-2 py-0.5 rounded-full text-xs font-bold">
                           Table {order.table_number}
                         </span>
                       )}

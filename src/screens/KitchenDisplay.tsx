@@ -29,15 +29,15 @@ interface OrderWithElapsed extends Order {
 const STALE_THRESHOLD_MS = 15_000;
 
 const TIER_CARD_CLASS: Record<TimeTier, string> = {
-  fresh: 'border-green-600/50',
-  warning: 'border-yellow-400',
-  critical: 'border-red-500 bg-red-950/20',
+  fresh: 'border-cockpit-green/50',
+  warning: 'border-cockpit-yellow',
+  critical: 'border-cockpit-red bg-cockpit-red/15',
 };
 
 const TIER_TIME_TEXT_CLASS: Record<TimeTier, string> = {
-  fresh: 'text-green-400',
-  warning: 'text-yellow-400',
-  critical: 'text-red-400',
+  fresh: 'text-cockpit-green',
+  warning: 'text-cockpit-yellow',
+  critical: 'text-cockpit-red',
 };
 
 export default function KitchenDisplay() {
@@ -399,7 +399,7 @@ function OrderCard({
       {tier === 'critical' && (
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-0 rounded-lg ring-4 ring-inset ring-red-500/80 animate-pulse"
+          className="pointer-events-none absolute inset-0 rounded-lg ring-4 ring-inset ring-cockpit-red/80 animate-pulse"
         />
       )}
 
@@ -431,11 +431,11 @@ function OrderCard({
             </span>
           )}
           {paid ? (
-            <span className="bg-green-600 text-white px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap flex items-center gap-1">
+            <span className="bg-cockpit-green text-neutral-900 px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap flex items-center gap-1">
               <Check size={14} strokeWidth={3} /> {t('status.paid')}
             </span>
           ) : (
-            <span className="bg-amber-500 text-neutral-900 px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
+            <span className="bg-cockpit-yellow text-neutral-900 px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
               {t('status.unpaid')}
             </span>
           )}
@@ -448,7 +448,7 @@ function OrderCard({
         <Clock size={24} />
         <span>{formatTime(order.elapsedSeconds)}</span>
         {tier === 'critical' && (
-          <span className="ml-1 bg-red-500 text-white px-2 py-0.5 rounded text-sm font-black uppercase tracking-wide animate-pulse">
+          <span className="ml-1 bg-cockpit-red text-white px-2 py-0.5 rounded text-sm font-black uppercase tracking-wide animate-pulse">
             {t('status.urgent')}
           </span>
         )}

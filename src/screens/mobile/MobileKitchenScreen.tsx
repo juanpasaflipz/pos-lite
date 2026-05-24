@@ -11,15 +11,15 @@ interface OrderWithElapsed extends Order {
 }
 
 const TIER_BORDER_CLASS: Record<TimeTier, string> = {
-  fresh: 'border-green-600/50',
-  warning: 'border-yellow-400',
-  critical: 'border-red-500',
+  fresh: 'border-cockpit-green/50',
+  warning: 'border-cockpit-yellow',
+  critical: 'border-cockpit-red',
 };
 
 const TIER_TIME_TEXT_CLASS: Record<TimeTier, string> = {
-  fresh: 'text-green-400',
-  warning: 'text-yellow-400',
-  critical: 'text-red-400',
+  fresh: 'text-cockpit-green',
+  warning: 'text-cockpit-yellow',
+  critical: 'text-cockpit-red',
 };
 
 const MobileKitchenScreen: React.FC = () => {
@@ -136,7 +136,7 @@ const MobileKitchenScreen: React.FC = () => {
           </div>
         ) : orders.length === 0 ? (
           <div className="text-center py-20">
-            <p className="text-2xl font-bold text-green-400">{t('mobileKitchen.allClear')}</p>
+            <p className="text-2xl font-bold text-cockpit-green">{t('mobileKitchen.allClear')}</p>
             <p className="text-neutral-500 mt-1">{t('mobileKitchen.noPendingOrders')}</p>
           </div>
         ) : (
@@ -147,14 +147,14 @@ const MobileKitchenScreen: React.FC = () => {
             <div
               key={order.id}
               className={`relative bg-neutral-900 border-2 rounded-xl overflow-hidden ${TIER_BORDER_CLASS[tier]} ${
-                tier === 'critical' ? 'bg-red-950/20' : ''
+                tier === 'critical' ? 'bg-cockpit-red/15' : ''
               }`}
             >
               {/* Blinking red ring for the critical tier (8+ min) */}
               {tier === 'critical' && (
                 <span
                   aria-hidden
-                  className="pointer-events-none absolute inset-0 rounded-xl ring-2 ring-inset ring-red-500/80 animate-pulse"
+                  className="pointer-events-none absolute inset-0 rounded-xl ring-2 ring-inset ring-cockpit-red/80 animate-pulse"
                 />
               )}
 
@@ -164,28 +164,28 @@ const MobileKitchenScreen: React.FC = () => {
                   <span className="text-2xl font-black text-white">#{order.order_number}</span>
                   <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
                     order.status === 'pending'
-                      ? 'bg-brand-600 text-white'
-                      : 'bg-amber-500 text-neutral-900'
+                      ? 'bg-cockpit-blue text-white'
+                      : 'bg-cockpit-yellow text-neutral-900'
                   }`}>
                     {t(`common:orderStatus.${order.status}`, order.status)}
                   </span>
                   {paid ? (
-                    <span className="bg-green-600 text-white px-2 py-0.5 rounded-full text-xs font-bold">
+                    <span className="bg-cockpit-green text-neutral-900 px-2 py-0.5 rounded-full text-xs font-bold">
                       {t('mobileKitchen.paid')}
                     </span>
                   ) : (
-                    <span className="bg-amber-500 text-neutral-900 px-2 py-0.5 rounded-full text-xs font-bold">
+                    <span className="bg-cockpit-yellow text-neutral-900 px-2 py-0.5 rounded-full text-xs font-bold">
                       {t('mobileKitchen.unpaid')}
                     </span>
                   )}
                   {order.source === 'qr_order' && (
-                    <span className="bg-violet-600 text-white px-2 py-0.5 rounded-full text-xs font-bold">QR</span>
+                    <span className="bg-cockpit-blue text-white px-2 py-0.5 rounded-full text-xs font-bold">QR</span>
                   )}
                   {order.source === 'customer_kiosk' && (
-                    <span className="bg-emerald-600 text-white px-2 py-0.5 rounded-full text-xs font-bold">KIOSK</span>
+                    <span className="bg-cockpit-blue text-white px-2 py-0.5 rounded-full text-xs font-bold">KIOSK</span>
                   )}
                   {order.table_number && (
-                    <span className="bg-sky-600 text-white px-2 py-0.5 rounded-full text-xs font-bold">Table {order.table_number}</span>
+                    <span className="bg-cockpit-blue text-white px-2 py-0.5 rounded-full text-xs font-bold">Table {order.table_number}</span>
                   )}
                 </div>
                 <div className={`flex items-center gap-1 text-sm font-semibold ${TIER_TIME_TEXT_CLASS[tier]}`}>
@@ -235,7 +235,7 @@ const MobileKitchenScreen: React.FC = () => {
                   <button
                     onClick={() => handleReady(order.id)}
                     disabled={actionLoading === order.id}
-                    className="w-full py-4 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-bold rounded-xl text-lg transition-colors touch-manipulation"
+                    className="w-full py-4 bg-cockpit-green hover:bg-cockpit-green/90 disabled:opacity-50 text-neutral-900 font-bold rounded-xl text-lg transition-colors touch-manipulation"
                   >
                     {actionLoading === order.id ? t('mobileKitchen.marking') : t('mobileKitchen.readyForPickup')}
                   </button>
