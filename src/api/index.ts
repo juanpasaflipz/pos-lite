@@ -1255,14 +1255,65 @@ export async function deleteCombo(id: number): Promise<any> {
 
 /* ==================== Split Payment Endpoints ==================== */
 
-export async function splitPayment(data: {
+export interface SplitRow {
+  id: number;
+  payment_method: 'card' | 'cash';
+  amount: number;
+  tip: number;
+  status: 'pending' | 'pending_terminal' | 'paid' | 'failed';
+  payment_intent_id?: string | null;
+}
+
+export async function splitStart(data: {
   order_id: number;
-  split_type: 'even' | 'by_item' | 'by_amount';
-  splits: Array<{ payment_method: 'card' | 'cash'; amount: number; tip?: number; item_ids?: number[] }>;
-}): Promise<any> {
-  return apiRequest('/payments/split', {
+  splits: Array<{ payment_method: 'card' | 'cash'; amount: number; tip?: number }>;
+}): Promise<{ success: boolean; order_id: number; splits: SplitRow[] }> {
+  return apiRequest('/payments/split/start', {
     method: 'POST',
     body: JSON.stringify(data),
+  });
+}
+
+export async function splitChargeCard(
+  order_payment_id: number,
+  terminal_id?: string,
+): Promise<{ success: boolean; order_payment_id: number; mp_order_id: string }> {
+  return apiRequest('/payments/split/charge-card', {
+    method: 'POST',
+    body: JSON.stringify({ order_payment_id, terminal_id }),
+  });
+}
+
+export async function splitCancelCard(order_payment_id: number): Promise<{ success: boolean }> {
+  return apiRequest('/payments/split/cancel-card', {
+    method: 'POST',
+    body: JSON.stringify({ order_payment_id }),
+  });
+}
+
+export async function splitRecordCash(
+  order_payment_id: number,
+  amount_received: number,
+): Promise<{ success: boolean; change_due: number }> {
+  return apiRequest('/payments/split/record-cash', {
+    method: 'POST',
+    body: JSON.stringify({ order_payment_id, amount_received }),
+  });
+}
+
+export async function getSplitStatus(order_id: number): Promise<{ order_id: number; splits: SplitRow[] }> {
+  return apiRequest(`/payments/split/${order_id}/status`);
+}
+
+export async function splitFinalize(order_id: number): Promise<{
+  success: boolean;
+  splits_count: number;
+  tip: number;
+  invoice_token: string | null;
+}> {
+  return apiRequest('/payments/split/finalize', {
+    method: 'POST',
+    body: JSON.stringify({ order_id }),
   });
 }
 

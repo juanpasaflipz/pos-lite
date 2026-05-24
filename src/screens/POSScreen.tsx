@@ -8,7 +8,7 @@ import {
   confirmPayment,
   cashPayment,
   getModifierGroupsForItem,
-  splitPayment,
+  splitStart,
   addStampsForOrder,
   createOrderTemplate,
   getOrders,
@@ -853,25 +853,63 @@ const POSScreen: React.FC = () => {
     }
   };
 
-  const handleSplitPayment = async (splits: Array<{ payment_method: 'card' | 'cash'; amount: number; tip: number }>) => {
-    if (cart.length === 0) { addToast(t('toast.cartEmpty'), 'error'); return; }
-    setIsProcessingPayment(true);
-    try {
-      const order = await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload() });
-      await splitPayment({ order_id: order.id, split_type: 'by_amount', splits });
-      const totalTip = splits.reduce((sum, s) => sum + s.tip, 0);
-      const finalOrder: Order = { ...order, tip: totalTip, total: order.subtotal + order.tax + totalTip, payment_method: 'split', employee_name: currentEmployee?.name, estimated_ready_minutes: order.estimated_ready_minutes, estimated_ready_range: order.estimated_ready_range };
-      await handleLoyaltyStamp(order);
-      setCompletedOrder(finalOrder);
+  // Split flow keeps the order in scope so the modal can finalize and we can show the receipt.
+  const splitOrderRef = useRef<Order | null>(null);
+
+  const handleSplitStart = async (
+    splits: Array<{ payment_method: 'card' | 'cash'; amount: number; tip: number }>,
+  ) => {
+    if (cart.length === 0) {
+      throw new Error(t('toast.cartEmpty'));
+    }
+    const order = await createOrder({
+      employee_id: currentEmployee!.id,
+      items: buildOrderItems(),
+      discount: buildCartDiscountPayload(),
+    });
+    splitOrderRef.current = order;
+    const result = await splitStart({
+      order_id: order.id,
+      splits: splits.map((s) => ({ payment_method: s.payment_method, amount: s.amount, tip: s.tip })),
+    });
+    return { orderId: order.id, splits: result.splits };
+  };
+
+  const handleSplitComplete = async (_orderId: number, totalTip: number) => {
+    const order = splitOrderRef.current;
+    splitOrderRef.current = null;
+    if (!order) {
+      // Defensive: modal finished but we lost the ref. Just close and refresh.
       setShowSplitPayment(false);
-      setShowReceiptModal(true);
       clearCart();
       addToast(t('toast.splitDone'), 'success');
-    } catch (error) {
-      addToast(error instanceof Error ? error.message : t('toast.splitFailed'), 'error');
-    } finally {
-      setIsProcessingPayment(false);
+      return;
     }
+    try {
+      await handleLoyaltyStamp(order);
+    } catch {
+      // Loyalty stamp failure shouldn't block the receipt.
+    }
+    const finalOrder: Order = {
+      ...order,
+      tip: totalTip,
+      total: order.subtotal + order.tax + totalTip,
+      payment_method: 'split',
+      payment_status: 'paid',
+      employee_name: currentEmployee?.name,
+      estimated_ready_minutes: order.estimated_ready_minutes,
+      estimated_ready_range: order.estimated_ready_range,
+    };
+    setCompletedOrder(finalOrder);
+    setShowSplitPayment(false);
+    setShowReceiptModal(true);
+    clearCart();
+    addToast(t('toast.splitDone'), 'success');
+  };
+
+  const handleSplitClose = () => {
+    splitOrderRef.current = null;
+    setShowSplitPayment(false);
   };
 
   const handleLogout = () => {
@@ -1185,9 +1223,10 @@ const POSScreen: React.FC = () => {
         <SplitPaymentModal
           orderTotal={total}
           items={cart}
-          onSplitPayment={handleSplitPayment}
-          onClose={() => setShowSplitPayment(false)}
-          isProcessing={isProcessingPayment}
+          isMpConnected={isMpConnected}
+          onStart={handleSplitStart}
+          onComplete={handleSplitComplete}
+          onClose={handleSplitClose}
         />
       )}
 

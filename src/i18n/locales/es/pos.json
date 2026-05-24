@@ -251,7 +251,37 @@
     "processPayments": "Procesar {{count}} Pagos",
     "processing": "Procesando...",
     "back": "Atrás",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "collectingFrom": "Cobrando a Persona {{number}} de {{total}}",
+    "method": {
+      "card": "Pago con tarjeta — Enviar a terminal",
+      "cash": "Pago en efectivo"
+    },
+    "sendToTerminal": "Enviar a Terminal",
+    "terminalWaiting": "Esperando a la terminal…",
+    "terminalInstructions": "Pide al cliente que inserte, deslice o acerque su tarjeta a la terminal Mercado Pago.",
+    "cancelTerminal": "Cancelar y reintentar",
+    "retry": "Reintentar",
+    "amountReceived": "Monto recibido",
+    "exactAmount": "Exacto ({{amount}})",
+    "changeDue": "Cambio a devolver",
+    "markCashCollected": "Confirmar Efectivo Recibido",
+    "recording": "Registrando…",
+    "finalizing": "Finalizando orden…",
+    "retryFinalize": "Reintentar Finalizar",
+    "abandon": "Abandonar",
+    "keepGoing": "Continuar",
+    "abandonConfirmTitle": "¿Abandonar pago dividido?",
+    "abandonConfirmBody": "La orden se quedará sin pagar y podrás retomarla más tarde.",
+    "abandonWithPaidWarning": "Ya se cobraron {{count}} pago(s). La orden quedará sin finalizar y los cobros realizados deberán reembolsarse manualmente si decides abandonar.",
+    "errors": {
+      "mpNotConnected": "Mercado Pago no está conectado. Conecta una terminal antes de dividir con tarjeta.",
+      "terminalDeclined": "Pago rechazado en la terminal. Intenta de nuevo.",
+      "terminalSendFailed": "No se pudo enviar a la terminal. Intenta de nuevo.",
+      "cashShort": "Falta {{short}} para completar este pago.",
+      "cashRecordFailed": "No se pudo registrar el efectivo.",
+      "finalizeFailed": "No se pudo finalizar la orden. Intenta de nuevo."
+    }
   },
   "customerLookup": {
     "loyaltyProgram": "Programa de Lealtad",

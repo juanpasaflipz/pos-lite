@@ -251,7 +251,37 @@
     "processPayments": "Process {{count}} Payments",
     "processing": "Processing...",
     "back": "Back",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "collectingFrom": "Collecting from Person {{number}} of {{total}}",
+    "method": {
+      "card": "Card payment — Send to terminal",
+      "cash": "Cash payment"
+    },
+    "sendToTerminal": "Send to Terminal",
+    "terminalWaiting": "Waiting on terminal…",
+    "terminalInstructions": "Ask the customer to insert, swipe, or tap their card on the Mercado Pago terminal.",
+    "cancelTerminal": "Cancel and retry",
+    "retry": "Retry",
+    "amountReceived": "Amount received",
+    "exactAmount": "Exact ({{amount}})",
+    "changeDue": "Change due",
+    "markCashCollected": "Confirm Cash Received",
+    "recording": "Recording…",
+    "finalizing": "Finalizing order…",
+    "retryFinalize": "Retry Finalize",
+    "abandon": "Abandon",
+    "keepGoing": "Keep Going",
+    "abandonConfirmTitle": "Abandon split payment?",
+    "abandonConfirmBody": "The order will remain unpaid so you can pick it up later.",
+    "abandonWithPaidWarning": "{{count}} payment(s) already collected. The order will be left unfinalized; the collected payments must be refunded manually if you abandon.",
+    "errors": {
+      "mpNotConnected": "Mercado Pago is not connected. Connect a terminal before splitting by card.",
+      "terminalDeclined": "Payment declined at the terminal. Try again.",
+      "terminalSendFailed": "Could not send to terminal. Try again.",
+      "cashShort": "Need {{short}} more for this split.",
+      "cashRecordFailed": "Could not record cash.",
+      "finalizeFailed": "Could not finalize the order. Try again."
+    }
   },
   "customerLookup": {
     "loyaltyProgram": "Loyalty Program",

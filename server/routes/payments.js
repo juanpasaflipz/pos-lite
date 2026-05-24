@@ -229,50 +229,307 @@ router.post('/cash', paymentLimiter, requireAuth('pos_access'), async (req, res)
   }
 });
 
-// POST /api/payments/split - split payment across multiple methods
-router.post('/split', paymentLimiter, requireAuth('pos_access'), async (req, res) => {
+// POST /api/payments/split/start - register N pending splits on an order
+// Returns the order_payments rows the client must collect one-by-one.
+router.post('/split/start', paymentLimiter, requireAuth('pos_access'), async (req, res) => {
   try {
-    const { order_id, split_type, splits } = req.body;
+    const { order_id, splits } = req.body;
 
-    if (!order_id || !splits || splits.length === 0) {
+    if (!order_id || !Array.isArray(splits) || splits.length === 0) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+    for (const s of splits) {
+      if (!s || (s.payment_method !== 'card' && s.payment_method !== 'cash')) {
+        return res.status(400).json({ error: 'Each split must have payment_method card or cash' });
+      }
+      if (typeof s.amount !== 'number' || s.amount <= 0) {
+        return res.status(400).json({ error: 'Each split must have a positive amount' });
+      }
     }
 
     const order = await get('SELECT id, total, tip, payment_status FROM orders WHERE id = $1', [order_id]);
     if (!order) return res.status(404).json({ error: 'Order not found' });
-    if (order.payment_status === 'paid') return res.status(400).json({ error: 'Order is already paid' });
-
-    // Process each split
-    const tid = getTenantId();
-    for (const split of splits) {
-      const tipAmount = split.tip || 0;
-      await run(`
-        INSERT INTO order_payments (tenant_id, order_id, payment_method, amount, tip, status)
-        VALUES ($1, $2, $3, $4, $5, 'paid')
-      `, [tid, order_id, split.payment_method, split.amount, tipAmount]);
+    if (order.payment_status === 'paid') {
+      return res.status(400).json({ error: 'Order is already paid' });
     }
 
-    // Calculate total tip from all splits
-    const totalTip = splits.reduce((sum, s) => sum + (s.tip || 0), 0);
+    // Sum check: splits must add up to order total (allow 1 cent tolerance for rounding)
+    const splitTotal = splits.reduce((sum, s) => sum + Number(s.amount), 0);
+    if (Math.abs(splitTotal - Number(order.total)) > 0.02) {
+      return res.status(400).json({
+        error: `Split totals (${splitTotal.toFixed(2)}) do not match order total (${Number(order.total).toFixed(2)})`,
+      });
+    }
 
-    // Mark the order as paid
-    await run(`
-      UPDATE orders
-      SET payment_status = 'paid', status = 'preparing', payment_method = 'split', tip = $1
-      WHERE id = $2
-    `, [totalTip, order_id]);
+    // Wipe any prior pending/failed splits for this order (allow re-start).
+    // Keep paid splits (recovery from partial collection).
+    await run(
+      `DELETE FROM order_payments WHERE order_id = $1 AND status NOT IN ('paid')`,
+      [order_id]
+    );
 
-    // Deduct inventory
-    await deductInventoryForOrder(order_id);
+    const tid = getTenantId();
+    const created = [];
+    for (const s of splits) {
+      const tipAmount = Number(s.tip) || 0;
+      const row = await get(
+        `INSERT INTO order_payments (tenant_id, order_id, payment_method, amount, tip, status)
+         VALUES ($1, $2, $3, $4, $5, 'pending')
+         RETURNING id, payment_method, amount, tip, status`,
+        [tid, order_id, s.payment_method, s.amount, tipAmount]
+      );
+      created.push(row);
+    }
 
-    res.json({ success: true, message: 'Split payment processed', splits_count: splits.length });
+    // Leave payment_status='unpaid' so an abandoned split flow remains visible in
+    // the unpaid-orders recovery list. The 'split' payment_method is the marker.
+    await run(
+      `UPDATE orders SET payment_method = 'split' WHERE id = $1`,
+      [order_id]
+    );
+
+    res.json({ success: true, order_id, splits: created });
   } catch (error) {
-    console.error('Error processing split payment:', error);
-    res.status(500).json({ error: 'Failed to process split payment' });
+    console.error('Error starting split payment:', error);
+    res.status(500).json({ error: 'Failed to start split payment' });
   }
 });
 
-// GET /api/payments/split/:order_id - get split details
+// POST /api/payments/split/charge-card - push a single split to the MP Point terminal.
+router.post('/split/charge-card', paymentLimiter, requireAuth('pos_access'), requirePro, async (req, res) => {
+  try {
+    const { order_payment_id, terminal_id } = req.body;
+    if (!order_payment_id) return res.status(400).json({ error: 'Missing order_payment_id' });
+
+    const split = await get(
+      `SELECT op.id, op.order_id, op.payment_method, op.amount, op.tip, op.status, op.payment_intent_id,
+              o.order_number, o.payment_status AS order_payment_status
+         FROM order_payments op
+         JOIN orders o ON o.id = op.order_id
+        WHERE op.id = $1`,
+      [order_payment_id]
+    );
+    if (!split) return res.status(404).json({ error: 'Split not found' });
+    if (split.payment_method !== 'card') {
+      return res.status(400).json({ error: 'Split is not a card payment' });
+    }
+    if (split.status === 'paid') {
+      return res.status(400).json({ error: 'Split is already paid' });
+    }
+    if (split.order_payment_status === 'paid') {
+      return res.status(400).json({ error: 'Order is already paid' });
+    }
+
+    const tenant = await getTenant(req.tenant.id);
+    if (!tenant?.mp_access_token) {
+      return res.status(400).json({ error: 'Mercado Pago not connected' });
+    }
+
+    const accessToken = await ensureFreshToken(tenant, adminSql);
+    const termId = terminal_id || tenant.mp_default_terminal_id;
+    if (!termId) return res.status(400).json({ error: 'No terminal selected' });
+
+    const chargeAmount = Number(split.amount) + (Number(split.tip) || 0);
+    const externalRef = `${req.tenant.id}-${split.order_id}-sp${split.id}`;
+
+    const mpOrder = await createPointOrder(accessToken, {
+      amount: chargeAmount,
+      externalRef,
+      terminalId: termId,
+    });
+
+    await run(
+      `UPDATE order_payments
+          SET payment_intent_id = $1, status = 'pending_terminal'
+        WHERE id = $2`,
+      [mpOrder.id, split.id]
+    );
+
+    res.json({ success: true, order_payment_id: split.id, mp_order_id: mpOrder.id });
+  } catch (error) {
+    console.error('Split MP charge error:', error);
+    res.status(500).json({ error: 'Failed to create terminal payment for split' });
+  }
+});
+
+// POST /api/payments/split/cancel-card - cancel a pending terminal split.
+router.post('/split/cancel-card', requireAuth('pos_access'), requirePro, async (req, res) => {
+  try {
+    const { order_payment_id } = req.body;
+    if (!order_payment_id) return res.status(400).json({ error: 'Missing order_payment_id' });
+
+    const split = await get(
+      `SELECT id, payment_intent_id, status FROM order_payments WHERE id = $1`,
+      [order_payment_id]
+    );
+    if (!split) return res.status(404).json({ error: 'Split not found' });
+    if (split.status !== 'pending_terminal') {
+      return res.status(400).json({ error: 'Split is not awaiting terminal' });
+    }
+
+    const tenant = await getTenant(req.tenant.id);
+    if (tenant?.mp_access_token && split.payment_intent_id) {
+      try {
+        const accessToken = await ensureFreshToken(tenant, adminSql);
+        await cancelPointOrder(accessToken, tenant.mp_default_terminal_id, split.payment_intent_id);
+      } catch (cancelErr) {
+        console.warn('Split MP cancel warning:', cancelErr.message);
+      }
+    }
+
+    await run(
+      `UPDATE order_payments SET payment_intent_id = NULL, status = 'pending' WHERE id = $1`,
+      [split.id]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Split MP cancel error:', error);
+    res.status(500).json({ error: 'Failed to cancel terminal split' });
+  }
+});
+
+// POST /api/payments/split/record-cash - record a cash split as collected.
+router.post('/split/record-cash', requireAuth('pos_access'), async (req, res) => {
+  try {
+    const { order_payment_id, amount_received } = req.body;
+    if (!order_payment_id) return res.status(400).json({ error: 'Missing order_payment_id' });
+
+    const split = await get(
+      `SELECT id, payment_method, amount, tip, status FROM order_payments WHERE id = $1`,
+      [order_payment_id]
+    );
+    if (!split) return res.status(404).json({ error: 'Split not found' });
+    if (split.payment_method !== 'cash') {
+      return res.status(400).json({ error: 'Split is not a cash payment' });
+    }
+    if (split.status === 'paid') {
+      return res.status(400).json({ error: 'Split is already paid' });
+    }
+
+    const required = Number(split.amount) + (Number(split.tip) || 0);
+    const received = Number(amount_received) || 0;
+    if (received + 0.005 < required) {
+      return res.status(400).json({
+        error: `Amount received (${received.toFixed(2)}) is less than required (${required.toFixed(2)})`,
+      });
+    }
+    const change = Math.round((received - required) * 100) / 100;
+
+    await run(
+      `UPDATE order_payments SET status = 'paid' WHERE id = $1`,
+      [split.id]
+    );
+
+    res.json({ success: true, change_due: change });
+  } catch (error) {
+    console.error('Split cash record error:', error);
+    res.status(500).json({ error: 'Failed to record cash split' });
+  }
+});
+
+// GET /api/payments/split/:order_id/status - return all splits with live MP polling.
+router.get('/split/:order_id/status', requireAuth('pos_access'), async (req, res) => {
+  try {
+    const { order_id } = req.params;
+    const splits = await all(
+      `SELECT id, payment_method, amount, tip, status, payment_intent_id
+         FROM order_payments
+        WHERE order_id = $1
+        ORDER BY id ASC`,
+      [order_id]
+    );
+
+    // Live pull MP for any splits still pending_terminal.
+    const pendingMp = splits.filter(s => s.status === 'pending_terminal' && s.payment_intent_id);
+    if (pendingMp.length > 0 && req.tenant?.id) {
+      try {
+        const tenant = await getTenant(req.tenant.id);
+        if (tenant?.mp_access_token) {
+          const accessToken = await ensureFreshToken(tenant, adminSql);
+          for (const s of pendingMp) {
+            try {
+              const mpOrder = await getPointOrder(accessToken, s.payment_intent_id, tenant.mp_default_terminal_id);
+              const mapped = mapPointOrderStatus(mpOrder);
+              if (mapped === 'paid') {
+                await run(`UPDATE order_payments SET status = 'paid' WHERE id = $1`, [s.id]);
+                s.status = 'paid';
+              } else if (mapped === 'failed') {
+                await run(`UPDATE order_payments SET status = 'failed' WHERE id = $1`, [s.id]);
+                s.status = 'failed';
+              }
+            } catch (innerErr) {
+              console.warn('Split MP status pull failed:', innerErr.message);
+            }
+          }
+        }
+      } catch (mpErr) {
+        console.warn('Split MP status pull setup failed:', mpErr.message);
+      }
+    }
+
+    res.json({ order_id: Number(order_id), splits });
+  } catch (error) {
+    console.error('Error fetching split status:', error);
+    res.status(500).json({ error: 'Failed to fetch split status' });
+  }
+});
+
+// POST /api/payments/split/finalize - verify all splits are paid, then mark order paid.
+router.post('/split/finalize', requireAuth('pos_access'), async (req, res) => {
+  try {
+    const { order_id } = req.body;
+    if (!order_id) return res.status(400).json({ error: 'Missing order_id' });
+
+    const order = await get('SELECT id, payment_status FROM orders WHERE id = $1', [order_id]);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.payment_status === 'paid') {
+      return res.status(400).json({ error: 'Order is already paid' });
+    }
+
+    const splits = await all(
+      `SELECT id, status, tip FROM order_payments WHERE order_id = $1`,
+      [order_id]
+    );
+    if (splits.length === 0) {
+      return res.status(400).json({ error: 'No splits found for order' });
+    }
+    const unpaid = splits.filter(s => s.status !== 'paid');
+    if (unpaid.length > 0) {
+      return res.status(400).json({
+        error: `Cannot finalize: ${unpaid.length} split(s) still unpaid`,
+        unpaid_ids: unpaid.map(s => s.id),
+      });
+    }
+
+    const totalTip = splits.reduce((sum, s) => sum + (Number(s.tip) || 0), 0);
+
+    await run(
+      `UPDATE orders
+          SET payment_status = 'paid', status = 'preparing',
+              payment_method = 'split', tip = $1, paid_at = NOW()
+        WHERE id = $2`,
+      [totalTip, order_id]
+    );
+
+    await deductInventoryForOrder(order_id);
+
+    let invoice_token = null;
+    try {
+      invoice_token = await generateInvoiceToken(req.tenant?.id || 'default', order_id, 72);
+      await run('UPDATE orders SET invoice_token = $1 WHERE id = $2', [invoice_token, order_id]);
+    } catch (tokenErr) {
+      console.error('Non-fatal: split finalize invoice token failed:', tokenErr.message);
+    }
+
+    res.json({ success: true, splits_count: splits.length, tip: totalTip, invoice_token });
+  } catch (error) {
+    console.error('Error finalizing split payment:', error);
+    res.status(500).json({ error: 'Failed to finalize split payment' });
+  }
+});
+
+// GET /api/payments/split/:order_id - get split details (legacy endpoint, kept for read use)
 router.get('/split/:order_id', async (req, res) => {
   try {
     const { order_id } = req.params;
@@ -282,6 +539,15 @@ router.get('/split/:order_id', async (req, res) => {
     console.error('Error fetching split payments:', error);
     res.status(500).json({ error: 'Failed to fetch split payments' });
   }
+});
+
+// POST /api/payments/split - DEPRECATED. The old endpoint marked orders paid without
+// actually charging cards or collecting cash. Clients must use the new flow:
+//   /split/start → /split/charge-card or /split/record-cash → /split/finalize
+router.post('/split', requireAuth('pos_access'), async (_req, res) => {
+  res.status(410).json({
+    error: 'This endpoint is deprecated. Use /split/start + per-split charge endpoints + /split/finalize.',
+  });
 });
 
 // POST /api/payments/refund - refund payment (full, partial by items, or partial by amount)
