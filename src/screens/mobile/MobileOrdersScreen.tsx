@@ -10,11 +10,11 @@ import { RefreshCw, WifiOff, ChevronDown, ChevronUp } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
   pending: 'bg-brand-600',
-  confirmed: 'bg-blue-600',
-  preparing: 'bg-amber-500 text-neutral-900',
-  ready: 'bg-green-600',
+  confirmed: 'bg-cockpit-blue',
+  preparing: 'bg-cockpit-yellow text-neutral-900',
+  ready: 'bg-cockpit-green',
   completed: 'bg-neutral-600',
-  cancelled: 'bg-red-600',
+  cancelled: 'bg-cockpit-red',
 };
 
 const MobileOrdersScreen: React.FC = () => {

@@ -39,7 +39,7 @@ const OxxoReferenceModal: React.FC<OxxoReferenceModalProps> = ({
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
       <div className="bg-neutral-900 rounded-2xl shadow-2xl w-full max-w-md border border-neutral-800 max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="bg-orange-600 text-white p-6 rounded-t-2xl text-center">
+        <div className="bg-cockpit-yellow text-neutral-900 p-6 rounded-t-2xl text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
             <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
@@ -72,9 +72,9 @@ const OxxoReferenceModal: React.FC<OxxoReferenceModalProps> = ({
           </div>
 
           {/* Instructions */}
-          <div className="bg-orange-900/30 border border-orange-700/50 p-4 rounded-lg">
-            <p className="text-orange-300 text-sm font-semibold mb-2">{t('oxxo.instructions')}</p>
-            <ol className="text-orange-200/80 text-sm space-y-1 list-decimal list-inside">
+          <div className="bg-cockpit-yellow/30 border border-cockpit-yellow/50 p-4 rounded-lg">
+            <p className="text-cockpit-yellow text-sm font-semibold mb-2">{t('oxxo.instructions')}</p>
+            <ol className="text-cockpit-yellow/80 text-sm space-y-1 list-decimal list-inside">
               <li>{t('oxxo.step1')}</li>
               <li>{t('oxxo.step2')}</li>
               <li>{t('oxxo.step3')}</li>
@@ -86,7 +86,7 @@ const OxxoReferenceModal: React.FC<OxxoReferenceModalProps> = ({
           <div className="space-y-3">
             <button
               onClick={handleCopy}
-              className="w-full py-3 bg-orange-600 text-white font-bold rounded-lg hover:bg-orange-700 transition-all"
+              className="w-full py-3 bg-cockpit-yellow text-neutral-900 font-bold rounded-lg hover:bg-cockpit-yellow/90 transition-all"
             >
               {t('oxxo.copyReference')}
             </button>

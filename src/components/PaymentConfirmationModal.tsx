@@ -76,7 +76,7 @@ const PaymentConfirmationModal: React.FC<PaymentConfirmationModalProps> = ({
         {/* Success overlay */}
         {success && (
           <div className="absolute inset-0 bg-neutral-900/95 z-10 flex flex-col items-center justify-center rounded-2xl">
-            <div className="w-20 h-20 rounded-full bg-green-600 flex items-center justify-center mb-4 animate-pulse">
+            <div className="w-20 h-20 rounded-full bg-cockpit-green flex items-center justify-center mb-4 animate-pulse">
               <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
@@ -134,7 +134,7 @@ const PaymentConfirmationModal: React.FC<PaymentConfirmationModalProps> = ({
 
           {/* Error message */}
           {error && (
-            <p className="text-red-400 text-sm text-center font-medium">{error}</p>
+            <p className="text-cockpit-red text-sm text-center font-medium">{error}</p>
           )}
 
           {/* Confirm button */}

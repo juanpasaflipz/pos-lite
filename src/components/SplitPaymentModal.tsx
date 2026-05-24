@@ -386,7 +386,7 @@ export default function SplitPaymentModal({
                 </button>
                 <button
                   onClick={() => updateDraftMethod(i, 'cash')}
-                  className={`flex-1 py-2 rounded-lg text-sm font-bold ${split.method === 'cash' ? 'bg-green-600 text-white' : 'bg-neutral-700 text-neutral-400'}`}
+                  className={`flex-1 py-2 rounded-lg text-sm font-bold ${split.method === 'cash' ? 'bg-cockpit-green text-white' : 'bg-neutral-700 text-neutral-400'}`}
                 >
                   {t('splitPayment.cash')}
                 </button>
@@ -437,7 +437,7 @@ export default function SplitPaymentModal({
                 </button>
                 <button
                   onClick={() => updateDraftMethod(i, 'cash')}
-                  className={`flex-1 py-2 rounded-lg text-sm font-bold ${split.method === 'cash' ? 'bg-green-600 text-white' : 'bg-neutral-700 text-neutral-400'}`}
+                  className={`flex-1 py-2 rounded-lg text-sm font-bold ${split.method === 'cash' ? 'bg-cockpit-green text-white' : 'bg-neutral-700 text-neutral-400'}`}
                 >
                   {t('splitPayment.cash')}
                 </button>
@@ -445,7 +445,7 @@ export default function SplitPaymentModal({
             </div>
           ))}
           <div className="bg-neutral-800 p-3 rounded-lg text-center">
-            <p className={`font-bold ${isBalanced ? 'text-green-400' : 'text-brand-400'}`}>
+            <p className={`font-bold ${isBalanced ? 'text-cockpit-green' : 'text-brand-400'}`}>
               {t('splitPayment.assigned', { assigned: formatPrice(totalAssigned), total: formatPrice(orderTotal) })}
               {!isBalanced && ` (${formatPrice(Math.abs(orderTotal - totalAssigned))} ${totalAssigned > orderTotal ? t('splitPayment.over') : t('splitPayment.remaining')})`}
             </p>
@@ -496,7 +496,7 @@ export default function SplitPaymentModal({
                 </button>
                 <button
                   onClick={() => updateDraftMethod(i, 'cash')}
-                  className={`px-2 py-1 rounded text-xs font-bold ${split.method === 'cash' ? 'bg-green-600 text-white' : 'bg-neutral-700 text-neutral-400'}`}
+                  className={`px-2 py-1 rounded text-xs font-bold ${split.method === 'cash' ? 'bg-cockpit-green text-white' : 'bg-neutral-700 text-neutral-400'}`}
                 >
                   {t('splitPayment.cash')}
                 </button>
@@ -521,9 +521,9 @@ export default function SplitPaymentModal({
               key={s.id}
               className={`flex-1 h-2 rounded-full ${
                 s.status === 'paid'
-                  ? 'bg-green-500'
+                  ? 'bg-cockpit-green'
                   : s.status === 'failed'
-                  ? 'bg-red-500'
+                  ? 'bg-cockpit-red'
                   : i === activeIndex
                   ? 'bg-brand-500'
                   : 'bg-neutral-700'
@@ -570,8 +570,8 @@ export default function SplitPaymentModal({
               </div>
             )}
             {terminalError && (
-              <div className="bg-red-900/30 border border-red-600/40 rounded-lg p-3 text-center">
-                <p className="text-red-300 font-semibold mb-2">{terminalError}</p>
+              <div className="bg-cockpit-red/30 border border-cockpit-red/40 rounded-lg p-3 text-center">
+                <p className="text-cockpit-red font-semibold mb-2">{terminalError}</p>
                 <button
                   onClick={sendToTerminal}
                   className="text-sm text-white font-bold underline"
@@ -592,7 +592,7 @@ export default function SplitPaymentModal({
                 value={cashReceived}
                 onChange={(e) => setCashReceived(e.target.value)}
                 placeholder={formatPrice(requiredForActive)}
-                className="w-full bg-neutral-700 border border-neutral-600 rounded-lg p-3 text-2xl text-white text-center focus:outline-none focus:border-green-500 font-bold"
+                className="w-full bg-neutral-700 border border-neutral-600 rounded-lg p-3 text-2xl text-white text-center focus:outline-none focus:border-cockpit-green font-bold"
                 autoFocus
               />
               <div className="grid grid-cols-4 gap-2">
@@ -615,17 +615,17 @@ export default function SplitPaymentModal({
               {cashReceivedNum > 0 && (
                 <div className="text-center pt-2 border-t border-neutral-700">
                   <p className="text-neutral-400 text-sm">{t('splitPayment.changeDue')}</p>
-                  <p className="text-2xl font-bold text-green-400">{formatPrice(cashChangeDue)}</p>
+                  <p className="text-2xl font-bold text-cockpit-green">{formatPrice(cashChangeDue)}</p>
                 </div>
               )}
             </div>
             {cashError && (
-              <p className="text-red-400 text-sm font-semibold text-center">{cashError}</p>
+              <p className="text-cockpit-red text-sm font-semibold text-center">{cashError}</p>
             )}
             <button
               onClick={recordCash}
               disabled={isRecordingCash || cashReceivedNum + 0.005 < requiredForActive}
-              className="w-full py-4 bg-green-600 text-white text-lg font-bold rounded-lg hover:bg-green-700 disabled:bg-neutral-700 disabled:text-neutral-500 transition-all"
+              className="w-full py-4 bg-cockpit-green text-white text-lg font-bold rounded-lg hover:bg-cockpit-green/90 disabled:bg-neutral-700 disabled:text-neutral-500 transition-all"
             >
               {isRecordingCash ? t('splitPayment.recording') : t('splitPayment.markCashCollected')}
             </button>
@@ -639,7 +639,7 @@ export default function SplitPaymentModal({
     <div className="space-y-4 text-center py-8">
       {finalizeError ? (
         <>
-          <p className="text-red-400 font-bold">{finalizeError}</p>
+          <p className="text-cockpit-red font-bold">{finalizeError}</p>
           <button
             onClick={() => orderId && finalize(splitRows)}
             className="px-6 py-3 bg-brand-600 text-white font-bold rounded-lg"
@@ -676,12 +676,12 @@ export default function SplitPaymentModal({
           {phase === 'setup' && mode && (
             <>
               {cardSplitsBlocked && (
-                <p className="text-red-400 text-sm font-semibold text-center mb-2">
+                <p className="text-cockpit-red text-sm font-semibold text-center mb-2">
                   {t('splitPayment.errors.mpNotConnected')}
                 </p>
               )}
               {startError && (
-                <p className="text-red-400 text-sm font-semibold text-center mb-2">{startError}</p>
+                <p className="text-cockpit-red text-sm font-semibold text-center mb-2">{startError}</p>
               )}
               <button
                 onClick={handleStart}
@@ -727,7 +727,7 @@ export default function SplitPaymentModal({
                 </button>
                 <button
                   onClick={handleAbandon}
-                  className="flex-1 py-3 bg-red-600 text-white font-bold rounded-lg"
+                  className="flex-1 py-3 bg-cockpit-red text-white font-bold rounded-lg"
                 >
                   {t('splitPayment.abandon')}
                 </button>

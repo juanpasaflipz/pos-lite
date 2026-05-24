@@ -60,7 +60,7 @@ const MobileReceiptShare: React.FC<Props> = ({ order, onNewOrder, onDone }) => {
 
         {/* Success icon */}
         <div className="flex flex-col items-center pt-4 pb-2">
-          <CheckCircle className="w-16 h-16 text-green-500 mb-2" />
+          <CheckCircle className="w-16 h-16 text-cockpit-green mb-2" />
           <h2 className="text-xl font-bold text-white">{t('mobilePOS.orderComplete')}</h2>
           <p className="text-neutral-400 text-sm mt-1">
             {t('mobilePOS.orderNumber', { number: order.order_number })}
@@ -105,7 +105,7 @@ const MobileReceiptShare: React.FC<Props> = ({ order, onNewOrder, onDone }) => {
           >
             {copied ? (
               <>
-                <CheckCircle className="w-5 h-5 text-green-500" />
+                <CheckCircle className="w-5 h-5 text-cockpit-green" />
                 {t('mobilePOS.copyReceipt')}
               </>
             ) : (

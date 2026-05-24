@@ -38,7 +38,7 @@ const SpeiReferenceModal: React.FC<SpeiReferenceModalProps> = ({
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
       <div className="bg-neutral-900 rounded-2xl shadow-2xl w-full max-w-md border border-neutral-800 max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="bg-blue-600 text-white p-6 rounded-t-2xl text-center">
+        <div className="bg-cockpit-blue text-white p-6 rounded-t-2xl text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
             <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
@@ -76,9 +76,9 @@ const SpeiReferenceModal: React.FC<SpeiReferenceModalProps> = ({
           </div>
 
           {/* Instructions */}
-          <div className="bg-blue-900/30 border border-blue-700/50 p-4 rounded-lg">
-            <p className="text-blue-300 text-sm font-semibold mb-2">{t('spei.instructions')}</p>
-            <ol className="text-blue-200/80 text-sm space-y-1 list-decimal list-inside">
+          <div className="bg-cockpit-blue/30 border border-cockpit-blue/50 p-4 rounded-lg">
+            <p className="text-cockpit-blue text-sm font-semibold mb-2">{t('spei.instructions')}</p>
+            <ol className="text-cockpit-blue/80 text-sm space-y-1 list-decimal list-inside">
               <li>{t('spei.step1')}</li>
               <li>{t('spei.step2')}</li>
               <li>{t('spei.step3')}</li>
@@ -90,7 +90,7 @@ const SpeiReferenceModal: React.FC<SpeiReferenceModalProps> = ({
           <div className="space-y-3">
             <button
               onClick={handleCopy}
-              className="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-all"
+              className="w-full py-3 bg-cockpit-blue text-white font-bold rounded-lg hover:bg-cockpit-blue/90 transition-all"
             >
               {t('spei.copyClabe')}
             </button>

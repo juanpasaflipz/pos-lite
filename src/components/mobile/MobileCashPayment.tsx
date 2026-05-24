@@ -96,8 +96,8 @@ const MobileCashPayment: React.FC<Props> = ({ total, onConfirm, onClose, isProce
 
           {/* Change display */}
           {amountNum > 0 && (
-            <div className={`text-center py-2 rounded-xl ${isSufficient ? 'bg-green-600/10' : 'bg-red-600/10'}`}>
-              <p className={`text-lg font-bold ${isSufficient ? 'text-green-400' : 'text-red-400'}`}>
+            <div className={`text-center py-2 rounded-xl ${isSufficient ? 'bg-cockpit-green/10' : 'bg-cockpit-red/10'}`}>
+              <p className={`text-lg font-bold ${isSufficient ? 'text-cockpit-green' : 'text-cockpit-red'}`}>
                 {isSufficient
                   ? t('mobilePOS.changeDue', { amount: formatPrice(change) })
                   : t('mobilePOS.insufficientAmount')}
@@ -109,7 +109,7 @@ const MobileCashPayment: React.FC<Props> = ({ total, onConfirm, onClose, isProce
           <button
             onClick={handleConfirm}
             disabled={!isSufficient || isProcessing}
-            className="w-full py-4 bg-green-600 text-white text-base font-bold rounded-2xl disabled:bg-neutral-700 disabled:text-neutral-500 active:bg-green-700 transition-colors touch-manipulation flex items-center justify-center gap-2"
+            className="w-full py-4 bg-cockpit-green text-white text-base font-bold rounded-2xl disabled:bg-neutral-700 disabled:text-neutral-500 active:bg-cockpit-green transition-colors touch-manipulation flex items-center justify-center gap-2"
             style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
           >
             {isProcessing ? (

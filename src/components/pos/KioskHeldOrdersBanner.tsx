@@ -49,9 +49,9 @@ export default function KioskHeldOrdersBanner({ onClaim, onError }: Props) {
 
   const hasStranded = orders.some((o) => o.kind === 'stranded_terminal');
   const bannerTone = hasStranded
-    ? 'bg-amber-500/15 border-amber-500/50 hover:bg-amber-500/25'
+    ? 'bg-cockpit-yellow/15 border-cockpit-yellow/50 hover:bg-cockpit-yellow/25'
     : 'bg-brand-600/15 border-brand-600/40 hover:bg-brand-600/25';
-  const headlineTone = hasStranded ? 'text-amber-200' : 'text-brand-200';
+  const headlineTone = hasStranded ? 'text-cockpit-yellow' : 'text-brand-200';
   const subline = hasStranded
     ? 'Una o más necesitan rescate del terminal'
     : 'Toca para reclamar a la caja';
@@ -63,7 +63,7 @@ export default function KioskHeldOrdersBanner({ onClaim, onError }: Props) {
         className={`mx-4 mt-2 mb-1 flex items-center gap-3 rounded-lg border px-4 py-2 text-left transition-colors ${bannerTone}`}
       >
         {hasStranded ? (
-          <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0" />
+          <AlertTriangle className="h-5 w-5 text-cockpit-yellow shrink-0" />
         ) : (
           <Smartphone className="h-5 w-5 text-brand-400 shrink-0" />
         )}
@@ -101,7 +101,7 @@ export default function KioskHeldOrdersBanner({ onClaim, onError }: Props) {
                     key={order.id}
                     className={`rounded-lg border p-4 flex items-center gap-4 ${
                       stranded
-                        ? 'bg-amber-950/40 border-amber-700/60'
+                        ? 'bg-cockpit-yellow/40 border-cockpit-yellow/60'
                         : 'bg-neutral-800 border-neutral-700'
                     }`}
                   >
@@ -111,7 +111,7 @@ export default function KioskHeldOrdersBanner({ onClaim, onError }: Props) {
                           {order.customer_name || 'Cliente'}
                         </p>
                         {stranded && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-200 text-[10px] font-black uppercase px-2 py-0.5 tracking-wide">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-cockpit-yellow/20 border border-cockpit-yellow/40 text-cockpit-yellow text-[10px] font-black uppercase px-2 py-0.5 tracking-wide">
                             <AlertTriangle className="h-3 w-3" />
                             Terminal expiró
                           </span>
@@ -131,7 +131,7 @@ export default function KioskHeldOrdersBanner({ onClaim, onError }: Props) {
                         disabled={claiming === order.id}
                         className={`mt-2 px-4 py-2 rounded-lg disabled:opacity-50 text-white text-sm font-bold min-h-[40px] ${
                           stranded
-                            ? 'bg-amber-600 hover:bg-amber-700'
+                            ? 'bg-cockpit-yellow hover:bg-cockpit-yellow/90'
                             : 'bg-brand-600 hover:bg-brand-700'
                         }`}
                       >

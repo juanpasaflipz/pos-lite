@@ -9,11 +9,11 @@ import BrandLogo from '../../components/BrandLogo';
 import { Wifi, WifiOff, LogOut } from 'lucide-react';
 
 const roleColors: Record<string, string> = {
-  admin: 'bg-purple-600',
-  manager: 'bg-blue-600',
+  admin: 'bg-cockpit-blue',
+  manager: 'bg-cockpit-blue',
   cashier: 'bg-brand-600',
-  kitchen: 'bg-amber-600',
-  bar: 'bg-pink-600',
+  kitchen: 'bg-cockpit-yellow',
+  bar: 'bg-cockpit-red',
 };
 
 const MobileProfileScreen: React.FC = () => {
@@ -58,8 +58,8 @@ const MobileProfileScreen: React.FC = () => {
           <div className="flex items-center gap-2">
             {isOnline ? (
               <>
-                <Wifi className="w-4 h-4 text-green-500" />
-                <span className="text-sm text-green-500 font-semibold">{t('mobileProfile.online')}</span>
+                <Wifi className="w-4 h-4 text-cockpit-green" />
+                <span className="text-sm text-cockpit-green font-semibold">{t('mobileProfile.online')}</span>
               </>
             ) : (
               <>

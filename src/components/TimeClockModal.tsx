@@ -144,7 +144,7 @@ const TimeClockModal: React.FC<TimeClockModalProps> = ({ isOpen, onClose }) => {
                 </div>
               ))}
             </div>
-            {error && <p className="text-center text-red-400 mb-4 font-medium">{error}</p>}
+            {error && <p className="text-center text-cockpit-red mb-4 font-medium">{error}</p>}
             <div className="grid grid-cols-3 gap-2 mb-3">
               {['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((d) => (
                 <button
@@ -182,8 +182,8 @@ const TimeClockModal: React.FC<TimeClockModalProps> = ({ isOpen, onClose }) => {
             <p className="text-3xl font-bold text-white mt-1">{status.employee.name}</p>
 
             {status.openShift ? (
-              <div className="mt-6 mb-6 rounded-xl border border-green-800 bg-green-950/40 px-4 py-4">
-                <p className="text-green-300 font-semibold">{t('timeClock.youAreClockedIn')}</p>
+              <div className="mt-6 mb-6 rounded-xl border border-cockpit-green bg-cockpit-green/40 px-4 py-4">
+                <p className="text-cockpit-green font-semibold">{t('timeClock.youAreClockedIn')}</p>
                 <p className="text-sm text-neutral-400 mt-1">
                   {t('timeClock.since', { time: formatTime(status.openShift.clock_in_at) })}
                 </p>
@@ -194,13 +194,13 @@ const TimeClockModal: React.FC<TimeClockModalProps> = ({ isOpen, onClose }) => {
               </div>
             )}
 
-            {error && <p className="text-red-400 mb-4 font-medium">{error}</p>}
+            {error && <p className="text-cockpit-red mb-4 font-medium">{error}</p>}
 
             <button
               onClick={handleConfirm}
               disabled={busy}
               className={`w-full h-14 rounded-xl font-bold text-white text-lg flex items-center justify-center gap-2 transition-colors ${
-                status.openShift ? 'bg-red-600 hover:bg-red-500' : 'bg-brand-600 hover:bg-brand-500'
+                status.openShift ? 'bg-cockpit-red hover:bg-cockpit-red/90' : 'bg-brand-600 hover:bg-brand-500'
               } disabled:opacity-60`}
             >
               {status.openShift ? <LogOut size={20} /> : <LogIn size={20} />}
@@ -215,8 +215,8 @@ const TimeClockModal: React.FC<TimeClockModalProps> = ({ isOpen, onClose }) => {
 
         {phase === 'success' && (
           <div className="text-center py-6">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-950/40 border border-green-800 mb-4">
-              <CheckCircle2 size={32} className="text-green-400" />
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-cockpit-green/40 border border-cockpit-green mb-4">
+              <CheckCircle2 size={32} className="text-cockpit-green" />
             </div>
             <p className="text-xl font-bold text-white">{successMessage}</p>
           </div>

@@ -87,9 +87,9 @@ const DiscountModal: React.FC<DiscountModalProps> = ({
     <>
       <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
         <div className="bg-neutral-900 rounded-2xl shadow-2xl w-full max-w-md border border-neutral-800">
-          <div className="bg-amber-700 text-white p-5 rounded-t-2xl">
+          <div className="bg-cockpit-yellow text-neutral-900 p-5 rounded-t-2xl">
             <h2 className="text-xl font-bold">{t('discount.title')}</h2>
-            <p className="text-amber-100 text-sm">
+            <p className="text-cockpit-yellow text-sm">
               {scope === 'cart' ? t('discount.scopeCart') : t('discount.scopeItem', { name: itemName || '' })}
             </p>
           </div>
@@ -116,7 +116,7 @@ const DiscountModal: React.FC<DiscountModalProps> = ({
                     value={valueText}
                     onChange={(e) => setValueText(e.target.value)}
                     placeholder={type === 'percent' ? '10' : '50.00'}
-                    className="w-full bg-neutral-800 border border-neutral-700 rounded-lg p-3 text-lg text-white placeholder-neutral-500 focus:outline-none focus:border-amber-600"
+                    className="w-full bg-neutral-800 border border-neutral-700 rounded-lg p-3 text-lg text-white placeholder-neutral-500 focus:outline-none focus:border-cockpit-yellow"
                     autoFocus
                   />
                   <span className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-500 text-lg pointer-events-none">
@@ -134,7 +134,7 @@ const DiscountModal: React.FC<DiscountModalProps> = ({
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 placeholder={t('discount.reasonPlaceholder')}
-                className="w-full h-20 bg-neutral-800 border border-neutral-700 rounded-lg p-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-600"
+                className="w-full h-20 bg-neutral-800 border border-neutral-700 rounded-lg p-3 text-white placeholder-neutral-500 focus:outline-none focus:border-cockpit-yellow"
               />
             </div>
 
@@ -147,13 +147,13 @@ const DiscountModal: React.FC<DiscountModalProps> = ({
             </div>
 
             {!ownerHasPerm && (
-              <div className="bg-amber-900/30 border border-amber-700 rounded-lg p-3">
+              <div className="bg-cockpit-yellow/30 border border-cockpit-yellow rounded-lg p-3">
                 {authorizer ? (
-                  <p className="text-amber-200 text-sm">
+                  <p className="text-cockpit-yellow text-sm">
                     {t('discount.approvedBy', { name: authorizer.name })}
                   </p>
                 ) : (
-                  <p className="text-amber-200 text-sm">
+                  <p className="text-cockpit-yellow text-sm">
                     {t('discount.requiresManager')}
                   </p>
                 )}
@@ -170,7 +170,7 @@ const DiscountModal: React.FC<DiscountModalProps> = ({
               {initialDiscount && (
                 <button
                   onClick={remove}
-                  className="px-4 py-3 bg-red-700 text-white text-base font-semibold rounded-lg hover:bg-red-800 transition-all"
+                  className="px-4 py-3 bg-cockpit-red text-white text-base font-semibold rounded-lg hover:bg-cockpit-red/90 transition-all"
                 >
                   {t('discount.remove')}
                 </button>
@@ -178,7 +178,7 @@ const DiscountModal: React.FC<DiscountModalProps> = ({
               <button
                 onClick={submit}
                 disabled={!valid}
-                className="flex-1 py-3 bg-amber-600 text-white text-base font-bold rounded-lg hover:bg-amber-700 disabled:bg-neutral-800 disabled:text-neutral-600 transition-all"
+                className="flex-1 py-3 bg-cockpit-yellow text-neutral-900 text-base font-bold rounded-lg hover:bg-cockpit-yellow/90 disabled:bg-neutral-800 disabled:text-neutral-600 transition-all"
               >
                 {t('discount.apply')}
               </button>
@@ -213,7 +213,7 @@ const TypeButton: React.FC<{
     onClick={onClick}
     className={`flex flex-col items-center gap-1 py-3 rounded-lg border transition-all ${
       active
-        ? 'bg-amber-600 border-amber-500 text-white'
+        ? 'bg-cockpit-yellow border-cockpit-yellow text-neutral-900'
         : 'bg-neutral-800 border-neutral-700 text-neutral-300 hover:bg-neutral-700'
     }`}
   >
@@ -226,8 +226,8 @@ const Row: React.FC<{ label: string; value: string; bold?: boolean; highlight?: 
   label, value, bold, highlight,
 }) => (
   <div className="flex justify-between text-sm">
-    <span className={highlight ? 'text-amber-400' : 'text-neutral-400'}>{label}</span>
-    <span className={`${bold ? 'text-white font-bold' : highlight ? 'text-amber-400 font-semibold' : 'text-neutral-200'}`}>
+    <span className={highlight ? 'text-cockpit-yellow' : 'text-neutral-400'}>{label}</span>
+    <span className={`${bold ? 'text-white font-bold' : highlight ? 'text-cockpit-yellow font-semibold' : 'text-neutral-200'}`}>
       {value}
     </span>
   </div>

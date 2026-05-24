@@ -87,24 +87,24 @@ const GetnetTapPayment: React.FC<GetnetTapPaymentProps> = ({
       {status === 'ready' && (
         <button
           onClick={handleStartPayment}
-          className="w-full py-4 bg-red-600 text-white text-xl font-bold rounded-lg hover:bg-red-700 transition-all touch-manipulation"
+          className="w-full py-4 bg-cockpit-red text-white text-xl font-bold rounded-lg hover:bg-cockpit-red/90 transition-all touch-manipulation"
         >
           {t('getnetTap.tapToPay')} — {formatPrice(amount)}
         </button>
       )}
 
       {status === 'waiting' && (
-        <div className="bg-red-600/10 border border-red-600/30 rounded-lg p-5 text-center space-y-3">
+        <div className="bg-cockpit-red/10 border border-cockpit-red/30 rounded-lg p-5 text-center space-y-3">
           <div className="flex items-center justify-center gap-2">
-            <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse" />
-            <p className="text-red-500 font-bold text-lg">{t('getnetTap.waitingForCard')}</p>
+            <div className="w-3 h-3 bg-cockpit-red rounded-full animate-pulse" />
+            <p className="text-cockpit-red font-bold text-lg">{t('getnetTap.waitingForCard')}</p>
           </div>
           <p className="text-neutral-400 text-sm">
             {t('getnetTap.bringCardCloser')}
           </p>
           <button
             onClick={handleCancel}
-            className="text-red-400 text-sm font-semibold hover:text-red-300 transition-colors"
+            className="text-cockpit-red text-sm font-semibold hover:text-cockpit-red/90 transition-colors"
           >
             {t('common:buttons.cancel')}
           </button>
@@ -112,19 +112,19 @@ const GetnetTapPayment: React.FC<GetnetTapPaymentProps> = ({
       )}
 
       {status === 'success' && (
-        <div className="bg-green-600/10 border border-green-600/30 rounded-lg p-5 text-center">
-          <div className="w-16 h-16 rounded-full bg-green-600 flex items-center justify-center mx-auto mb-3">
+        <div className="bg-cockpit-green/10 border border-cockpit-green/30 rounded-lg p-5 text-center">
+          <div className="w-16 h-16 rounded-full bg-cockpit-green flex items-center justify-center mx-auto mb-3">
             <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <p className="text-green-400 font-bold text-lg">{t('getnetTap.paymentConfirmed')}</p>
+          <p className="text-cockpit-green font-bold text-lg">{t('getnetTap.paymentConfirmed')}</p>
         </div>
       )}
 
       {status === 'error' && errorMessage && (
         <div className="text-center">
-          <p className="text-red-400 text-sm font-medium mb-2">{errorMessage}</p>
+          <p className="text-cockpit-red text-sm font-medium mb-2">{errorMessage}</p>
           <button
             onClick={() => setStatus('ready')}
             className="text-brand-400 text-sm font-semibold hover:text-brand-300"

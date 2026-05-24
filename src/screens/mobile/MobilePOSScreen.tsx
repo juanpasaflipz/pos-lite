@@ -128,7 +128,7 @@ const MobilePOSScreen: React.FC = () => {
           onClick={() => { tapFeedback(); cart.toggleQuickMode(); }}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors touch-manipulation ${
             cart.quickMode
-              ? 'bg-green-600/20 text-green-400 border border-green-600/40'
+              ? 'bg-cockpit-green/20 text-cockpit-green border border-cockpit-green/40'
               : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
           }`}
         >
@@ -139,8 +139,8 @@ const MobilePOSScreen: React.FC = () => {
 
       {/* Offline indicator */}
       {!isOnline && (
-        <div className="mx-3 mb-1 py-1.5 px-3 bg-amber-600/20 border border-amber-600/40 rounded-xl text-center">
-          <p className="text-amber-400 text-xs font-semibold">{t('offline.indicator')}</p>
+        <div className="mx-3 mb-1 py-1.5 px-3 bg-cockpit-yellow/20 border border-cockpit-yellow/40 rounded-xl text-center">
+          <p className="text-cockpit-yellow text-xs font-semibold">{t('offline.indicator')}</p>
         </div>
       )}
 

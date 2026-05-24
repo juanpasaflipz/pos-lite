@@ -150,7 +150,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         {/* Terminal success overlay */}
         {terminalSuccess && (
           <div className="absolute inset-0 bg-neutral-900/95 z-10 flex flex-col items-center justify-center rounded-2xl">
-            <div className="w-20 h-20 rounded-full bg-green-600 flex items-center justify-center mb-4 animate-pulse">
+            <div className="w-20 h-20 rounded-full bg-cockpit-green flex items-center justify-center mb-4 animate-pulse">
               <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
@@ -250,7 +250,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 value={amountReceived}
                 onChange={(e) => setAmountReceived(e.target.value)}
                 placeholder={formatPrice(finalTotal)}
-                className="w-full bg-neutral-700 border border-neutral-600 rounded-lg p-3 text-2xl text-white text-center focus:outline-none focus:border-green-500 font-bold"
+                className="w-full bg-neutral-700 border border-neutral-600 rounded-lg p-3 text-2xl text-white text-center focus:outline-none focus:border-cockpit-green font-bold"
                 autoFocus
               />
               <div className="grid grid-cols-4 gap-2">
@@ -267,7 +267,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
               {receivedNum > 0 && (
                 <div className="text-center pt-2 border-t border-neutral-700">
                   <p className="text-neutral-400 text-sm">{t('payment.changeDue')}</p>
-                  <p className="text-2xl font-bold text-green-400">{formatPrice(changeDue)}</p>
+                  <p className="text-2xl font-bold text-cockpit-green">{formatPrice(changeDue)}</p>
                 </div>
               )}
             </div>
@@ -285,7 +285,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
               </p>
               <button
                 onClick={handleCancelTerminal}
-                className="text-red-400 text-sm font-semibold hover:text-red-300 transition-colors"
+                className="text-cockpit-red text-sm font-semibold hover:text-cockpit-red/90 transition-colors"
               >
                 {t('payment.cancelCharge')}
               </button>
@@ -293,7 +293,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
           )}
 
           {terminalError && (
-            <p className="text-red-400 text-sm text-center font-medium">{terminalError}</p>
+            <p className="text-cockpit-red text-sm text-center font-medium">{terminalError}</p>
           )}
 
           {/* Payment Buttons */}
@@ -333,7 +333,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 <button
                   onClick={() => onCashPayment(tip, receivedNum)}
                   disabled={isProcessing || receivedNum < finalTotal}
-                  className="w-full py-4 bg-green-600 text-white text-xl font-bold rounded-lg hover:bg-green-700 disabled:bg-neutral-700 transition-all touch-manipulation"
+                  className="w-full py-4 bg-cockpit-green text-white text-xl font-bold rounded-lg hover:bg-cockpit-green/90 disabled:bg-neutral-700 transition-all touch-manipulation"
                 >
                   {isProcessing ? t('payment.processing') : t('payment.confirmCash', { change: formatPrice(changeDue) })}
                 </button>
@@ -351,7 +351,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 <button
                   onClick={() => onGetnetPayment(tip)}
                   disabled={isProcessing || !isOnline}
-                  className="w-full py-4 bg-red-600 text-white text-xl font-bold rounded-lg hover:bg-red-700 disabled:bg-neutral-700 disabled:text-neutral-400 transition-all touch-manipulation"
+                  className="w-full py-4 bg-cockpit-red text-white text-xl font-bold rounded-lg hover:bg-cockpit-red/90 disabled:bg-neutral-700 disabled:text-neutral-400 transition-all touch-manipulation"
                 >
                   {isProcessing ? t('payment.processing') : t('payment.payWithGetnet')}
                 </button>
@@ -361,7 +361,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 <button
                   onClick={() => onOxxoPayment(tip)}
                   disabled={isProcessing || !isOnline}
-                  className="w-full py-4 bg-orange-600 text-white text-xl font-bold rounded-lg hover:bg-orange-700 disabled:bg-neutral-700 disabled:text-neutral-400 transition-all touch-manipulation"
+                  className="w-full py-4 bg-cockpit-yellow text-neutral-900 text-xl font-bold rounded-lg hover:bg-cockpit-yellow/90 disabled:bg-neutral-700 disabled:text-neutral-400 transition-all touch-manipulation"
                 >
                   {isProcessing ? t('payment.processing') : t('payment.payAtOxxo')}
                 </button>
@@ -370,7 +370,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 <button
                   onClick={() => onSpeiPayment(tip)}
                   disabled={isProcessing || !isOnline}
-                  className="w-full py-4 bg-blue-600 text-white text-xl font-bold rounded-lg hover:bg-blue-700 disabled:bg-neutral-700 disabled:text-neutral-400 transition-all touch-manipulation"
+                  className="w-full py-4 bg-cockpit-blue text-white text-xl font-bold rounded-lg hover:bg-cockpit-blue/90 disabled:bg-neutral-700 disabled:text-neutral-400 transition-all touch-manipulation"
                 >
                   {isProcessing ? t('payment.processing') : t('payment.speiTransfer')}
                 </button>

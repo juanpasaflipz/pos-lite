@@ -40,12 +40,12 @@ export default function ParkedCartsModal({
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
       <div className="bg-neutral-900 rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] border border-neutral-800 flex flex-col">
-        <div className="bg-blue-600 text-white p-6 rounded-t-2xl flex items-center justify-between">
+        <div className="bg-cockpit-blue text-white p-6 rounded-t-2xl flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold">{t('parkedCarts.title')}</h2>
-            <p className="text-blue-100 text-sm">{t('parkedCarts.subtitle')}</p>
+            <p className="text-cockpit-blue text-sm">{t('parkedCarts.subtitle')}</p>
           </div>
-          <button onClick={onClose} className="text-blue-200 hover:text-white">
+          <button onClick={onClose} className="text-cockpit-blue hover:text-white">
             <X className="w-6 h-6" />
           </button>
         </div>
@@ -95,7 +95,7 @@ export default function ParkedCartsModal({
                     }
                   }}
                   placeholder={t('parkedCarts.namePlaceholder')}
-                  className="w-full px-4 py-3 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-blue-600"
+                  className="w-full px-4 py-3 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-cockpit-blue"
                   autoFocus
                 />
                 <div className="flex gap-2">
@@ -110,7 +110,7 @@ export default function ParkedCartsModal({
                   </button>
                   <button
                     onClick={handlePark}
-                    className="flex-1 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700"
+                    className="flex-1 py-2 bg-cockpit-blue text-white font-semibold rounded-lg hover:bg-cockpit-blue/90"
                   >
                     {t('parkedCarts.park')}
                   </button>
@@ -119,7 +119,7 @@ export default function ParkedCartsModal({
             ) : (
               <button
                 onClick={() => setShowParkInput(true)}
-                className="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 transition-all"
+                className="w-full py-3 bg-cockpit-blue text-white font-bold rounded-lg hover:bg-cockpit-blue/90 flex items-center justify-center gap-2 transition-all"
               >
                 <PauseCircle className="w-5 h-5" />
                 {t('parkedCarts.parkCurrent')}

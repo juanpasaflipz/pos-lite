@@ -202,7 +202,7 @@ export default function CustomerLookupModal({ onCustomerLinked, onClose }: Props
           {mode === 'existing' && phase === 'found' && foundCustomer && (
             <div className="space-y-3">
               <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-4 space-y-2">
-                <div className="flex items-center gap-2 text-green-400">
+                <div className="flex items-center gap-2 text-cockpit-green">
                   <Gift size={16} />
                   <span className="text-sm font-semibold">{t('customerLookup.customerFound')}</span>
                 </div>
@@ -229,7 +229,7 @@ export default function CustomerLookupModal({ onCustomerLinked, onClose }: Props
                       })}
                     </p>
                     {foundCustomer.activeCard.completed === 1 && (
-                      <p className="text-sm text-green-400 font-semibold mt-1">
+                      <p className="text-sm text-cockpit-green font-semibold mt-1">
                         {t('customerLookup.rewardReady')}
                       </p>
                     )}

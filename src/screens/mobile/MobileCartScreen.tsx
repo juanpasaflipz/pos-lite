@@ -182,7 +182,7 @@ const MobileCartScreen: React.FC = () => {
                   <button
                     onClick={() => { tapFeedback(); cart.removeItem(item.cart_id); }}
                     aria-label={t('mobilePOS.removeItem', 'Remove item')}
-                    className="w-10 h-10 rounded-full bg-red-600/20 flex items-center justify-center text-red-400 touch-manipulation ml-1"
+                    className="w-10 h-10 rounded-full bg-cockpit-red/20 flex items-center justify-center text-cockpit-red touch-manipulation ml-1"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -228,7 +228,7 @@ const MobileCartScreen: React.FC = () => {
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => { tapFeedback(); setShowCash(true); }}
-              className="py-3.5 bg-green-600 text-white font-semibold rounded-2xl text-sm active:bg-green-700 touch-manipulation"
+              className="py-3.5 bg-cockpit-green text-white font-semibold rounded-2xl text-sm active:bg-cockpit-green touch-manipulation"
             >
               {t('mobilePOS.payWithCash')}
             </button>
@@ -241,7 +241,7 @@ const MobileCartScreen: React.FC = () => {
             </button>
           </div>
           {!isOnline && (
-            <p className="text-amber-400 text-xs text-center mt-2">{t('offline.cashOnly')}</p>
+            <p className="text-cockpit-yellow text-xs text-center mt-2">{t('offline.cashOnly')}</p>
           )}
         </div>
       )}

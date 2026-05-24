@@ -40,8 +40,8 @@ export default function MenuGrid({
       {!searchQuery && filteredPopularItems.length > 0 && (
         <div className="mb-6 pb-6 border-b border-neutral-800/60">
           <div className="flex items-center gap-2 mb-3.5">
-            <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-            <p className="text-sm font-semibold text-amber-400 uppercase tracking-wider">{t('favorites.title')}</p>
+            <Star className="w-4 h-4 text-cockpit-yellow fill-cockpit-yellow" />
+            <p className="text-sm font-semibold text-cockpit-yellow uppercase tracking-wider">{t('favorites.title')}</p>
           </div>
           <div className="flex gap-3.5 overflow-x-auto pb-3 scrollbar-hide">
             {filteredPopularItems.map((item) => {
@@ -54,11 +54,11 @@ export default function MenuGrid({
                   className={`flex-shrink-0 w-40 rounded-xl p-4 transition-all touch-manipulation border ${
                     isSoldOut
                       ? 'bg-neutral-900/40 border-neutral-700 opacity-50 cursor-not-allowed'
-                      : 'bg-neutral-900 border-amber-600/50 hover:border-amber-500 active:scale-95'
+                      : 'bg-neutral-900 border-cockpit-yellow/50 hover:border-cockpit-yellow/90 active:scale-95'
                   }`}
                 >
                   <p className="font-bold text-white text-sm line-clamp-2 leading-snug">{brandItemMap?.get(item.id)?.custom_name || item.name}</p>
-                  <p className="font-bold text-amber-400 text-base mt-2">{formatPrice(brandItemMap?.get(item.id)?.custom_price ?? item.price)}</p>
+                  <p className="font-bold text-cockpit-yellow text-base mt-2">{formatPrice(brandItemMap?.get(item.id)?.custom_price ?? item.price)}</p>
                 </button>
               );
             })}
@@ -87,9 +87,9 @@ export default function MenuGrid({
                 isSoldOut
                   ? 'bg-neutral-900/40 border border-neutral-700 grayscale cursor-not-allowed'
                   : isLowStock
-                    ? 'bg-neutral-900 border-2 border-yellow-500'
+                    ? 'bg-neutral-900 border-2 border-cockpit-yellow'
                     : isPush
-                      ? 'bg-neutral-900 border-2 border-green-600 ring-1 ring-green-600/30'
+                      ? 'bg-neutral-900 border-2 border-cockpit-green ring-1 ring-cockpit-green/30'
                       : isAvoid
                         ? 'bg-neutral-900/60 border border-neutral-700 opacity-60'
                         : 'bg-neutral-900 border border-neutral-700 hover:border-brand-600'
@@ -115,7 +115,7 @@ export default function MenuGrid({
                   <p className="font-semibold text-white text-sm lg:text-base leading-snug line-clamp-2 flex-1 text-left">{brandItemMap?.get(item.id)?.custom_name || item.name}</p>
                   <div className="flex items-center gap-1.5 ml-2 flex-shrink-0 mt-0.5">
                     {hasModifiers && <SlidersHorizontal className="w-3.5 h-3.5 text-neutral-500" />}
-                    {isPush && <span className="w-2.5 h-2.5 bg-green-500 rounded-full" />}
+                    {isPush && <span className="w-2.5 h-2.5 bg-cockpit-green rounded-full" />}
                   </div>
                 </div>
                 {item.description && (

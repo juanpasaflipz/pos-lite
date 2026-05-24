@@ -26,14 +26,14 @@ const MobileCardPayment: React.FC<Props> = ({ state, onRetry, onClose, errorMess
 
         {state === 'success' && (
           <>
-            <CheckCircle className="w-16 h-16 text-green-500" />
+            <CheckCircle className="w-16 h-16 text-cockpit-green" />
             <p className="text-white font-semibold text-lg">{t('mobilePOS.orderComplete')}</p>
           </>
         )}
 
         {state === 'error' && (
           <>
-            <XCircle className="w-16 h-16 text-red-500" />
+            <XCircle className="w-16 h-16 text-cockpit-red" />
             <p className="text-white font-semibold text-lg">{t('mobilePOS.paymentFailed')}</p>
             {errorMessage && <p className="text-neutral-400 text-sm text-center">{errorMessage}</p>}
             <button

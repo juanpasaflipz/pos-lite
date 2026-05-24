@@ -306,8 +306,8 @@ const MobileScannerScreen: React.FC = () => {
           {/* Receipt done overlay */}
           {!cameraActive && receiptStep === 'done' && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-neutral-900 gap-4">
-              <CircleCheck className="w-16 h-16 text-green-400" />
-              <span className="text-green-400 font-bold text-lg">{t('mobileScanner.expenseSaved')}</span>
+              <CircleCheck className="w-16 h-16 text-cockpit-green" />
+              <span className="text-cockpit-green font-bold text-lg">{t('mobileScanner.expenseSaved')}</span>
               {receiptMatches && receiptMatches.length > 0 && (
                 <span className="text-neutral-400 text-sm">{t('mobileScanner.inventoryUpdated', { count: receiptMatches.length })}</span>
               )}
@@ -489,7 +489,7 @@ const MobileScannerScreen: React.FC = () => {
                         {t('mobileScanner.currentStock')} <span className="font-bold text-white">{foundItem.quantity} {foundItem.unit}</span>
                       </span>
                       {foundItem.low_stock_threshold && foundItem.quantity <= foundItem.low_stock_threshold && (
-                        <span className="text-xs bg-amber-600 text-white px-2 py-0.5 rounded-full font-bold">{t('lowStock')}</span>
+                        <span className="text-xs bg-cockpit-yellow text-neutral-900 px-2 py-0.5 rounded-full font-bold">{t('lowStock')}</span>
                       )}
                     </div>
                     {foundItem.barcode && (
@@ -525,7 +525,7 @@ const MobileScannerScreen: React.FC = () => {
                   <button
                     onClick={handleRestock}
                     disabled={loading}
-                    className="w-full py-4 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-bold rounded-xl text-lg flex items-center justify-center gap-2 transition-colors touch-manipulation"
+                    className="w-full py-4 bg-cockpit-green hover:bg-cockpit-green/90 disabled:opacity-50 text-white font-bold rounded-xl text-lg flex items-center justify-center gap-2 transition-colors touch-manipulation"
                   >
                     <Check className="w-5 h-5" />
                     {loading ? t('mobileScanner.restocking') : t('mobileScanner.restock')}
@@ -546,7 +546,7 @@ const MobileScannerScreen: React.FC = () => {
                           <p className="text-sm text-white font-semibold">{entry.item.name}</p>
                           <p className="text-xs text-neutral-500">+{entry.quantity} {entry.item.unit}</p>
                         </div>
-                        <span className="text-sm text-green-400 font-bold">{entry.newQuantity}</span>
+                        <span className="text-sm text-cockpit-green font-bold">{entry.newQuantity}</span>
                       </div>
                     ))}
                   </div>
@@ -557,8 +557,8 @@ const MobileScannerScreen: React.FC = () => {
 
           {/* Error */}
           {error && (
-            <div className="bg-red-900/30 border border-red-700 rounded-xl p-3">
-              <p className="text-red-300 text-sm">{error}</p>
+            <div className="bg-cockpit-red/30 border border-cockpit-red rounded-xl p-3">
+              <p className="text-cockpit-red text-sm">{error}</p>
             </div>
           )}
         </div>

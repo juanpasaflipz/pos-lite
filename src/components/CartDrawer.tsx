@@ -106,7 +106,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
               <div className="flex items-center gap-2">
                 <span className="text-sm font-bold">{linkedCustomer.name}</span>
                 {linkedCustomer.activeCard && (
-                  <span className="text-xs bg-purple-600 px-2 py-0.5 rounded-full">
+                  <span className="text-xs bg-cockpit-blue px-2 py-0.5 rounded-full">
                     {linkedCustomer.activeCard.stamps_earned}/{linkedCustomer.activeCard.stamps_required}
                   </span>
                 )}
@@ -141,13 +141,13 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
                   className={`rounded-lg p-2.5 border ${
                     isComboItem
                       ? isFirstComboItem
-                        ? 'bg-amber-900/20 border-amber-700'
-                        : 'bg-amber-900/10 border-amber-800/50 ml-3'
+                        ? 'bg-cockpit-yellow/20 border-cockpit-yellow'
+                        : 'bg-cockpit-yellow/10 border-cockpit-yellow/50 ml-3'
                       : 'bg-neutral-800 border-neutral-700'
                   }`}
                 >
                   {isFirstComboItem && (
-                    <p className="text-xs font-bold text-amber-400 mb-1 uppercase tracking-wider">{t('cart.combo')}</p>
+                    <p className="text-xs font-bold text-cockpit-yellow mb-1 uppercase tracking-wider">{t('cart.combo')}</p>
                   )}
                   <div className="flex justify-between items-start mb-1">
                     <div className="flex-1">
@@ -196,9 +196,9 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
                     </div>
                   )}
                   {item.discount && (
-                    <div className="mb-1.5 px-2 py-1 bg-amber-900/30 border border-amber-700 rounded text-xs flex items-center justify-between">
+                    <div className="mb-1.5 px-2 py-1 bg-cockpit-yellow/30 border border-cockpit-yellow rounded text-xs flex items-center justify-between">
                       <div className="flex-1 min-w-0">
-                        <p className="text-amber-300 font-semibold">
+                        <p className="text-cockpit-yellow font-semibold">
                           {item.discount.type === 'comp'
                             ? t('discount.compLabel')
                             : item.discount.type === 'percent'
@@ -208,7 +208,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
                       </div>
                       <button
                         onClick={() => onApplyLineDiscount(item)}
-                        className="text-amber-300 hover:text-white text-xs font-bold ml-2"
+                        className="text-cockpit-yellow hover:text-white text-xs font-bold ml-2"
                       >
                         {t('discount.edit')}
                       </button>
@@ -225,7 +225,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
                       {!item.discount && (
                         <button
                           onClick={() => onApplyLineDiscount(item)}
-                          className="px-2 py-1.5 text-xs bg-neutral-700 text-amber-400 rounded hover:bg-neutral-600 transition-all"
+                          className="px-2 py-1.5 text-xs bg-neutral-700 text-cockpit-yellow rounded hover:bg-neutral-600 transition-all"
                         >
                           <Percent className="w-3.5 h-3.5" />
                         </button>
@@ -240,14 +240,14 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
 
         {/* Combo Detection Banner */}
         {comboSuggestion && (
-          <div className="mx-3 mb-2 bg-amber-900/30 border border-amber-600 rounded-lg p-2.5">
-            <p className="text-amber-400 font-bold text-xs">{t('comboDetection.title')}</p>
-            <p className="text-amber-200 text-xs mt-0.5">
+          <div className="mx-3 mb-2 bg-cockpit-yellow/30 border border-cockpit-yellow rounded-lg p-2.5">
+            <p className="text-cockpit-yellow font-bold text-xs">{t('comboDetection.title')}</p>
+            <p className="text-cockpit-yellow text-xs mt-0.5">
               {t('comboDetection.message', { name: comboSuggestion.combo.name, savings: formatPrice(comboSuggestion.savings) })}
             </p>
             <button
               onClick={onConvertToCombo}
-              className="mt-1.5 w-full py-1.5 bg-amber-600 text-white text-xs font-bold rounded-lg hover:bg-amber-700 transition-all"
+              className="mt-1.5 w-full py-1.5 bg-cockpit-yellow text-neutral-900 text-xs font-bold rounded-lg hover:bg-cockpit-yellow/90 transition-all"
             >
               {t('comboDetection.convert', { price: formatPrice(comboSuggestion.combo.combo_price) })}
             </button>
@@ -261,7 +261,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
             <span className="font-bold text-brand-500">{formatPrice(total)}</span>
           </div>
           {totalDiscount > 0 && (
-            <div className="flex justify-between text-amber-400 text-xs font-semibold">
+            <div className="flex justify-between text-cockpit-yellow text-xs font-semibold">
               <span>{t('totals.discount')}</span>
               <span>-{formatPrice(totalDiscount)}</span>
             </div>
@@ -288,7 +288,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
           <button
             onClick={onShowCustomerLookup}
             className={`w-full py-2.5 text-white text-sm font-bold rounded-lg transition-all touch-manipulation ${
-              linkedCustomer ? 'bg-purple-700 hover:bg-purple-800' : 'bg-purple-600 hover:bg-purple-700'
+              linkedCustomer ? 'bg-cockpit-blue/80 hover:bg-cockpit-blue/70' : 'bg-cockpit-blue hover:bg-cockpit-blue/90'
             }`}
           >
             {linkedCustomer ? t('loyalty.loyaltyCustomer', { name: linkedCustomer.name }) : t('loyalty.loyaltyProgram')}
@@ -296,7 +296,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
           <button
             onClick={onShowParkedCarts}
             disabled={cart.length === 0 && parkedCount === 0}
-            className="w-full py-2.5 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 disabled:bg-neutral-800 disabled:text-neutral-600 disabled:cursor-not-allowed transition-all touch-manipulation flex items-center justify-center gap-2"
+            className="w-full py-2.5 bg-cockpit-blue text-white text-sm font-bold rounded-lg hover:bg-cockpit-blue/90 disabled:bg-neutral-800 disabled:text-neutral-600 disabled:cursor-not-allowed transition-all touch-manipulation flex items-center justify-center gap-2"
           >
             <PauseCircle className="w-4 h-4" />
             {parkedCount > 0
@@ -306,21 +306,21 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
           <div className="flex gap-1.5">
             <button
               onClick={onShowTemplates}
-              className="flex-1 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-all touch-manipulation flex items-center justify-center gap-1"
+              className="flex-1 py-2.5 bg-cockpit-green text-white text-xs font-bold rounded-lg hover:bg-cockpit-green/90 transition-all touch-manipulation flex items-center justify-center gap-1"
             >
               <ClipboardList className="w-3.5 h-3.5" />
               {t('quickOrders.title')}
             </button>
             <button
               onClick={onShowComboBuilder}
-              className="flex-1 py-2.5 bg-amber-600 text-white text-xs font-bold rounded-lg hover:bg-amber-700 transition-all touch-manipulation"
+              className="flex-1 py-2.5 bg-cockpit-yellow text-neutral-900 text-xs font-bold rounded-lg hover:bg-cockpit-yellow/90 transition-all touch-manipulation"
             >
               {t('actions.combos')}
             </button>
             <button
               onClick={onShowSplitPayment}
               disabled={cart.length === 0}
-              className="flex-1 py-2.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 disabled:bg-neutral-800 disabled:text-neutral-600 transition-all touch-manipulation"
+              className="flex-1 py-2.5 bg-cockpit-blue text-white text-xs font-bold rounded-lg hover:bg-cockpit-blue/90 disabled:bg-neutral-800 disabled:text-neutral-600 transition-all touch-manipulation"
             >
               {t('actions.splitPay')}
             </button>
@@ -328,7 +328,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
           <button
             onClick={onApplyCartDiscount}
             disabled={cart.length === 0}
-            className="w-full py-2.5 bg-amber-700 text-white text-xs font-bold rounded-lg hover:bg-amber-800 disabled:bg-neutral-800 disabled:text-neutral-600 disabled:cursor-not-allowed transition-all touch-manipulation flex items-center justify-center gap-1.5"
+            className="w-full py-2.5 bg-cockpit-yellow text-neutral-900 text-xs font-bold rounded-lg hover:bg-cockpit-yellow/90 disabled:bg-neutral-800 disabled:text-neutral-600 disabled:cursor-not-allowed transition-all touch-manipulation flex items-center justify-center gap-1.5"
           >
             <Percent className="w-3.5 h-3.5" />
             {cartDiscount ? t('discount.modify') : t('discount.applyToOrder')}

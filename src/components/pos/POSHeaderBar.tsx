@@ -74,7 +74,7 @@ export default function POSHeaderBar({
             <p className="text-lg font-bold text-white">{todayOrderCount}</p>
           </div>
           {isOnline ? (
-            <Wifi className="w-5 h-5 text-green-500" />
+            <Wifi className="w-5 h-5 text-cockpit-green" />
           ) : (
             <WifiOff className="w-5 h-5 text-brand-500 animate-pulse" />
           )}
@@ -133,10 +133,10 @@ export default function POSHeaderBar({
 
       {/* Pending sync badge (online with pending orders) */}
       {isOnline && pendingSyncCount > 0 && (
-        <div className="flex items-center justify-center gap-2 py-2 px-4 mb-3 bg-amber-900/40 border border-amber-700 rounded-lg">
-          <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
-          <span className="text-amber-200 font-bold text-sm">{t('offline.syncing')}</span>
-          <span className="ml-2 bg-amber-700 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+        <div className="flex items-center justify-center gap-2 py-2 px-4 mb-3 bg-cockpit-yellow/40 border border-cockpit-yellow rounded-lg">
+          <span className="w-2 h-2 bg-cockpit-yellow rounded-full animate-pulse" />
+          <span className="text-cockpit-yellow font-bold text-sm">{t('offline.syncing')}</span>
+          <span className="ml-2 bg-cockpit-yellow text-neutral-900 text-xs font-bold px-2 py-0.5 rounded-full">
             {pendingSyncCount}
           </span>
         </div>

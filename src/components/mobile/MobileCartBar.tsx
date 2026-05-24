@@ -32,7 +32,7 @@ const MobileCartBar: React.FC<Props> = ({ onSendToKitchen }) => {
         onClick={handleTap}
         className={`w-full flex items-center justify-between rounded-2xl px-5 py-3.5 shadow-lg touch-manipulation ${
           quickMode
-            ? 'bg-green-600 active:bg-green-700'
+            ? 'bg-cockpit-green active:bg-cockpit-green'
             : 'bg-brand-600 active:bg-brand-700'
         } text-white font-semibold text-base`}
       >

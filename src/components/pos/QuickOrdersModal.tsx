@@ -33,12 +33,12 @@ export default function QuickOrdersModal({
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
       <div className="bg-neutral-900 rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] border border-neutral-800 flex flex-col">
-        <div className="bg-emerald-600 text-white p-6 rounded-t-2xl flex items-center justify-between">
+        <div className="bg-cockpit-green text-white p-6 rounded-t-2xl flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold">{t('quickOrders.title')}</h2>
-            <p className="text-emerald-100 text-sm">{t('quickOrders.subtitle')}</p>
+            <p className="text-cockpit-green text-sm">{t('quickOrders.subtitle')}</p>
           </div>
-          <button onClick={onClose} className="text-emerald-200 hover:text-white">
+          <button onClick={onClose} className="text-cockpit-green hover:text-white">
             <X className="w-6 h-6" />
           </button>
         </div>
@@ -50,7 +50,7 @@ export default function QuickOrdersModal({
               <button
                 key={template.id}
                 onClick={() => onApplyTemplate(template)}
-                className="w-full text-left bg-neutral-800 border border-neutral-700 rounded-lg p-4 hover:border-emerald-600 transition-all"
+                className="w-full text-left bg-neutral-800 border border-neutral-700 rounded-lg p-4 hover:border-cockpit-green/90 transition-all"
               >
                 <p className="font-bold text-white">{template.name}</p>
                 {template.description && (
@@ -73,7 +73,7 @@ export default function QuickOrdersModal({
                   value={templateName}
                   onChange={(e) => onTemplateNameChange(e.target.value)}
                   placeholder={t('quickOrders.enterName')}
-                  className="w-full px-4 py-3 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-600"
+                  className="w-full px-4 py-3 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-cockpit-green"
                   autoFocus
                 />
                 <div className="flex gap-2">
@@ -86,7 +86,7 @@ export default function QuickOrdersModal({
                   <button
                     onClick={onSaveCartAsTemplate}
                     disabled={!templateName.trim()}
-                    className="flex-1 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 disabled:bg-neutral-700 disabled:text-neutral-500"
+                    className="flex-1 py-2 bg-cockpit-green text-white font-semibold rounded-lg hover:bg-cockpit-green/90 disabled:bg-neutral-700 disabled:text-neutral-500"
                   >
                     {t('common:buttons.save')}
                   </button>
@@ -95,7 +95,7 @@ export default function QuickOrdersModal({
             ) : (
               <button
                 onClick={() => onShowSaveTemplate(true)}
-                className="w-full py-3 bg-neutral-800 text-emerald-400 font-bold rounded-lg hover:bg-neutral-700 border border-neutral-700 transition-all"
+                className="w-full py-3 bg-neutral-800 text-cockpit-green font-bold rounded-lg hover:bg-neutral-700 border border-neutral-700 transition-all"
               >
                 {t('quickOrders.saveCurrentCart')}
               </button>

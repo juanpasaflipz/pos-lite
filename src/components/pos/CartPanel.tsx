@@ -112,7 +112,7 @@ export default function CartPanel({
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold">{linkedCustomer.name}</span>
               {linkedCustomer.activeCard && (
-                <span className="text-xs bg-purple-600 px-2 py-0.5 rounded-full">
+                <span className="text-xs bg-cockpit-blue px-2 py-0.5 rounded-full">
                   {linkedCustomer.activeCard.stamps_earned}/{linkedCustomer.activeCard.stamps_required}
                 </span>
               )}
@@ -129,9 +129,9 @@ export default function CartPanel({
 
       {/* Unpaid orders list \u2014 toggled from the header pending badge */}
       {unpaidOrders.length > 0 && showUnpaidOrders && (
-        <div className="border-b border-neutral-800 bg-amber-900/10">
+        <div className="border-b border-neutral-800 bg-cockpit-yellow/10">
           <div className="flex items-center justify-between px-4 pt-3 pb-1">
-            <span className="text-amber-200 font-bold text-sm">{t('cart.unpaidOrders')}</span>
+            <span className="text-cockpit-yellow font-bold text-sm">{t('cart.unpaidOrders')}</span>
           </div>
           <div className="px-4 pb-3 space-y-2 max-h-48 overflow-y-auto">
             {unpaidOrders.map((order) => (
@@ -152,7 +152,7 @@ export default function CartPanel({
                       </span>
                     )}
                     {order.order_fulfillment_type && (
-                      <span className="inline-flex items-center rounded-full bg-amber-500 text-neutral-950 text-[10px] font-black uppercase px-1.5 py-0.5 tracking-wide whitespace-nowrap">
+                      <span className="inline-flex items-center rounded-full bg-cockpit-yellow text-neutral-950 text-[10px] font-black uppercase px-1.5 py-0.5 tracking-wide whitespace-nowrap">
                         {order.order_fulfillment_type === 'for_here' ? t('cart.forHere') : t('cart.toGo')}
                       </span>
                     )}
@@ -176,7 +176,7 @@ export default function CartPanel({
                     <button
                       onClick={() => onDeleteUnpaidOrder(order)}
                       title="Delete order"
-                      className="p-1.5 text-neutral-400 hover:text-red-400 hover:bg-neutral-700 rounded-lg transition-all"
+                      className="p-1.5 text-neutral-400 hover:text-cockpit-red/90 hover:bg-neutral-700 rounded-lg transition-all"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -210,13 +210,13 @@ export default function CartPanel({
                 className={`rounded-lg p-3 border ${
                   isComboItem
                     ? isFirstComboItem
-                      ? 'bg-amber-900/20 border-amber-700'
-                      : 'bg-amber-900/10 border-amber-800/50 ml-4'
+                      ? 'bg-cockpit-yellow/20 border-cockpit-yellow'
+                      : 'bg-cockpit-yellow/10 border-cockpit-yellow/50 ml-4'
                     : 'bg-neutral-800 border-neutral-700'
                 }`}
               >
                 {isFirstComboItem && (
-                  <p className="text-xs font-bold text-amber-400 mb-1 uppercase tracking-wider">{t('cart.combo')}</p>
+                  <p className="text-xs font-bold text-cockpit-yellow mb-1 uppercase tracking-wider">{t('cart.combo')}</p>
                 )}
                 <div className="flex justify-between items-start mb-1">
                   <div className="flex-1">
@@ -270,9 +270,9 @@ export default function CartPanel({
                 )}
 
                 {item.discount && (
-                  <div className="mb-2 px-2 py-1.5 bg-amber-900/30 border border-amber-700 rounded text-xs flex items-center justify-between">
+                  <div className="mb-2 px-2 py-1.5 bg-cockpit-yellow/30 border border-cockpit-yellow rounded text-xs flex items-center justify-between">
                     <div className="flex-1 min-w-0">
-                      <p className="text-amber-300 font-semibold">
+                      <p className="text-cockpit-yellow font-semibold">
                         {item.discount.type === 'comp'
                           ? t('discount.compLabel')
                           : item.discount.type === 'percent'
@@ -280,12 +280,12 @@ export default function CartPanel({
                             : t('discount.amountLabel', { value: formatPrice(item.discount.value) })}
                       </p>
                       {item.discount.reason && (
-                        <p className="text-amber-200/80 truncate">{item.discount.reason}</p>
+                        <p className="text-cockpit-yellow/80 truncate">{item.discount.reason}</p>
                       )}
                     </div>
                     <button
                       onClick={() => onApplyLineDiscount(item)}
-                      className="text-amber-300 hover:text-white text-xs font-bold ml-2"
+                      className="text-cockpit-yellow hover:text-white text-xs font-bold ml-2"
                     >
                       {t('discount.edit')}
                     </button>
@@ -304,7 +304,7 @@ export default function CartPanel({
                       <button
                         onClick={() => onApplyLineDiscount(item)}
                         title={t('discount.applyToLine')}
-                        className="px-3 py-2 text-sm bg-neutral-700 text-amber-400 rounded hover:bg-neutral-600 transition-all font-semibold"
+                        className="px-3 py-2 text-sm bg-neutral-700 text-cockpit-yellow rounded hover:bg-neutral-600 transition-all font-semibold"
                       >
                         <Percent className="w-4 h-4" />
                       </button>
@@ -319,14 +319,14 @@ export default function CartPanel({
 
       {/* Combo Detection Banner */}
       {comboSuggestion && (
-        <div className="mx-4 mb-2 bg-amber-900/30 border border-amber-600 rounded-lg p-3">
-          <p className="text-amber-400 font-bold text-sm">{t('comboDetection.title')}</p>
-          <p className="text-amber-200 text-xs mt-1">
+        <div className="mx-4 mb-2 bg-cockpit-yellow/30 border border-cockpit-yellow rounded-lg p-3">
+          <p className="text-cockpit-yellow font-bold text-sm">{t('comboDetection.title')}</p>
+          <p className="text-cockpit-yellow text-xs mt-1">
             {t('comboDetection.message', { name: comboSuggestion.combo.name, savings: formatPrice(comboSuggestion.savings) })}
           </p>
           <button
             onClick={onConvertToCombo}
-            className="mt-2 w-full py-2 bg-amber-600 text-white text-sm font-bold rounded-lg hover:bg-amber-700 transition-all"
+            className="mt-2 w-full py-2 bg-cockpit-yellow text-neutral-900 text-sm font-bold rounded-lg hover:bg-cockpit-yellow/90 transition-all"
           >
             {t('comboDetection.convert', { price: formatPrice(comboSuggestion.combo.combo_price) })}
           </button>
@@ -339,7 +339,7 @@ export default function CartPanel({
           <span className="font-bold text-brand-500">{formatPrice(total)}</span>
         </div>
         {totalDiscount > 0 && (
-          <div className="flex justify-between text-amber-400 text-sm font-semibold">
+          <div className="flex justify-between text-cockpit-yellow text-sm font-semibold">
             <span>{t('totals.discount')}</span>
             <span>-{formatPrice(totalDiscount)}</span>
           </div>
@@ -353,9 +353,9 @@ export default function CartPanel({
           <span>{formatPrice(tax)}</span>
         </div>
         {cartDiscount && (
-          <div className="mt-2 px-3 py-2 bg-amber-900/30 border border-amber-700 rounded-lg flex items-center justify-between">
+          <div className="mt-2 px-3 py-2 bg-cockpit-yellow/30 border border-cockpit-yellow rounded-lg flex items-center justify-between">
             <div className="flex-1 min-w-0">
-              <p className="text-amber-300 font-bold text-xs">
+              <p className="text-cockpit-yellow font-bold text-xs">
                 {cartDiscount.type === 'comp'
                   ? t('discount.compLabel')
                   : cartDiscount.type === 'percent'
@@ -363,12 +363,12 @@ export default function CartPanel({
                     : t('discount.amountLabel', { value: formatPrice(cartDiscount.value) })}
               </p>
               {cartDiscount.reason && (
-                <p className="text-amber-200/80 text-xs truncate">{cartDiscount.reason}</p>
+                <p className="text-cockpit-yellow/80 text-xs truncate">{cartDiscount.reason}</p>
               )}
             </div>
             <button
               onClick={onApplyCartDiscount}
-              className="text-amber-300 hover:text-white text-xs font-bold ml-2"
+              className="text-cockpit-yellow hover:text-white text-xs font-bold ml-2"
             >
               {t('discount.edit')}
             </button>
@@ -387,7 +387,7 @@ export default function CartPanel({
         <button
           onClick={onShowCustomerLookup}
           className={`w-full py-3 text-white text-sm font-bold rounded-lg transition-all touch-manipulation ${
-            linkedCustomer ? 'bg-purple-700 hover:bg-purple-800' : 'bg-purple-600 hover:bg-purple-700'
+            linkedCustomer ? 'bg-cockpit-blue/80 hover:bg-cockpit-blue/70' : 'bg-cockpit-blue hover:bg-cockpit-blue/90'
           }`}
         >
           {linkedCustomer ? t('loyalty.loyaltyCustomer', { name: linkedCustomer.name }) : t('loyalty.loyaltyProgram')}
@@ -395,7 +395,7 @@ export default function CartPanel({
         <button
           onClick={onShowParkedCarts}
           disabled={cart.length === 0 && parkedCount === 0}
-          className="w-full py-3 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 disabled:bg-neutral-800 disabled:text-neutral-600 disabled:cursor-not-allowed transition-all touch-manipulation flex items-center justify-center gap-2"
+          className="w-full py-3 bg-cockpit-blue text-white text-sm font-bold rounded-lg hover:bg-cockpit-blue/90 disabled:bg-neutral-800 disabled:text-neutral-600 disabled:cursor-not-allowed transition-all touch-manipulation flex items-center justify-center gap-2"
         >
           <PauseCircle className="w-4 h-4" />
           {parkedCount > 0
@@ -405,21 +405,21 @@ export default function CartPanel({
         <div className="flex gap-2">
           <button
             onClick={onShowTemplates}
-            className="flex-1 py-3 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 transition-all touch-manipulation flex items-center justify-center gap-1"
+            className="flex-1 py-3 bg-cockpit-green text-white text-sm font-bold rounded-lg hover:bg-cockpit-green/90 transition-all touch-manipulation flex items-center justify-center gap-1"
           >
             <ClipboardList className="w-4 h-4" />
             {t('quickOrders.title')}
           </button>
           <button
             onClick={onShowComboBuilder}
-            className="flex-1 py-3 bg-amber-600 text-white text-sm font-bold rounded-lg hover:bg-amber-700 transition-all touch-manipulation"
+            className="flex-1 py-3 bg-cockpit-yellow text-neutral-900 text-sm font-bold rounded-lg hover:bg-cockpit-yellow/90 transition-all touch-manipulation"
           >
             {t('actions.combos')}
           </button>
           <button
             onClick={onShowSplitPayment}
             disabled={cart.length === 0}
-            className="flex-1 py-3 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 disabled:bg-neutral-800 disabled:text-neutral-600 transition-all touch-manipulation"
+            className="flex-1 py-3 bg-cockpit-blue text-white text-sm font-bold rounded-lg hover:bg-cockpit-blue/90 disabled:bg-neutral-800 disabled:text-neutral-600 transition-all touch-manipulation"
           >
             {t('actions.splitPay')}
           </button>
@@ -427,7 +427,7 @@ export default function CartPanel({
         <button
           onClick={onApplyCartDiscount}
           disabled={cart.length === 0}
-          className="w-full py-3 bg-amber-700 text-white text-sm font-bold rounded-lg hover:bg-amber-800 disabled:bg-neutral-800 disabled:text-neutral-600 disabled:cursor-not-allowed transition-all touch-manipulation flex items-center justify-center gap-2"
+          className="w-full py-3 bg-cockpit-yellow text-neutral-900 text-sm font-bold rounded-lg hover:bg-cockpit-yellow/90 disabled:bg-neutral-800 disabled:text-neutral-600 disabled:cursor-not-allowed transition-all touch-manipulation flex items-center justify-center gap-2"
         >
           <Percent className="w-4 h-4" />
           {cartDiscount ? t('discount.modify') : t('discount.applyToOrder')}

@@ -50,11 +50,11 @@ const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
       <div className="bg-neutral-900 rounded-2xl shadow-2xl w-full max-w-sm border border-neutral-800">
-        <div className="bg-amber-700 text-white p-5 rounded-t-2xl flex items-center gap-3">
+        <div className="bg-cockpit-yellow text-neutral-900 p-5 rounded-t-2xl flex items-center gap-3">
           <Lock className="w-5 h-5" />
           <div>
             <h2 className="text-lg font-bold">{title || t('managerApproval.title')}</h2>
-            <p className="text-amber-100 text-xs">{message || t('managerApproval.subtitle')}</p>
+            <p className="text-cockpit-yellow text-xs">{message || t('managerApproval.subtitle')}</p>
           </div>
         </div>
         <div className="p-5 space-y-4">
@@ -62,12 +62,12 @@ const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
             {Array.from({ length: Math.max(4, pin.length) }).map((_, i) => (
               <div
                 key={i}
-                className={`w-3 h-3 rounded-full ${i < pin.length ? 'bg-amber-500' : 'bg-neutral-700'}`}
+                className={`w-3 h-3 rounded-full ${i < pin.length ? 'bg-cockpit-yellow' : 'bg-neutral-700'}`}
               />
             ))}
           </div>
           {error && (
-            <p className="text-red-400 text-sm text-center">{error}</p>
+            <p className="text-cockpit-red text-sm text-center">{error}</p>
           )}
           <div className="grid grid-cols-3 gap-2">
             {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
@@ -97,7 +97,7 @@ const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
             <button
               onClick={submit}
               disabled={submitting || !pin}
-              className="py-4 bg-amber-600 text-white text-sm font-bold rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-all touch-manipulation"
+              className="py-4 bg-cockpit-yellow text-neutral-900 text-sm font-bold rounded-lg hover:bg-cockpit-yellow/90 disabled:opacity-50 transition-all touch-manipulation"
             >
               {submitting ? '…' : t('managerApproval.approve')}
             </button>

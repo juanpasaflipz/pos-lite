@@ -113,7 +113,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
             <div className="text-center border-b pb-3">
               <p className="font-bold text-lg">{t('receipt.orderNumber', { number: order.order_number })}</p>
               {String(order.order_number).startsWith('OFF-') && (
-                <span className="inline-block mt-1 px-2 py-0.5 bg-amber-100 text-amber-800 text-xs font-bold rounded">
+                <span className="inline-block mt-1 px-2 py-0.5 bg-cockpit-yellow/15 text-cockpit-yellow text-xs font-bold rounded">
                   {t('receipt.offlineBadge')}
                 </span>
               )}
@@ -127,16 +127,16 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
 
             {/* Estimated Ready Time */}
             {order.estimated_ready_range && (
-              <div className="flex items-center justify-center gap-2 py-3 px-4 bg-amber-50 border border-amber-200 rounded-lg">
-                <Clock className="w-5 h-5 text-amber-600 flex-shrink-0" />
+              <div className="flex items-center justify-center gap-2 py-3 px-4 bg-cockpit-yellow/10 border border-cockpit-yellow rounded-lg">
+                <Clock className="w-5 h-5 text-cockpit-yellow flex-shrink-0" />
                 <div className="text-center">
-                  <p className="text-amber-800 font-bold text-lg">
+                  <p className="text-cockpit-yellow font-bold text-lg">
                     {t('receipt.estimatedReady', {
                       low: order.estimated_ready_range.low,
                       high: order.estimated_ready_range.high,
                     })}
                   </p>
-                  <p className="text-amber-600 text-xs">{t('receipt.orderBeingPrepared')}</p>
+                  <p className="text-cockpit-yellow text-xs">{t('receipt.orderBeingPrepared')}</p>
                 </div>
               </div>
             )}
@@ -195,8 +195,8 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
             )}
 
             {invoiceIssued && (
-              <div className="text-center py-2 bg-green-50 rounded-lg">
-                <p className="text-green-700 text-sm font-semibold">{t('receipt.invoiceIssued')}</p>
+              <div className="text-center py-2 bg-cockpit-green/10 rounded-lg">
+                <p className="text-cockpit-green text-sm font-semibold">{t('receipt.invoiceIssued')}</p>
               </div>
             )}
 
@@ -216,14 +216,14 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
             {!showSmsForm ? (
               <button
                 onClick={() => setShowSmsForm(true)}
-                className="w-full py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-all"
+                className="w-full py-3 bg-cockpit-green text-white font-bold rounded-lg hover:bg-cockpit-green/90 transition-all"
               >
                 {recognizedCustomer ? `Enviar recibo a ${recognizedCustomer.name}` : 'Enviar recibo por SMS'}
               </button>
             ) : (
               <div className="space-y-2 p-3 bg-neutral-50 rounded-lg border border-neutral-200">
                 {recognizedCustomer && (
-                  <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-md px-2 py-1">
+                  <div className="flex items-center gap-2 text-xs text-cockpit-green bg-cockpit-green/10 border border-cockpit-green rounded-md px-2 py-1">
                     <span>✓ Cliente reconocido — {recognizedCustomer.name}</span>
                   </div>
                 )}
@@ -254,12 +254,12 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
                       checked={enrollLoyalty}
                       onChange={(e) => setEnrollLoyalty(e.target.checked)}
                       disabled={smsState === 'sending' || smsState === 'sent'}
-                      className="w-4 h-4 accent-green-600"
+                      className="w-4 h-4 accent-cockpit-green"
                     />
                     Sumar al programa de lealtad (+1 sello)
                   </label>
                 )}
-                {smsError && <p className="text-red-600 text-xs">{smsError}</p>}
+                {smsError && <p className="text-cockpit-red text-xs">{smsError}</p>}
                 <div className="flex gap-2">
                   <button
                     onClick={() => {
@@ -278,7 +278,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
                   <button
                     onClick={handleSendSms}
                     disabled={!smsPhone.trim() || smsState === 'sending' || smsState === 'sent'}
-                    className="flex-1 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:opacity-50"
+                    className="flex-1 py-2 bg-cockpit-green text-white font-semibold rounded-lg hover:bg-cockpit-green/90 disabled:opacity-50"
                   >
                     {smsState === 'sending' ? 'Enviando...' : smsState === 'sent' ? '✓ Enviado' : 'Enviar'}
                   </button>
@@ -288,7 +288,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
             {!invoiceIssued && !order.cfdi_invoice_id && (
               <button
                 onClick={() => setShowInvoiceModal(true)}
-                className="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-all"
+                className="w-full py-3 bg-cockpit-blue text-white font-bold rounded-lg hover:bg-cockpit-blue/90 transition-all"
               >
                 {t('receipt.invoiceButton')}
               </button>

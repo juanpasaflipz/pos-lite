@@ -279,10 +279,10 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onInvoiceIs
         {modalState === 'success' && issuedInvoice && (
           <div className="p-4 space-y-4">
             <div className="flex flex-col items-center gap-2 py-2">
-              <div className="w-12 h-12 rounded-full bg-green-600/20 flex items-center justify-center">
-                <Check className="w-6 h-6 text-green-400" />
+              <div className="w-12 h-12 rounded-full bg-cockpit-green/20 flex items-center justify-center">
+                <Check className="w-6 h-6 text-cockpit-green" />
               </div>
-              <p className="text-green-400 font-bold text-sm">{t('invoice.success')}</p>
+              <p className="text-cockpit-green font-bold text-sm">{t('invoice.success')}</p>
             </div>
 
             <div className="bg-neutral-800 rounded-lg p-3 space-y-2 text-sm">
@@ -326,8 +326,8 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onInvoiceIs
                 >
                   {copied ? (
                     <>
-                      <Check className="w-4 h-4 text-green-400" />
-                      <span className="text-green-400">{t('invoice.linkCopied')}</span>
+                      <Check className="w-4 h-4 text-cockpit-green" />
+                      <span className="text-cockpit-green">{t('invoice.linkCopied')}</span>
                     </>
                   ) : (
                     <>
@@ -353,14 +353,14 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onInvoiceIs
         {modalState === 'error' && (
           <div className="p-4 space-y-4">
             <div className="flex flex-col items-center gap-2 py-2">
-              <div className="w-12 h-12 rounded-full bg-red-600/20 flex items-center justify-center">
-                <AlertCircle className="w-6 h-6 text-red-400" />
+              <div className="w-12 h-12 rounded-full bg-cockpit-red/20 flex items-center justify-center">
+                <AlertCircle className="w-6 h-6 text-cockpit-red" />
               </div>
-              <p className="text-red-400 font-bold text-sm">{t('invoice.errorTitle')}</p>
+              <p className="text-cockpit-red font-bold text-sm">{t('invoice.errorTitle')}</p>
             </div>
 
-            <div className="bg-red-900/20 border border-red-800 rounded-lg p-3">
-              <p className="text-red-300 text-sm">{errorMessage}</p>
+            <div className="bg-cockpit-red/20 border border-cockpit-red rounded-lg p-3">
+              <p className="text-cockpit-red text-sm">{errorMessage}</p>
             </div>
 
             <div className="space-y-2">
