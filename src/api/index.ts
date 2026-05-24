@@ -78,6 +78,11 @@ import {
   CSVImportPreview,
   AIMenuParseResult,
   MenuEngineeringReport,
+  PayrollSnapshot,
+  PayrollSettings,
+  PayrollRateRow,
+  PayrollPeriodsList,
+  PayType,
   SettlementSummary,
   DisbursementRecord,
   SettlementStatement,
@@ -3411,5 +3416,66 @@ export async function exportExpenses(params?: { from?: string; to?: string }): P
   }
   const response = await fetch(`${base}/expenses/export${query}`, { headers });
   if (!response.ok) throw new Error('Failed to export expenses');
+  return response.blob();
+}
+
+/* ==================== Payroll Endpoints ==================== */
+
+export async function getPayrollLive(): Promise<PayrollSnapshot> {
+  return apiRequest<PayrollSnapshot>('/payroll/live');
+}
+
+export async function getPayrollPeriod(from: string, to: string): Promise<PayrollSnapshot> {
+  return apiRequest<PayrollSnapshot>(`/payroll/period?from=${from}&to=${to}`);
+}
+
+export async function getPayrollSettings(): Promise<PayrollSettings> {
+  return apiRequest<PayrollSettings>('/payroll/settings');
+}
+
+export async function updatePayrollSettings(patch: Partial<PayrollSettings>): Promise<PayrollSettings> {
+  return apiRequest<PayrollSettings>('/payroll/settings', {
+    method: 'PUT',
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function getPayrollRates(): Promise<PayrollRateRow[]> {
+  return apiRequest<PayrollRateRow[]>('/payroll/employees/rates');
+}
+
+export async function updateEmployeePayRate(
+  employeeId: number,
+  body: { pay_type: PayType; hourly_rate_cents?: number; weekly_salary_cents?: number; note?: string }
+): Promise<PayrollRateRow> {
+  return apiRequest<PayrollRateRow>(`/payroll/employees/${employeeId}/rate`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function listPayrollPeriods(): Promise<PayrollPeriodsList> {
+  return apiRequest<PayrollPeriodsList>('/payroll/periods');
+}
+
+export async function closePayrollPeriod(period_start: string, period_end: string): Promise<PayrollSnapshot & { period_id: number }> {
+  return apiRequest<PayrollSnapshot & { period_id: number }>('/payroll/periods/close', {
+    method: 'POST',
+    body: JSON.stringify({ period_start, period_end }),
+  });
+}
+
+export async function exportPayrollPeriodCsv(periodId: number): Promise<Blob> {
+  const base = FALLBACK_URLS.length ? await resolveBaseUrl() : activeBaseUrl;
+  const headers: Record<string, string> = {};
+  if (currentEmployeeToken) {
+    headers['Authorization'] = `Bearer ${currentEmployeeToken}`;
+  }
+  if (!isCapacitor && window.location.hostname === 'localhost') {
+    const tenantId = localStorage.getItem('tenant_id');
+    if (tenantId) headers['X-Tenant-ID'] = tenantId;
+  }
+  const response = await fetch(`${base}/payroll/periods/${periodId}/export.csv`, { headers });
+  if (!response.ok) throw new Error('Failed to export payroll period');
   return response.blob();
 }

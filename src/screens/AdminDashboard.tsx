@@ -22,6 +22,8 @@ import {
   User,
   Trash2,
   Clock,
+  Wallet,
+  LayoutDashboard,
 } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 import { useAuth } from '../context/AuthContext';
@@ -44,6 +46,7 @@ const ADMIN_LINKS: AdminLink[] = [
   { to: '/admin/modifiers', icon: <SlidersHorizontal size={24} />, label: 'Modifiers', description: 'Extras, sizes & add-ons' },
   { to: '/admin/employees', icon: <Users size={24} />, label: 'Employees', description: 'Staff & PINs', adminOnly: true },
   { to: '/admin/shifts', icon: <Clock size={24} />, label: 'Time Clock', description: 'Who is on shift, hours worked' },
+  { to: '/admin/payroll', icon: <Wallet size={24} />, label: 'Payroll', description: 'Pay rates, tip policy & labor cost' },
   { to: '/admin/printers', icon: <Printer size={24} />, label: 'Printers', description: 'Receipt & kitchen printers' },
   { to: '/admin/delivery', icon: <Truck size={24} />, label: 'Delivery', description: 'Platform integrations' },
   { to: '/admin/permissions', icon: <Shield size={24} />, label: 'Permissions', description: 'Role access control', adminOnly: true },
@@ -96,6 +99,31 @@ export default function AdminDashboard() {
       </div>
 
       <div className="max-w-5xl mx-auto p-6">
+        <Link
+          to="/admin/cockpit"
+          className="group block mb-6 rounded-2xl p-6 bg-gradient-to-br from-emerald-900/40 via-neutral-900 to-violet-900/40 border border-neutral-700 hover:border-neutral-500 transition-all shadow-[0_0_28px_-10px_rgba(139,92,246,0.5)] hover:shadow-[0_0_40px_-8px_rgba(139,92,246,0.7)]"
+        >
+          <div className="flex items-center gap-5">
+            <div className="w-14 h-14 rounded-2xl bg-neutral-950/60 border border-neutral-700 flex items-center justify-center text-white group-hover:scale-105 transition-transform">
+              <LayoutDashboard size={28} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-white font-black text-xl tracking-tight">Owner Cockpit</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">New</span>
+              </div>
+              <div className="text-neutral-300 text-sm">
+                See what comes in, what goes out, and how the machine runs.
+              </div>
+              <div className="flex gap-2 mt-3">
+                <span className="text-[11px] font-bold px-2 py-1 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">IN</span>
+                <span className="text-[11px] font-bold px-2 py-1 rounded bg-rose-500/10 text-rose-300 border border-rose-500/30">OUT</span>
+                <span className="text-[11px] font-bold px-2 py-1 rounded bg-violet-500/10 text-violet-300 border border-violet-500/30">SYSTEM</span>
+              </div>
+            </div>
+          </div>
+        </Link>
+
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           {links.map((link) => (
             <Link

@@ -1591,3 +1591,84 @@ export interface PaginatedResponse<T> {
   page: number;
   limit: number;
 }
+
+/* ==================== Payroll ==================== */
+
+export type PayType = 'hourly' | 'salary' | 'commission' | 'no_pay';
+export type TipPolicy = 'taker_keeps' | 'pool_by_hours' | 'pool_equal' | 'house_keeps';
+
+export interface PayrollEmployeeLine {
+  employee_id: number;
+  employee_name: string;
+  employee_role: string | null;
+  pay_type: PayType;
+  hourly_rate_cents: number;
+  weekly_salary_cents: number;
+  hours_worked: number;
+  hours_overtime: number;
+  has_open_shift: boolean;
+  base_pay_cents: number;
+  tip_share_cents: number;
+  total_cents: number;
+}
+
+export interface PayrollTotals {
+  hours_worked: number;
+  hours_overtime: number;
+  base_pay_cents: number;
+  tip_share_cents: number;
+  total_cents: number;
+  labor_pct_of_sales: number | null;
+}
+
+export interface PayrollSnapshot {
+  period_start: string;
+  period_end: string;
+  tip_policy: TipPolicy;
+  sales_cents: number;
+  tip_pool_cents: number;
+  overtime_threshold_hours: number | null;
+  labor_warn_pct: number | null;
+  labor_critical_pct: number | null;
+  employees: PayrollEmployeeLine[];
+  totals: PayrollTotals;
+  frozen?: boolean;
+  closed_at?: string;
+}
+
+export interface PayrollSettings {
+  tip_policy: TipPolicy;
+  period_type: 'weekly' | 'biweekly' | 'catorcenal' | 'quincenal';
+  period_start_dow: number;
+  overtime_threshold_hours: number;
+  labor_warn_pct: number;
+  labor_critical_pct: number;
+}
+
+export interface PayrollRateRow {
+  employee_id: number;
+  employee_name: string;
+  role: string | null;
+  pay_type: PayType;
+  hourly_rate_cents: number;
+  weekly_salary_cents: number;
+}
+
+export interface PayrollClosedPeriod {
+  id: number;
+  period_start: string;
+  period_end: string;
+  status: 'closed';
+  total_hours: number;
+  total_overtime_hours: number;
+  total_base_pay_cents: number;
+  total_tip_pool_cents: number;
+  total_sales_cents: number;
+  labor_pct_of_sales: number | null;
+  closed_at: string;
+}
+
+export interface PayrollPeriodsList {
+  current: { period_start: string; period_end: string };
+  closed: PayrollClosedPeriod[];
+}

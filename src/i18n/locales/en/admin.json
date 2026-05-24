@@ -1,4 +1,40 @@
 {
+  "payroll": {
+    "title": "Payroll",
+    "savedSettings": "Settings saved",
+    "savedRate": "Pay rate saved",
+    "settings": {
+      "title": "Payroll settings",
+      "tipPolicy": "Tip policy",
+      "tipPolicyHint": "How tips collected from customers are distributed to employees.",
+      "periodStartDow": "Week starts on",
+      "periodStartHint": "The day the weekly payroll period begins. Mexican restaurants typically use Monday.",
+      "overtimeThreshold": "Overtime threshold (hours/week)",
+      "overtimeHint": "Mexican LFT default is 48h/week. Hours over this are flagged for review.",
+      "warnPct": "Warn at labor %",
+      "criticalPct": "Critical at labor %",
+      "save": "Save settings"
+    },
+    "rates": {
+      "title": "Employee pay rates",
+      "subtitle": "Each rate change is recorded in history so closed periods stay accurate.",
+      "employee": "Employee",
+      "payType": "Pay type",
+      "hourly": "Hourly rate (MXN)",
+      "weekly": "Weekly salary (MXN)",
+      "save": "Save",
+      "empty": "No active employees"
+    },
+    "dow": {
+      "mon": "Monday",
+      "tue": "Tuesday",
+      "wed": "Wednesday",
+      "thu": "Thursday",
+      "fri": "Friday",
+      "sat": "Saturday",
+      "sun": "Sunday"
+    }
+  },
   "panel": {
     "title": "Admin Panel",
     "todaysRevenue": "Today's Revenue",

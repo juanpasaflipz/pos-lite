@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { SalesReport, EmployeePerformanceReport, HourlyReport, ItemSalesReport } from '../../types';
 import { AlertCircle, Filter } from 'lucide-react';
+import LaborStrip from './LaborStrip';
 
 const fmt = (v: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(v);
 const intFmt = (v: number) => new Intl.NumberFormat('es-MX').format(v || 0);
@@ -37,6 +38,8 @@ export default function OverviewTab({
 
   return (
     <div className="space-y-6">
+      <LaborStrip />
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
           <p className="text-neutral-400 text-sm font-medium">{t('sales.kpi.totalRevenue')}</p>

@@ -17,7 +17,8 @@
       "fees": "Fees",
       "refunds": "Refunds",
       "financials": "Financials",
-      "menuEngineering": "Menu Engineering"
+      "menuEngineering": "Menu Engineering",
+      "payroll": "Payroll"
     },
     "csvHeaders": {
       "metric": "Metric",
@@ -421,6 +422,69 @@
       "contribution": "Contribution"
     },
     "ofMenu": "of menu"
+  },
+  "payroll": {
+    "tableTitle": "Pay by employee",
+    "frozen": "Closed",
+    "closeBtn": "Close period",
+    "exportCsv": "Export CSV",
+    "confirmClose": "Close payroll for {{start}} → {{end}}? This will freeze the snapshot.",
+    "savedSettings": "Settings saved",
+    "savedRate": "Pay rate saved",
+    "kpi": {
+      "basePay": "Base pay",
+      "tipPool": "Tip pool",
+      "hours": "Hours",
+      "otHours": "OT: {{hours}}",
+      "sales": "Sales",
+      "laborPct": "Labor %",
+      "targetThresholds": "Warn {{warn}}% · Critical {{critical}}%"
+    },
+    "table": {
+      "employee": "Employee",
+      "payType": "Type",
+      "rate": "Rate",
+      "hours": "Hours",
+      "ot": "OT",
+      "basePay": "Base pay",
+      "tipShare": "Tip share",
+      "total": "Total",
+      "totals": "Totals",
+      "onClock": "On clock"
+    },
+    "nav": {
+      "prev": "Previous week",
+      "next": "Next week",
+      "week": "Week",
+      "thisWeek": "This week (live)",
+      "jumpCurrent": "Jump to current"
+    },
+    "payType": {
+      "hourly": "Hourly",
+      "salary": "Salary",
+      "commission": "Commission",
+      "no_pay": "Unpaid"
+    },
+    "tipPolicy": {
+      "pool_by_hours": "Tips pooled by hours",
+      "pool_equal": "Tips pooled equally",
+      "taker_keeps": "Taker keeps tips",
+      "house_keeps": "House keeps tips"
+    },
+    "otAdvisory": {
+      "title": "Overtime flagged",
+      "body": "One or more employees crossed the {{threshold}}h threshold this week. Mexican LFT requires 200% pay for hours 49–57 and 300% beyond. We do not auto-calculate — verify and adjust in your payroll provider."
+    },
+    "laborStrip": {
+      "weekLabor": "This week's labor",
+      "ofSales": "of {{sales}} in sales",
+      "hours": "Hours worked",
+      "period": "{{start}} → {{end}}",
+      "tipPool": "Tip pool",
+      "onClock": "{{count}} on clock",
+      "overtimeAlert": "Over {{threshold}}h: {{names}}",
+      "fullPayroll": "Open full payroll"
+    }
   },
   "errors": {
     "fetchReports": "Failed to fetch reports",

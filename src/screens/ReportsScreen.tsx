@@ -47,9 +47,10 @@ import FeesTab from '../components/reports/FeesTab';
 import RefundsTab from '../components/reports/RefundsTab';
 import FinancialsTab from '../components/reports/FinancialsTab';
 import MenuEngineeringTab from '../components/reports/MenuEngineeringTab';
+import PayrollTab from '../components/reports/PayrollTab';
 
 type Period = 'today' | 'week' | 'month';
-type Tab = 'overview' | 'cashcard' | 'cogs' | 'categories' | 'margin' | 'delivery' | 'fees' | 'refunds' | 'financials' | 'engineering';
+type Tab = 'overview' | 'cashcard' | 'cogs' | 'categories' | 'margin' | 'delivery' | 'fees' | 'refunds' | 'financials' | 'engineering' | 'payroll';
 
 export default function ReportsScreen() {
   const { t } = useTranslation('reports');
@@ -87,6 +88,11 @@ export default function ReportsScreen() {
   }, [period, tab, financialMonth, itemSalesFilters]);
 
   const fetchReportData = async () => {
+    if (tab === 'payroll') {
+      // PayrollTab manages its own data loading and period state.
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -201,6 +207,11 @@ export default function ReportsScreen() {
     return `${startStr} – ${endStr}`;
   };
 
+  const canSeePayroll = !!(currentEmployee && (
+    currentEmployee.role === 'admin' ||
+    currentEmployee.permissions?.includes('manage_payroll')
+  ));
+
   const tabs: { key: Tab; label: string }[] = [
     { key: 'overview', label: t('sales.tabs.overview') },
     { key: 'cashcard', label: t('sales.tabs.cashCard') },
@@ -212,6 +223,7 @@ export default function ReportsScreen() {
     { key: 'refunds', label: t('sales.tabs.refunds') },
     { key: 'engineering', label: '⭐ ' + t('sales.tabs.menuEngineering') },
     { key: 'financials', label: t('sales.tabs.financials') },
+    ...(canSeePayroll ? [{ key: 'payroll' as Tab, label: t('sales.tabs.payroll') }] : []),
   ];
 
   return (
@@ -337,6 +349,7 @@ export default function ReportsScreen() {
                 onError={setError}
               />
             )}
+            {tab === 'payroll' && canSeePayroll && <PayrollTab />}
           </>
         )}
       </div>

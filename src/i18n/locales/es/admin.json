@@ -1,4 +1,40 @@
 {
+  "payroll": {
+    "title": "Nómina",
+    "savedSettings": "Configuración guardada",
+    "savedRate": "Tarifa guardada",
+    "settings": {
+      "title": "Configuración de nómina",
+      "tipPolicy": "Política de propinas",
+      "tipPolicyHint": "Cómo se reparten las propinas recibidas de los clientes entre los empleados.",
+      "periodStartDow": "La semana empieza el",
+      "periodStartHint": "Día en que comienza el periodo semanal de nómina. En México lo común es lunes.",
+      "overtimeThreshold": "Umbral de tiempo extra (horas/semana)",
+      "overtimeHint": "La LFT establece 48h/semana. Horas adicionales se marcan para revisión.",
+      "warnPct": "Aviso al % de nómina",
+      "criticalPct": "Crítico al % de nómina",
+      "save": "Guardar configuración"
+    },
+    "rates": {
+      "title": "Tarifas por empleado",
+      "subtitle": "Cada cambio se guarda en el historial para mantener exactos los periodos cerrados.",
+      "employee": "Empleado",
+      "payType": "Tipo de pago",
+      "hourly": "Tarifa por hora (MXN)",
+      "weekly": "Sueldo semanal (MXN)",
+      "save": "Guardar",
+      "empty": "Sin empleados activos"
+    },
+    "dow": {
+      "mon": "Lunes",
+      "tue": "Martes",
+      "wed": "Miércoles",
+      "thu": "Jueves",
+      "fri": "Viernes",
+      "sat": "Sábado",
+      "sun": "Domingo"
+    }
+  },
   "panel": {
     "title": "Panel de Admin",
     "todaysRevenue": "Ventas de Hoy",

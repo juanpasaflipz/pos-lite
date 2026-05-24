@@ -19,6 +19,7 @@ import paymentsRoutes, { mpOAuthCallback, mpWebhook, conektaWebhook } from './ro
 import inventoryRoutes from './routes/inventory.js';
 import employeesRoutes from './routes/employees.js';
 import shiftsRoutes from './routes/shifts.js';
+import payrollRoutes from './routes/payroll.js';
 import reportsRoutes from './routes/reports.js';
 import modifiersRoutes from './routes/modifiers.js';
 import combosRoutes from './routes/combos.js';
@@ -221,6 +222,7 @@ app.use('/api/payments', paymentsRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/employees', employeesRoutes);
 app.use('/api/shifts', shiftsRoutes);
+app.use('/api/payroll', payrollRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/modifiers', modifiersRoutes);
 app.use('/api/combos', combosRoutes);

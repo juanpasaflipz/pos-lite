@@ -81,7 +81,7 @@ async function seedTenantDefaults(tenantId) {
     'manage_inventory', 'manage_employees', 'manage_printers', 'manage_delivery',
     'manage_modifiers', 'manage_ai', 'process_refunds', 'void_orders',
     'apply_discounts', 'view_dashboard', 'manage_permissions', 'manage_purchase_orders',
-    'manage_loyalty', 'manage_branding', 'manage_invoicing',
+    'manage_loyalty', 'manage_branding', 'manage_invoicing', 'manage_payroll',
   ];
 
   const roleDefaults = {
@@ -125,6 +125,13 @@ async function seedTenantDefaults(tenantId) {
       ON CONFLICT (tenant_id, key) DO NOTHING
     `;
   }
+
+  // Seed payroll_settings with defaults (tip_policy=pool_by_hours, weekly, Mon start)
+  await adminSql`
+    INSERT INTO payroll_settings (tenant_id)
+    VALUES (${tenantId})
+    ON CONFLICT (tenant_id) DO NOTHING
+  `;
 
   // Seed financial targets
   const financialDefaults = [

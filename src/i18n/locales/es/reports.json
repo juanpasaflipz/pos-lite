@@ -17,7 +17,8 @@
       "fees": "Comisiones",
       "refunds": "Reembolsos",
       "financials": "Finanzas",
-      "menuEngineering": "Ingeniería de Menú"
+      "menuEngineering": "Ingeniería de Menú",
+      "payroll": "Nómina"
     },
     "csvHeaders": {
       "metric": "Métrica",
@@ -421,6 +422,69 @@
       "contribution": "Contribución"
     },
     "ofMenu": "del menú"
+  },
+  "payroll": {
+    "tableTitle": "Pago por empleado",
+    "frozen": "Cerrada",
+    "closeBtn": "Cerrar periodo",
+    "exportCsv": "Exportar CSV",
+    "confirmClose": "¿Cerrar nómina del {{start}} al {{end}}? Esto congelará la instantánea.",
+    "savedSettings": "Configuración guardada",
+    "savedRate": "Tarifa guardada",
+    "kpi": {
+      "basePay": "Sueldo base",
+      "tipPool": "Bote de propinas",
+      "hours": "Horas",
+      "otHours": "Tiempo extra: {{hours}}",
+      "sales": "Ventas",
+      "laborPct": "% nómina",
+      "targetThresholds": "Aviso {{warn}}% · Crítico {{critical}}%"
+    },
+    "table": {
+      "employee": "Empleado",
+      "payType": "Tipo",
+      "rate": "Tarifa",
+      "hours": "Horas",
+      "ot": "Extra",
+      "basePay": "Sueldo base",
+      "tipShare": "Propinas",
+      "total": "Total",
+      "totals": "Totales",
+      "onClock": "En turno"
+    },
+    "nav": {
+      "prev": "Semana anterior",
+      "next": "Semana siguiente",
+      "week": "Semana",
+      "thisWeek": "Esta semana (en vivo)",
+      "jumpCurrent": "Ir a actual"
+    },
+    "payType": {
+      "hourly": "Por hora",
+      "salary": "Sueldo fijo",
+      "commission": "Comisión",
+      "no_pay": "Sin sueldo"
+    },
+    "tipPolicy": {
+      "pool_by_hours": "Propinas repartidas por horas",
+      "pool_equal": "Propinas repartidas en partes iguales",
+      "taker_keeps": "Quien toma la orden se queda la propina",
+      "house_keeps": "La casa se queda las propinas"
+    },
+    "otAdvisory": {
+      "title": "Tiempo extra detectado",
+      "body": "Uno o más empleados superaron las {{threshold}}h esta semana. La LFT exige 200% por las horas 49–57 y 300% en adelante. No calculamos esto automáticamente — verifica y ajusta en tu sistema de nómina."
+    },
+    "laborStrip": {
+      "weekLabor": "Nómina de la semana",
+      "ofSales": "de {{sales}} en ventas",
+      "hours": "Horas trabajadas",
+      "period": "{{start}} → {{end}}",
+      "tipPool": "Bote de propinas",
+      "onClock": "{{count}} en turno",
+      "overtimeAlert": "Más de {{threshold}}h: {{names}}",
+      "fullPayroll": "Abrir nómina completa"
+    }
   },
   "errors": {
     "fetchReports": "Error al cargar reportes",
