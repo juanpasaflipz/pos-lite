@@ -104,14 +104,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Cache for future offline use
       await cacheEmployee(employee, pin);
     } catch (err) {
-      // Online failed — try offline fallback
-      const offlineEmployee = await offlineLogin(pin);
-      if (offlineEmployee) {
-        setCurrentEmployee(offlineEmployee);
-        setPermissions(offlineEmployee.permissions || []);
-        setCurrentEmployeeId(offlineEmployee.id);
-        setCurrentEmployeeToken(offlineEmployee.token || null);
-        return; // success via offline
+      // Only fall back to offline cache when the fetch itself failed (no response).
+      // If the server returned a status (e.g. 401 invalid PIN, 429 lockout), the cache
+      // must not silently override it — that masks real errors and produces blank screens
+      // by navigating to /pos with a stale/expired token.
+      const status = (err as { status?: number })?.status;
+      const isNetworkFailure = status === undefined;
+      if (isNetworkFailure) {
+        const offlineEmployee = await offlineLogin(pin);
+        if (offlineEmployee) {
+          setCurrentEmployee(offlineEmployee);
+          setPermissions(offlineEmployee.permissions || []);
+          setCurrentEmployeeId(offlineEmployee.id);
+          setCurrentEmployeeToken(offlineEmployee.token || null);
+          return; // success via offline
+        }
       }
       const errorMessage = err instanceof Error ? err.message : 'Login failed';
       setError(errorMessage);
