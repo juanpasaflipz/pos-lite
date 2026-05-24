@@ -500,6 +500,45 @@ be meaningful), or when asked for the suggestion ROI number.
 
 ---
 
+## Data integrity follow-ups
+
+### Cross-tenant FK in `price_history`
+
+**What:** Surfaced 2026-05-24 while trying to delete the `numero-3` test tenant.
+54 rows in `price_history` carry `tenant_id = 'juanbertos'` but FK-reference
+`menu_items.id` rows owned by `tenant_id = 'numero-3'`. Tenant-scoped data
+should never FK across tenants — either RLS is missing/broken on the
+`price_history` INSERT path, or some code is using the admin pool (which
+bypasses RLS) when it shouldn't, or `menu_items.id` is not effectively
+tenant-scoped.
+
+**Why it matters:**
+- Tenant isolation violation, even if low-severity (price_history is internal
+  analytics, not customer-visible). If this pattern exists here, it may exist
+  elsewhere.
+- Blocks safe tenant offboarding — the super-admin `DELETE /admin/tenants/:id`
+  flow can't complete because dropping the parent tenant's menu_items
+  violates the orphan FK.
+- The super-admin offboarding endpoint also needs to be audited — at the time
+  of this finding it was missing ~30 newer tenant_id tables from its cascade
+  list (payroll_*, expenses, shifts, cash_drawer_sessions, etc.), which would
+  silently fail on any tenant with data in those areas.
+
+**Investigation steps:**
+1. Find what code path inserts into `price_history` and how it derives the
+   `tenant_id` vs the menu_item the row references.
+2. Check whether `price_history` has an RLS policy and whether INSERTs are
+   subject to it.
+3. Sweep other tables for the same cross-tenant FK pattern:
+   `SELECT child.tenant_id, parent.tenant_id, COUNT(*) FROM <child> JOIN <parent> ON ... WHERE child.tenant_id <> parent.tenant_id`.
+4. Rebuild the super-admin offboarding cascade from `information_schema`
+   instead of a hard-coded layer list so future tables don't get forgotten.
+
+**Trigger:** Before first paying-customer churn (offboarding must work
+end-to-end). Or sooner if a second cross-tenant FK case appears.
+
+---
+
 ## Carryover from design doc / CEO plan
 
 These were explicitly deferred in the original plan — re-listed here so TODOS.md
