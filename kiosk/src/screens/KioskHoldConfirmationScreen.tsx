@@ -50,7 +50,7 @@ const KioskHoldConfirmationScreen: React.FC = () => {
 
   return (
     <div className="h-full w-full bg-neutral-950 text-white flex flex-col items-center justify-center p-10 text-center">
-      <CheckCircle2 className="h-28 w-28 text-emerald-400 mb-6" />
+      <CheckCircle2 className="h-28 w-28 text-cockpit-green mb-6" />
       <h1 className="text-5xl font-black leading-tight">
         {state.firstName ? `¡Listo, ${state.firstName}!` : '¡Listo!'}
       </h1>

@@ -109,13 +109,13 @@ const KioskPaymentScreen: React.FC = () => {
         </div>
 
         {message && (
-          <div className="min-h-20 px-6 rounded-lg bg-amber-500 text-neutral-950 flex items-center gap-3 text-2xl font-black">
+          <div className="min-h-20 px-6 rounded-lg bg-cockpit-yellow text-neutral-950 flex items-center gap-3 text-2xl font-black">
             <Loader2 className="h-8 w-8 animate-spin shrink-0" />
             {message}
           </div>
         )}
         {error && (
-          <div className="w-full max-w-[720px] rounded-lg bg-red-950 border border-red-700 px-6 py-5 text-2xl font-bold text-red-100 text-center">
+          <div className="w-full max-w-[720px] rounded-lg bg-cockpit-red/20 border border-cockpit-red/60 px-6 py-5 text-2xl font-bold text-white text-center">
             {error}
           </div>
         )}

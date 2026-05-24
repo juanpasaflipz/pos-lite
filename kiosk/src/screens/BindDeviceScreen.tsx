@@ -76,7 +76,7 @@ const BindDeviceScreen: React.FC = () => {
         ))}
       </div>
 
-      <div className={`mb-4 h-6 text-base ${error ? 'text-red-400' : 'text-transparent'}`}>
+      <div className={`mb-4 h-6 text-base ${error ? 'text-cockpit-red' : 'text-transparent'}`}>
         {error || 'placeholder'}
       </div>
 

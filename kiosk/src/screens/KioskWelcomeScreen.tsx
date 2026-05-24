@@ -215,7 +215,7 @@ const KioskWelcomeScreen: React.FC = () => {
           </button>
         </div>
 
-        {error && <p className="mt-4 text-red-400 text-base font-bold">{error}</p>}
+        {error && <p className="mt-4 text-cockpit-red text-base font-bold">{error}</p>}
       </div>
     );
   }
@@ -250,7 +250,7 @@ const KioskWelcomeScreen: React.FC = () => {
             </span>
           </div>
 
-          <div className={`mb-3 h-6 text-base font-bold ${error ? 'text-red-400' : 'text-transparent'}`}>
+          <div className={`mb-3 h-6 text-base font-bold ${error ? 'text-cockpit-red' : 'text-transparent'}`}>
             {error || 'placeholder'}
           </div>
 
@@ -296,7 +296,7 @@ const KioskWelcomeScreen: React.FC = () => {
         className="w-[460px] h-20 rounded-2xl bg-neutral-900 border-2 border-neutral-700 focus:border-brand-500 outline-none text-center text-3xl font-black px-6"
       />
 
-      <div className={`my-3 h-6 text-base font-bold ${error ? 'text-red-400' : 'text-transparent'}`}>
+      <div className={`my-3 h-6 text-base font-bold ${error ? 'text-cockpit-red' : 'text-transparent'}`}>
         {error || 'placeholder'}
       </div>
 

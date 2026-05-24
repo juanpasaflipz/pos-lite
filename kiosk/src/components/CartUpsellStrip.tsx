@@ -117,7 +117,7 @@ const CartUpsellStrip: React.FC = () => {
                 </div>
               </div>
               {added && (
-                <div className="absolute inset-0 bg-emerald-600/90 flex items-center justify-center gap-1 text-base font-black">
+                <div className="absolute inset-0 bg-cockpit-green/90 flex items-center justify-center gap-1 text-base font-black">
                   <Check className="h-6 w-6" />
                   Agregado
                 </div>

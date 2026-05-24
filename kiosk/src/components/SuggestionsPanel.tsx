@@ -82,7 +82,7 @@ const SuggestionsPanel: React.FC<Props> = ({
   const card = (s: SuggestionItem, lane: string, accent: 'brand' | 'amber') => {
     const key = `${lane}-${s.menu_item_id}`;
     const added = flash === key;
-    const ring = accent === 'amber' ? 'active:border-amber-400' : 'active:border-brand-500';
+    const ring = accent === 'amber' ? 'active:border-cockpit-yellow' : 'active:border-brand-500';
     return (
       <button
         key={key}
@@ -98,7 +98,7 @@ const SuggestionsPanel: React.FC<Props> = ({
           {s.reason && (
             <p
               className={`mt-2 text-sm font-semibold leading-snug line-clamp-2 ${
-                accent === 'amber' ? 'text-amber-300' : 'text-brand-200'
+                accent === 'amber' ? 'text-cockpit-yellow' : 'text-brand-200'
               }`}
             >
               {s.reason}
@@ -110,7 +110,7 @@ const SuggestionsPanel: React.FC<Props> = ({
             </span>
             <span
               className={`h-11 w-11 rounded-lg flex items-center justify-center ${
-                accent === 'amber' ? 'bg-amber-500 text-neutral-950' : 'bg-brand-600 text-white'
+                accent === 'amber' ? 'bg-cockpit-yellow text-neutral-950' : 'bg-brand-600 text-white'
               }`}
             >
               <Plus className="h-6 w-6" />
@@ -118,7 +118,7 @@ const SuggestionsPanel: React.FC<Props> = ({
           </div>
         </div>
         {added && (
-          <div className="absolute inset-0 bg-emerald-600/90 flex items-center justify-center gap-2 text-2xl font-black">
+          <div className="absolute inset-0 bg-cockpit-green/90 flex items-center justify-center gap-2 text-2xl font-black">
             <Check className="h-9 w-9" />
             Agregado
           </div>
@@ -154,7 +154,7 @@ const SuggestionsPanel: React.FC<Props> = ({
               Agregar
             </span>
             {flash === 'usual' && (
-              <div className="absolute inset-0 bg-emerald-600/90 flex items-center justify-center gap-2 text-2xl font-black">
+              <div className="absolute inset-0 bg-cockpit-green/90 flex items-center justify-center gap-2 text-2xl font-black">
                 <Check className="h-9 w-9" />
                 Agregado a tu orden
               </div>

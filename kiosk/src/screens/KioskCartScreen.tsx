@@ -113,7 +113,7 @@ const KioskCartScreen: React.FC = () => {
                   </button>
                   <button
                     onClick={() => removeLine(line.line_key)}
-                    className="col-span-3 h-14 rounded-lg bg-red-900/70 active:bg-red-800 flex items-center justify-center gap-2 text-lg font-black"
+                    className="col-span-3 h-14 rounded-lg bg-cockpit-red/30 active:bg-cockpit-red/50 flex items-center justify-center gap-2 text-lg font-black"
                     aria-label="Quitar"
                   >
                     <Trash2 className="h-6 w-6" />
@@ -129,7 +129,7 @@ const KioskCartScreen: React.FC = () => {
 
       <footer className="p-4 border-t border-neutral-800 bg-neutral-950 space-y-3">
         {holdError && (
-          <p className="text-red-400 text-base font-bold text-center">{holdError}</p>
+          <p className="text-cockpit-red text-base font-bold text-center">{holdError}</p>
         )}
         <button
           disabled={count === 0 || holding}

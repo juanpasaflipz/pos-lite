@@ -28,7 +28,7 @@ const SUGGEST_TAB = -1;
 const StampBar: React.FC<{ stamp: StampStatus }> = ({ stamp }) => {
   if (stamp.completed) {
     return (
-      <span className="inline-flex items-center gap-2 rounded-full bg-amber-500 text-neutral-950 px-3 py-1 text-sm font-black">
+      <span className="inline-flex items-center gap-2 rounded-full bg-cockpit-yellow text-neutral-950 px-3 py-1 text-sm font-black">
         <Gift className="h-4 w-4" />
         ¡Tienes un premio!
       </span>
@@ -235,7 +235,7 @@ const KioskMenuScreen: React.FC = () => {
             </div>
           )}
           {error && (
-            <div className="h-full flex items-center justify-center text-2xl text-red-300">
+            <div className="h-full flex items-center justify-center text-2xl text-cockpit-red">
               {error}
             </div>
           )}

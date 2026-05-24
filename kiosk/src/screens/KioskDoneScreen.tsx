@@ -23,7 +23,7 @@ const KioskDoneScreen: React.FC = () => {
   useIdleTimer(finish, 8_000);
 
   return (
-    <div className="h-full w-full bg-emerald-700 text-white flex flex-col items-center justify-center p-8 text-center">
+    <div className="h-full w-full bg-cockpit-green text-white flex flex-col items-center justify-center p-8 text-center">
       <CheckCircle2 className="h-36 w-36 mb-8" />
       <h1 className="text-[72px] font-black mb-6 leading-none">
         {greetingName ? `¡Gracias, ${greetingName}!` : 'Orden enviada'}
@@ -47,7 +47,7 @@ const KioskDoneScreen: React.FC = () => {
       )}
       <button
         onClick={finish}
-        className="h-20 px-12 rounded-lg bg-white text-emerald-800 text-2xl font-black"
+        className="h-20 px-12 rounded-lg bg-white text-cockpit-green text-2xl font-black"
       >
         Listo
       </button>
