@@ -50,8 +50,8 @@ export default class ErrorBoundary extends Component<Props, State> {
       const chunkError = isChunkLoadError(this.state.error);
       return (
         <div className="min-h-screen flex items-center justify-center bg-neutral-950 p-8">
-          <div className="max-w-lg w-full bg-neutral-900 rounded-xl border border-red-800 p-6">
-            <h2 className="text-xl font-bold text-red-400 mb-2">
+          <div className="max-w-lg w-full bg-neutral-900 rounded-xl border border-cockpit-red/40 p-6">
+            <h2 className="text-xl font-bold text-cockpit-red mb-2">
               {chunkError ? 'A new version is available' : 'Something went wrong'}
             </h2>
             <pre className="text-sm text-neutral-300 whitespace-pre-wrap break-words mb-4">

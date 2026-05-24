@@ -23,12 +23,12 @@ interface StatusStyle {
 }
 
 const STATUS_STYLES: Record<OrderStatus, StatusStyle> = {
-  pending:   { bg: 'bg-brand-600',    text: 'text-white',         dot: 'bg-white' },
-  confirmed: { bg: 'bg-sky-600',      text: 'text-white',         dot: 'bg-white' },
-  preparing: { bg: 'bg-amber-500',    text: 'text-neutral-900',   dot: 'bg-neutral-900' },
-  ready:     { bg: 'bg-emerald-500',  text: 'text-neutral-900',   dot: 'bg-neutral-900' },
-  completed: { bg: 'bg-neutral-600',  text: 'text-neutral-100',   dot: 'bg-neutral-300' },
-  cancelled: { bg: 'bg-red-600',      text: 'text-white',         dot: 'bg-white' },
+  pending:   { bg: 'bg-cockpit-blue',   text: 'text-white',       dot: 'bg-white' },
+  confirmed: { bg: 'bg-cockpit-blue',   text: 'text-white',       dot: 'bg-white' },
+  preparing: { bg: 'bg-cockpit-yellow', text: 'text-neutral-900', dot: 'bg-neutral-900' },
+  ready:     { bg: 'bg-cockpit-green',  text: 'text-neutral-900', dot: 'bg-neutral-900' },
+  completed: { bg: 'bg-neutral-600',    text: 'text-neutral-100', dot: 'bg-neutral-300' },
+  cancelled: { bg: 'bg-cockpit-red',    text: 'text-white',       dot: 'bg-white' },
 };
 
 const FALLBACK_STYLE: StatusStyle = {
