@@ -9,3 +9,8 @@ dist-kiosk/
 /data/
 .DS_Store
 .gstack/
+
+# Stray local images / screenshots (not repo assets)
+*.HEIC
+*.heic
+Screenshot *.png
