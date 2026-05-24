@@ -208,3 +208,96 @@ export async function cancelPointOrder(accessToken, terminalId, paymentIntentId)
     throw new Error(`MP cancelPointOrder failed: ${res.status} ${text}`);
   }
 }
+
+/**
+ * List ALL Point devices on the account (PDV + STANDALONE).
+ * Used by recovery to know every device a stuck intent could live on.
+ */
+export async function getAllDevices(accessToken) {
+  const res = await fetch(`${MP}/point/integration-api/devices`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`MP getAllDevices failed: ${res.status} ${text}`);
+  }
+  const data = await res.json();
+  return data.devices || [];
+}
+
+// MP error 2205 = "There is already a queued intent for the device".
+// Match on either the code or the message — MP has been known to vary the format.
+export function isQueueStuckError(err) {
+  const msg = err?.message || '';
+  return /\b2205\b/.test(msg) || /queued intent/i.test(msg);
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Clear MP Point queued intents that are blocking new charges for a tenant.
+ *
+ * Looks up orders in `pending_terminal` state with an `mp_order_id`, then DELETEs
+ * each intent on every device on the account (covers the case where a stuck intent
+ * lives on the OLD device after a terminal swap). Resets the order locally
+ * regardless of MP's response, so the order can be retried fresh.
+ *
+ * Returns { cleared, attempted } where `cleared` is the count actually killed on MP
+ * (200/404), and `attempted` is the total stuck orders found.
+ *
+ * Spaces calls ~3s apart to dodge MP's per-token rate limit (429 error 105).
+ */
+export async function recoverStuckQueue(accessToken, { tenantId, sql }) {
+  const stuck = await sql`
+    SELECT id, mp_order_id
+    FROM orders
+    WHERE tenant_id = ${tenantId}
+      AND payment_status = 'pending_terminal'
+      AND mp_order_id IS NOT NULL
+  `;
+
+  if (stuck.length === 0) return { cleared: 0, attempted: 0 };
+
+  let devices = [];
+  try {
+    devices = (await getAllDevices(accessToken)).map((d) => d.id);
+  } catch {
+    // If we can't list devices, we can't DELETE on MP — but we can still reset orders locally.
+  }
+
+  let cleared = 0;
+
+  for (let i = 0; i < stuck.length; i++) {
+    const order = stuck[i];
+    let killed = false;
+
+    for (const device of devices) {
+      try {
+        const res = await fetch(
+          `${MP}/point/integration-api/devices/${device}/payment-intents/${order.mp_order_id}`,
+          { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (res.ok || res.status === 404) {
+          killed = true;
+          break;
+        }
+        if (res.status === 429) {
+          await sleep(3500);
+        }
+      } catch {
+        // network glitch — try next device
+      }
+    }
+
+    await sql`
+      UPDATE orders
+      SET mp_order_id = NULL, payment_status = 'pending'
+      WHERE id = ${order.id}
+    `;
+
+    if (killed) cleared++;
+    if (i < stuck.length - 1) await sleep(3000);
+  }
+
+  return { cleared, attempted: stuck.length };
+}

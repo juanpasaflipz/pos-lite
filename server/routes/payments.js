@@ -15,6 +15,8 @@ import {
   getPointOrder,
   mapPointOrderStatus,
   cancelPointOrder,
+  isQueueStuckError,
+  recoverStuckQueue,
 } from '../services/mercadopago.js';
 import { getServiceCredentials } from '../helpers/tenantCredentials.js';
 import {
@@ -946,19 +948,37 @@ function requirePro(req, res, next) {
 }
 
 async function markTerminalOrderPaid(orderId, tenantId = 'default') {
-  await run(
+  const completed = await get(
     `UPDATE orders
-     SET payment_status = 'paid', status = 'preparing', payment_method = 'card', paid_at = NOW()
-     WHERE id = $1`,
+     SET payment_status = 'paid',
+         status = CASE
+           WHEN status IN ('ready', 'completed') THEN status
+           ELSE 'preparing'
+         END,
+         payment_method = 'card',
+         paid_at = COALESCE(paid_at, NOW())
+     WHERE id = $1
+       AND (
+         payment_status IS DISTINCT FROM 'paid'
+         OR payment_method IS DISTINCT FROM 'card'
+         OR status NOT IN ('preparing', 'ready', 'completed')
+       )
+     RETURNING id, invoice_token`,
     [orderId]
   );
 
-  await deductInventoryForOrder(orderId);
+  if (completed) {
+    await deductInventoryForOrder(orderId);
+  }
 
   let invoice_token = null;
   try {
-    invoice_token = await generateInvoiceToken(tenantId, orderId, 72);
-    await run('UPDATE orders SET invoice_token = $1 WHERE id = $2', [invoice_token, orderId]);
+    const tokenRow = completed || await get('SELECT invoice_token FROM orders WHERE id = $1', [orderId]);
+    invoice_token = tokenRow?.invoice_token || null;
+    if (!invoice_token) {
+      invoice_token = await generateInvoiceToken(tenantId, orderId, 72);
+      await run('UPDATE orders SET invoice_token = $1 WHERE id = $2', [invoice_token, orderId]);
+    }
   } catch (tokenErr) {
     console.error('Non-fatal: failed to generate invoice token:', tokenErr.message);
   }
@@ -1033,11 +1053,36 @@ router.post('/mp/charge', requireAuth('pos_access'), requirePro, async (req, res
     const tipAmount = typeof tip === 'number' ? tip : 0;
     const totalAmount = Number(order.total) + tipAmount;
     const externalRef = `${req.tenant.id}-${order.id}`;
-    const mpOrder = await createPointOrder(accessToken, {
-      amount: totalAmount,
-      externalRef,
-      terminalId: termId,
-    });
+
+    let mpOrder;
+    try {
+      mpOrder = await createPointOrder(accessToken, {
+        amount: totalAmount,
+        externalRef,
+        terminalId: termId,
+      });
+    } catch (err) {
+      if (!isQueueStuckError(err)) throw err;
+      console.warn(`MP queue stuck for tenant ${req.tenant.id} — running auto-recovery`);
+      const recovery = await recoverStuckQueue(accessToken, { tenantId: req.tenant.id, sql: adminSql });
+      console.log(`Auto-recovery: cleared ${recovery.cleared}/${recovery.attempted} stuck intent(s)`);
+      try {
+        mpOrder = await createPointOrder(accessToken, {
+          amount: totalAmount,
+          externalRef,
+          terminalId: termId,
+        });
+      } catch (retryErr) {
+        if (isQueueStuckError(retryErr)) {
+          return res.status(409).json({
+            error: 'queue_stuck',
+            message: 'La cola de la terminal sigue bloqueada. Reinicia la terminal e inténtalo de nuevo.',
+            recovery,
+          });
+        }
+        throw retryErr;
+      }
+    }
 
     await run(
       `UPDATE orders SET mp_order_id = $1, payment_status = 'pending_terminal', tip = $2 WHERE id = $3`,
@@ -1212,7 +1257,7 @@ router.get('/:order_id', async (req, res) => {
     const { order_id } = req.params;
 
     const order = await get(`
-      SELECT id, order_number, payment_intent_id, payment_status, payment_method, total, tip, refund_total, mp_order_id, clip_payment_id
+      SELECT id, order_number, payment_intent_id, payment_status, payment_method, status, total, tip, refund_total, mp_order_id, clip_payment_id
       FROM orders
       WHERE id = $1
     `, [order_id]);
@@ -1274,6 +1319,17 @@ router.get('/:order_id', async (req, res) => {
       } catch (mpErr) {
         console.warn('MP live status pull failed:', mpErr.message);
       }
+    }
+
+    if (
+      order.payment_status === 'paid' &&
+      order.mp_order_id &&
+      req.tenant?.id &&
+      (order.payment_method !== 'card' || !['preparing', 'ready', 'completed'].includes(order.status))
+    ) {
+      await markTerminalOrderPaid(order.id, req.tenant.id);
+      order.payment_method = 'card';
+      order.status = order.status === 'ready' || order.status === 'completed' ? order.status : 'preparing';
     }
 
     if (!order.payment_intent_id) {
@@ -1420,7 +1476,7 @@ export async function mpWebhook(req, res) {
       // Fetch the payment details from MP to get the status
       // We need to find the tenant for this payment
       const order = await adminSql`
-        SELECT o.id, o.tenant_id, o.mp_order_id, o.payment_status
+        SELECT o.id, o.tenant_id, o.mp_order_id, o.payment_status, o.payment_method, o.status
         FROM orders o
         WHERE o.mp_order_id = ${String(paymentId)}
         LIMIT 1
@@ -1429,7 +1485,16 @@ export async function mpWebhook(req, res) {
       if (order.length === 0) return;
       const ord = order[0];
 
-      if (ord.payment_status === 'paid') return; // already processed
+      if (
+        ord.payment_status === 'paid' &&
+        ord.payment_method === 'card' &&
+        ['preparing', 'ready', 'completed'].includes(ord.status)
+      ) return; // already processed
+
+      if (ord.payment_status === 'paid') {
+        await markTerminalOrderPaid(ord.id, ord.tenant_id);
+        return;
+      }
 
       // Get tenant's token to verify payment status
       const tenant = await getTenant(ord.tenant_id);
@@ -1446,11 +1511,7 @@ export async function mpWebhook(req, res) {
       const mapped = mapPointOrderStatus(mpOrder);
 
       if (mapped === 'paid') {
-        await adminSql`
-          UPDATE orders
-          SET payment_status = 'paid', payment_method = 'card', paid_at = NOW()
-          WHERE id = ${ord.id}
-        `;
+        await markTerminalOrderPaid(ord.id, ord.tenant_id);
       } else if (mapped === 'failed') {
         await adminSql`
           UPDATE orders
