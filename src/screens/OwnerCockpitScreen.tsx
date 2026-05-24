@@ -52,10 +52,10 @@ const IN_CARDS: CockpitCard[] = [
 
 const OUT_CARDS: CockpitCard[] = [
   { to: '/admin/expenses', icon: <DollarSign size={32} />, label: 'Expenses', hint: 'Money going out', intensity: 'primary' },
-  { to: '/admin/employees', icon: <Users size={32} />, label: 'Payroll', hint: 'Staff & pay', intensity: 'primary' },
+  { to: '/admin/staff?tab=payroll', icon: <Users size={32} />, label: 'Payroll', hint: 'Staff & pay', intensity: 'primary' },
   { to: '/admin/inventory', icon: <Package size={32} />, label: 'Inventory', hint: 'Stock & COGS', intensity: 'primary' },
   { to: '/admin/recipes', icon: <ChefHat size={28} />, label: 'Recipes', hint: 'Cost per item', intensity: 'secondary' },
-  { to: '/admin/shifts', icon: <Clock size={28} />, label: 'Time Clock', hint: 'Shifts & hours', intensity: 'secondary' },
+  { to: '/admin/staff?tab=timeclock', icon: <Clock size={28} />, label: 'Time Clock', hint: 'Shifts & hours', intensity: 'secondary' },
   { to: '/admin/purchase-orders', icon: <ClipboardList size={28} />, label: 'Purchase Orders', hint: 'Supplier orders', intensity: 'secondary' },
 ];
 

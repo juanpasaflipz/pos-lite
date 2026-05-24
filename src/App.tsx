@@ -23,7 +23,7 @@ const LoginScreen = React.lazy(() => import('./screens/LoginScreen').then(m => (
 const POSScreen = React.lazy(() => import('./screens/POSScreen').then(m => ({ default: m.default || (() => <div>POS</div>) })));
 const KitchenDisplay = React.lazy(() => import('./screens/KitchenDisplay').then(m => ({ default: m.default || (() => <div>Kitchen</div>) })));
 const InventoryScreen = React.lazy(() => import('./screens/InventoryScreen').then(m => ({ default: m.default || (() => <div>Inventory</div>) })));
-const EmployeeScreen = React.lazy(() => import('./screens/EmployeeScreen').then(m => ({ default: m.default || (() => <div>Employees</div>) })));
+const StaffHubScreen = React.lazy(() => import('./screens/StaffHubScreen').then(m => ({ default: m.default || (() => <div>Staff</div>) })));
 const ReportsScreen = React.lazy(() => import('./screens/ReportsScreen').then(m => ({ default: m.default || (() => <div>Reports</div>) })));
 const MenuManagement = React.lazy(() => import('./screens/MenuManagement').then(m => ({ default: m.default || (() => <div>Menu</div>) })));
 const ModifierManagement = React.lazy(() => import('./screens/ModifierManagement').then(m => ({ default: m.default || (() => <div>Modifiers</div>) })));
@@ -45,8 +45,6 @@ const AccountScreen = React.lazy(() => import('./screens/AccountScreen').then(m 
 const IntegrationsScreen = React.lazy(() => import('./screens/IntegrationsScreen').then(m => ({ default: m.default || (() => <div>Integrations</div>) })));
 const ExpensesScreen = React.lazy(() => import('./screens/ExpensesScreen').then(m => ({ default: m.default || (() => <div>Expenses</div>) })));
 const RecipeManagementScreen = React.lazy(() => import('./screens/RecipeManagementScreen').then(m => ({ default: m.default || (() => <div>Recipes</div>) })));
-const ShiftsScreen = React.lazy(() => import('./screens/ShiftsScreen').then(m => ({ default: m.default || (() => <div>Shifts</div>) })));
-const PayrollSettingsScreen = React.lazy(() => import('./screens/PayrollSettingsScreen').then(m => ({ default: m.default || (() => <div>Payroll</div>) })));
 const OwnerCockpitScreen = React.lazy(() => import('./screens/OwnerCockpitScreen').then(m => ({ default: m.default || (() => <div>Cockpit</div>) })));
 const SuperAdmin = React.lazy(() => import('./screens/SuperAdmin').then(m => ({ default: m.default })));
 
@@ -145,9 +143,11 @@ const TenantRoutes: React.FC = () => {
       <Route path="/admin/recipes" element={<ProtectedRoute element={<RecipeManagementScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/modifiers" element={<ProtectedRoute element={<ModifierManagement />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/inventory" element={<ProtectedRoute element={<InventoryScreen />} requiredRole={['manager', 'admin']} />} />
-      <Route path="/admin/employees" element={<ProtectedRoute element={<EmployeeScreen />} requiredRole={['admin']} />} />
-      <Route path="/admin/shifts" element={<ProtectedRoute element={<ShiftsScreen />} requiredRole={['manager', 'admin']} />} />
-      <Route path="/admin/payroll" element={<ProtectedRoute element={<PayrollSettingsScreen />} requiredRole={['manager', 'admin']} />} />
+      <Route path="/admin/staff" element={<ProtectedRoute element={<StaffHubScreen />} requiredRole={['manager', 'admin']} />} />
+      {/* Legacy deep-links — redirect to the new Staff hub */}
+      <Route path="/admin/employees" element={<Navigate to="/admin/staff?tab=roster" replace />} />
+      <Route path="/admin/shifts" element={<Navigate to="/admin/staff?tab=timeclock" replace />} />
+      <Route path="/admin/payroll" element={<Navigate to="/admin/staff?tab=payroll" replace />} />
       <Route path="/admin/reports" element={<ProtectedRoute element={<ReportsScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/printers" element={<ProtectedRoute element={<PrinterManagement />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/delivery" element={<ProtectedRoute element={<DeliveryScreen />} requiredRole={['manager', 'admin']} />} />

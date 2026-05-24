@@ -1,4 +1,13 @@
 {
+  "staff": {
+    "title": "Staff",
+    "subtitle": "Roster, time clock, and payroll in one place.",
+    "tabs": {
+      "roster": "Roster",
+      "timeClock": "Time Clock",
+      "payroll": "Payroll"
+    }
+  },
   "payroll": {
     "title": "Payroll",
     "savedSettings": "Settings saved",

@@ -1,4 +1,13 @@
 {
+  "staff": {
+    "title": "Personal",
+    "subtitle": "Plantilla, reloj checador y nómina en un solo lugar.",
+    "tabs": {
+      "roster": "Plantilla",
+      "timeClock": "Reloj Checador",
+      "payroll": "Nómina"
+    }
+  },
   "payroll": {
     "title": "Nómina",
     "savedSettings": "Configuración guardada",

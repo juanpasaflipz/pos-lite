@@ -1,13 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Clock, AlertTriangle, Users, Save, X, Pencil, Wallet } from 'lucide-react';
-import BrandLogo from '../components/BrandLogo';
-import { useAuth } from '../context/AuthContext';
-import { useToast } from '../context/ToastContext';
-import { getActiveShifts, getShifts, updateShift, updateShiftCashDrawer } from '../api';
-import type { ActiveShift, CashDrawerCounts, ShiftRow } from '../types';
-import { formatPrice } from '../utils/currency';
+import { Clock, AlertTriangle, Users, Save, X, Pencil, Wallet } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import { getActiveShifts, getShifts, updateShift, updateShiftCashDrawer } from '../../api';
+import type { ActiveShift, CashDrawerCounts, ShiftRow } from '../../types';
+import { formatPrice } from '../../utils/currency';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RANGE_OPTIONS = [
@@ -72,15 +70,14 @@ function zeroCounts(): CashDrawerCounts {
 }
 
 function normalizeCounts(counts?: CashDrawerCounts | null): CashDrawerCounts {
-  return {
-    ...zeroCounts(),
-    ...(counts || {}),
-  };
+  return { ...zeroCounts(), ...(counts || {}) };
 }
 
 function totalFromCounts(counts: CashDrawerCounts): number {
   return Math.round(
-    Object.entries(counts).reduce((sum, [denomination, count]) => sum + Number(denomination) * Number(count || 0), 0) * 100
+    Object.entries(counts).reduce(
+      (sum, [d, c]) => sum + Number(d) * Number(c || 0), 0,
+    ) * 100
   ) / 100;
 }
 
@@ -88,11 +85,16 @@ function formatDenomination(value: number): string {
   return `$${value >= 1 ? value.toLocaleString('en-US') : value.toFixed(2)}`;
 }
 
-export default function ShiftsScreen() {
+/**
+ * Time Clock panel for the Staff hub.
+ * Active shifts, hours by employee, full shift log + cash drawer reconciliation.
+ * Chrome-less — the hub provides the page header.
+ */
+export default function TimeClockPanel() {
   const { t } = useTranslation('common');
   const { currentEmployee } = useAuth();
   const { addToast } = useToast();
-  const canEdit = currentEmployee && ['manager', 'admin'].includes(currentEmployee.role);
+  const canEdit = !!currentEmployee && ['manager', 'admin'].includes(currentEmployee.role);
 
   const [active, setActive] = useState<ActiveShift[]>([]);
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
@@ -123,9 +125,7 @@ export default function ShiftsScreen() {
     }
   };
 
-  useEffect(() => {
-    void load(rangeDays);
-  }, [rangeDays]);
+  useEffect(() => { void load(rangeDays); }, [rangeDays]);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 30 * 1000);
@@ -161,29 +161,24 @@ export default function ShiftsScreen() {
     elapsed_seconds: Math.max(0, Math.floor((now - new Date(a.clock_in_at).getTime()) / 1000)),
   })), [active, now]);
 
-  const startEdit = (row: ShiftRow) => {
-    setEditing({
-      id: row.id,
-      clockIn: toLocalInputValue(row.clock_in_at),
-      clockOut: toLocalInputValue(row.clock_out_at),
-      notes: row.notes || '',
-    });
-  };
-
+  const startEdit = (row: ShiftRow) => setEditing({
+    id: row.id,
+    clockIn: toLocalInputValue(row.clock_in_at),
+    clockOut: toLocalInputValue(row.clock_out_at),
+    notes: row.notes || '',
+  });
   const cancelEdit = () => setEditing(null);
 
-  const startCashEdit = (row: ShiftRow) => {
-    setCashEditing({
-      shiftId: row.id,
-      employeeName: row.employee_name,
-      isClosed: Boolean(row.clock_out_at),
-      hadClosingCounts: Boolean(row.cash_drawer?.closing_counts),
-      openingCounts: normalizeCounts(row.cash_drawer?.opening_counts),
-      closingCounts: normalizeCounts(row.cash_drawer?.closing_counts),
-      varianceNote: row.cash_drawer?.variance_note || '',
-      expectedCashTotal: row.cash_drawer?.expected_cash_total ?? row.cash_drawer_preview?.expected_cash_total ?? 0,
-    });
-  };
+  const startCashEdit = (row: ShiftRow) => setCashEditing({
+    shiftId: row.id,
+    employeeName: row.employee_name,
+    isClosed: Boolean(row.clock_out_at),
+    hadClosingCounts: Boolean(row.cash_drawer?.closing_counts),
+    openingCounts: normalizeCounts(row.cash_drawer?.opening_counts),
+    closingCounts: normalizeCounts(row.cash_drawer?.closing_counts),
+    varianceNote: row.cash_drawer?.variance_note || '',
+    expectedCashTotal: row.cash_drawer?.expected_cash_total ?? row.cash_drawer_preview?.expected_cash_total ?? 0,
+  });
 
   const saveEdit = async () => {
     if (!editing) return;
@@ -231,216 +226,185 @@ export default function ShiftsScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950">
-      <div className="bg-neutral-900 text-white p-6 border-b border-neutral-800">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link to="/admin" className="p-2 hover:bg-neutral-800 rounded-lg transition-colors">
-              <ArrowLeft size={24} />
-            </Link>
-            <div>
-              <h1 className="text-3xl font-black tracking-tighter">Time Clock</h1>
-              <p className="text-sm text-neutral-400 mt-1">Who is on shift now and hours worked.</p>
-            </div>
+    <div className="space-y-6">
+      {error && (
+        <div className="rounded-xl border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">{error}</div>
+      )}
+
+      {flagged.length > 0 && (
+        <div className="rounded-xl border border-amber-800 bg-amber-950/40 px-4 py-3 flex items-start gap-3">
+          <AlertTriangle size={18} className="text-amber-400 mt-0.5 shrink-0" />
+          <div className="text-sm text-amber-200">
+            <p className="font-semibold">{flagged.length} shift(s) open more than 12 hours</p>
+            <p className="mt-1 text-amber-300/80">Likely forgot to clock out. Edit the row to set the correct clock-out time.</p>
           </div>
-          <BrandLogo className="h-10" />
         </div>
-      </div>
+      )}
 
-      <div className="max-w-6xl mx-auto p-6 space-y-6">
-        {error && (
-          <div className="rounded-xl border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">
-            {error}
+      <section>
+        <h2 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+          <Users size={18} className="text-brand-500" />
+          On shift now <span className="text-neutral-500 font-normal text-sm">({liveActive.length})</span>
+        </h2>
+        {liveActive.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-neutral-800 px-4 py-8 text-sm text-neutral-500 text-center">
+            Nobody is currently clocked in.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {liveActive.map(a => (
+              <div key={a.id} className="rounded-xl border border-green-800 bg-green-950/20 p-4">
+                <p className="text-xs uppercase tracking-wide text-green-400">{a.employee_role}</p>
+                <p className="text-xl font-bold text-white mt-1">{a.employee_name}</p>
+                <p className="text-sm text-neutral-300 mt-2">
+                  Since {formatDateTime(a.clock_in_at)} · <span className="text-green-300">{formatDuration(a.elapsed_seconds)}</span>
+                </p>
+              </div>
+            ))}
           </div>
         )}
+      </section>
 
-        {flagged.length > 0 && (
-          <div className="rounded-xl border border-amber-800 bg-amber-950/40 px-4 py-3 flex items-start gap-3">
-            <AlertTriangle size={18} className="text-amber-400 mt-0.5 shrink-0" />
-            <div className="text-sm text-amber-200">
-              <p className="font-semibold">{flagged.length} shift(s) open more than 12 hours</p>
-              <p className="mt-1 text-amber-300/80">Likely forgot to clock out. Edit the row to set the correct clock-out time.</p>
-            </div>
-          </div>
-        )}
-
-        <section>
-          <h2 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-            <Users size={18} className="text-brand-500" />
-            On shift now <span className="text-neutral-500 font-normal text-sm">({liveActive.length})</span>
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <Clock size={18} className="text-brand-500" />
+            Hours by employee
           </h2>
-          {liveActive.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-neutral-800 px-4 py-8 text-sm text-neutral-500 text-center">
-              Nobody is currently clocked in.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {liveActive.map(a => (
-                <div key={a.id} className="rounded-xl border border-green-800 bg-green-950/20 p-4">
-                  <p className="text-xs uppercase tracking-wide text-green-400">{a.employee_role}</p>
-                  <p className="text-xl font-bold text-white mt-1">{a.employee_name}</p>
-                  <p className="text-sm text-neutral-300 mt-2">
-                    Since {formatDateTime(a.clock_in_at)} · <span className="text-green-300">{formatDuration(a.elapsed_seconds)}</span>
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Clock size={18} className="text-brand-500" />
-              Hours by employee
-            </h2>
-            <div className="flex gap-1 bg-neutral-900 border border-neutral-800 rounded-lg p-1">
-              {RANGE_OPTIONS.map(opt => (
-                <button
-                  key={opt.key}
-                  onClick={() => setRangeDays(opt.days)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-                    rangeDays === opt.days
-                      ? 'bg-brand-600 text-white'
-                      : 'text-neutral-400 hover:text-white'
-                  }`}
-                >
-                  {opt.key === 'today' ? 'Today' : `${opt.key}d`}
-                </button>
-              ))}
-            </div>
+          <div className="flex gap-1 bg-neutral-900 border border-neutral-800 rounded-lg p-1">
+            {RANGE_OPTIONS.map(opt => (
+              <button
+                key={opt.key}
+                onClick={() => setRangeDays(opt.days)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                  rangeDays === opt.days ? 'bg-brand-600 text-white' : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                {opt.key === 'today' ? 'Today' : `${opt.key}d`}
+              </button>
+            ))}
           </div>
+        </div>
 
-          {loading ? (
-            <div className="rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-8 text-center text-neutral-500">
-              {t('states.loading')}
-            </div>
-          ) : totalsByEmployee.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-neutral-800 px-4 py-8 text-sm text-neutral-500 text-center">
-              No shifts in this range.
-            </div>
-          ) : (
-            <div className="rounded-xl border border-neutral-800 bg-neutral-900 overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-neutral-950 text-neutral-400 text-xs uppercase tracking-wide">
-                  <tr>
-                    <th className="text-left px-4 py-3">Employee</th>
-                    <th className="text-left px-4 py-3">Role</th>
-                    <th className="text-right px-4 py-3">Hours</th>
-                    <th className="text-left px-4 py-3"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {totalsByEmployee.map(row => (
-                    <tr key={row.employee_id} className="border-t border-neutral-800">
-                      <td className="px-4 py-3 text-white font-medium">{row.name}</td>
-                      <td className="px-4 py-3 text-neutral-400">{row.role}</td>
-                      <td className="px-4 py-3 text-right text-white font-semibold tabular-nums">
-                        {formatDuration(row.seconds)}
-                      </td>
-                      <td className="px-4 py-3">
-                        {row.openShift && (
-                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-950/60 border border-green-800 text-green-300">
-                            on shift
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-
-        <section>
-          <h2 className="text-lg font-bold text-white mb-3">Shift log</h2>
-          {shifts.length === 0 && !loading ? (
-            <div className="rounded-xl border border-dashed border-neutral-800 px-4 py-8 text-sm text-neutral-500 text-center">
-              No shifts in this range.
-            </div>
-          ) : (
-            <div className="rounded-xl border border-neutral-800 bg-neutral-900 overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-neutral-950 text-neutral-400 text-xs uppercase tracking-wide">
-                  <tr>
-                    <th className="text-left px-4 py-3">Employee</th>
-                    <th className="text-left px-4 py-3">Clock in</th>
-                    <th className="text-left px-4 py-3">Clock out</th>
-                    <th className="text-right px-4 py-3">Duration</th>
-                    <th className="text-left px-4 py-3">Cash closeout</th>
-                    {canEdit && <th className="px-4 py-3" />}
-                  </tr>
-                </thead>
-                <tbody>
-                  {shifts.map(row => (
-                  <tr key={row.id} className={`border-t border-neutral-800 ${row.flagged_long_open ? 'bg-amber-950/10' : ''}`}>
-                      <td className="px-4 py-3 text-white">{row.employee_name}</td>
-                      <td className="px-4 py-3 text-neutral-300 tabular-nums">{formatDateTime(row.clock_in_at)}</td>
-                      <td className="px-4 py-3 text-neutral-300 tabular-nums">
-                        {row.clock_out_at ? formatDateTime(row.clock_out_at) : (
-                          <span className={row.flagged_long_open ? 'text-amber-400 font-medium' : 'text-green-400'}>
-                            {row.flagged_long_open ? 'Open >12h' : 'Open'}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right text-white font-semibold tabular-nums">
-                        {formatDuration(row.duration_seconds)}
-                      </td>
-                      <td className="px-4 py-3 text-neutral-500 text-xs">
-                        <div className="space-y-1">
-                          {row.cash_drawer ? (
-                            <>
-                              <span className="block text-neutral-400">Opening float: {formatMoney(row.cash_drawer.opening_total)}</span>
-                              <span className="block text-neutral-400">Cash sales: {formatMoney(row.cash_drawer.cash_sales_total)}</span>
-                              <span className="block text-neutral-400">Expected drawer: {formatMoney(row.cash_drawer.expected_cash_total)}</span>
-                              <span className="block text-neutral-400">Counted close: {formatMoney(row.cash_drawer.closing_total)}</span>
-                              <span className={`block font-semibold ${row.cash_drawer.variance_total === 0 ? 'text-neutral-300' : (row.cash_drawer.variance_total || 0) > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                Over / short: {row.cash_drawer.variance_total != null && row.cash_drawer.variance_total > 0 ? '+' : ''}{formatMoney(row.cash_drawer.variance_total)}
-                              </span>
-                              {row.cash_drawer.variance_note && (
-                                <span className="block text-[11px] text-amber-300">Manager note: {row.cash_drawer.variance_note}</span>
-                              )}
-                            </>
-                          ) : (
-                            <span className="block text-neutral-600">No closeout recorded</span>
-                          )}
-                        </div>
-                        {row.notes && <span className="block mt-2">{row.notes}</span>}
-                        {row.edited_by_name && (
-                          <span className="block text-[10px] text-neutral-600 mt-0.5">
-                            edited by {row.edited_by_name}
-                          </span>
-                        )}
-                      </td>
-                      {canEdit && (
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-3">
-                            <button
-                              onClick={() => startCashEdit(row)}
-                              className="text-neutral-400 hover:text-white inline-flex items-center gap-1 text-xs"
-                            >
-                              <Wallet size={14} />
-                              Closeout
-                            </button>
-                            <button
-                              onClick={() => startEdit(row)}
-                              className="text-neutral-400 hover:text-white inline-flex items-center gap-1 text-xs"
-                            >
-                              <Pencil size={14} />
-                              Edit
-                            </button>
-                          </div>
-                        </td>
+        {loading ? (
+          <div className="rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-8 text-center text-neutral-500">
+            {t('states.loading')}
+          </div>
+        ) : totalsByEmployee.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-neutral-800 px-4 py-8 text-sm text-neutral-500 text-center">
+            No shifts in this range.
+          </div>
+        ) : (
+          <div className="rounded-xl border border-neutral-800 bg-neutral-900 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-neutral-950 text-neutral-400 text-xs uppercase tracking-wide">
+                <tr>
+                  <th className="text-left px-4 py-3">Employee</th>
+                  <th className="text-left px-4 py-3">Role</th>
+                  <th className="text-right px-4 py-3">Hours</th>
+                  <th className="text-left px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {totalsByEmployee.map(row => (
+                  <tr key={row.employee_id} className="border-t border-neutral-800">
+                    <td className="px-4 py-3 text-white font-medium">{row.name}</td>
+                    <td className="px-4 py-3 text-neutral-400">{row.role}</td>
+                    <td className="px-4 py-3 text-right text-white font-semibold tabular-nums">
+                      {formatDuration(row.seconds)}
+                    </td>
+                    <td className="px-4 py-3">
+                      {row.openShift && (
+                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-950/60 border border-green-800 text-green-300">
+                          on shift
+                        </span>
                       )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section>
+        <h2 className="text-lg font-bold text-white mb-3">Shift log</h2>
+        {shifts.length === 0 && !loading ? (
+          <div className="rounded-xl border border-dashed border-neutral-800 px-4 py-8 text-sm text-neutral-500 text-center">
+            No shifts in this range.
+          </div>
+        ) : (
+          <div className="rounded-xl border border-neutral-800 bg-neutral-900 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-neutral-950 text-neutral-400 text-xs uppercase tracking-wide">
+                <tr>
+                  <th className="text-left px-4 py-3">Employee</th>
+                  <th className="text-left px-4 py-3">Clock in</th>
+                  <th className="text-left px-4 py-3">Clock out</th>
+                  <th className="text-right px-4 py-3">Duration</th>
+                  <th className="text-left px-4 py-3">Cash closeout</th>
+                  {canEdit && <th className="px-4 py-3" />}
+                </tr>
+              </thead>
+              <tbody>
+                {shifts.map(row => (
+                  <tr key={row.id} className={`border-t border-neutral-800 ${row.flagged_long_open ? 'bg-amber-950/10' : ''}`}>
+                    <td className="px-4 py-3 text-white">{row.employee_name}</td>
+                    <td className="px-4 py-3 text-neutral-300 tabular-nums">{formatDateTime(row.clock_in_at)}</td>
+                    <td className="px-4 py-3 text-neutral-300 tabular-nums">
+                      {row.clock_out_at ? formatDateTime(row.clock_out_at) : (
+                        <span className={row.flagged_long_open ? 'text-amber-400 font-medium' : 'text-green-400'}>
+                          {row.flagged_long_open ? 'Open >12h' : 'Open'}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right text-white font-semibold tabular-nums">
+                      {formatDuration(row.duration_seconds)}
+                    </td>
+                    <td className="px-4 py-3 text-neutral-500 text-xs">
+                      <div className="space-y-1">
+                        {row.cash_drawer ? (
+                          <>
+                            <span className="block text-neutral-400">Opening float: {formatMoney(row.cash_drawer.opening_total)}</span>
+                            <span className="block text-neutral-400">Cash sales: {formatMoney(row.cash_drawer.cash_sales_total)}</span>
+                            <span className="block text-neutral-400">Expected drawer: {formatMoney(row.cash_drawer.expected_cash_total)}</span>
+                            <span className="block text-neutral-400">Counted close: {formatMoney(row.cash_drawer.closing_total)}</span>
+                            <span className={`block font-semibold ${row.cash_drawer.variance_total === 0 ? 'text-neutral-300' : (row.cash_drawer.variance_total || 0) > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                              Over / short: {row.cash_drawer.variance_total != null && row.cash_drawer.variance_total > 0 ? '+' : ''}{formatMoney(row.cash_drawer.variance_total)}
+                            </span>
+                            {row.cash_drawer.variance_note && (
+                              <span className="block text-[11px] text-amber-300">Manager note: {row.cash_drawer.variance_note}</span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="block text-neutral-600">No closeout recorded</span>
+                        )}
+                      </div>
+                      {row.notes && <span className="block mt-2">{row.notes}</span>}
+                      {row.edited_by_name && (
+                        <span className="block text-[10px] text-neutral-600 mt-0.5">edited by {row.edited_by_name}</span>
+                      )}
+                    </td>
+                    {canEdit && (
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-3">
+                          <button onClick={() => startCashEdit(row)} className="text-neutral-400 hover:text-white inline-flex items-center gap-1 text-xs">
+                            <Wallet size={14} /> Closeout
+                          </button>
+                          <button onClick={() => startEdit(row)} className="text-neutral-400 hover:text-white inline-flex items-center gap-1 text-xs">
+                            <Pencil size={14} /> Edit
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       {editing && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
@@ -462,7 +426,6 @@ export default function ShiftsScreen() {
                   className="w-full px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-lg text-white focus:outline-none focus:border-brand-500"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-neutral-300 mb-2">Clock out (leave blank if still on shift)</label>
                 <input
@@ -472,7 +435,6 @@ export default function ShiftsScreen() {
                   className="w-full px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-lg text-white focus:outline-none focus:border-brand-500"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-neutral-300 mb-2">Notes</label>
                 <textarea
