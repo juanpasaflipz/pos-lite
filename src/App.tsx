@@ -47,7 +47,6 @@ const ExpensesScreen = React.lazy(() => import('./screens/ExpensesScreen').then(
 const RecipeManagementScreen = React.lazy(() => import('./screens/RecipeManagementScreen').then(m => ({ default: m.default || (() => <div>Recipes</div>) })));
 const ShiftsScreen = React.lazy(() => import('./screens/ShiftsScreen').then(m => ({ default: m.default || (() => <div>Shifts</div>) })));
 const PayrollSettingsScreen = React.lazy(() => import('./screens/PayrollSettingsScreen').then(m => ({ default: m.default || (() => <div>Payroll</div>) })));
-const AdminDashboard = React.lazy(() => import('./screens/AdminDashboard').then(m => ({ default: m.default || (() => <div>Admin</div>) })));
 const OwnerCockpitScreen = React.lazy(() => import('./screens/OwnerCockpitScreen').then(m => ({ default: m.default || (() => <div>Cockpit</div>) })));
 const SuperAdmin = React.lazy(() => import('./screens/SuperAdmin').then(m => ({ default: m.default })));
 
@@ -140,7 +139,7 @@ const TenantRoutes: React.FC = () => {
       <Route path="/kitchen" element={<ProtectedRoute element={<KitchenDisplay />} requiredRole={['kitchen', 'bar', 'manager', 'admin']} />} />
 
       {/* Admin */}
-      <Route path="/admin" element={<ProtectedRoute element={<AdminDashboard />} requiredRole={['manager', 'admin']} />} />
+      <Route path="/admin" element={<Navigate to="/admin/cockpit" replace />} />
       <Route path="/admin/cockpit" element={<ProtectedRoute element={<OwnerCockpitScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/menu" element={<ProtectedRoute element={<MenuManagement />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/recipes" element={<ProtectedRoute element={<RecipeManagementScreen />} requiredRole={['manager', 'admin']} />} />

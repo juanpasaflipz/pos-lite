@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -22,8 +22,14 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   Settings,
+  ChefHat,
+  SlidersHorizontal,
+  Truck,
+  Trash2,
 } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
+import { useAuth } from '../context/AuthContext';
+import { purgeUnpaidOrders } from '../api';
 
 type Intensity = 'primary' | 'secondary';
 
@@ -38,14 +44,17 @@ interface CockpitCard {
 const IN_CARDS: CockpitCard[] = [
   { to: '/pos', icon: <ShoppingCart size={32} />, label: 'POS', hint: 'Ring up sales', intensity: 'primary' },
   { to: '/admin/reports', icon: <TrendingUp size={32} />, label: 'Sales', hint: 'Daily revenue', intensity: 'primary' },
+  { to: '/admin/menu', icon: <UtensilsCrossed size={28} />, label: 'Menu', hint: 'Items & prices', intensity: 'secondary' },
   { to: '/admin/loyalty', icon: <Heart size={28} />, label: 'Loyalty', hint: 'Repeat customers', intensity: 'secondary' },
-  { to: '/admin/reports', icon: <UtensilsCrossed size={28} />, label: 'Menu Performance', hint: 'Top sellers', intensity: 'secondary' },
+  { to: '/admin/delivery', icon: <Truck size={28} />, label: 'Delivery', hint: 'Rappi, Uber, DiDi', intensity: 'secondary' },
+  { to: '/admin/reports', icon: <BarChart3 size={28} />, label: 'Menu Performance', hint: 'Top sellers', intensity: 'secondary' },
 ];
 
 const OUT_CARDS: CockpitCard[] = [
   { to: '/admin/expenses', icon: <DollarSign size={32} />, label: 'Expenses', hint: 'Money going out', intensity: 'primary' },
   { to: '/admin/employees', icon: <Users size={32} />, label: 'Payroll', hint: 'Staff & pay', intensity: 'primary' },
   { to: '/admin/inventory', icon: <Package size={32} />, label: 'Inventory', hint: 'Stock & COGS', intensity: 'primary' },
+  { to: '/admin/recipes', icon: <ChefHat size={28} />, label: 'Recipes', hint: 'Cost per item', intensity: 'secondary' },
   { to: '/admin/shifts', icon: <Clock size={28} />, label: 'Time Clock', hint: 'Shifts & hours', intensity: 'secondary' },
   { to: '/admin/purchase-orders', icon: <ClipboardList size={28} />, label: 'Purchase Orders', hint: 'Supplier orders', intensity: 'secondary' },
 ];
@@ -53,6 +62,7 @@ const OUT_CARDS: CockpitCard[] = [
 const SYSTEM_CARDS: CockpitCard[] = [
   { to: '/admin/reports', icon: <BarChart3 size={28} />, label: 'Reports', hint: 'Numbers & trends', intensity: 'primary' },
   { to: '/admin/integrations', icon: <Plug size={28} />, label: 'Integrations', hint: 'Payments & apps', intensity: 'primary' },
+  { to: '/admin/modifiers', icon: <SlidersHorizontal size={28} />, label: 'Modifiers', hint: 'Sizes, extras & add-ons', intensity: 'secondary' },
   { to: '/admin/printers', icon: <Printer size={28} />, label: 'Printers', hint: 'Receipt & kitchen', intensity: 'secondary' },
   { to: '/admin/permissions', icon: <Shield size={28} />, label: 'Permissions', hint: 'Role access', intensity: 'secondary' },
   { to: '/admin/branding', icon: <Palette size={28} />, label: 'Branding', hint: 'Logo & colors', intensity: 'secondary' },
@@ -136,12 +146,29 @@ const Section: React.FC<SectionProps> = ({ tone, title, description, badgeIcon, 
 };
 
 export default function OwnerCockpitScreen() {
+  const { currentEmployee } = useAuth();
+  const isAdmin = currentEmployee?.role === 'admin';
+  const [purging, setPurging] = useState(false);
+
+  const handlePurgeUnpaid = async () => {
+    if (!window.confirm('Delete ALL unpaid and pending-terminal orders? This cannot be undone.')) return;
+    setPurging(true);
+    try {
+      const res = await purgeUnpaidOrders();
+      window.alert(`Deleted ${res.deleted_count} order(s).`);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to purge orders');
+    } finally {
+      setPurging(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-neutral-950">
       <div className="bg-neutral-900 text-white p-6 border-b border-neutral-800">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link to="/admin" className="p-2 hover:bg-neutral-800 rounded-lg transition-colors">
+            <Link to="/pos" className="p-2 hover:bg-neutral-800 rounded-lg transition-colors">
               <ArrowLeft size={24} />
             </Link>
             <div>
@@ -182,6 +209,25 @@ export default function OwnerCockpitScreen() {
           badgeColor="bg-violet-900/60 border border-violet-500/60"
           cards={SYSTEM_CARDS}
         />
+
+        {isAdmin && (
+          <div className="mt-4 p-5 bg-neutral-900 border border-red-900/40 rounded-xl">
+            <div className="flex items-center gap-2 mb-2">
+              <Trash2 size={16} className="text-red-400" />
+              <h3 className="text-red-400 font-semibold text-sm">Danger zone</h3>
+            </div>
+            <p className="text-neutral-400 text-xs mb-4">
+              Bulk-delete all unpaid and pending-terminal orders. Useful for clearing test orders.
+            </p>
+            <button
+              onClick={handlePurgeUnpaid}
+              disabled={purging}
+              className="px-4 py-2 bg-red-900/40 border border-red-900/60 text-red-300 text-sm font-semibold rounded-lg hover:bg-red-900/60 transition-all disabled:opacity-50"
+            >
+              {purging ? 'Deleting\u2026' : 'Delete all unpaid orders'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
