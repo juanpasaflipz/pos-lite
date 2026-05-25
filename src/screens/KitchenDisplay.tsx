@@ -187,17 +187,14 @@ export default function KitchenDisplay() {
     return () => clearInterval(updateElapsed);
   }, [calculateElapsedSeconds]);
 
-  const handleStartOrder = async (orderId: number) => {
+  // Single-tap "Ready" — auto-transitions pending → preparing → ready
+  // so the KDS doesn't need a separate Start button. (Backend rejects
+  // pending → ready directly, so we walk it through preparing first.)
+  const handleReadyOrder = async (orderId: number, currentStatus: string) => {
     try {
-      await updateOrderStatus(orderId, 'preparing');
-      fetchOrders();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('errors.startFailed'));
-    }
-  };
-
-  const handleReadyOrder = async (orderId: number) => {
-    try {
+      if (currentStatus === 'pending') {
+        await updateOrderStatus(orderId, 'preparing');
+      }
       await updateOrderStatus(orderId, 'ready');
       fetchOrders();
     } catch (err) {
@@ -347,14 +344,19 @@ export default function KitchenDisplay() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-max">
+          // Auto-fill: density scales with screen width. ~340px min card
+          // → ~3 cols on 1080p, ~5 on 4K, collapses on tablets/phones.
+          <div
+            className="grid gap-3 auto-rows-max"
+            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))' }}
+          >
             {orders.map((order) => (
               <OrderCard
                 key={order.id}
                 order={order}
-                onStart={handleStartOrder}
                 onReady={handleReadyOrder}
                 formatTime={formatElapsedTime}
+                isTvMode={!currentEmployee}
               />
             ))}
           </div>
@@ -366,30 +368,26 @@ export default function KitchenDisplay() {
 
 interface OrderCardProps {
   order: OrderWithElapsed;
-  onStart: (orderId: number) => void;
-  onReady: (orderId: number) => void;
+  onReady: (orderId: number, currentStatus: string) => void;
   formatTime: (seconds: number) => string;
+  isTvMode?: boolean;
 }
 
 function OrderCard({
   order,
-  onStart,
   onReady,
   formatTime,
+  isTvMode = false,
 }: OrderCardProps) {
   const { t } = useTranslation('kitchen');
   const [isLoading, setIsLoading] = useState(false);
   const tier = getTimeTier(order.elapsedSeconds);
   const paid = isPaid(order);
 
-  const handleAction = async (action: 'start' | 'ready') => {
+  const handleReady = async () => {
     setIsLoading(true);
     try {
-      if (action === 'start') {
-        await onStart(order.id);
-      } else {
-        await onReady(order.id);
-      }
+      await onReady(order.id, order.status);
     } finally {
       setIsLoading(false);
     }
@@ -494,43 +492,20 @@ function OrderCard({
         )}
       </div>
 
-      {/* Action Buttons */}
-      <div className="grid grid-cols-2 gap-3 mt-auto">
-        {order.status === 'pending' && (
-          <button
-            onClick={() => handleAction('start')}
-            disabled={isLoading}
-            className="bg-brand-600 hover:bg-brand-700 disabled:bg-brand-800 disabled:opacity-50 text-white font-bold py-3 px-4 rounded-lg transition-colors text-lg min-h-[48px] flex items-center justify-center"
-          >
-            {isLoading ? (
-              <span className="animate-pulse">{t('actions.starting')}</span>
-            ) : (
-              <span>{t('actions.start')}</span>
-            )}
-          </button>
+      {/* Single Ready action — being on the KDS implies the order is in
+          the works; cooks shouldn't have to tap Start first. handleReady
+          walks pending → preparing → ready under the hood. */}
+      <button
+        onClick={handleReady}
+        disabled={isLoading}
+        className="mt-auto bg-cockpit-green hover:bg-cockpit-green/90 disabled:bg-cockpit-green/50 disabled:opacity-50 text-white font-bold py-4 px-4 rounded-lg transition-colors text-xl min-h-[56px] flex items-center justify-center"
+      >
+        {isLoading ? (
+          <span className="animate-pulse">{t('actions.markingReady')}</span>
+        ) : (
+          <span>{t('actions.readyForPickup')}</span>
         )}
-        {order.status === 'preparing' && (
-          <button
-            onClick={() => handleAction('ready')}
-            disabled={isLoading}
-            className="bg-cockpit-green hover:bg-cockpit-green/90 disabled:bg-cockpit-green/50 disabled:opacity-50 text-white font-bold py-3 px-4 rounded-lg transition-colors text-lg min-h-[48px] flex items-center justify-center col-span-2"
-          >
-            {isLoading ? (
-              <span className="animate-pulse">{t('actions.markingReady')}</span>
-            ) : (
-              <span>{t('actions.readyForPickup')}</span>
-            )}
-          </button>
-        )}
-        {order.status === 'pending' && (
-          <button
-            disabled
-            className="col-span-2 bg-neutral-800 text-neutral-600 font-bold py-3 px-4 rounded-lg cursor-not-allowed text-lg min-h-[48px] flex items-center justify-center"
-          >
-            {t('actions.clickStartFirst')}
-          </button>
-        )}
-      </div>
+      </button>
     </div>
   );
 }
