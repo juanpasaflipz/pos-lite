@@ -60,6 +60,7 @@ import customerOrderRoutes from './routes/customer-order.js';
 import menuBoardRoutes from './routes/menu-board.js';
 import displayAssetsRoutes from './routes/display-assets.js';
 import kioskRoutes from './routes/kiosk.js';
+import devicesRoutes from './routes/devices.js';
 
 // AI Agent
 import agentRoutes from './agent/route.js';
@@ -254,6 +255,7 @@ app.use('/api/display-assets', displayAssetsRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/account', accountRoutes);
 app.use('/api/credentials', credentialsRoutes);
+app.use('/api/devices', devicesRoutes);
 app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/demo-data', demoDataRoutes);
 

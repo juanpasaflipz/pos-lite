@@ -16,6 +16,7 @@ import { resolveTenant, type TenantInfo } from './lib/tenantResolver';
 import { useDeviceType } from './hooks/useDeviceType';
 import { MobileCartProvider } from './context/MobileCartContext';
 import ErrorBoundary from './components/ErrorBoundary';
+import { getDeviceToken } from './api';
 
 // ==================== Lazy-loaded Screens (Lean POS) ====================
 
@@ -47,6 +48,8 @@ const ExpensesScreen = React.lazy(() => import('./screens/ExpensesScreen').then(
 const RecipeManagementScreen = React.lazy(() => import('./screens/RecipeManagementScreen').then(m => ({ default: m.default || (() => <div>Recipes</div>) })));
 const OwnerCockpitScreen = React.lazy(() => import('./screens/OwnerCockpitScreen').then(m => ({ default: m.default || (() => <div>Cockpit</div>) })));
 const SuperAdmin = React.lazy(() => import('./screens/SuperAdmin').then(m => ({ default: m.default })));
+const KitchenPairScreen = React.lazy(() => import('./screens/KitchenPairScreen').then(m => ({ default: m.default || (() => <div>Pair</div>) })));
+const DevicesScreen = React.lazy(() => import('./screens/DevicesScreen').then(m => ({ default: m.default || (() => <div>Devices</div>) })));
 
 // AI Agent
 const AgentChat = React.lazy(() => import('./components/agent/AgentChat').then(m => ({ default: m.default })));
@@ -75,11 +78,22 @@ export const useTenant = () => React.useContext(TenantContext);
 interface ProtectedRouteProps {
   element: React.ReactNode;
   requiredRole?: string[];
+  // When true, a paired-device JWT in localStorage is accepted as auth —
+  // skips the role check entirely (the device IS the role).
+  allowDeviceToken?: boolean;
+  // Where to send an unauthenticated user. Defaults to '/'.
+  unauthRedirect?: string;
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ element, requiredRole }) => {
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
+  element,
+  requiredRole,
+  allowDeviceToken = false,
+  unauthRedirect = '/',
+}) => {
   const { currentEmployee } = useAuth();
-  if (!currentEmployee) return <Navigate to="/" replace />;
+  if (allowDeviceToken && getDeviceToken()) return <>{element}</>;
+  if (!currentEmployee) return <Navigate to={unauthRedirect} replace />;
   if (requiredRole && !requiredRole.includes(currentEmployee.role)) return <Navigate to="/pos" replace />;
   return <>{element}</>;
 };
@@ -134,7 +148,12 @@ const TenantRoutes: React.FC = () => {
 
       {/* POS */}
       <Route path="/pos" element={<ProtectedRoute element={<POSScreen />} requiredRole={['cashier', 'manager', 'admin']} />} />
-      <Route path="/kitchen" element={<ProtectedRoute element={<KitchenDisplay />} requiredRole={['kitchen', 'bar', 'manager', 'admin']} />} />
+      {/* KDS is intentionally open: typing on a TV remote is awful, so
+          /#/kitchen must Just Work the moment the URL loads. Pairing
+          (/#/kitchen-pair) is opt-in for managers who want to track and
+          revoke specific devices from /admin/devices. */}
+      <Route path="/kitchen" element={<KitchenDisplay />} />
+      <Route path="/kitchen-pair" element={<KitchenPairScreen />} />
 
       {/* Admin */}
       <Route path="/admin" element={<Navigate to="/admin/cockpit" replace />} />
@@ -159,6 +178,7 @@ const TenantRoutes: React.FC = () => {
       <Route path="/admin/display-menu" element={<ProtectedRoute element={<DisplayMenuScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/invoicing" element={<ProtectedRoute element={<InvoicingScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/integrations" element={<ProtectedRoute element={<IntegrationsScreen />} requiredRole={['manager', 'admin']} />} />
+      <Route path="/admin/devices" element={<ProtectedRoute element={<DevicesScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/account" element={<ProtectedRoute element={<AccountScreen />} />} />
 
       {/* Super Admin (platform owner only — gated by ADMIN_SECRET) */}

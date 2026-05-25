@@ -243,14 +243,18 @@ export default function KitchenDisplay() {
       {/* Header */}
       <div className="bg-neutral-900 border-b border-neutral-800 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-6">
-          <button
-            onClick={() => navigate('/pos')}
-            className="flex items-center gap-2 hover:bg-neutral-800 px-4 py-2 rounded-lg transition-colors text-lg font-semibold"
-            title={t('header.back')}
-          >
-            <ArrowLeft size={32} />
-            <span className="hidden sm:inline">{t('header.back')}</span>
-          </button>
+          {/* Hide back-to-POS on TVs (no signed-in employee). Wall displays
+              shouldn't expose POS navigation to anyone walking by. */}
+          {currentEmployee && (
+            <button
+              onClick={() => navigate('/pos')}
+              className="flex items-center gap-2 hover:bg-neutral-800 px-4 py-2 rounded-lg transition-colors text-lg font-semibold"
+              title={t('header.back')}
+            >
+              <ArrowLeft size={32} />
+              <span className="hidden sm:inline">{t('header.back')}</span>
+            </button>
+          )}
           <h1 className="text-3xl font-black tracking-tighter">{t('header.title')}</h1>
           <div className="flex gap-1 ml-4">
             <button

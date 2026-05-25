@@ -63,6 +63,7 @@ const SYSTEM_CARDS: CockpitCard[] = [
   { to: '/admin/integrations', icon: <Plug size={28} />, label: 'Integrations', hint: 'Payments & apps', intensity: 'primary' },
   { to: '/admin/modifiers', icon: <SlidersHorizontal size={28} />, label: 'Modifiers', hint: 'Sizes, extras & add-ons', intensity: 'secondary' },
   { to: '/kitchen', icon: <Monitor size={28} />, label: 'Kitchen Display', hint: 'Order screen for cooks', intensity: 'secondary' },
+  { to: '/admin/devices', icon: <Monitor size={28} />, label: 'Devices', hint: 'Paired KDS screens & TVs', intensity: 'secondary' },
   { to: '/admin/permissions', icon: <Shield size={28} />, label: 'Permissions', hint: 'Role access', intensity: 'secondary' },
   { to: '/admin/branding', icon: <Palette size={28} />, label: 'Identity', hint: 'Logo & info', intensity: 'secondary' },
   { to: '/admin/invoicing', icon: <FileText size={28} />, label: 'Invoicing', hint: 'CFDI & invoices', intensity: 'secondary' },

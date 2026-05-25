@@ -110,6 +110,32 @@ export function getCurrentEmployeeToken(): string | null {
   return currentEmployeeToken;
 }
 
+// Paired-device JWT — used by wall-mounted KDS TVs. Persists across reloads
+// in localStorage so the TV stays signed in across power cycles. When set,
+// it's used as the Authorization header IFF no employee is logged in.
+const DEVICE_TOKEN_KEY = 'kds_device_token';
+let currentDeviceToken: string | null = (() => {
+  try { return localStorage.getItem(DEVICE_TOKEN_KEY); } catch { return null; }
+})();
+
+export function setDeviceToken(token: string | null) {
+  currentDeviceToken = token;
+  try {
+    if (token) localStorage.setItem(DEVICE_TOKEN_KEY, token);
+    else localStorage.removeItem(DEVICE_TOKEN_KEY);
+  } catch { /* localStorage unavailable */ }
+}
+
+export function getDeviceToken(): string | null {
+  return currentDeviceToken;
+}
+
+function authHeader(): string | null {
+  if (currentEmployeeToken) return `Bearer ${currentEmployeeToken}`;
+  if (currentDeviceToken) return `Bearer ${currentDeviceToken}`;
+  return null;
+}
+
 // Capacitor native: API calls must go to the remote server (local dist/ has no backend)
 const isCapacitor = !!(window as any).Capacitor?.isNativePlatform?.();
 
@@ -203,8 +229,9 @@ async function apiRequest<T>(
   const defaultHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  if (currentEmployeeToken) {
-    defaultHeaders['Authorization'] = `Bearer ${currentEmployeeToken}`;
+  const auth = authHeader();
+  if (auth) {
+    defaultHeaders['Authorization'] = auth;
   }
   // Only send X-Tenant-ID header in development (localhost).
   // In production, tenant is resolved via subdomain — sending the header
@@ -3489,6 +3516,30 @@ export async function getPayrollPeriod(from: string, to: string): Promise<Payrol
   return apiRequest<PayrollSnapshot>(`/payroll/period?from=${from}&to=${to}`);
 }
 
+export interface PayrollForecast {
+  from: string;
+  to: string;
+  employees: Array<{
+    employee_id: number;
+    employee_name: string;
+    employee_role: string;
+    pay_type: string;
+    hourly_rate_cents: number;
+    weekly_salary_cents: number;
+    hours_scheduled: number;
+    cost_cents: number;
+  }>;
+  totals: { hours_scheduled: number; cost_cents: number };
+}
+
+export async function getPayrollForecast(params: { from?: string; to?: string } = {}): Promise<PayrollForecast> {
+  const qs = new URLSearchParams();
+  if (params.from) qs.set('from', params.from);
+  if (params.to) qs.set('to', params.to);
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  return apiRequest<PayrollForecast>(`/payroll/forecast${suffix}`);
+}
+
 export async function getPayrollSettings(): Promise<PayrollSettings> {
   return apiRequest<PayrollSettings>('/payroll/settings');
 }
@@ -3538,4 +3589,73 @@ export async function exportPayrollPeriodCsv(periodId: number): Promise<Blob> {
   const response = await fetch(`${base}/payroll/periods/${periodId}/export.csv`, { headers });
   if (!response.ok) throw new Error('Failed to export payroll period');
   return response.blob();
+}
+
+/* ==================== Paired Devices (KDS, etc.) ==================== */
+
+export interface PairInitResponse {
+  device_id: string;
+  pairing_code: string;
+  expires_at: string;
+}
+
+export type PairPollResponse =
+  | { status: 'pending' }
+  | { status: 'expired' }
+  | { status: 'revoked' }
+  | {
+      status: 'claimed';
+      token: string;
+      device_id: string;
+      device_label: string | null;
+      device_type: 'kds' | 'bar' | 'expo';
+      tenant_name: string;
+    };
+
+export interface PairedDevice {
+  id: string;
+  device_label: string | null;
+  device_type: 'kds' | 'bar' | 'expo';
+  claimed_at: string | null;
+  last_seen_at: string | null;
+  last_seen_ip: string | null;
+  revoked_at: string | null;
+  created_at: string;
+  claimed_by_name: string | null;
+}
+
+export async function pairDeviceInit(deviceType: 'kds' | 'bar' | 'expo' = 'kds'): Promise<PairInitResponse> {
+  return apiRequest<PairInitResponse>('/devices/pair/init', {
+    method: 'POST',
+    body: JSON.stringify({ device_type: deviceType }),
+  });
+}
+
+export async function pairDevicePoll(deviceId: string): Promise<PairPollResponse> {
+  return apiRequest<PairPollResponse>('/devices/pair/poll', {
+    method: 'POST',
+    body: JSON.stringify({ device_id: deviceId }),
+  });
+}
+
+export async function pairDeviceClaim(pairingCode: string, deviceLabel?: string): Promise<{ ok: true; device_id: string }> {
+  return apiRequest<{ ok: true; device_id: string }>('/devices/pair/claim', {
+    method: 'POST',
+    body: JSON.stringify({ pairing_code: pairingCode, device_label: deviceLabel }),
+  });
+}
+
+export async function listPairedDevices(): Promise<PairedDevice[]> {
+  return apiRequest<PairedDevice[]>('/devices');
+}
+
+export async function renamePairedDevice(id: string, deviceLabel: string): Promise<{ ok: true }> {
+  return apiRequest<{ ok: true }>(`/devices/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ device_label: deviceLabel }),
+  });
+}
+
+export async function revokePairedDevice(id: string): Promise<{ ok: true }> {
+  return apiRequest<{ ok: true }>(`/devices/${id}`, { method: 'DELETE' });
 }
