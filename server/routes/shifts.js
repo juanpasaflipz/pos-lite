@@ -350,6 +350,144 @@ router.post('/clock-out', clockLimiter, async (req, res) => {
 });
 
 /**
+ * POST /api/shifts/admin/clock-in — manager clocks an employee in by id.
+ * Body: { employee_id }
+ * Idempotent: if the employee already has an open shift, returns it instead.
+ */
+router.post('/admin/clock-in', requireAuth('manage_employees'), async (req, res) => {
+  try {
+    const employeeId = Number(req.body?.employee_id);
+    if (!Number.isInteger(employeeId) || employeeId <= 0) {
+      return res.status(400).json({ error: 'employee_id is required' });
+    }
+
+    const employee = await get(
+      'SELECT id, name, role, active FROM employees WHERE id = $1',
+      [employeeId]
+    );
+    if (!employee) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+    if (!employee.active) {
+      return res.status(400).json({ error: 'Employee is inactive' });
+    }
+
+    const conn = getConn();
+    const existing = await one(conn,
+      `SELECT id, clock_in_at FROM shifts
+       WHERE employee_id = $1 AND clock_out_at IS NULL
+       ORDER BY clock_in_at DESC LIMIT 1`,
+      [employee.id]
+    );
+
+    if (existing) {
+      const [decoratedExisting] = await attachCashDrawers(conn, [{ ...existing, employee_id: employee.id, clock_out_at: null }]);
+      return res.status(200).json({
+        already_open: true,
+        shift: decoratedExisting,
+        employee: { id: employee.id, name: employee.name, role: employee.role },
+      });
+    }
+
+    const shift = await one(conn,
+      `INSERT INTO shifts (employee_id)
+       VALUES ($1)
+       RETURNING id, employee_id, clock_in_at, clock_out_at`,
+      [employee.id]
+    );
+
+    audit({
+      tenantId: req.tenant?.id || 'default',
+      actorType: 'employee',
+      actorId: req.employee.id,
+      action: 'admin_clock_in',
+      resource: 'shift',
+      resourceId: shift.id,
+      details: { target_employee_id: employee.id, ip: req.ip },
+      ip: req.ip,
+    });
+
+    res.status(201).json({
+      shift,
+      employee: { id: employee.id, name: employee.name, role: employee.role },
+    });
+  } catch (error) {
+    console.error('Admin clock-in error:', error);
+    res.status(500).json({ error: 'Failed to clock in employee' });
+  }
+});
+
+/**
+ * POST /api/shifts/admin/clock-out — manager clocks an employee out by id.
+ * Body: { employee_id }
+ * Closes the employee's open shift. 409 if no open shift.
+ */
+router.post('/admin/clock-out', requireAuth('manage_employees'), async (req, res) => {
+  try {
+    const employeeId = Number(req.body?.employee_id);
+    if (!Number.isInteger(employeeId) || employeeId <= 0) {
+      return res.status(400).json({ error: 'employee_id is required' });
+    }
+
+    const employee = await get(
+      'SELECT id, name, role FROM employees WHERE id = $1',
+      [employeeId]
+    );
+    if (!employee) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    const conn = getConn();
+    const open = await one(conn,
+      `SELECT id, clock_in_at FROM shifts
+       WHERE employee_id = $1 AND clock_out_at IS NULL
+       ORDER BY clock_in_at DESC LIMIT 1`,
+      [employee.id]
+    );
+
+    if (!open) {
+      return res.status(409).json({ error: 'No open shift to clock out from' });
+    }
+
+    const closed = await one(conn,
+      `UPDATE shifts
+         SET clock_out_at = NOW(),
+             edited_by_employee_id = $1,
+             edited_at = NOW()
+       WHERE id = $2
+       RETURNING id, employee_id, clock_in_at, clock_out_at`,
+      [req.employee.id, open.id]
+    );
+
+    audit({
+      tenantId: req.tenant?.id || 'default',
+      actorType: 'employee',
+      actorId: req.employee.id,
+      action: 'admin_clock_out',
+      resource: 'shift',
+      resourceId: closed.id,
+      details: {
+        target_employee_id: employee.id,
+        ip: req.ip,
+        duration_seconds: shiftDurationSeconds(closed.clock_in_at, closed.clock_out_at),
+      },
+      ip: req.ip,
+    });
+
+    res.json({
+      shift: {
+        ...closed,
+        duration_seconds: shiftDurationSeconds(closed.clock_in_at, closed.clock_out_at),
+      },
+      employee: { id: employee.id, name: employee.name, role: employee.role },
+    });
+  } catch (error) {
+    console.error('Admin clock-out error:', error);
+    res.status(500).json({ error: 'Failed to clock out employee' });
+  }
+});
+
+/**
  * GET /api/shifts/active — manager view of who is currently on the clock.
  */
 router.get('/active', requireAuth(), async (req, res) => {

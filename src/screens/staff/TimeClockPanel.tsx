@@ -1,10 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Clock, AlertTriangle, Users, Save, X, Pencil, Wallet } from 'lucide-react';
+import { Clock, AlertTriangle, Users, Save, X, Pencil, Wallet, LogIn, LogOut, UserPlus } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { getActiveShifts, getShifts, updateShift, updateShiftCashDrawer } from '../../api';
-import type { ActiveShift, CashDrawerCounts, ShiftRow } from '../../types';
+import {
+  adminClockInEmployee,
+  adminClockOutEmployee,
+  getActiveShifts,
+  getEmployees,
+  getShifts,
+  updateShift,
+  updateShiftCashDrawer,
+} from '../../api';
+import type { ActiveShift, CashDrawerCounts, Employee, ShiftRow } from '../../types';
 import { formatPrice } from '../../utils/currency';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -98,6 +106,7 @@ export default function TimeClockPanel() {
 
   const [active, setActive] = useState<ActiveShift[]>([]);
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [rangeDays, setRangeDays] = useState(7);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -105,6 +114,10 @@ export default function TimeClockPanel() {
   const [editing, setEditing] = useState<EditState | null>(null);
   const [cashEditing, setCashEditing] = useState<CashEditState | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [clockInOpen, setClockInOpen] = useState(false);
+  const [clockInEmployeeId, setClockInEmployeeId] = useState<number | null>(null);
+  const [clockInBusy, setClockInBusy] = useState(false);
+  const [clockOutBusyId, setClockOutBusyId] = useState<number | null>(null);
 
   const load = async (days: number) => {
     try {
@@ -131,6 +144,64 @@ export default function TimeClockPanel() {
     const id = setInterval(() => setNow(Date.now()), 30 * 1000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!canEdit) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await getEmployees();
+        if (!cancelled) setEmployees(rows);
+      } catch {
+        // non-fatal: clock-in picker just won't populate
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [canEdit]);
+
+  const activeEmployeeIds = useMemo(() => new Set(active.map(a => a.employee_id)), [active]);
+  const clockInCandidates = useMemo(
+    () => employees.filter(e => e.active && !activeEmployeeIds.has(e.id)),
+    [employees, activeEmployeeIds]
+  );
+
+  const openClockInModal = () => {
+    setClockInEmployeeId(clockInCandidates[0]?.id ?? null);
+    setClockInOpen(true);
+  };
+
+  const submitClockIn = async () => {
+    if (!clockInEmployeeId) return;
+    try {
+      setClockInBusy(true);
+      const result = await adminClockInEmployee(clockInEmployeeId);
+      addToast(
+        result.already_open
+          ? `${result.employee.name} was already clocked in`
+          : `${result.employee.name} clocked in`,
+        'success'
+      );
+      setClockInOpen(false);
+      await load(rangeDays);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Failed to clock in employee', 'error');
+    } finally {
+      setClockInBusy(false);
+    }
+  };
+
+  const handleClockOut = async (employeeId: number, employeeName: string) => {
+    try {
+      setClockOutBusyId(employeeId);
+      await adminClockOutEmployee(employeeId);
+      addToast(`${employeeName} clocked out`, 'success');
+      await load(rangeDays);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Failed to clock out employee', 'error');
+    } finally {
+      setClockOutBusyId(null);
+    }
+  };
 
   const totalsByEmployee = useMemo(() => {
     const map = new Map<number, { name: string; role: string; seconds: number; openShift: boolean }>();
@@ -242,10 +313,21 @@ export default function TimeClockPanel() {
       )}
 
       <section>
-        <h2 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-          <Users size={18} className="text-brand-500" />
-          On shift now <span className="text-neutral-500 font-normal text-sm">({liveActive.length})</span>
-        </h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <Users size={18} className="text-brand-500" />
+            On shift now <span className="text-neutral-500 font-normal text-sm">({liveActive.length})</span>
+          </h2>
+          {canEdit && (
+            <button
+              onClick={openClockInModal}
+              className="inline-flex items-center gap-2 px-3 py-2 min-h-[40px] rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-500 transition-colors"
+            >
+              <UserPlus size={16} />
+              Clock in employee
+            </button>
+          )}
+        </div>
         {liveActive.length === 0 ? (
           <div className="rounded-xl border border-dashed border-neutral-800 px-4 py-8 text-sm text-neutral-500 text-center">
             Nobody is currently clocked in.
@@ -253,12 +335,24 @@ export default function TimeClockPanel() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {liveActive.map(a => (
-              <div key={a.id} className="rounded-xl border border-cockpit-green bg-cockpit-green/20 p-4">
-                <p className="text-xs uppercase tracking-wide text-cockpit-in-text">{a.employee_role}</p>
-                <p className="text-xl font-bold text-white mt-1">{a.employee_name}</p>
-                <p className="text-sm text-neutral-300 mt-2">
-                  Since {formatDateTime(a.clock_in_at)} · <span className="text-cockpit-in-text">{formatDuration(a.elapsed_seconds)}</span>
-                </p>
+              <div key={a.id} className="rounded-xl border border-cockpit-green bg-cockpit-green/20 p-4 flex flex-col gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-cockpit-in-text">{a.employee_role}</p>
+                  <p className="text-xl font-bold text-white mt-1">{a.employee_name}</p>
+                  <p className="text-sm text-neutral-300 mt-2">
+                    Since {formatDateTime(a.clock_in_at)} · <span className="text-cockpit-in-text">{formatDuration(a.elapsed_seconds)}</span>
+                  </p>
+                </div>
+                {canEdit && (
+                  <button
+                    onClick={() => handleClockOut(a.employee_id, a.employee_name)}
+                    disabled={clockOutBusyId === a.employee_id}
+                    className="inline-flex items-center justify-center gap-2 px-3 py-2 min-h-[40px] rounded-lg border border-cockpit-green bg-neutral-900/40 text-cockpit-in-text text-sm font-medium hover:bg-neutral-900 transition-colors disabled:opacity-60"
+                  >
+                    <LogOut size={16} />
+                    {clockOutBusyId === a.employee_id ? 'Clocking out…' : 'Clock out'}
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -559,6 +653,63 @@ export default function TimeClockPanel() {
               >
                 <Save size={16} />
                 {savingEdit ? 'Saving...' : 'Save closeout'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {clockInOpen && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-white">Clock in employee</h3>
+              <button onClick={() => setClockInOpen(false)} className="text-neutral-500 hover:text-neutral-300">
+                <X size={20} />
+              </button>
+            </div>
+
+            {clockInCandidates.length === 0 ? (
+              <p className="text-sm text-neutral-400 py-4">
+                Everyone active is already clocked in.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-neutral-300 mb-2">Employee</label>
+                  <select
+                    value={clockInEmployeeId ?? ''}
+                    onChange={(e) => setClockInEmployeeId(Number(e.target.value) || null)}
+                    className="w-full px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-lg text-white focus:outline-none focus:border-brand-500"
+                  >
+                    {clockInCandidates.map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name} · {emp.role}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <p className="text-xs text-neutral-500">
+                  Shift will start now. You can adjust the clock-in time afterward from the shift log.
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setClockInOpen(false)}
+                disabled={clockInBusy}
+                className="flex-1 px-4 py-2 border border-neutral-700 text-neutral-300 rounded-lg hover:bg-neutral-800 transition-colors font-medium"
+              >
+                {t('buttons.cancel')}
+              </button>
+              <button
+                onClick={submitClockIn}
+                disabled={clockInBusy || !clockInEmployeeId || clockInCandidates.length === 0}
+                className="flex-1 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-500 transition-colors font-medium disabled:opacity-60 inline-flex items-center justify-center gap-2"
+              >
+                <LogIn size={16} />
+                {clockInBusy ? 'Clocking in…' : 'Clock in'}
               </button>
             </div>
           </div>

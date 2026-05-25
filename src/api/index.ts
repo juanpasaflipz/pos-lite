@@ -1032,6 +1032,20 @@ export async function getActiveShifts(): Promise<ActiveShift[]> {
   return apiRequest<ActiveShift[]>('/shifts/active');
 }
 
+export async function adminClockInEmployee(employee_id: number): Promise<ClockInResponse> {
+  return apiRequest<ClockInResponse>('/shifts/admin/clock-in', {
+    method: 'POST',
+    body: JSON.stringify({ employee_id }),
+  });
+}
+
+export async function adminClockOutEmployee(employee_id: number): Promise<ClockOutResponse> {
+  return apiRequest<ClockOutResponse>('/shifts/admin/clock-out', {
+    method: 'POST',
+    body: JSON.stringify({ employee_id }),
+  });
+}
+
 export async function getShifts(params: { from?: string; to?: string; employee_id?: number } = {}): Promise<ShiftRow[]> {
   const qs = new URLSearchParams();
   if (params.from) qs.set('from', params.from);
