@@ -53,19 +53,45 @@ function verifyTwilioSignature(req, authToken) {
   if (!authToken) return false;
   const sig = req.get('x-twilio-signature');
   if (!sig) return false;
-  const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+
+  // Try multiple URL forms — Railway's proxy chain can produce a slightly
+  // different host/protocol than what Twilio signed. Sandbox webhook configs
+  // also vary: some users paste the URL with a trailing slash, some without.
+  const proto = req.protocol;
+  const xfHost = req.get('x-forwarded-host');
+  const host = req.get('host');
+  const candidates = new Set();
+  for (const h of [xfHost, host].filter(Boolean)) {
+    for (const p of [proto, 'https', 'http']) {
+      candidates.add(`${p}://${h}${req.originalUrl}`);
+      candidates.add(`${p}://${h}${req.originalUrl.replace(/\/$/, '')}`);
+    }
+  }
+
   const params = req.body || {};
   const keys = Object.keys(params).sort();
-  let payload = url;
-  for (const k of keys) payload += k + (params[k] == null ? '' : String(params[k]));
-  const expected = crypto.createHmac('sha1', authToken).update(payload).digest('base64');
-  try {
-    const a = Buffer.from(sig);
-    const b = Buffer.from(expected);
-    return a.length === b.length && crypto.timingSafeEqual(a, b);
-  } catch {
-    return false;
+  let suffix = '';
+  for (const k of keys) suffix += k + (params[k] == null ? '' : String(params[k]));
+
+  let matched = null;
+  for (const url of candidates) {
+    const expected = crypto.createHmac('sha1', authToken).update(url + suffix).digest('base64');
+    try {
+      const a = Buffer.from(sig);
+      const b = Buffer.from(expected);
+      if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+        matched = url;
+        break;
+      }
+    } catch {}
   }
+
+  if (!matched) {
+    // One-shot diagnostic: log what we tried so we can pin the mismatch.
+    console.warn('[TwilioInbound] signature mismatch. tried URLs:', [...candidates],
+      'param keys:', keys, 'received sig:', sig);
+  }
+  return matched !== null;
 }
 
 // Cross-tenant employee lookup. Uses adminSql to bypass RLS — the inbound
