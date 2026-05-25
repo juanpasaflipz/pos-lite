@@ -367,7 +367,11 @@ export default function KitchenDisplay() {
           // → ~3 cols on 1080p, ~5 on 4K, collapses on tablets/phones.
           <div
             className="grid gap-3 auto-rows-max"
-            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))' }}
+            style={{
+              gridTemplateColumns: isTvMode
+                ? 'repeat(auto-fill, minmax(260px, 1fr))'
+                : 'repeat(auto-fill, minmax(340px, 1fr))',
+            }}
           >
             {orders.map((order) => (
               <OrderCard
@@ -414,7 +418,7 @@ function OrderCard({
 
   return (
     <div
-      className={`relative ${TIER_CARD_CLASS[tier]} bg-neutral-900 rounded-lg p-6 shadow-lg flex flex-col h-full transition-all duration-300 border-2`}
+      className={`relative ${TIER_CARD_CLASS[tier]} bg-neutral-900 rounded-lg shadow-lg flex flex-col h-full transition-all duration-300 border-2 ${isTvMode ? 'p-3' : 'p-6'}`}
     >
       {/* Blinking red ring for the critical tier (8+ min) */}
       {tier === 'critical' && (
@@ -424,62 +428,85 @@ function OrderCard({
         />
       )}
 
-      {/* Order Header */}
-      <div className="flex items-start justify-between mb-4 border-b border-neutral-800 pb-4">
-        <div>
-          <h2 className="text-5xl font-black tracking-tighter text-white mb-1">#{order.order_number}</h2>
-          <p className="text-sm text-neutral-500">{t('orders.orderId', { id: String(order.id).slice(0, 8) })}</p>
+      {isTvMode ? (
+        // TV layout: tiny order # in the corner, time prominent, items the
+        // protagonist. Cooks read top → bottom: how urgent → what to cook.
+        <div className="flex items-baseline justify-between gap-2 mb-2">
+          <div className={`flex items-center gap-1.5 text-2xl font-black ${TIER_TIME_TEXT_CLASS[tier]}`}>
+            <Clock size={22} />
+            <span>{formatTime(order.elapsedSeconds)}</span>
+            {tier === 'critical' && (
+              <span className="ml-1 bg-cockpit-red text-white px-1.5 py-0.5 rounded text-xs font-black uppercase tracking-wide animate-pulse">
+                {t('status.urgent')}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 text-neutral-500">
+            {order.table_number && (
+              <span className="text-xs font-bold">T{order.table_number}</span>
+            )}
+            {!paid && (
+              <span className="bg-cockpit-yellow text-neutral-900 px-1.5 py-0.5 rounded text-[10px] font-black uppercase">
+                {t('status.unpaid')}
+              </span>
+            )}
+            <span className="text-[10px] font-mono tracking-tight">#{order.order_number}</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          {order.source === 'qr_order' && (
-            <span className="bg-cockpit-blue text-white px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
-              QR
-            </span>
-          )}
-          {order.source === 'customer_kiosk' && (
-            <span className="bg-cockpit-blue text-white px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
-              KIOSK
-            </span>
-          )}
-          {order.source === 'customer_kiosk' && order.order_fulfillment_type && (
-            <span className="bg-cockpit-yellow text-neutral-950 px-2.5 py-1.5 rounded-full font-black text-xs whitespace-nowrap">
-              {order.order_fulfillment_type === 'for_here' ? t('orders.forHere') : t('orders.toGo')}
-            </span>
-          )}
-          {order.table_number && (
-            <span className="bg-cockpit-blue text-white px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
-              Table {order.table_number}
-            </span>
-          )}
-          {paid ? (
-            <span className="bg-cockpit-green text-neutral-900 px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap flex items-center gap-1">
-              <Check size={14} strokeWidth={3} /> {t('status.paid')}
-            </span>
-          ) : (
-            <span className="bg-cockpit-yellow text-neutral-900 px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
-              {t('status.unpaid')}
-            </span>
-          )}
-          <StatusPill status={order.status} size="lg" />
-        </div>
-      </div>
+      ) : (
+        // Full-chrome layout for signed-in staff (POS/tablet).
+        <>
+          <div className="flex items-start justify-between mb-4 border-b border-neutral-800 pb-4">
+            <div>
+              <h2 className="text-5xl font-black tracking-tighter text-white mb-1">#{order.order_number}</h2>
+              <p className="text-sm text-neutral-500">{t('orders.orderId', { id: String(order.id).slice(0, 8) })}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {order.source === 'qr_order' && (
+                <span className="bg-cockpit-blue text-white px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">QR</span>
+              )}
+              {order.source === 'customer_kiosk' && (
+                <span className="bg-cockpit-blue text-white px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">KIOSK</span>
+              )}
+              {order.source === 'customer_kiosk' && order.order_fulfillment_type && (
+                <span className="bg-cockpit-yellow text-neutral-950 px-2.5 py-1.5 rounded-full font-black text-xs whitespace-nowrap">
+                  {order.order_fulfillment_type === 'for_here' ? t('orders.forHere') : t('orders.toGo')}
+                </span>
+              )}
+              {order.table_number && (
+                <span className="bg-cockpit-blue text-white px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
+                  Table {order.table_number}
+                </span>
+              )}
+              {paid ? (
+                <span className="bg-cockpit-green text-neutral-900 px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap flex items-center gap-1">
+                  <Check size={14} strokeWidth={3} /> {t('status.paid')}
+                </span>
+              ) : (
+                <span className="bg-cockpit-yellow text-neutral-900 px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
+                  {t('status.unpaid')}
+                </span>
+              )}
+              <StatusPill status={order.status} size="lg" />
+            </div>
+          </div>
 
-      {/* Time Elapsed */}
-      <div className={`flex items-center gap-2 mb-4 text-lg font-semibold ${TIER_TIME_TEXT_CLASS[tier]}`}>
-        <Clock size={24} />
-        <span>{formatTime(order.elapsedSeconds)}</span>
-        {tier === 'critical' && (
-          <span className="ml-1 bg-cockpit-red text-white px-2 py-0.5 rounded text-sm font-black uppercase tracking-wide animate-pulse">
-            {t('status.urgent')}
-          </span>
-        )}
-      </div>
+          <div className={`flex items-center gap-2 mb-4 text-lg font-semibold ${TIER_TIME_TEXT_CLASS[tier]}`}>
+            <Clock size={24} />
+            <span>{formatTime(order.elapsedSeconds)}</span>
+            {tier === 'critical' && (
+              <span className="ml-1 bg-cockpit-red text-white px-2 py-0.5 rounded text-sm font-black uppercase tracking-wide animate-pulse">
+                {t('status.urgent')}
+              </span>
+            )}
+          </div>
+        </>
+      )}
 
-      {/* Items List */}
-      <div className="flex-1 mb-6 space-y-3">
+      {/* Items List — the protagonist on a kitchen display */}
+      <div className={`flex-1 ${isTvMode ? 'mb-2 space-y-1' : 'mb-6 space-y-3'}`}>
         {order.items && order.items.length > 0 ? (
           (() => {
-            // Group combo items together
             const comboGroups: Record<string, OrderItem[]> = {};
             const regularItems: OrderItem[] = [];
             for (const item of order.items) {
@@ -493,13 +520,13 @@ function OrderCard({
             return (
               <>
                 {regularItems.map((item, index) => (
-                  <ItemDisplay key={`reg-${index}`} item={item} />
+                  <ItemDisplay key={`reg-${index}`} item={item} isTvMode={isTvMode} />
                 ))}
                 {Object.entries(comboGroups).map(([comboId, items]) => (
-                  <div key={comboId} className="border border-cockpit-yellow/40 rounded-lg p-2 bg-cockpit-yellow/5">
-                    <p className="text-xs font-bold text-cockpit-attention-text uppercase mb-2">{t('orders.combo')}</p>
+                  <div key={comboId} className={`border border-cockpit-yellow/40 rounded-lg bg-cockpit-yellow/5 ${isTvMode ? 'p-1.5' : 'p-2'}`}>
+                    <p className="text-[10px] font-bold text-cockpit-attention-text uppercase mb-1">{t('orders.combo')}</p>
                     {items.map((item, index) => (
-                      <ItemDisplay key={`combo-${index}`} item={item} />
+                      <ItemDisplay key={`combo-${index}`} item={item} isTvMode={isTvMode} />
                     ))}
                   </div>
                 ))}
@@ -511,13 +538,10 @@ function OrderCard({
         )}
       </div>
 
-      {/* Single Ready action — being on the KDS implies the order is in
-          the works; cooks shouldn't have to tap Start first. handleReady
-          walks pending → preparing → ready under the hood. */}
       <button
         onClick={handleReady}
         disabled={isLoading}
-        className="mt-auto bg-cockpit-green hover:bg-cockpit-green/90 disabled:bg-cockpit-green/50 disabled:opacity-50 text-white font-bold py-4 px-4 rounded-lg transition-colors text-xl min-h-[56px] flex items-center justify-center"
+        className={`mt-auto bg-cockpit-green hover:bg-cockpit-green/90 disabled:bg-cockpit-green/50 disabled:opacity-50 text-white font-bold rounded-lg transition-colors flex items-center justify-center ${isTvMode ? 'py-2.5 text-base min-h-[44px]' : 'py-4 px-4 text-xl min-h-[56px]'}`}
       >
         {isLoading ? (
           <span className="animate-pulse">{t('actions.markingReady')}</span>
@@ -531,11 +555,42 @@ function OrderCard({
 
 interface ItemDisplayProps {
   item: OrderItem;
+  isTvMode?: boolean;
 }
 
-function ItemDisplay({ item }: ItemDisplayProps) {
+function ItemDisplay({ item, isTvMode = false }: ItemDisplayProps) {
   const hasNotes = item.notes && item.notes.trim().length > 0;
   const hasModifiers = item.modifiers && item.modifiers.length > 0;
+  const qty = item.quantity > 1 ? `${item.quantity}× ` : '';
+
+  if (isTvMode) {
+    // TV: item name is the protagonist. Quantity is a leading "2× " prefix
+    // (no badge), modifiers are bold secondary lines with "+", notes are
+    // italic. No backgrounds — typography alone carries the hierarchy.
+    return (
+      <div className="leading-tight">
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-2xl font-black text-white tracking-tight">
+            <span className="text-cockpit-yellow">{qty}</span>{item.item_name}
+          </span>
+        </div>
+        {hasModifiers && (
+          <div className="mt-0.5 pl-1">
+            {item.modifiers!.map((mod, i) => (
+              <div key={i} className="text-brand-300 font-semibold text-base">
+                + {mod.modifier_name}
+              </div>
+            ))}
+          </div>
+        )}
+        {hasNotes && (
+          <div className="mt-0.5 pl-1 text-brand-200 italic text-sm">
+            "{item.notes}"
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="bg-neutral-800/50 rounded-lg p-3 border border-neutral-700">
