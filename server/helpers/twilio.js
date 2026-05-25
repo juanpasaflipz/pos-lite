@@ -245,6 +245,48 @@ export async function sendWhatsAppTemplate(to, messageType, variables, customerI
   }
 }
 
+/**
+ * Send a free-form WhatsApp text message. Only legal inside the 24-hour
+ * session window (i.e. a reply to an inbound message from the same number).
+ * Used by the voice-ops webhook to send confirmation prompts + success
+ * receipts back to staff. Takes platform Twilio creds since the inbound
+ * webhook lives at the platform level, not inside a tenant context.
+ *
+ * `from` may be the bare E.164 sender or already `whatsapp:+...`.
+ */
+export async function sendWhatsAppText(to, body, { from, sid, token } = {}) {
+  const accountSid = sid || PLATFORM_SID;
+  const authToken = token || PLATFORM_TOKEN;
+  const sender = from || PLATFORM_PHONE;
+  if (!accountSid || !authToken || !sender || !body) return null;
+
+  const toAddr = to.startsWith('whatsapp:') ? to : `whatsapp:${to.startsWith('+') ? to : '+' + to}`;
+  const fromAddr = senderAddress(sender);
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+  const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+  const params = new URLSearchParams({ To: toAddr, From: fromAddr, Body: String(body) });
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params,
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      console.error('[Twilio] WA text send failed:', data.message || data);
+      return null;
+    }
+    return data.sid;
+  } catch (err) {
+    console.error('[Twilio] WA text error:', err.message);
+    return null;
+  }
+}
+
 // Loyalty wrappers route through SMS by default — WhatsApp template approval is
 // slow and per-tenant. To re-enable WhatsApp, swap each sendSMS call below for
 // sendWhatsAppTemplate with the matching messageType and positional variables.

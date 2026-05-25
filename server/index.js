@@ -64,6 +64,9 @@ import kioskRoutes from './routes/kiosk.js';
 // AI Agent
 import agentRoutes from './agent/route.js';
 
+// Twilio inbound (WhatsApp voice ops — platform-level webhook)
+import twilioInboundRoutes from './routes/twilio-inbound.js';
+
 // ==================== App Setup ====================
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -168,6 +171,9 @@ app.get('/api/payments/mp/callback', mpOAuthCallback);
 app.post('/api/payments/mp/webhook', mpWebhook);
 app.post('/api/payments/conekta/webhook', conektaWebhook);
 app.use('/webhooks/getnet', getnetWebhook);
+
+// Twilio inbound (WhatsApp voice ops — uses urlencoded body, no tenant)
+app.use('/api/twilio', twilioInboundRoutes);
 
 // Promo code validation (public)
 app.get('/api/billing/promo/validate', promoValidateHandler);
