@@ -487,42 +487,6 @@
     "platformsUpdated": "{{count}} updated",
     "failedSetup": "Failed to set up delivery platforms"
   },
-  "staff": {
-    "addStaff": "Add Staff",
-    "createPins": "Create login PINs for your team",
-    "employeesAdded": "{{count}} employee(s) added",
-    "name": "Name",
-    "namePlaceholder": "e.g. Maria, Carlos...",
-    "role": "Role",
-    "roles": {
-      "cashier": "Cashier",
-      "kitchen": "Kitchen",
-      "bar": "Bar",
-      "manager": "Manager",
-      "admin": "Admin"
-    },
-    "roleDescriptions": {
-      "cashier": "Takes orders and payments",
-      "kitchen": "Views kitchen display",
-      "bar": "Views bar orders",
-      "manager": "Reports + settings access",
-      "admin": "Full access to everything"
-    },
-    "loginPin": "Login PIN",
-    "randomize": "Randomize",
-    "pinHint": "This PIN is used to clock in at the POS",
-    "addEmployee": "Add Employee",
-    "creatingEmployee": "Creating employee...",
-    "employeeAdded": "{{name}} added!",
-    "loginPinShare": "Login PIN — share with {{name}}",
-    "copyPin": "Copy PIN",
-    "copied": "Copied!",
-    "addedThisSession": "Added this session:",
-    "addAnother": "Add Another",
-    "errorNameRequired": "Enter the employee name",
-    "errorPinFormat": "PIN must be 4–6 digits",
-    "errorCreating": "Failed to create employee"
-  },
   "menuImport": {
     "title": "Import Menu from CSV",
     "previewTitle": "Preview Import",

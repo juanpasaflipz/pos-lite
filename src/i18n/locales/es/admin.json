@@ -487,42 +487,6 @@
     "platformsUpdated": "{{count}} actualizada(s)",
     "failedSetup": "Error al configurar plataformas de delivery"
   },
-  "staff": {
-    "addStaff": "Agregar Personal",
-    "createPins": "Crea PINs de acceso para tu equipo",
-    "employeesAdded": "{{count}} empleado(s) agregado(s)",
-    "name": "Nombre",
-    "namePlaceholder": "ej. María, Carlos...",
-    "role": "Rol",
-    "roles": {
-      "cashier": "Cajero",
-      "kitchen": "Cocina",
-      "bar": "Bar",
-      "manager": "Gerente",
-      "admin": "Admin"
-    },
-    "roleDescriptions": {
-      "cashier": "Toma órdenes y pagos",
-      "kitchen": "Ve el display de cocina",
-      "bar": "Ve las órdenes del bar",
-      "manager": "Acceso a reportes y configuración",
-      "admin": "Acceso completo a todo"
-    },
-    "loginPin": "PIN de Acceso",
-    "randomize": "Aleatorio",
-    "pinHint": "Este PIN se usa para iniciar sesión en el POS",
-    "addEmployee": "Agregar Empleado",
-    "creatingEmployee": "Creando empleado...",
-    "employeeAdded": "¡{{name}} agregado!",
-    "loginPinShare": "PIN de acceso — comparte con {{name}}",
-    "copyPin": "Copiar PIN",
-    "copied": "¡Copiado!",
-    "addedThisSession": "Agregados en esta sesión:",
-    "addAnother": "Agregar Otro",
-    "errorNameRequired": "Ingresa el nombre del empleado",
-    "errorPinFormat": "El PIN debe ser de 4–6 dígitos",
-    "errorCreating": "Error al crear empleado"
-  },
   "menuImport": {
     "title": "Importar Menú desde CSV",
     "previewTitle": "Vista Previa de Importación",

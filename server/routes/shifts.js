@@ -511,66 +511,67 @@ router.patch('/:id/cash-drawer', requireAuth('manage_employees'), async (req, re
       return res.status(400).json({ error: 'No cash drawer fields to update' });
     }
 
-    const updatedShift = await conn.begin(async (sql) => {
-      const existingDrawer = await ensureCashDrawerSession(sql, shift);
-      const nextOpeningCounts = hasOpening ? normalizeCounts(opening_counts) : existingDrawer.opening_counts;
-      const nextClosingCounts = hasClosing ? normalizeCounts(closing_counts) : existingDrawer.closing_counts;
-      const nextNote = hasNote
-        ? (typeof variance_note === 'string' ? variance_note.trim() : '')
-        : (existingDrawer.variance_note || '');
+    // Runs inside the tenant middleware's transaction on the reserved
+    // connection. postgres.js reserved connections don't expose .begin(),
+    // so we operate on `conn` directly; errors bubble to the catch below
+    // and the middleware rollbacks the outer transaction on 5xx.
+    const existingDrawer = await ensureCashDrawerSession(conn, shift);
+    const nextOpeningCounts = hasOpening ? normalizeCounts(opening_counts) : existingDrawer.opening_counts;
+    const nextClosingCounts = hasClosing ? normalizeCounts(closing_counts) : existingDrawer.closing_counts;
+    const nextNote = hasNote
+      ? (typeof variance_note === 'string' ? variance_note.trim() : '')
+      : (existingDrawer.variance_note || '');
 
-      if (hasOpening && !nextOpeningCounts) {
-        throw new Error('Valid opening_counts are required');
-      }
-      if (hasClosing && !nextClosingCounts) {
-        throw new Error('Valid closing_counts are required');
-      }
+    if (hasOpening && !nextOpeningCounts) {
+      return res.status(400).json({ error: 'Valid opening_counts are required' });
+    }
+    if (hasClosing && !nextClosingCounts) {
+      return res.status(400).json({ error: 'Valid closing_counts are required' });
+    }
 
-      const openingTotal = computeCountedTotal(nextOpeningCounts || zeroCounts());
-      const summary = await getShiftCashSummary(sql, {
-        ...shift,
-        cash_drawer: { ...existingDrawer, opening_total: openingTotal },
-      });
-
-      let closingTotal = null;
-      let varianceTotal = null;
-      let closedAt = existingDrawer.closed_at;
-      if (nextClosingCounts) {
-        closingTotal = computeCountedTotal(nextClosingCounts);
-        varianceTotal = toMoney(closingTotal - summary.expected_cash_total);
-        if (varianceTotal !== 0 && !nextNote) {
-          throw new Error('variance_note is required when the closing count differs from expected cash');
-        }
-        closedAt = shift.clock_out_at || existingDrawer.closed_at || new Date().toISOString();
-      }
-
-      await sql.unsafe(
-        `UPDATE cash_drawer_sessions
-         SET opening_counts = $1::jsonb,
-             opening_total = $2,
-             closing_counts = $3::jsonb,
-             closing_total = $4,
-             expected_cash_total = $5,
-             variance_total = $6,
-             variance_note = $7,
-             closed_at = $8
-         WHERE shift_id = $9`,
-        [
-          serializeCounts(nextOpeningCounts || zeroCounts()),
-          openingTotal,
-          nextClosingCounts ? serializeCounts(nextClosingCounts) : null,
-          closingTotal,
-          summary.expected_cash_total,
-          varianceTotal,
-          nextNote || null,
-          closedAt,
-          shift.id,
-        ]
-      );
-
-      const [decoratedShift] = await attachCashDrawers(sql, [shift]);
-      return decoratedShift;
+    const openingTotal = computeCountedTotal(nextOpeningCounts || zeroCounts());
+    const summary = await getShiftCashSummary(conn, {
+      ...shift,
+      cash_drawer: { ...existingDrawer, opening_total: openingTotal },
     });
+
+    let closingTotal = null;
+    let varianceTotal = null;
+    let closedAt = existingDrawer.closed_at;
+    if (nextClosingCounts) {
+      closingTotal = computeCountedTotal(nextClosingCounts);
+      varianceTotal = toMoney(closingTotal - summary.expected_cash_total);
+      if (varianceTotal !== 0 && !nextNote) {
+        return res.status(400).json({ error: 'variance_note is required when the closing count differs from expected cash' });
+      }
+      closedAt = shift.clock_out_at || existingDrawer.closed_at || new Date().toISOString();
+    }
+
+    await conn.unsafe(
+      `UPDATE cash_drawer_sessions
+       SET opening_counts = $1::jsonb,
+           opening_total = $2,
+           closing_counts = $3::jsonb,
+           closing_total = $4,
+           expected_cash_total = $5,
+           variance_total = $6,
+           variance_note = $7,
+           closed_at = $8
+       WHERE shift_id = $9`,
+      [
+        serializeCounts(nextOpeningCounts || zeroCounts()),
+        openingTotal,
+        nextClosingCounts ? serializeCounts(nextClosingCounts) : null,
+        closingTotal,
+        summary.expected_cash_total,
+        varianceTotal,
+        nextNote || null,
+        closedAt,
+        shift.id,
+      ]
+    );
+
+    const [updatedShift] = await attachCashDrawers(conn, [shift]);
 
     audit({
       tenantId: req.tenant?.id || 'default',

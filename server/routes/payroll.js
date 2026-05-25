@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { all, get, run, getConn, getTenantId } from '../db/index.js';
+import { all, get, run, getTenantId } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { audit } from '../lib/auditLog.js';
 
@@ -437,21 +437,21 @@ router.patch('/employees/:id/rate', requireAuth('manage_payroll'), async (req, r
     const emp = await get('SELECT id FROM employees WHERE id = $1 AND active = true', [id]);
     if (!emp) return res.status(404).json({ error: 'Employee not found' });
 
-    const conn = getConn();
-    await conn.begin(async (sql) => {
-      await sql.unsafe(
-        `UPDATE employees
-         SET pay_type = $1, hourly_rate_cents = $2, weekly_salary_cents = $3
-         WHERE id = $4`,
-        [pay_type, hourly_rate_cents, weekly_salary_cents, id]
-      );
-      await sql.unsafe(
-        `INSERT INTO employee_pay_rates
-           (employee_id, pay_type, hourly_rate_cents, weekly_salary_cents, set_by_employee_id, note)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [id, pay_type, hourly_rate_cents, weekly_salary_cents, req.employee.id, note || null]
-      );
-    });
+    // Tenant middleware already wraps the request in a transaction on the
+    // reserved connection. Run statements directly via the run() helper —
+    // reserved postgres.js connections do NOT expose .begin().
+    await run(
+      `UPDATE employees
+       SET pay_type = $1, hourly_rate_cents = $2, weekly_salary_cents = $3
+       WHERE id = $4`,
+      [pay_type, hourly_rate_cents, weekly_salary_cents, id]
+    );
+    await run(
+      `INSERT INTO employee_pay_rates
+         (employee_id, pay_type, hourly_rate_cents, weekly_salary_cents, set_by_employee_id, note)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [id, pay_type, hourly_rate_cents, weekly_salary_cents, req.employee.id, note || null]
+    );
 
     audit({
       tenantId: req.tenant?.id || 'default',
@@ -550,58 +550,56 @@ router.post('/periods/close', requireAuth('manage_payroll'), async (req, res) =>
 
     const snapshot = await computeSnapshot({ period_start, period_end, tz });
 
-    const conn = getConn();
-    const periodId = await conn.begin(async (sql) => {
-      const inserted = await sql.unsafe(
-        `INSERT INTO payroll_periods
-           (period_start, period_end, status, total_hours, total_overtime_hours,
-            total_base_pay_cents, total_tip_pool_cents, total_sales_cents,
-            labor_pct_of_sales, tip_policy_snapshot, closed_by_employee_id, closed_at)
-         VALUES ($1, $2, 'closed', $3, $4, $5, $6, $7, $8, $9, $10, NOW())
-         ON CONFLICT (tenant_id, period_start, period_end)
-         DO UPDATE SET
-           status = 'closed',
-           total_hours = EXCLUDED.total_hours,
-           total_overtime_hours = EXCLUDED.total_overtime_hours,
-           total_base_pay_cents = EXCLUDED.total_base_pay_cents,
-           total_tip_pool_cents = EXCLUDED.total_tip_pool_cents,
-           total_sales_cents = EXCLUDED.total_sales_cents,
-           labor_pct_of_sales = EXCLUDED.labor_pct_of_sales,
-           tip_policy_snapshot = EXCLUDED.tip_policy_snapshot,
-           closed_by_employee_id = EXCLUDED.closed_by_employee_id,
-           closed_at = NOW()
-         RETURNING id`,
+    // Runs inside the tenant middleware's transaction on the reserved
+    // connection; we use the helpers directly because postgres.js reserved
+    // connections do not expose .begin().
+    const inserted = await all(
+      `INSERT INTO payroll_periods
+         (period_start, period_end, status, total_hours, total_overtime_hours,
+          total_base_pay_cents, total_tip_pool_cents, total_sales_cents,
+          labor_pct_of_sales, tip_policy_snapshot, closed_by_employee_id, closed_at)
+       VALUES ($1, $2, 'closed', $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+       ON CONFLICT (tenant_id, period_start, period_end)
+       DO UPDATE SET
+         status = 'closed',
+         total_hours = EXCLUDED.total_hours,
+         total_overtime_hours = EXCLUDED.total_overtime_hours,
+         total_base_pay_cents = EXCLUDED.total_base_pay_cents,
+         total_tip_pool_cents = EXCLUDED.total_tip_pool_cents,
+         total_sales_cents = EXCLUDED.total_sales_cents,
+         labor_pct_of_sales = EXCLUDED.labor_pct_of_sales,
+         tip_policy_snapshot = EXCLUDED.tip_policy_snapshot,
+         closed_by_employee_id = EXCLUDED.closed_by_employee_id,
+         closed_at = NOW()
+       RETURNING id`,
+      [
+        period_start, period_end,
+        snapshot.totals.hours_worked, snapshot.totals.hours_overtime,
+        snapshot.totals.base_pay_cents, snapshot.tip_pool_cents,
+        snapshot.sales_cents,
+        snapshot.totals.labor_pct_of_sales,
+        snapshot.tip_policy,
+        req.employee.id,
+      ]
+    );
+    const periodId = inserted[0].id;
+
+    await run(`DELETE FROM payroll_period_lines WHERE period_id = $1`, [periodId]);
+    for (const e of snapshot.employees) {
+      await run(
+        `INSERT INTO payroll_period_lines
+           (period_id, employee_id, employee_name, employee_role, pay_type,
+            hourly_rate_cents, weekly_salary_cents, hours_worked, hours_overtime,
+            base_pay_cents, tip_share_cents, total_cents)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
         [
-          period_start, period_end,
-          snapshot.totals.hours_worked, snapshot.totals.hours_overtime,
-          snapshot.totals.base_pay_cents, snapshot.tip_pool_cents,
-          snapshot.sales_cents,
-          snapshot.totals.labor_pct_of_sales,
-          snapshot.tip_policy,
-          req.employee.id,
+          periodId, e.employee_id, e.employee_name, e.employee_role, e.pay_type,
+          e.hourly_rate_cents, e.weekly_salary_cents,
+          e.hours_worked, e.hours_overtime,
+          e.base_pay_cents, e.tip_share_cents, e.total_cents,
         ]
       );
-      const id = inserted[0].id;
-
-      // Clear prior lines (idempotent for re-close) then re-insert.
-      await sql.unsafe(`DELETE FROM payroll_period_lines WHERE period_id = $1`, [id]);
-      for (const e of snapshot.employees) {
-        await sql.unsafe(
-          `INSERT INTO payroll_period_lines
-             (period_id, employee_id, employee_name, employee_role, pay_type,
-              hourly_rate_cents, weekly_salary_cents, hours_worked, hours_overtime,
-              base_pay_cents, tip_share_cents, total_cents)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-          [
-            id, e.employee_id, e.employee_name, e.employee_role, e.pay_type,
-            e.hourly_rate_cents, e.weekly_salary_cents,
-            e.hours_worked, e.hours_overtime,
-            e.base_pay_cents, e.tip_share_cents, e.total_cents,
-          ]
-        );
-      }
-      return id;
-    });
+    }
 
     audit({
       tenantId: req.tenant?.id || 'default',
