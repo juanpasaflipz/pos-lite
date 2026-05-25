@@ -76,16 +76,16 @@ export async function processGetnetWebhook(event) {
         await adminSql`
           UPDATE inventory_items ii
           SET quantity = ii.quantity - (
-            SELECT COALESCE(SUM(ri.quantity_used * ${item.quantity}), 0)
-            FROM recipe_ingredients ri
-            WHERE ri.menu_item_id = ${item.menu_item_id}
-              AND ri.inventory_item_id = ii.id
+            SELECT COALESCE(SUM(mii.quantity_used * ${item.quantity}), 0)
+            FROM menu_item_ingredients mii
+            WHERE mii.menu_item_id = ${item.menu_item_id}
+              AND mii.inventory_item_id = ii.id
           )
           WHERE ii.tenant_id = ${txn.tenant_id}
             AND ii.id IN (
-              SELECT ri.inventory_item_id
-              FROM recipe_ingredients ri
-              WHERE ri.menu_item_id = ${item.menu_item_id}
+              SELECT mii.inventory_item_id
+              FROM menu_item_ingredients mii
+              WHERE mii.menu_item_id = ${item.menu_item_id}
             )
         `;
       }
