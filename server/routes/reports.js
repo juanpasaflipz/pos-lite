@@ -923,15 +923,41 @@ router.get('/reconciliation', requireAuth('view_reports'), async (req, res) => {
   }
 });
 
-// GET /api/reports/payment-fees - aggregate fee report
+// GET /api/reports/payment-fees - aggregate fee + tip report across all processors
 router.get('/payment-fees', requireAuth('view_reports'), async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
     const startDate = getDateRange(period, tz);
 
-    const orders = await all(`
-      SELECT id, total, tip, payment_intent_id, created_at
+    const daily = {};
+    const byProcessor = {};
+    let totalRevenue = 0;
+    let totalFees = 0;
+    let totalNet = 0;
+    let totalTips = 0;
+
+    const bump = (dateKey, processor, { revenue = 0, fees = 0, net = 0, tips = 0, count = 0 }) => {
+      if (!daily[dateKey]) daily[dateKey] = { date: dateKey, revenue: 0, fees: 0, net: 0, order_count: 0 };
+      daily[dateKey].revenue += revenue;
+      daily[dateKey].fees += fees;
+      daily[dateKey].net += net;
+      daily[dateKey].order_count += count;
+      if (!byProcessor[processor]) byProcessor[processor] = { processor, revenue: 0, fees: 0, net: 0, tips: 0, count: 0 };
+      byProcessor[processor].revenue += revenue;
+      byProcessor[processor].fees += fees;
+      byProcessor[processor].net += net;
+      byProcessor[processor].tips += tips;
+      byProcessor[processor].count += count;
+      totalRevenue += revenue;
+      totalFees += fees;
+      totalNet += net;
+      totalTips += tips;
+    };
+
+    // 1) Stripe-backed card payments — fees fetched live from Stripe.
+    const stripeOrders = await all(`
+      SELECT id, payment_intent_id, created_at
       FROM orders
       WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $2)::date >= $1
         AND payment_method = 'card'
@@ -940,38 +966,67 @@ router.get('/payment-fees', requireAuth('view_reports'), async (req, res) => {
       ORDER BY created_at ASC
     `, [startDate, tz]);
 
-    let totalGross = 0;
-    let totalFees = 0;
-    let totalNet = 0;
-
-    const dailyFees = {};
-    for (const order of orders) {
+    for (const order of stripeOrders) {
       const dateKey = order.created_at.split(' ')[0] || order.created_at.split('T')[0];
       try {
         const fees = await getChargeFees(order.payment_intent_id);
-        totalGross += fees.gross;
-        totalFees += fees.fee;
-        totalNet += fees.net;
-
-        if (!dailyFees[dateKey]) dailyFees[dateKey] = { date: dateKey, gross: 0, fees: 0, net: 0, count: 0 };
-        dailyFees[dateKey].gross += fees.gross;
-        dailyFees[dateKey].fees += fees.fee;
-        dailyFees[dateKey].net += fees.net;
-        dailyFees[dateKey].count++;
+        bump(dateKey, 'stripe', { revenue: fees.gross, fees: fees.fee, net: fees.net, count: 1 });
       } catch {
         // Skip failed Stripe lookups
       }
     }
 
-    const feePercent = totalGross > 0 ? Math.round((totalFees / totalGross) * 10000) / 100 : 0;
+    // 2) MP Terminal (and any future processor) — fees stored locally in order_payments.
+    const localPayments = await all(`
+      SELECT payment_method,
+             COALESCE(amount, 0)         AS amount,
+             COALESCE(tip, 0)            AS tip,
+             COALESCE(processor_fee, 0)  AS processor_fee,
+             COALESCE(processor_net, COALESCE(amount, 0) - COALESCE(processor_fee, 0)) AS processor_net,
+             created_at
+      FROM order_payments
+      WHERE (created_at AT TIME ZONE $2)::date >= $1
+        AND status = 'paid'
+        AND payment_method = 'mp_terminal'
+      ORDER BY created_at ASC
+    `, [startDate, tz]);
+
+    for (const p of localPayments) {
+      const ts = typeof p.created_at === 'string' ? p.created_at : p.created_at.toISOString();
+      const dateKey = ts.split(' ')[0] || ts.split('T')[0];
+      bump(dateKey, p.payment_method, {
+        revenue: Number(p.amount),
+        fees: Number(p.processor_fee),
+        net: Number(p.processor_net),
+        tips: Number(p.tip),
+        count: 1,
+      });
+    }
+
+    const round2 = (n) => Math.round(n * 100) / 100;
+    const feePercent = totalRevenue > 0 ? round2((totalFees / totalRevenue) * 100) : 0;
 
     res.json({
       period,
-      total_gross: Math.round(totalGross * 100) / 100,
-      total_fees: Math.round(totalFees * 100) / 100,
-      total_net: Math.round(totalNet * 100) / 100,
+      total_revenue: round2(totalRevenue),
+      total_fees: round2(totalFees),
+      net_revenue: round2(totalNet),
       fee_percent: feePercent,
-      daily: Object.values(dailyFees),
+      tips_collected: round2(totalTips),
+      daily: Object.values(daily).map(d => ({
+        ...d,
+        revenue: round2(d.revenue),
+        fees: round2(d.fees),
+        net: round2(d.net),
+      })),
+      by_processor: Object.values(byProcessor).map(p => ({
+        ...p,
+        revenue: round2(p.revenue),
+        fees: round2(p.fees),
+        net: round2(p.net),
+        tips: round2(p.tips),
+        fee_percent: p.revenue > 0 ? round2((p.fees / p.revenue) * 100) : 0,
+      })),
     });
   } catch (error) {
     console.error('Error fetching payment fees:', error);

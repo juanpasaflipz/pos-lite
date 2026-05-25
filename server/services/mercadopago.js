@@ -159,6 +159,61 @@ export async function getPointOrder(accessToken, orderId, terminalId = null) {
   return res.json();
 }
 
+/**
+ * Fetch a single payment from MP's /v1/payments resource.
+ * Used as a fallback when the Point /v1/orders response doesn't carry fee_details
+ * (MP populates fees on the payment object, not always on the order).
+ */
+export async function getPayment(accessToken, paymentId) {
+  const res = await fetch(`${MP}/v1/payments/${paymentId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`MP getPayment failed: ${res.status} ${text}`);
+  }
+  return res.json();
+}
+
+/**
+ * Pull fee + net from a paid MP Point order. Tries the order payload first
+ * (fee_details may be inline), then falls back to /v1/payments/{id}.
+ *
+ * Returns { fee, net, raw } with numbers (or null if unknown). `raw` is the
+ * fullest response we got for forensics — stored as JSONB in order_payments.
+ */
+export async function extractMpFees(accessToken, mpOrder) {
+  const payment = mpOrder?.transactions?.payments?.[0];
+  if (!payment) return { fee: null, net: null, raw: mpOrder ?? null };
+
+  const sumFees = (arr) =>
+    (Array.isArray(arr) ? arr : []).reduce((s, f) => s + Number(f?.amount || 0), 0);
+
+  if (Array.isArray(payment.fee_details) && payment.fee_details.length > 0) {
+    const fee = sumFees(payment.fee_details);
+    const amount = Number(payment.paid_amount ?? payment.amount ?? 0);
+    return { fee, net: amount - fee, raw: payment };
+  }
+
+  if (payment.id && accessToken) {
+    try {
+      const detail = await getPayment(accessToken, payment.id);
+      const fee = sumFees(detail?.fee_details);
+      const amount = Number(detail?.transaction_amount ?? payment.amount ?? 0);
+      const net =
+        detail?.transaction_details?.net_received_amount != null
+          ? Number(detail.transaction_details.net_received_amount)
+          : amount - fee;
+      return { fee, net, raw: detail };
+    } catch (err) {
+      // Non-fatal — we still record the payment, just without fee data.
+      return { fee: null, net: null, raw: payment, fetchError: err.message };
+    }
+  }
+
+  return { fee: null, net: null, raw: payment };
+}
+
 export function mapPointOrderStatus(order) {
   const payment = order?.transactions?.payments?.[0];
   const status = String(payment?.status || order?.status || '').toLowerCase();

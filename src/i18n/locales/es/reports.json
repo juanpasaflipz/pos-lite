@@ -130,8 +130,18 @@
       "totalFees": "Comisiones Totales",
       "netRevenue": "Venta Neta",
       "feePercent": "% Comisión",
+      "tipsCollected": "Propinas Cobradas",
       "chartRevenue": "Ventas",
-      "chartFees": "Comisiones"
+      "chartFees": "Comisiones",
+      "byProcessor": "Por Procesador",
+      "processorColumn": "Procesador",
+      "processorRevenue": "Ventas",
+      "processorFees": "Comisión",
+      "processorNet": "Neto",
+      "processorTips": "Propinas",
+      "processorCount": "Cobros",
+      "processorFeeRate": "% Comisión",
+      "noProcessorData": "Sin datos aún — las comisiones aparecen tras el primer cobro pagado."
     },
     "refunds": {
       "totalRefunds": "Total de Reembolsos",

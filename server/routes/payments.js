@@ -17,6 +17,7 @@ import {
   cancelPointOrder,
   isQueueStuckError,
   recoverStuckQueue,
+  extractMpFees,
 } from '../services/mercadopago.js';
 import { getServiceCredentials } from '../helpers/tenantCredentials.js';
 import {
@@ -947,7 +948,7 @@ function requirePro(req, res, next) {
   next();
 }
 
-async function markTerminalOrderPaid(orderId, tenantId = 'default') {
+async function markTerminalOrderPaid(orderId, tenantId = 'default', { mpOrder = null, mpAccessToken = null } = {}) {
   const completed = await get(
     `UPDATE orders
      SET payment_status = 'paid',
@@ -971,6 +972,16 @@ async function markTerminalOrderPaid(orderId, tenantId = 'default') {
     await deductInventoryForOrder(orderId);
   }
 
+  // Persist the MP terminal payment + processor fee for owner-facing reports.
+  // Fire-and-record: failures here must not block payment completion.
+  if (mpOrder) {
+    try {
+      await recordMpTerminalPayment(orderId, tenantId, mpOrder, mpAccessToken);
+    } catch (feeErr) {
+      console.warn('MP order_payments insert failed (non-fatal):', feeErr.message);
+    }
+  }
+
   let invoice_token = null;
   try {
     const tokenRow = completed || await get('SELECT invoice_token FROM orders WHERE id = $1', [orderId]);
@@ -984,6 +995,42 @@ async function markTerminalOrderPaid(orderId, tenantId = 'default') {
   }
 
   return invoice_token;
+}
+
+/**
+ * Idempotently insert an order_payments row for an MP Point payment, capturing
+ * the processor fee + raw response. Owners read this back in FeesTab to see
+ * what MP is actually charging them — cashiers never see it.
+ */
+async function recordMpTerminalPayment(orderId, tenantId, mpOrder, mpAccessToken) {
+  const existing = await get(
+    `SELECT id FROM order_payments WHERE order_id = $1 AND payment_method = 'mp_terminal'`,
+    [orderId]
+  );
+  if (existing) return;
+
+  const payment = mpOrder?.transactions?.payments?.[0];
+  const grossAmount = Number(payment?.paid_amount ?? payment?.amount ?? mpOrder?.total_amount ?? 0);
+  const orderRow = await get('SELECT tip FROM orders WHERE id = $1', [orderId]);
+  const tipAmount = Number(orderRow?.tip || 0);
+
+  const fees = await extractMpFees(mpAccessToken, mpOrder);
+
+  await run(
+    `INSERT INTO order_payments
+       (tenant_id, order_id, payment_method, amount, tip, payment_intent_id, status, processor_fee, processor_net, processor_response)
+     VALUES ($1, $2, 'mp_terminal', $3, $4, $5, 'paid', $6, $7, $8)`,
+    [
+      tenantId,
+      orderId,
+      grossAmount,
+      tipAmount,
+      mpOrder?.id ?? null,
+      fees.fee,
+      fees.net,
+      fees.raw ? JSON.stringify(fees.raw) : null,
+    ]
+  );
 }
 
 // GET /api/payments/mp/connect — initiate MP OAuth flow
@@ -1305,7 +1352,7 @@ router.get('/:order_id', async (req, res) => {
           const mpOrder = await getPointOrder(accessToken, order.mp_order_id, tenant.mp_default_terminal_id);
           const mapped = mapPointOrderStatus(mpOrder);
           if (mapped === 'paid') {
-            await markTerminalOrderPaid(order.id, req.tenant.id);
+            await markTerminalOrderPaid(order.id, req.tenant.id, { mpOrder, mpAccessToken: accessToken });
             order.payment_status = 'paid';
             order.payment_method = 'card';
           } else if (mapped === 'failed') {
@@ -1511,7 +1558,7 @@ export async function mpWebhook(req, res) {
       const mapped = mapPointOrderStatus(mpOrder);
 
       if (mapped === 'paid') {
-        await markTerminalOrderPaid(ord.id, ord.tenant_id);
+        await markTerminalOrderPaid(ord.id, ord.tenant_id, { mpOrder, mpAccessToken: accessToken });
       } else if (mapped === 'failed') {
         await adminSql`
           UPDATE orders

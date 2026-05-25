@@ -250,6 +250,9 @@ CREATE TABLE IF NOT EXISTS order_payments (
   tip NUMERIC(10,2) DEFAULT 0,
   payment_intent_id TEXT,
   status TEXT DEFAULT 'pending',
+  processor_fee NUMERIC(10,2),
+  processor_net NUMERIC(10,2),
+  processor_response JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

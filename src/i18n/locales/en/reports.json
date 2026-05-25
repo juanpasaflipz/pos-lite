@@ -130,8 +130,18 @@
       "totalFees": "Total Fees",
       "netRevenue": "Net Revenue",
       "feePercent": "Fee %",
+      "tipsCollected": "Tips Collected",
       "chartRevenue": "Revenue",
-      "chartFees": "Fees"
+      "chartFees": "Fees",
+      "byProcessor": "By Processor",
+      "processorColumn": "Processor",
+      "processorRevenue": "Revenue",
+      "processorFees": "Fees",
+      "processorNet": "Net",
+      "processorTips": "Tips",
+      "processorCount": "Charges",
+      "processorFeeRate": "Fee %",
+      "noProcessorData": "No processor data yet — fees appear after the first paid charge."
     },
     "refunds": {
       "totalRefunds": "Total Refunds",

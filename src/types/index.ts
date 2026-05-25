@@ -871,12 +871,22 @@ export interface PaymentFeeSummary {
   total_fees: number;
   net_revenue: number;
   fee_percent: number;
+  tips_collected: number;
   daily: Array<{
     date: string;
     revenue: number;
     fees: number;
     net: number;
     order_count: number;
+  }>;
+  by_processor: Array<{
+    processor: string;
+    revenue: number;
+    fees: number;
+    net: number;
+    tips: number;
+    count: number;
+    fee_percent: number;
   }>;
 }
 
