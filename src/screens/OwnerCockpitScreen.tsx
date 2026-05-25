@@ -13,12 +13,11 @@ import {
   ClipboardList,
   BarChart3,
   Plug,
-  Printer,
+  Monitor,
   Shield,
   Palette,
   FileText,
   User,
-  MonitorPlay,
   ArrowDownCircle,
   ArrowUpCircle,
   Settings,
@@ -63,12 +62,11 @@ const SYSTEM_CARDS: CockpitCard[] = [
   { to: '/admin/reports', icon: <BarChart3 size={28} />, label: 'Reports', hint: 'Numbers & trends', intensity: 'primary' },
   { to: '/admin/integrations', icon: <Plug size={28} />, label: 'Integrations', hint: 'Payments & apps', intensity: 'primary' },
   { to: '/admin/modifiers', icon: <SlidersHorizontal size={28} />, label: 'Modifiers', hint: 'Sizes, extras & add-ons', intensity: 'secondary' },
-  { to: '/admin/printers', icon: <Printer size={28} />, label: 'Printers', hint: 'Receipt & kitchen', intensity: 'secondary' },
+  { to: '/kitchen', icon: <Monitor size={28} />, label: 'Kitchen Display', hint: 'Order screen for cooks', intensity: 'secondary' },
   { to: '/admin/permissions', icon: <Shield size={28} />, label: 'Permissions', hint: 'Role access', intensity: 'secondary' },
   { to: '/admin/branding', icon: <Palette size={28} />, label: 'Identity', hint: 'Logo & info', intensity: 'secondary' },
   { to: '/admin/invoicing', icon: <FileText size={28} />, label: 'Invoicing', hint: 'CFDI & invoices', intensity: 'secondary' },
   { to: '/admin/account', icon: <User size={28} />, label: 'Account', hint: 'Plan & billing', intensity: 'secondary' },
-  { to: '/admin/display-menu', icon: <MonitorPlay size={28} />, label: 'Display Menu', hint: 'TV menu board', intensity: 'secondary' },
 ];
 
 type Tone = 'in' | 'out' | 'system';
