@@ -89,7 +89,7 @@ const TenantsTab: React.FC = () => {
         </div>
       </div>
 
-      {error && <div className="text-red-400">{error}</div>}
+      {error && <div className="text-cockpit-red">{error}</div>}
 
       {!tenants ? (
         <div className="text-neutral-400">{t('tenants.loading')}</div>
@@ -133,7 +133,7 @@ const TenantsTab: React.FC = () => {
                   <td className="px-4 py-3">
                     <span
                       className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                        row.active ? 'bg-green-900/40 text-green-300' : 'bg-red-900/40 text-red-300'
+                        row.active ? 'bg-cockpit-green/40 text-cockpit-green' : 'bg-cockpit-red/40 text-cockpit-red'
                       }`}
                     >
                       {row.active ? t('tenants.active') : t('tenants.inactive')}
@@ -275,7 +275,7 @@ const TenantDrawer: React.FC<{
               onClick={toggleActive}
               disabled={busy}
               className={`px-3 py-2 rounded text-sm font-semibold ${
-                tenant.active ? 'bg-red-900/40 text-red-300 hover:bg-red-900/60' : 'bg-green-900/40 text-green-300 hover:bg-green-900/60'
+                tenant.active ? 'bg-cockpit-red/40 text-cockpit-red hover:bg-cockpit-red/60' : 'bg-cockpit-green/40 text-cockpit-green hover:bg-cockpit-green/60'
               } disabled:opacity-50`}
             >
               {tenant.active ? t('tenants.deactivate') : t('tenants.activate')}
@@ -438,7 +438,7 @@ const CreateTenantModal: React.FC<{
           </select>
         </Field>
 
-        {err && <div className="text-sm text-red-400">{err}</div>}
+        {err && <div className="text-sm text-cockpit-red">{err}</div>}
 
         <div className="flex gap-2 pt-2">
           <button

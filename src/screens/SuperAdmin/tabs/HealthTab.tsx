@@ -14,9 +14,9 @@ const fmtUptime = (s: number) => {
 };
 
 const statusColor = (s: ServiceStatus['status']) => ({
-  ok: 'bg-green-900/40 text-green-300',
-  degraded: 'bg-amber-900/40 text-amber-300',
-  down: 'bg-red-900/40 text-red-300',
+  ok: 'bg-cockpit-green/40 text-cockpit-green',
+  degraded: 'bg-cockpit-yellow/40 text-cockpit-yellow',
+  down: 'bg-cockpit-red/40 text-cockpit-red',
   unconfigured: 'bg-neutral-800 text-neutral-400',
 }[s]);
 
@@ -38,7 +38,7 @@ const HealthTab: React.FC = () => {
   useEffect(load, []);
 
   if (!data && !err) return <div className="text-neutral-400">{t('health.loading')}</div>;
-  if (err) return <div className="text-red-400">{err}</div>;
+  if (err) return <div className="text-cockpit-red">{err}</div>;
   if (!data) return null;
 
   const heapPct = (data.memory.heap_used_mb / data.memory.heap_total_mb) * 100;
@@ -129,9 +129,9 @@ const HealthTab: React.FC = () => {
                     <td className="py-2 pr-4 text-right text-neutral-300">{job.runCount}</td>
                     <td className="py-2">
                       {job.lastError ? (
-                        <span className="text-red-400 text-xs" title={job.lastError}>error</span>
+                        <span className="text-cockpit-red text-xs" title={job.lastError}>error</span>
                       ) : (
-                        <span className="text-green-400 text-xs">ok</span>
+                        <span className="text-cockpit-green text-xs">ok</span>
                       )}
                     </td>
                   </tr>
@@ -158,7 +158,7 @@ const HealthTab: React.FC = () => {
               {data.requests.recentErrors.slice(0, 20).map((e, i) => (
                 <li key={i} className="flex gap-3 text-neutral-400">
                   <span className="text-neutral-600">{new Date(e.timestamp).toLocaleTimeString()}</span>
-                  <span className="text-red-400">{e.status}</span>
+                  <span className="text-cockpit-red">{e.status}</span>
                   <span className="text-neutral-300">{e.method}</span>
                   <span className="truncate">{e.path}</span>
                   {e.tenant && <span className="text-brand-400">[{e.tenant}]</span>}
@@ -204,7 +204,7 @@ const Bar: React.FC<{ pct: number; label: string }> = ({ pct, label }) => (
     </div>
     <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
       <div
-        className={`h-full ${pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-amber-500' : 'bg-brand-600'}`}
+        className={`h-full ${pct > 90 ? 'bg-cockpit-red' : pct > 70 ? 'bg-cockpit-yellow' : 'bg-brand-600'}`}
         style={{ width: `${Math.min(pct, 100)}%` }}
       />
     </div>
@@ -225,7 +225,7 @@ const PoolCard: React.FC<{ label: string; pool: DetailedHealthData['pools']['ten
         <Stat label={t('health.peak')} value={String(pool.peakActive)} />
       </div>
       {pool.failures > 0 && (
-        <div className="mt-2 text-xs text-red-400">
+        <div className="mt-2 text-xs text-cockpit-red">
           {t('health.failures')}: {pool.failures}
         </div>
       )}

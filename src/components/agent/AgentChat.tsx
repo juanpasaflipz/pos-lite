@@ -249,7 +249,7 @@ export default function AgentChat({ isOpen, onClose }: AgentChatProps) {
               msg.role === 'user'
                 ? 'bg-brand-600 text-white rounded-2xl rounded-tr-md px-4 py-2.5'
                 : msg.role === 'system'
-                ? 'bg-red-900/40 border border-red-800 rounded-xl px-4 py-2.5'
+                ? 'bg-cockpit-red/40 border border-cockpit-red rounded-xl px-4 py-2.5'
                 : 'bg-neutral-800 text-neutral-100 rounded-2xl rounded-tl-md px-4 py-3'
             }`}>
 
@@ -273,7 +273,7 @@ export default function AgentChat({ isOpen, onClose }: AgentChatProps) {
                         <button
                           onClick={() => handleApproveAction(action)}
                           disabled={isLoading}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-green-600 hover:bg-green-500 text-white transition-colors disabled:opacity-50"
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-cockpit-green hover:bg-cockpit-green/90 text-white transition-colors disabled:opacity-50"
                         >
                           <CheckCircle className="w-3.5 h-3.5" /> Approve
                         </button>
@@ -294,7 +294,7 @@ export default function AgentChat({ isOpen, onClose }: AgentChatProps) {
               {msg.action_results && msg.action_results.length > 0 && (
                 <div className="mt-2 space-y-1">
                   {msg.action_results.map((result, ri) => (
-                    <div key={ri} className={`text-xs px-2 py-1 rounded ${result.success ? 'text-green-400 bg-green-900/20' : 'text-neutral-500 bg-neutral-800/50'}`}>
+                    <div key={ri} className={`text-xs px-2 py-1 rounded ${result.success ? 'text-cockpit-green bg-cockpit-green/20' : 'text-neutral-500 bg-neutral-800/50'}`}>
                       {result.message}
                     </div>
                   ))}

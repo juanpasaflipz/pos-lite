@@ -176,8 +176,8 @@ export default function BrandingSettingsScreen() {
 
       <div className="max-w-3xl mx-auto p-6 space-y-8">
         {error && (
-          <div className="bg-red-900/30 border border-red-800 rounded-lg p-4">
-            <p className="text-red-300">{error}</p>
+          <div className="bg-cockpit-red/30 border border-cockpit-red rounded-lg p-4">
+            <p className="text-cockpit-red">{error}</p>
           </div>
         )}
 
