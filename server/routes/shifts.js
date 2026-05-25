@@ -41,6 +41,27 @@ function shiftDurationSeconds(clockIn, clockOut) {
   return Math.round((new Date(clockOut).getTime() - new Date(clockIn).getTime()) / 1000);
 }
 
+/**
+ * Find the best unclaimed scheduled shift for an employee at the moment they
+ * clock in. Match window: ±4 hours from scheduled start. Picks the closest.
+ * Returns the scheduled_shift id, or null if no match.
+ */
+async function findMatchingScheduledShiftId(conn, employeeId, clockInAt) {
+  const row = await one(conn,
+    `SELECT ss.id
+       FROM scheduled_shifts ss
+       LEFT JOIN shifts s ON s.scheduled_shift_id = ss.id
+      WHERE ss.employee_id = $1
+        AND ss.starts_at BETWEEN $2::timestamptz - INTERVAL '4 hours'
+                              AND $2::timestamptz + INTERVAL '4 hours'
+        AND s.id IS NULL
+      ORDER BY ABS(EXTRACT(EPOCH FROM (ss.starts_at - $2::timestamptz)))
+      LIMIT 1`,
+    [employeeId, clockInAt]
+  );
+  return row?.id || null;
+}
+
 function zeroCounts() {
   return Object.fromEntries(CASH_DENOMINATIONS.map((value) => [String(value), 0]));
 }
@@ -273,6 +294,11 @@ router.post('/clock-in', clockLimiter, async (req, res) => {
       [employee.id]
     );
 
+    const scheduledId = await findMatchingScheduledShiftId(conn, employee.id, shift.clock_in_at);
+    if (scheduledId) {
+      await conn.unsafe('UPDATE shifts SET scheduled_shift_id = $1 WHERE id = $2', [scheduledId, shift.id]);
+    }
+
     audit({
       tenantId: req.tenant?.id || 'default',
       actorType: 'employee',
@@ -280,7 +306,7 @@ router.post('/clock-in', clockLimiter, async (req, res) => {
       action: 'clock_in',
       resource: 'shift',
       resourceId: shift.id,
-      details: { ip: req.ip },
+      details: { ip: req.ip, scheduled_shift_id: scheduledId },
       ip: req.ip,
     });
 
@@ -396,6 +422,11 @@ router.post('/admin/clock-in', requireAuth('manage_employees'), async (req, res)
       [employee.id]
     );
 
+    const scheduledId = await findMatchingScheduledShiftId(conn, employee.id, shift.clock_in_at);
+    if (scheduledId) {
+      await conn.unsafe('UPDATE shifts SET scheduled_shift_id = $1 WHERE id = $2', [scheduledId, shift.id]);
+    }
+
     audit({
       tenantId: req.tenant?.id || 'default',
       actorType: 'employee',
@@ -403,7 +434,7 @@ router.post('/admin/clock-in', requireAuth('manage_employees'), async (req, res)
       action: 'admin_clock_in',
       resource: 'shift',
       resourceId: shift.id,
-      details: { target_employee_id: employee.id, ip: req.ip },
+      details: { target_employee_id: employee.id, ip: req.ip, scheduled_shift_id: scheduledId },
       ip: req.ip,
     });
 
@@ -537,15 +568,24 @@ router.get('/', requireAuth(), async (req, res) => {
              s.clock_in_at, s.clock_out_at, s.notes,
              s.edited_by_employee_id, s.edited_at,
              editor.name AS edited_by_name,
+             s.scheduled_shift_id,
+             ss.starts_at AS scheduled_start_at,
+             ss.ends_at AS scheduled_end_at,
              CASE
                WHEN s.clock_out_at IS NOT NULL
                  THEN EXTRACT(EPOCH FROM (s.clock_out_at - s.clock_in_at))::INTEGER
                ELSE NULL
              END AS duration_seconds,
+             CASE
+               WHEN ss.id IS NOT NULL
+                 THEN EXTRACT(EPOCH FROM (ss.ends_at - ss.starts_at))::INTEGER
+               ELSE NULL
+             END AS scheduled_seconds,
              (s.clock_out_at IS NULL AND s.clock_in_at < NOW() - INTERVAL '12 hours') AS flagged_long_open
       FROM shifts s
       JOIN employees e ON e.id = s.employee_id
       LEFT JOIN employees editor ON editor.id = s.edited_by_employee_id
+      LEFT JOIN scheduled_shifts ss ON ss.id = s.scheduled_shift_id
       WHERE ${where}
       ORDER BY s.clock_in_at DESC
     `, params);
@@ -730,6 +770,207 @@ router.patch('/:id/cash-drawer', requireAuth('manage_employees'), async (req, re
       return res.status(400).json({ error: message });
     }
     res.status(500).json({ error: 'Failed to update cash drawer' });
+  }
+});
+
+/* ==================== Scheduled shifts ==================== */
+
+/**
+ * GET /api/shifts/scheduled?from=&to=&employee_id= — list scheduled shifts.
+ * Defaults to this week. Returns the linked actual shift (if any) for variance.
+ */
+router.get('/scheduled', requireAuth(), async (req, res) => {
+  try {
+    const conn = getConn();
+    const to = req.query.to ? new Date(req.query.to) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const employeeId = req.query.employee_id ? Number(req.query.employee_id) : null;
+
+    const params = [from.toISOString(), to.toISOString()];
+    let where = 'ss.starts_at >= $1 AND ss.starts_at < $2';
+    if (employeeId) {
+      params.push(employeeId);
+      where += ` AND ss.employee_id = $${params.length}`;
+    }
+
+    const rows = await many(conn, `
+      SELECT ss.id, ss.employee_id, e.name AS employee_name, e.role AS employee_role,
+             ss.starts_at, ss.ends_at, ss.notes,
+             ss.created_by_employee_id, ss.created_at, ss.updated_at,
+             EXTRACT(EPOCH FROM (ss.ends_at - ss.starts_at))::INTEGER AS scheduled_seconds,
+             actual.id AS shift_id,
+             actual.clock_in_at AS actual_clock_in_at,
+             actual.clock_out_at AS actual_clock_out_at,
+             CASE
+               WHEN actual.clock_out_at IS NOT NULL
+                 THEN EXTRACT(EPOCH FROM (actual.clock_out_at - actual.clock_in_at))::INTEGER
+               ELSE NULL
+             END AS actual_duration_seconds
+      FROM scheduled_shifts ss
+      JOIN employees e ON e.id = ss.employee_id
+      LEFT JOIN shifts actual ON actual.scheduled_shift_id = ss.id
+      WHERE ${where}
+      ORDER BY ss.starts_at ASC
+    `, params);
+
+    res.json(rows);
+  } catch (error) {
+    console.error('List scheduled shifts error:', error);
+    res.status(500).json({ error: 'Failed to load scheduled shifts' });
+  }
+});
+
+/**
+ * POST /api/shifts/scheduled — create a scheduled shift.
+ * Body: { employee_id, starts_at, ends_at, notes? }
+ */
+router.post('/scheduled', requireAuth('manage_employees'), async (req, res) => {
+  try {
+    const { employee_id, starts_at, ends_at, notes } = req.body || {};
+    const empId = Number(employee_id);
+    if (!Number.isInteger(empId) || empId <= 0) {
+      return res.status(400).json({ error: 'employee_id is required' });
+    }
+    if (!starts_at || !ends_at) {
+      return res.status(400).json({ error: 'starts_at and ends_at are required' });
+    }
+    if (new Date(ends_at).getTime() <= new Date(starts_at).getTime()) {
+      return res.status(400).json({ error: 'ends_at must be after starts_at' });
+    }
+
+    const employee = await get(
+      'SELECT id, active FROM employees WHERE id = $1',
+      [empId]
+    );
+    if (!employee) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    const inserted = await get(
+      `INSERT INTO scheduled_shifts (employee_id, starts_at, ends_at, notes, created_by_employee_id)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, employee_id, starts_at, ends_at, notes, created_by_employee_id, created_at, updated_at`,
+      [empId, starts_at, ends_at, notes || null, req.employee.id]
+    );
+
+    audit({
+      tenantId: req.tenant?.id || 'default',
+      actorType: 'employee',
+      actorId: req.employee.id,
+      action: 'scheduled_shift_create',
+      resource: 'scheduled_shift',
+      resourceId: inserted.id,
+      details: { employee_id: empId, starts_at, ends_at },
+      ip: req.ip,
+    });
+
+    // Retroactive link: if the employee already clocked in within ±4h of this
+    // scheduled start with no current link, hook it up.
+    const conn = getConn();
+    await conn.unsafe(`
+      UPDATE shifts s
+         SET scheduled_shift_id = $1
+       WHERE s.id = (
+         SELECT id FROM shifts
+          WHERE employee_id = $2
+            AND scheduled_shift_id IS NULL
+            AND clock_in_at BETWEEN $3::timestamptz - INTERVAL '4 hours'
+                                AND $3::timestamptz + INTERVAL '4 hours'
+          ORDER BY ABS(EXTRACT(EPOCH FROM (clock_in_at - $3::timestamptz)))
+          LIMIT 1
+       )
+    `, [inserted.id, empId, starts_at]);
+
+    res.status(201).json(inserted);
+  } catch (error) {
+    console.error('Create scheduled shift error:', error);
+    res.status(500).json({ error: 'Failed to create scheduled shift' });
+  }
+});
+
+/**
+ * PATCH /api/shifts/scheduled/:id — edit a scheduled shift.
+ */
+router.patch('/scheduled/:id', requireAuth('manage_employees'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { starts_at, ends_at, notes } = req.body || {};
+
+    const existing = await get('SELECT id, starts_at, ends_at FROM scheduled_shifts WHERE id = $1', [id]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Scheduled shift not found' });
+    }
+
+    const nextStart = starts_at ?? existing.starts_at;
+    const nextEnd = ends_at ?? existing.ends_at;
+    if (new Date(nextEnd).getTime() <= new Date(nextStart).getTime()) {
+      return res.status(400).json({ error: 'ends_at must be after starts_at' });
+    }
+
+    const updates = [];
+    const params = [];
+    if (starts_at !== undefined) { params.push(starts_at); updates.push(`starts_at = $${params.length}`); }
+    if (ends_at !== undefined)   { params.push(ends_at);   updates.push(`ends_at = $${params.length}`); }
+    if (notes !== undefined)     { params.push(notes);     updates.push(`notes = $${params.length}`); }
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+    updates.push('updated_at = NOW()');
+    params.push(id);
+
+    const updated = await get(
+      `UPDATE scheduled_shifts SET ${updates.join(', ')} WHERE id = $${params.length}
+       RETURNING id, employee_id, starts_at, ends_at, notes, created_by_employee_id, created_at, updated_at`,
+      params
+    );
+
+    audit({
+      tenantId: req.tenant?.id || 'default',
+      actorType: 'employee',
+      actorId: req.employee.id,
+      action: 'scheduled_shift_edit',
+      resource: 'scheduled_shift',
+      resourceId: id,
+      details: { changes: req.body },
+      ip: req.ip,
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Edit scheduled shift error:', error);
+    res.status(500).json({ error: 'Failed to edit scheduled shift' });
+  }
+});
+
+/**
+ * DELETE /api/shifts/scheduled/:id — remove a scheduled shift.
+ * Any linked actual shift's scheduled_shift_id becomes NULL (ON DELETE SET NULL).
+ */
+router.delete('/scheduled/:id', requireAuth('manage_employees'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const existing = await get('SELECT id, employee_id FROM scheduled_shifts WHERE id = $1', [id]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Scheduled shift not found' });
+    }
+
+    await getConn().unsafe('DELETE FROM scheduled_shifts WHERE id = $1', [id]);
+
+    audit({
+      tenantId: req.tenant?.id || 'default',
+      actorType: 'employee',
+      actorId: req.employee.id,
+      action: 'scheduled_shift_delete',
+      resource: 'scheduled_shift',
+      resourceId: id,
+      details: { employee_id: existing.employee_id },
+      ip: req.ip,
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete scheduled shift error:', error);
+    res.status(500).json({ error: 'Failed to delete scheduled shift' });
   }
 });
 

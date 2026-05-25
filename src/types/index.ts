@@ -1584,8 +1584,30 @@ export interface ShiftRow {
   edited_by_name: string | null;
   duration_seconds: number | null;
   flagged_long_open: boolean;
+  scheduled_shift_id: number | null;
+  scheduled_start_at: string | null;
+  scheduled_end_at: string | null;
+  scheduled_seconds: number | null;
   cash_drawer?: CashDrawerSession | null;
   cash_drawer_preview?: CashDrawerPreview | null;
+}
+
+export interface ScheduledShiftRow {
+  id: number;
+  employee_id: number;
+  employee_name: string;
+  employee_role: string;
+  starts_at: string;
+  ends_at: string;
+  notes: string | null;
+  created_by_employee_id: number | null;
+  created_at: string;
+  updated_at: string;
+  scheduled_seconds: number;
+  shift_id: number | null;
+  actual_clock_in_at: string | null;
+  actual_clock_out_at: string | null;
+  actual_duration_seconds: number | null;
 }
 
 export interface ApiResponse<T> {

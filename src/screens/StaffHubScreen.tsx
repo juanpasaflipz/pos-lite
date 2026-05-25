@@ -1,16 +1,17 @@
 import React, { useMemo } from 'react';
 import { Link, useSearchParams, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Users, Clock, Wallet } from 'lucide-react';
+import { ArrowLeft, Users, Calendar, Clock, Wallet } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 import { useAuth } from '../context/AuthContext';
 import RosterPanel from './staff/RosterPanel';
+import SchedulePanel from './staff/SchedulePanel';
 import TimeClockPanel from './staff/TimeClockPanel';
 import PayrollPanel from './staff/PayrollPanel';
 
-type Tab = 'roster' | 'timeclock' | 'payroll';
+type Tab = 'roster' | 'schedule' | 'timeclock' | 'payroll';
 
-const VALID_TABS: Tab[] = ['roster', 'timeclock', 'payroll'];
+const VALID_TABS: Tab[] = ['roster', 'schedule', 'timeclock', 'payroll'];
 
 /**
  * Consolidated Staff hub: Roster (admin), Time Clock, Payroll under one header.
@@ -27,6 +28,7 @@ export default function StaffHubScreen() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const isAdmin = currentEmployee?.role === 'admin';
+  const canManageEmployees = isAdmin || !!currentEmployee?.permissions?.includes('manage_employees');
   const canSeePayroll = isAdmin || !!currentEmployee?.permissions?.includes('manage_payroll');
 
   const requestedTab = (searchParams.get('tab') || '').toLowerCase();
@@ -37,6 +39,9 @@ export default function StaffHubScreen() {
   if (activeTab === 'roster' && !isAdmin) {
     return <Navigate to="/admin/staff?tab=timeclock" replace />;
   }
+  if (activeTab === 'schedule' && !canManageEmployees) {
+    return <Navigate to="/admin/staff?tab=timeclock" replace />;
+  }
   if (activeTab === 'payroll' && !canSeePayroll) {
     return <Navigate to="/admin/staff?tab=timeclock" replace />;
   }
@@ -44,11 +49,12 @@ export default function StaffHubScreen() {
   const tabs = useMemo(() => {
     const all: { key: Tab; label: string; icon: React.ReactNode; visible: boolean }[] = [
       { key: 'roster', label: t('staff.tabs.roster'), icon: <Users size={18} />, visible: isAdmin },
+      { key: 'schedule', label: t('staff.tabs.schedule'), icon: <Calendar size={18} />, visible: canManageEmployees },
       { key: 'timeclock', label: t('staff.tabs.timeClock'), icon: <Clock size={18} />, visible: true },
       { key: 'payroll', label: t('staff.tabs.payroll'), icon: <Wallet size={18} />, visible: canSeePayroll },
     ];
     return all.filter(t => t.visible);
-  }, [isAdmin, canSeePayroll, t]);
+  }, [isAdmin, canManageEmployees, canSeePayroll, t]);
 
   const onTab = (key: Tab) => {
     const next = new URLSearchParams(searchParams);
@@ -92,6 +98,7 @@ export default function StaffHubScreen() {
         </div>
 
         {activeTab === 'roster' && <RosterPanel />}
+        {activeTab === 'schedule' && <SchedulePanel />}
         {activeTab === 'timeclock' && <TimeClockPanel />}
         {activeTab === 'payroll' && <PayrollPanel />}
       </div>

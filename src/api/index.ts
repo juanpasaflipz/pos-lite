@@ -1046,6 +1046,51 @@ export async function adminClockOutEmployee(employee_id: number): Promise<ClockO
   });
 }
 
+/* ==================== Scheduled Shifts ==================== */
+
+import type { ScheduledShiftRow } from '../types';
+
+export async function getScheduledShifts(params: {
+  from?: string;
+  to?: string;
+  employee_id?: number;
+} = {}): Promise<ScheduledShiftRow[]> {
+  const qs = new URLSearchParams();
+  if (params.from) qs.set('from', params.from);
+  if (params.to) qs.set('to', params.to);
+  if (params.employee_id) qs.set('employee_id', String(params.employee_id));
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  return apiRequest<ScheduledShiftRow[]>(`/shifts/scheduled${suffix}`);
+}
+
+export async function createScheduledShift(data: {
+  employee_id: number;
+  starts_at: string;
+  ends_at: string;
+  notes?: string;
+}): Promise<ScheduledShiftRow> {
+  return apiRequest<ScheduledShiftRow>('/shifts/scheduled', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateScheduledShift(
+  id: number,
+  data: { starts_at?: string; ends_at?: string; notes?: string }
+): Promise<ScheduledShiftRow> {
+  return apiRequest<ScheduledShiftRow>(`/shifts/scheduled/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteScheduledShift(id: number): Promise<{ success: boolean }> {
+  return apiRequest<{ success: boolean }>(`/shifts/scheduled/${id}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function getShifts(params: { from?: string; to?: string; employee_id?: number } = {}): Promise<ShiftRow[]> {
   const qs = new URLSearchParams();
   if (params.from) qs.set('from', params.from);

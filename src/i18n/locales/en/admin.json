@@ -4,6 +4,7 @@
     "subtitle": "Roster, time clock, and payroll in one place.",
     "tabs": {
       "roster": "Roster",
+      "schedule": "Schedule",
       "timeClock": "Time Clock",
       "payroll": "Payroll"
     }

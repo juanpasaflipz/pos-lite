@@ -204,18 +204,21 @@ export default function TimeClockPanel() {
   };
 
   const totalsByEmployee = useMemo(() => {
-    const map = new Map<number, { name: string; role: string; seconds: number; openShift: boolean }>();
+    const map = new Map<number, { name: string; role: string; seconds: number; scheduledSeconds: number; openShift: boolean }>();
     for (const s of shifts) {
       const dur = s.duration_seconds || 0;
+      const sched = s.scheduled_seconds || 0;
       const existing = map.get(s.employee_id);
       if (existing) {
         existing.seconds += dur;
+        existing.scheduledSeconds += sched;
         if (!s.clock_out_at) existing.openShift = true;
       } else {
         map.set(s.employee_id, {
           name: s.employee_name,
           role: s.employee_role,
           seconds: dur,
+          scheduledSeconds: sched,
           openShift: !s.clock_out_at,
         });
       }
@@ -395,27 +398,45 @@ export default function TimeClockPanel() {
                 <tr>
                   <th className="text-left px-4 py-3">Employee</th>
                   <th className="text-left px-4 py-3">Role</th>
-                  <th className="text-right px-4 py-3">Hours</th>
+                  <th className="text-right px-4 py-3">Scheduled</th>
+                  <th className="text-right px-4 py-3">Worked</th>
+                  <th className="text-right px-4 py-3">Variance</th>
                   <th className="text-left px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody>
-                {totalsByEmployee.map(row => (
-                  <tr key={row.employee_id} className="border-t border-neutral-800">
-                    <td className="px-4 py-3 text-white font-medium">{row.name}</td>
-                    <td className="px-4 py-3 text-neutral-400">{row.role}</td>
-                    <td className="px-4 py-3 text-right text-white font-semibold tabular-nums">
-                      {formatDuration(row.seconds)}
-                    </td>
-                    <td className="px-4 py-3">
-                      {row.openShift && (
-                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-cockpit-green/60 border border-cockpit-green text-cockpit-in-text">
-                          on shift
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {totalsByEmployee.map(row => {
+                  const variance = row.scheduledSeconds > 0 ? row.seconds - row.scheduledSeconds : null;
+                  const varianceClass = variance === null
+                    ? 'text-neutral-500'
+                    : variance === 0
+                      ? 'text-neutral-300'
+                      : variance > 0
+                        ? 'text-cockpit-in-text'
+                        : 'text-cockpit-out-text';
+                  return (
+                    <tr key={row.employee_id} className="border-t border-neutral-800">
+                      <td className="px-4 py-3 text-white font-medium">{row.name}</td>
+                      <td className="px-4 py-3 text-neutral-400">{row.role}</td>
+                      <td className="px-4 py-3 text-right text-neutral-300 tabular-nums">
+                        {row.scheduledSeconds > 0 ? formatDuration(row.scheduledSeconds) : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right text-white font-semibold tabular-nums">
+                        {formatDuration(row.seconds)}
+                      </td>
+                      <td className={`px-4 py-3 text-right font-semibold tabular-nums ${varianceClass}`}>
+                        {variance === null ? '—' : `${variance > 0 ? '+' : variance < 0 ? '−' : ''}${formatDuration(Math.abs(variance))}`}
+                      </td>
+                      <td className="px-4 py-3">
+                        {row.openShift && (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-cockpit-green/60 border border-cockpit-green text-cockpit-in-text">
+                            on shift
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -442,19 +463,47 @@ export default function TimeClockPanel() {
                 </tr>
               </thead>
               <tbody>
-                {shifts.map(row => (
+                {shifts.map(row => {
+                  const variance = row.scheduled_seconds && row.duration_seconds != null
+                    ? row.duration_seconds - row.scheduled_seconds
+                    : null;
+                  const varianceClass = variance === null
+                    ? ''
+                    : Math.abs(variance) < 60
+                      ? 'text-neutral-400'
+                      : variance > 0
+                        ? 'text-cockpit-in-text'
+                        : 'text-cockpit-out-text';
+                  return (
                   <tr key={row.id} className={`border-t border-neutral-800 ${row.flagged_long_open ? 'bg-cockpit-yellow/10' : ''}`}>
                     <td className="px-4 py-3 text-white">{row.employee_name}</td>
-                    <td className="px-4 py-3 text-neutral-300 tabular-nums">{formatDateTime(row.clock_in_at)}</td>
-                    <td className="px-4 py-3 text-neutral-300 tabular-nums">
-                      {row.clock_out_at ? formatDateTime(row.clock_out_at) : (
-                        <span className={row.flagged_long_open ? 'text-cockpit-attention-text font-medium' : 'text-cockpit-in-text'}>
-                          {row.flagged_long_open ? 'Open >12h' : 'Open'}
-                        </span>
+                    <td className="px-4 py-3 tabular-nums">
+                      <div className="text-neutral-300">{formatDateTime(row.clock_in_at)}</div>
+                      {row.scheduled_start_at && (
+                        <div className="text-[11px] text-neutral-500">sched {formatDateTime(row.scheduled_start_at)}</div>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right text-white font-semibold tabular-nums">
-                      {formatDuration(row.duration_seconds)}
+                    <td className="px-4 py-3 tabular-nums">
+                      <div className="text-neutral-300">
+                        {row.clock_out_at ? formatDateTime(row.clock_out_at) : (
+                          <span className={row.flagged_long_open ? 'text-cockpit-attention-text font-medium' : 'text-cockpit-in-text'}>
+                            {row.flagged_long_open ? 'Open >12h' : 'Open'}
+                          </span>
+                        )}
+                      </div>
+                      {row.scheduled_end_at && (
+                        <div className="text-[11px] text-neutral-500">sched {formatDateTime(row.scheduled_end_at)}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      <div className="text-white font-semibold">{formatDuration(row.duration_seconds)}</div>
+                      {variance !== null && (
+                        <div className={`text-[11px] font-medium ${varianceClass}`}>
+                          {Math.abs(variance) < 60
+                            ? 'on schedule'
+                            : `${variance > 0 ? '+' : '−'}${formatDuration(Math.abs(variance))}`}
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-neutral-500 text-xs">
                       <div className="space-y-1">
@@ -493,7 +542,8 @@ export default function TimeClockPanel() {
                       </td>
                     )}
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
