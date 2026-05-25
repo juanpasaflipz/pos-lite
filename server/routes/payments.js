@@ -26,7 +26,10 @@ import {
   createCardOrder as conektaCardOrder,
   createConektaRefund,
   getConektaOrder,
+  getConektaWebhookPublicKey,
+  verifyConektaSignature,
 } from '../conekta.js';
+import { getTenantBySubdomain } from '../tenants.js';
 import { refundPayment as getnetRefundPayment } from '../services/getnet/payments.js';
 import {
   getClipAuthHeader,
@@ -1578,6 +1581,33 @@ export async function conektaWebhook(req, res) {
   res.sendStatus(200);
 
   try {
+    // Signature verification. Conekta signs the raw JSON body with RSA-SHA256
+    // and sends the base64 digest in the `Digest` header. Resolve the
+    // verification key per-tenant (by subdomain) with a platform env fallback.
+    const tenantHost = (req.hostname || req.headers.host?.split(':')[0] || '').toLowerCase();
+    const subdomain = tenantHost.split('.')[0];
+    let webhookTenantId = null;
+    if (subdomain && subdomain !== 'pos' && subdomain !== 'localhost' && subdomain !== '127') {
+      const tenantRow = await getTenantBySubdomain(subdomain).catch(() => null);
+      if (tenantRow?.id) webhookTenantId = tenantRow.id;
+    }
+    const publicKey = await getConektaWebhookPublicKey(webhookTenantId);
+
+    if (publicKey) {
+      const signature = req.headers.digest;
+      const rawBody = req.rawBody;
+      if (!signature || !rawBody) {
+        console.warn('Conekta webhook: missing Digest header or raw body — rejecting');
+        return;
+      }
+      if (!verifyConektaSignature(rawBody, signature, publicKey)) {
+        console.warn('Conekta webhook: signature verification failed — rejecting');
+        return;
+      }
+    } else {
+      console.warn('Conekta webhook: no public key configured (tenant or CONEKTA_WEBHOOK_PUBLIC_KEY) — skipping signature verification');
+    }
+
     const { type, data } = req.body || {};
     if (!type || !data) return;
 

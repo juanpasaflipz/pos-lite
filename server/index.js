@@ -97,11 +97,14 @@ app.use(cors({
 // Stripe webhook needs raw body (before express.json)
 app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), stripeWebhook);
 
-// Capture raw body for delivery webhook signature verification
+// Capture raw body for webhook signature verification (delivery + Conekta)
 app.use(express.json({
   limit: '2mb',
   verify: (req, _res, buf) => {
-    if (req.url?.startsWith('/api/delivery/webhook')) {
+    if (
+      req.url?.startsWith('/api/delivery/webhook') ||
+      req.url?.startsWith('/api/payments/conekta/webhook')
+    ) {
       req.rawBody = buf;
     }
   },

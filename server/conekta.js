@@ -1,8 +1,40 @@
+import crypto from 'crypto';
 import { tenantContext } from './db/index.js';
 import { getServiceCredentials } from './helpers/tenantCredentials.js';
 
 const CONEKTA_API = 'https://api.conekta.io';
 const platformKey = process.env.CONEKTA_PRIVATE_KEY || '';
+
+/**
+ * Resolve the Conekta webhook public key for a tenant.
+ * Conekta signs webhook payloads with RSA-SHA256 using a per-merchant key pair;
+ * the public key is generated via Conekta's `/webhook_keys` endpoint and stored
+ * here so we can verify inbound notifications. Returns '' when no key is set.
+ */
+export async function getConektaWebhookPublicKey(tenantId) {
+  const creds = await getServiceCredentials(tenantId, 'conekta', {
+    webhook_public_key: 'CONEKTA_WEBHOOK_PUBLIC_KEY',
+  });
+  return creds.webhook_public_key || '';
+}
+
+/**
+ * Verify a Conekta webhook signature.
+ * Conekta sends the base64-encoded RSA-SHA256 signature of the raw UTF-8 JSON
+ * body in the `Digest` header. Returns true on a valid match, false otherwise
+ * (including when any input is missing — never throw to a webhook handler).
+ */
+export function verifyConektaSignature(rawBody, signatureB64, publicKeyPem) {
+  if (!rawBody || !signatureB64 || !publicKeyPem) return false;
+  try {
+    const verifier = crypto.createVerify('RSA-SHA256');
+    verifier.update(rawBody);
+    verifier.end();
+    return verifier.verify(publicKeyPem, signatureB64, 'base64');
+  } catch {
+    return false;
+  }
+}
 
 // Tenant Conekta key cache (5-min TTL)
 const _cache = new Map();
