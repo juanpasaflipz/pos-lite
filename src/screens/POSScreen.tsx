@@ -4,8 +4,6 @@ import { useAuth } from '../context/AuthContext';
 import { useTranslation } from 'react-i18next';
 import {
   createOrder,
-  createPaymentIntent,
-  confirmPayment,
   cashPayment,
   getModifierGroupsForItem,
   splitStart,
@@ -743,27 +741,6 @@ const POSScreen: React.FC = () => {
     setShowPaymentModal(true);
   };
 
-  const handleCardPayment = async (tip: number) => {
-    if (cart.length === 0) { addToast(t('toast.cartEmpty'), 'error'); return; }
-    setIsProcessingPayment(true);
-    try {
-      const order = await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload() });
-      const paymentIntent = await createPaymentIntent({ order_id: order.id, tip });
-      await confirmPayment({ order_id: order.id, payment_intent_id: paymentIntent.payment_intent_id });
-      const finalOrder: Order = { ...order, tip, total: order.total + tip, payment_method: 'card', employee_name: currentEmployee?.name, estimated_ready_minutes: order.estimated_ready_minutes, estimated_ready_range: order.estimated_ready_range };
-      await handleLoyaltyStamp(order);
-      setCompletedOrder(finalOrder);
-      setShowPaymentModal(false);
-      setShowReceiptModal(true);
-      clearCart();
-      addToast(t('toast.cardDone'), 'success');
-    } catch (error) {
-      addToast(error instanceof Error ? error.message : t('toast.cardFailed'), 'error');
-    } finally {
-      setIsProcessingPayment(false);
-    }
-  };
-
   const handleCashPayment = async (tip: number, amountReceived: number) => {
     if (cart.length === 0) { addToast(t('toast.cartEmpty'), 'error'); return; }
     setIsProcessingPayment(true);
@@ -1238,7 +1215,6 @@ const POSScreen: React.FC = () => {
         <PaymentModal
           orderTotal={total}
           orderId={preCreatedOrderId ?? undefined}
-          onCardPayment={handleCardPayment}
           onCashPayment={handleCashPayment}
           onOxxoPayment={handleOxxoPayment}
           onSpeiPayment={handleSpeiPayment}
