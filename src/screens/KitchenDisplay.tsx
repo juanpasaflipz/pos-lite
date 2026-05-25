@@ -235,6 +235,11 @@ export default function KitchenDisplay() {
   const staleSinceMs = lastSuccessAt ? currentTime.getTime() - lastSuccessAt : 0;
   const isStale = lastSuccessAt !== null && staleSinceMs > STALE_THRESHOLD_MS;
 
+  // TV mode = wall-mounted display (no signed-in employee). Strips static
+  // chrome (brand, language toggle, redundant title) to reduce burn-in and
+  // dial up typography for distance viewing.
+  const isTvMode = !currentEmployee;
+
   return (
     <div className="min-h-screen bg-neutral-950 text-white">
       {/* Header */}
@@ -252,34 +257,43 @@ export default function KitchenDisplay() {
               <span className="hidden sm:inline">{t('header.back')}</span>
             </button>
           )}
-          <h1 className="text-3xl font-black tracking-tighter">{t('header.title')}</h1>
+          {/* Title is redundant on a wall TV (anyone seeing the screen
+              knows what it is) and contributes burn-in risk as a static
+              bright element. Keep it for signed-in users only. */}
+          {!isTvMode && (
+            <h1 className="text-3xl font-black tracking-tighter">{t('header.title')}</h1>
+          )}
           <div className="flex gap-1 ml-4">
             <button
               onClick={() => setDisplayFilter('all')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-colors ${displayFilter === 'all' ? 'bg-brand-600 text-white' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'}`}
+              className={`rounded-lg font-bold transition-colors ${isTvMode ? 'px-5 py-3 text-lg' : 'px-3 py-1.5 text-sm'} ${displayFilter === 'all' ? 'bg-brand-600 text-white' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'}`}
             >
               {t('header.all')}
             </button>
             <button
               onClick={() => setDisplayFilter('kitchen')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex items-center gap-1 ${displayFilter === 'kitchen' ? 'bg-brand-600 text-white' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'}`}
+              className={`rounded-lg font-bold transition-colors flex items-center gap-1.5 ${isTvMode ? 'px-5 py-3 text-lg' : 'px-3 py-1.5 text-sm'} ${displayFilter === 'kitchen' ? 'bg-brand-600 text-white' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'}`}
             >
-              <ChefHat size={14} /> {t('header.kitchen')}
+              <ChefHat size={isTvMode ? 18 : 14} /> {t('header.kitchen')}
             </button>
             <button
               onClick={() => setDisplayFilter('bar')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex items-center gap-1 ${displayFilter === 'bar' ? 'bg-brand-600 text-white' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'}`}
+              className={`rounded-lg font-bold transition-colors flex items-center gap-1.5 ${isTvMode ? 'px-5 py-3 text-lg' : 'px-3 py-1.5 text-sm'} ${displayFilter === 'bar' ? 'bg-brand-600 text-white' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'}`}
             >
-              <Wine size={14} /> {t('header.bar')}
+              <Wine size={isTvMode ? 18 : 14} /> {t('header.bar')}
             </button>
           </div>
         </div>
 
         <div className="flex items-center gap-4">
-          <LanguageSwitcher variant="nav" />
+          {/* Language toggle is a setup-time choice — staff don't switch it
+              mid-shift on a wall display. Hidden in TV mode. */}
+          {!isTvMode && <LanguageSwitcher variant="nav" />}
           <div className="text-center">
-            <div className="text-3xl font-bold">{formatTime(currentTime)}</div>
-            <div className="text-xs text-neutral-500">
+            <div className={`font-bold ${isTvMode ? 'text-5xl text-neutral-200' : 'text-3xl'}`}>
+              {formatTime(currentTime)}
+            </div>
+            <div className={isTvMode ? 'text-sm text-neutral-600' : 'text-xs text-neutral-500'}>
               {formatDate(currentTime, {
                 weekday: 'short',
                 month: 'short',
@@ -289,7 +303,10 @@ export default function KitchenDisplay() {
           </div>
 
           {pendingCount > 0 && (
-            <div className="bg-brand-600 text-white rounded-full w-16 h-16 flex items-center justify-center font-bold text-2xl">
+            <div
+              className={`bg-brand-600 text-white rounded-full flex items-center justify-center font-bold ${isTvMode ? 'w-24 h-24 text-5xl' : 'w-16 h-16 text-2xl'}`}
+              title={t('orders.pendingCount', { count: pendingCount, defaultValue: '{{count}} pending' })}
+            >
               {pendingCount}
             </div>
           )}
@@ -299,9 +316,11 @@ export default function KitchenDisplay() {
             className="bg-neutral-800 hover:bg-neutral-700 p-3 rounded-lg transition-colors border border-neutral-700"
             title={t('header.fullscreen')}
           >
-            <Maximize size={28} />
+            <Maximize size={isTvMode ? 32 : 28} />
           </button>
-          <BrandLogo className="h-10" />
+          {/* Brand wordmark is a permanently bright static element — biggest
+              burn-in offender on a wall TV. Hide in TV mode. */}
+          {!isTvMode && <BrandLogo className="h-10" />}
         </div>
       </div>
 
