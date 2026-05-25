@@ -1,4 +1,4 @@
-export const version = 56;
+export const version = 60;
 export const name = 'scheduled_shifts';
 
 export async function up(sql) {
