@@ -1,4 +1,4 @@
-export const version = 57;
+export const version = 59;
 export const name = 'voice_intents';
 
 export async function up(sql) {
