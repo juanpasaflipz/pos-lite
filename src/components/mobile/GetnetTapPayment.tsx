@@ -97,14 +97,14 @@ const GetnetTapPayment: React.FC<GetnetTapPaymentProps> = ({
         <div className="bg-cockpit-red/10 border border-cockpit-red/30 rounded-lg p-5 text-center space-y-3">
           <div className="flex items-center justify-center gap-2">
             <div className="w-3 h-3 bg-cockpit-red rounded-full animate-pulse" />
-            <p className="text-cockpit-red font-bold text-lg">{t('getnetTap.waitingForCard')}</p>
+            <p className="text-cockpit-out-text font-bold text-lg">{t('getnetTap.waitingForCard')}</p>
           </div>
           <p className="text-neutral-400 text-sm">
             {t('getnetTap.bringCardCloser')}
           </p>
           <button
             onClick={handleCancel}
-            className="text-cockpit-red text-sm font-semibold hover:text-cockpit-red/90 transition-colors"
+            className="text-cockpit-out-text text-sm font-semibold hover:text-cockpit-out-text/90 transition-colors"
           >
             {t('common:buttons.cancel')}
           </button>
@@ -118,13 +118,13 @@ const GetnetTapPayment: React.FC<GetnetTapPaymentProps> = ({
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <p className="text-cockpit-green font-bold text-lg">{t('getnetTap.paymentConfirmed')}</p>
+          <p className="text-cockpit-in-text font-bold text-lg">{t('getnetTap.paymentConfirmed')}</p>
         </div>
       )}
 
       {status === 'error' && errorMessage && (
         <div className="text-center">
-          <p className="text-cockpit-red text-sm font-medium mb-2">{errorMessage}</p>
+          <p className="text-cockpit-out-text text-sm font-medium mb-2">{errorMessage}</p>
           <button
             onClick={() => setStatus('ready')}
             className="text-brand-400 text-sm font-semibold hover:text-brand-300"

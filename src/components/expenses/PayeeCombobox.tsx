@@ -166,7 +166,7 @@ const PayeeCombobox: React.FC<Props> = ({ value, onChange, placeholder, autoFocu
         <button
           type="button"
           onClick={() => handleSelect(suggestion)}
-          className="mt-1 w-full flex items-center gap-2 px-3 py-2 text-left bg-cockpit-yellow/40 border border-cockpit-yellow/60 rounded-lg text-cockpit-yellow text-xs hover:bg-cockpit-yellow/60 transition-colors"
+          className="mt-1 w-full flex items-center gap-2 px-3 py-2 text-left bg-cockpit-yellow/40 border border-cockpit-yellow/60 rounded-lg text-cockpit-attention-text text-xs hover:bg-cockpit-yellow/60 transition-colors"
         >
           <AlertCircle size={14} className="shrink-0" />
           <span>{t('expenses.didYouMean', { name: suggestion.name })}</span>

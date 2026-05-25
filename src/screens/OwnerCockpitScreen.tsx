@@ -77,21 +77,21 @@ const TONE_STYLES: Record<Tone, { primary: string; secondary: string; icon: stri
       'bg-cockpit-green/15 border-cockpit-green/70 hover:border-cockpit-green/90 hover:bg-cockpit-green/25 shadow-[0_0_24px_-8px_rgba(52,168,83,0.55)] hover:shadow-[0_0_36px_-6px_rgba(52,168,83,0.7)]',
     secondary:
       'bg-cockpit-green/5 border-cockpit-green/30 hover:border-cockpit-green/60 hover:bg-cockpit-green/10',
-    icon: 'text-cockpit-green',
+    icon: 'text-cockpit-in-text',
   },
   out: {
     primary:
       'bg-cockpit-red/15 border-cockpit-red/70 hover:border-cockpit-red/90 hover:bg-cockpit-red/25 shadow-[0_0_24px_-8px_rgba(234,67,53,0.55)] hover:shadow-[0_0_36px_-6px_rgba(234,67,53,0.7)]',
     secondary:
       'bg-cockpit-red/5 border-cockpit-red/30 hover:border-cockpit-red/60 hover:bg-cockpit-red/10',
-    icon: 'text-cockpit-red',
+    icon: 'text-cockpit-out-text',
   },
   system: {
     primary:
       'bg-cockpit-blue/15 border-cockpit-blue/70 hover:border-cockpit-blue/90 hover:bg-cockpit-blue/25 shadow-[0_0_24px_-8px_rgba(66,133,244,0.55)] hover:shadow-[0_0_36px_-6px_rgba(66,133,244,0.7)]',
     secondary:
       'bg-cockpit-blue/5 border-cockpit-blue/30 hover:border-cockpit-blue/60 hover:bg-cockpit-blue/10',
-    icon: 'text-cockpit-blue',
+    icon: 'text-cockpit-system-text',
   },
 };
 
@@ -185,7 +185,7 @@ export default function OwnerCockpitScreen() {
           tone="in"
           title="IN"
           description="Money and demand entering the business."
-          badgeIcon={<ArrowDownCircle size={26} className="text-cockpit-green" />}
+          badgeIcon={<ArrowDownCircle size={26} className="text-cockpit-in-text" />}
           badgeColor="bg-cockpit-green/15 border border-cockpit-green/60"
           cards={IN_CARDS}
         />
@@ -194,7 +194,7 @@ export default function OwnerCockpitScreen() {
           tone="out"
           title="OUT"
           description="Costs, labor, waste, and pressure leaving the business."
-          badgeIcon={<ArrowUpCircle size={26} className="text-cockpit-red" />}
+          badgeIcon={<ArrowUpCircle size={26} className="text-cockpit-out-text" />}
           badgeColor="bg-cockpit-red/15 border border-cockpit-red/60"
           cards={OUT_CARDS}
         />
@@ -203,7 +203,7 @@ export default function OwnerCockpitScreen() {
           tone="system"
           title="SYSTEM"
           description="Reports, connections, controls, and setup."
-          badgeIcon={<Settings size={26} className="text-cockpit-blue" />}
+          badgeIcon={<Settings size={26} className="text-cockpit-system-text" />}
           badgeColor="bg-cockpit-blue/15 border border-cockpit-blue/60"
           cards={SYSTEM_CARDS}
         />
@@ -211,8 +211,8 @@ export default function OwnerCockpitScreen() {
         {isAdmin && (
           <div className="mt-4 p-5 bg-neutral-900 border border-cockpit-red/40 rounded-xl">
             <div className="flex items-center gap-2 mb-2">
-              <Trash2 size={16} className="text-cockpit-red" />
-              <h3 className="text-cockpit-red font-semibold text-sm">Danger zone</h3>
+              <Trash2 size={16} className="text-cockpit-out-text" />
+              <h3 className="text-cockpit-out-text font-semibold text-sm">Danger zone</h3>
             </div>
             <p className="text-neutral-400 text-xs mb-4">
               Bulk-delete all unpaid and pending-terminal orders. Useful for clearing test orders.
@@ -220,7 +220,7 @@ export default function OwnerCockpitScreen() {
             <button
               onClick={handlePurgeUnpaid}
               disabled={purging}
-              className="px-4 py-2 bg-cockpit-red/40 border border-cockpit-red/60 text-cockpit-red text-sm font-semibold rounded-lg hover:bg-cockpit-red/60 transition-all disabled:opacity-50"
+              className="px-4 py-2 bg-cockpit-red/40 border border-cockpit-red/60 text-cockpit-out-text text-sm font-semibold rounded-lg hover:bg-cockpit-red/60 transition-all disabled:opacity-50"
             >
               {purging ? 'Deleting\u2026' : 'Delete all unpaid orders'}
             </button>

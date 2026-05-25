@@ -118,8 +118,8 @@ export default function StockTab({
 
   const getStatusBadge = (quantity: number, threshold: number) => {
     if (quantity === 0) return <span className="px-3 py-1 bg-brand-600/20 text-brand-400 rounded-full text-xs font-medium border border-brand-800">{t('inventory.status.outOfStock')}</span>;
-    if (quantity <= threshold) return <span className="px-3 py-1 bg-cockpit-yellow/20 text-cockpit-yellow rounded-full text-xs font-medium border border-cockpit-yellow">{t('inventory.status.lowStock')}</span>;
-    return <span className="px-3 py-1 bg-cockpit-green/20 text-cockpit-green rounded-full text-xs font-medium border border-cockpit-green">{t('inventory.status.inStock')}</span>;
+    if (quantity <= threshold) return <span className="px-3 py-1 bg-cockpit-yellow/20 text-cockpit-attention-text rounded-full text-xs font-medium border border-cockpit-yellow">{t('inventory.status.lowStock')}</span>;
+    return <span className="px-3 py-1 bg-cockpit-green/20 text-cockpit-in-text rounded-full text-xs font-medium border border-cockpit-green">{t('inventory.status.inStock')}</span>;
   };
 
   const getExpiryBadge = (expiryDate?: string) => {
@@ -128,10 +128,10 @@ export default function StockTab({
     const exp = new Date(expiryDate);
     const daysUntil = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
     if (daysUntil < 0) {
-      return <span className="px-2 py-0.5 bg-cockpit-red/30 text-cockpit-red rounded text-xs font-medium">{t('inventory.expired')}</span>;
+      return <span className="px-2 py-0.5 bg-cockpit-red/30 text-cockpit-out-text rounded text-xs font-medium">{t('inventory.expired')}</span>;
     }
     if (daysUntil <= 7) {
-      return <span className="px-2 py-0.5 bg-cockpit-yellow/30 text-cockpit-yellow rounded text-xs font-medium">{t('inventory.expiresSoon')}</span>;
+      return <span className="px-2 py-0.5 bg-cockpit-yellow/30 text-cockpit-attention-text rounded text-xs font-medium">{t('inventory.expiresSoon')}</span>;
     }
     return null;
   };
@@ -153,17 +153,17 @@ export default function StockTab({
             </div>
             <div className="p-3 bg-neutral-800 rounded-lg">
               <p className="text-neutral-400 text-xs">{t('cogs.foodCostPercent')}</p>
-              <p className={`text-lg font-bold ${cogsSummary.food_cost_percent > 35 ? 'text-cockpit-red' : cogsSummary.food_cost_percent > 30 ? 'text-cockpit-yellow' : 'text-cockpit-green'}`}>
+              <p className={`text-lg font-bold ${cogsSummary.food_cost_percent > 35 ? 'text-cockpit-out-text' : cogsSummary.food_cost_percent > 30 ? 'text-cockpit-attention-text' : 'text-cockpit-in-text'}`}>
                 {cogsSummary.food_cost_percent.toFixed(1)}%
               </p>
             </div>
             <div className="p-3 bg-neutral-800 rounded-lg">
               <p className="text-neutral-400 text-xs">{t('cogs.wasteCost')}</p>
-              <p className="text-lg font-bold text-cockpit-red">${cogsSummary.waste_cost.toLocaleString()}</p>
+              <p className="text-lg font-bold text-cockpit-out-text">${cogsSummary.waste_cost.toLocaleString()}</p>
             </div>
             <div className="p-3 bg-neutral-800 rounded-lg">
               <p className="text-neutral-400 text-xs">{t('cogs.grossMargin')}</p>
-              <p className="text-lg font-bold text-cockpit-green">{cogsSummary.gross_margin_percent.toFixed(1)}%</p>
+              <p className="text-lg font-bold text-cockpit-in-text">{cogsSummary.gross_margin_percent.toFixed(1)}%</p>
             </div>
           </div>
         </div>
@@ -283,7 +283,7 @@ export default function StockTab({
                           <button
                             onClick={() => onEditQuantity(item.id)}
                             disabled={actionLoading || editQuantity === ''}
-                            className="p-1 text-cockpit-green hover:bg-cockpit-green/30 rounded-lg transition-colors disabled:opacity-50"
+                            className="p-1 text-cockpit-in-text hover:bg-cockpit-green/30 rounded-lg transition-colors disabled:opacity-50"
                           >
                             <Check size={18} />
                           </button>
@@ -331,7 +331,7 @@ export default function StockTab({
                           <button
                             onClick={() => onEditThreshold(item.id)}
                             disabled={actionLoading}
-                            className="p-1 text-cockpit-green hover:bg-cockpit-green/30 rounded-lg transition-colors disabled:opacity-50"
+                            className="p-1 text-cockpit-in-text hover:bg-cockpit-green/30 rounded-lg transition-colors disabled:opacity-50"
                           >
                             <Check size={18} />
                           </button>
@@ -424,7 +424,7 @@ export default function StockTab({
                             onClick={() => onDeleteItem(item)}
                             disabled={actionLoading}
                             title={t('inventory.deleteItem')}
-                            className="p-2 text-cockpit-red bg-neutral-800 hover:bg-cockpit-red/30 rounded-lg transition-colors disabled:opacity-50"
+                            className="p-2 text-cockpit-out-text bg-neutral-800 hover:bg-cockpit-red/30 rounded-lg transition-colors disabled:opacity-50"
                           >
                             <Trash2 size={18} />
                           </button>
@@ -614,9 +614,9 @@ export default function StockTab({
                   <div className="flex items-center gap-3">
                     <span className={`px-2 py-1 rounded text-xs font-medium ${
                       f.risk_level === 'critical' ? 'bg-brand-900/30 text-brand-400' :
-                      f.risk_level === 'high' ? 'bg-cockpit-yellow/30 text-cockpit-yellow' :
-                      f.risk_level === 'medium' ? 'bg-cockpit-yellow/30 text-cockpit-yellow' :
-                      'bg-cockpit-green/30 text-cockpit-green'
+                      f.risk_level === 'high' ? 'bg-cockpit-yellow/30 text-cockpit-attention-text' :
+                      f.risk_level === 'medium' ? 'bg-cockpit-yellow/30 text-cockpit-attention-text' :
+                      'bg-cockpit-green/30 text-cockpit-in-text'
                     }`}>
                       {f.risk_level.toUpperCase()}
                     </span>
@@ -642,7 +642,7 @@ export default function StockTab({
             </div>
             <div className="p-4 bg-neutral-800 rounded-lg">
               <p className="text-neutral-400 text-sm">{t('inventory.summary.lowStock')}</p>
-              <p className="text-2xl font-bold text-cockpit-yellow">
+              <p className="text-2xl font-bold text-cockpit-attention-text">
                 {filteredItems.filter((i) => i.quantity <= i.low_stock_threshold && i.quantity > 0).length}
               </p>
             </div>

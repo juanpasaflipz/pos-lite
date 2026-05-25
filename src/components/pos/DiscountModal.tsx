@@ -89,7 +89,7 @@ const DiscountModal: React.FC<DiscountModalProps> = ({
         <div className="bg-neutral-900 rounded-2xl shadow-2xl w-full max-w-md border border-neutral-800">
           <div className="bg-cockpit-yellow text-neutral-900 p-5 rounded-t-2xl">
             <h2 className="text-xl font-bold">{t('discount.title')}</h2>
-            <p className="text-cockpit-yellow text-sm">
+            <p className="text-cockpit-attention-text text-sm">
               {scope === 'cart' ? t('discount.scopeCart') : t('discount.scopeItem', { name: itemName || '' })}
             </p>
           </div>
@@ -149,11 +149,11 @@ const DiscountModal: React.FC<DiscountModalProps> = ({
             {!ownerHasPerm && (
               <div className="bg-cockpit-yellow/30 border border-cockpit-yellow rounded-lg p-3">
                 {authorizer ? (
-                  <p className="text-cockpit-yellow text-sm">
+                  <p className="text-cockpit-attention-text text-sm">
                     {t('discount.approvedBy', { name: authorizer.name })}
                   </p>
                 ) : (
-                  <p className="text-cockpit-yellow text-sm">
+                  <p className="text-cockpit-attention-text text-sm">
                     {t('discount.requiresManager')}
                   </p>
                 )}
@@ -226,8 +226,8 @@ const Row: React.FC<{ label: string; value: string; bold?: boolean; highlight?: 
   label, value, bold, highlight,
 }) => (
   <div className="flex justify-between text-sm">
-    <span className={highlight ? 'text-cockpit-yellow' : 'text-neutral-400'}>{label}</span>
-    <span className={`${bold ? 'text-white font-bold' : highlight ? 'text-cockpit-yellow font-semibold' : 'text-neutral-200'}`}>
+    <span className={highlight ? 'text-cockpit-attention-text' : 'text-neutral-400'}>{label}</span>
+    <span className={`${bold ? 'text-white font-bold' : highlight ? 'text-cockpit-attention-text font-semibold' : 'text-neutral-200'}`}>
       {value}
     </span>
   </div>

@@ -35,9 +35,9 @@ const TIER_CARD_CLASS: Record<TimeTier, string> = {
 };
 
 const TIER_TIME_TEXT_CLASS: Record<TimeTier, string> = {
-  fresh: 'text-cockpit-green',
-  warning: 'text-cockpit-yellow',
-  critical: 'text-cockpit-red',
+  fresh: 'text-cockpit-in-text',
+  warning: 'text-cockpit-attention-text',
+  critical: 'text-cockpit-out-text',
 };
 
 export default function KitchenDisplay() {
@@ -316,7 +316,7 @@ export default function KitchenDisplay() {
           until the next successful fetch, regardless of whether the latest
           attempt errored or just hung. */}
       {isStale && (
-        <div className="bg-cockpit-yellow/20 border-b border-cockpit-yellow/60 px-6 py-3 text-cockpit-yellow flex items-center gap-3 font-semibold">
+        <div className="bg-cockpit-yellow/20 border-b border-cockpit-yellow/60 px-6 py-3 text-cockpit-attention-text flex items-center gap-3 font-semibold">
           <WifiOff size={20} />
           <span>
             {t('errors.stale', { seconds: Math.round(staleSinceMs / 1000) })}
@@ -338,7 +338,7 @@ export default function KitchenDisplay() {
         ) : orders.length === 0 ? (
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="text-center">
-              <p className="text-3xl font-bold text-cockpit-green mb-2">{t('orders.allClear')}</p>
+              <p className="text-3xl font-bold text-cockpit-in-text mb-2">{t('orders.allClear')}</p>
               <p className="text-xl text-neutral-500">{t('orders.noPending')}</p>
             </div>
           </div>
@@ -476,7 +476,7 @@ function OrderCard({
                 ))}
                 {Object.entries(comboGroups).map(([comboId, items]) => (
                   <div key={comboId} className="border border-cockpit-yellow/40 rounded-lg p-2 bg-cockpit-yellow/5">
-                    <p className="text-xs font-bold text-cockpit-yellow uppercase mb-2">{t('orders.combo')}</p>
+                    <p className="text-xs font-bold text-cockpit-attention-text uppercase mb-2">{t('orders.combo')}</p>
                     {items.map((item, index) => (
                       <ItemDisplay key={`combo-${index}`} item={item} />
                     ))}

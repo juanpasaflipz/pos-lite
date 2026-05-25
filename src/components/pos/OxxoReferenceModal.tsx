@@ -73,8 +73,8 @@ const OxxoReferenceModal: React.FC<OxxoReferenceModalProps> = ({
 
           {/* Instructions */}
           <div className="bg-cockpit-yellow/30 border border-cockpit-yellow/50 p-4 rounded-lg">
-            <p className="text-cockpit-yellow text-sm font-semibold mb-2">{t('oxxo.instructions')}</p>
-            <ol className="text-cockpit-yellow/80 text-sm space-y-1 list-decimal list-inside">
+            <p className="text-cockpit-attention-text text-sm font-semibold mb-2">{t('oxxo.instructions')}</p>
+            <ol className="text-cockpit-attention-text/80 text-sm space-y-1 list-decimal list-inside">
               <li>{t('oxxo.step1')}</li>
               <li>{t('oxxo.step2')}</li>
               <li>{t('oxxo.step3')}</li>

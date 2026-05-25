@@ -131,7 +131,7 @@ export default function CartPanel({
       {unpaidOrders.length > 0 && showUnpaidOrders && (
         <div className="border-b border-neutral-800 bg-cockpit-yellow/10">
           <div className="flex items-center justify-between px-4 pt-3 pb-1">
-            <span className="text-cockpit-yellow font-bold text-sm">{t('cart.unpaidOrders')}</span>
+            <span className="text-cockpit-attention-text font-bold text-sm">{t('cart.unpaidOrders')}</span>
           </div>
           <div className="px-4 pb-3 space-y-2 max-h-48 overflow-y-auto">
             {unpaidOrders.map((order) => (
@@ -176,7 +176,7 @@ export default function CartPanel({
                     <button
                       onClick={() => onDeleteUnpaidOrder(order)}
                       title="Delete order"
-                      className="p-1.5 text-neutral-400 hover:text-cockpit-red/90 hover:bg-neutral-700 rounded-lg transition-all"
+                      className="p-1.5 text-neutral-400 hover:text-cockpit-out-text/90 hover:bg-neutral-700 rounded-lg transition-all"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -216,7 +216,7 @@ export default function CartPanel({
                 }`}
               >
                 {isFirstComboItem && (
-                  <p className="text-xs font-bold text-cockpit-yellow mb-1 uppercase tracking-wider">{t('cart.combo')}</p>
+                  <p className="text-xs font-bold text-cockpit-attention-text mb-1 uppercase tracking-wider">{t('cart.combo')}</p>
                 )}
                 <div className="flex justify-between items-start mb-1">
                   <div className="flex-1">
@@ -272,7 +272,7 @@ export default function CartPanel({
                 {item.discount && (
                   <div className="mb-2 px-2 py-1.5 bg-cockpit-yellow/30 border border-cockpit-yellow rounded text-xs flex items-center justify-between">
                     <div className="flex-1 min-w-0">
-                      <p className="text-cockpit-yellow font-semibold">
+                      <p className="text-cockpit-attention-text font-semibold">
                         {item.discount.type === 'comp'
                           ? t('discount.compLabel')
                           : item.discount.type === 'percent'
@@ -280,12 +280,12 @@ export default function CartPanel({
                             : t('discount.amountLabel', { value: formatPrice(item.discount.value) })}
                       </p>
                       {item.discount.reason && (
-                        <p className="text-cockpit-yellow/80 truncate">{item.discount.reason}</p>
+                        <p className="text-cockpit-attention-text/80 truncate">{item.discount.reason}</p>
                       )}
                     </div>
                     <button
                       onClick={() => onApplyLineDiscount(item)}
-                      className="text-cockpit-yellow hover:text-white text-xs font-bold ml-2"
+                      className="text-cockpit-attention-text hover:text-white text-xs font-bold ml-2"
                     >
                       {t('discount.edit')}
                     </button>
@@ -304,7 +304,7 @@ export default function CartPanel({
                       <button
                         onClick={() => onApplyLineDiscount(item)}
                         title={t('discount.applyToLine')}
-                        className="px-3 py-2 text-sm bg-neutral-700 text-cockpit-yellow rounded hover:bg-neutral-600 transition-all font-semibold"
+                        className="px-3 py-2 text-sm bg-neutral-700 text-cockpit-attention-text rounded hover:bg-neutral-600 transition-all font-semibold"
                       >
                         <Percent className="w-4 h-4" />
                       </button>
@@ -320,8 +320,8 @@ export default function CartPanel({
       {/* Combo Detection Banner */}
       {comboSuggestion && (
         <div className="mx-4 mb-2 bg-cockpit-yellow/30 border border-cockpit-yellow rounded-lg p-3">
-          <p className="text-cockpit-yellow font-bold text-sm">{t('comboDetection.title')}</p>
-          <p className="text-cockpit-yellow text-xs mt-1">
+          <p className="text-cockpit-attention-text font-bold text-sm">{t('comboDetection.title')}</p>
+          <p className="text-cockpit-attention-text text-xs mt-1">
             {t('comboDetection.message', { name: comboSuggestion.combo.name, savings: formatPrice(comboSuggestion.savings) })}
           </p>
           <button
@@ -339,7 +339,7 @@ export default function CartPanel({
           <span className="font-bold text-brand-500">{formatPrice(total)}</span>
         </div>
         {totalDiscount > 0 && (
-          <div className="flex justify-between text-cockpit-yellow text-sm font-semibold">
+          <div className="flex justify-between text-cockpit-attention-text text-sm font-semibold">
             <span>{t('totals.discount')}</span>
             <span>-{formatPrice(totalDiscount)}</span>
           </div>
@@ -355,7 +355,7 @@ export default function CartPanel({
         {cartDiscount && (
           <div className="mt-2 px-3 py-2 bg-cockpit-yellow/30 border border-cockpit-yellow rounded-lg flex items-center justify-between">
             <div className="flex-1 min-w-0">
-              <p className="text-cockpit-yellow font-bold text-xs">
+              <p className="text-cockpit-attention-text font-bold text-xs">
                 {cartDiscount.type === 'comp'
                   ? t('discount.compLabel')
                   : cartDiscount.type === 'percent'
@@ -363,12 +363,12 @@ export default function CartPanel({
                     : t('discount.amountLabel', { value: formatPrice(cartDiscount.value) })}
               </p>
               {cartDiscount.reason && (
-                <p className="text-cockpit-yellow/80 text-xs truncate">{cartDiscount.reason}</p>
+                <p className="text-cockpit-attention-text/80 text-xs truncate">{cartDiscount.reason}</p>
               )}
             </div>
             <button
               onClick={onApplyCartDiscount}
-              className="text-cockpit-yellow hover:text-white text-xs font-bold ml-2"
+              className="text-cockpit-attention-text hover:text-white text-xs font-bold ml-2"
             >
               {t('discount.edit')}
             </button>

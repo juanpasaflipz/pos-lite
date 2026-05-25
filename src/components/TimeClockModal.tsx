@@ -144,7 +144,7 @@ const TimeClockModal: React.FC<TimeClockModalProps> = ({ isOpen, onClose }) => {
                 </div>
               ))}
             </div>
-            {error && <p className="text-center text-cockpit-red mb-4 font-medium">{error}</p>}
+            {error && <p className="text-center text-cockpit-out-text mb-4 font-medium">{error}</p>}
             <div className="grid grid-cols-3 gap-2 mb-3">
               {['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((d) => (
                 <button
@@ -183,7 +183,7 @@ const TimeClockModal: React.FC<TimeClockModalProps> = ({ isOpen, onClose }) => {
 
             {status.openShift ? (
               <div className="mt-6 mb-6 rounded-xl border border-cockpit-green bg-cockpit-green/40 px-4 py-4">
-                <p className="text-cockpit-green font-semibold">{t('timeClock.youAreClockedIn')}</p>
+                <p className="text-cockpit-in-text font-semibold">{t('timeClock.youAreClockedIn')}</p>
                 <p className="text-sm text-neutral-400 mt-1">
                   {t('timeClock.since', { time: formatTime(status.openShift.clock_in_at) })}
                 </p>
@@ -194,7 +194,7 @@ const TimeClockModal: React.FC<TimeClockModalProps> = ({ isOpen, onClose }) => {
               </div>
             )}
 
-            {error && <p className="text-cockpit-red mb-4 font-medium">{error}</p>}
+            {error && <p className="text-cockpit-out-text mb-4 font-medium">{error}</p>}
 
             <button
               onClick={handleConfirm}
@@ -216,7 +216,7 @@ const TimeClockModal: React.FC<TimeClockModalProps> = ({ isOpen, onClose }) => {
         {phase === 'success' && (
           <div className="text-center py-6">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-cockpit-green/40 border border-cockpit-green mb-4">
-              <CheckCircle2 size={32} className="text-cockpit-green" />
+              <CheckCircle2 size={32} className="text-cockpit-in-text" />
             </div>
             <p className="text-xl font-bold text-white">{successMessage}</p>
           </div>

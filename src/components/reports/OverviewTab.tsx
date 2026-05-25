@@ -274,7 +274,7 @@ export default function OverviewTab({
                     <td className="px-6 py-4 text-right text-neutral-300">{emp.orders_processed}</td>
                     <td className="px-6 py-4 text-right text-neutral-300">{fmt(emp.total_sales)}</td>
                     <td className="px-6 py-4 text-right text-neutral-300">{fmt(emp.avg_ticket)}</td>
-                    <td className="px-6 py-4 text-right font-medium text-cockpit-green">{fmt(emp.tips_received)}</td>
+                    <td className="px-6 py-4 text-right font-medium text-cockpit-in-text">{fmt(emp.tips_received)}</td>
                   </tr>
                 ))}
               </tbody>

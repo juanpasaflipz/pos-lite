@@ -87,11 +87,11 @@ const GetnetDashboard: React.FC<GetnetDashboardProps> = () => {
         </div>
         <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4">
           <p className="text-neutral-400 text-xs mb-1">{t('getnet.processorFees')}</p>
-          <p className="text-2xl font-bold text-cockpit-red">{formatPrice(totals.processorFees)}</p>
+          <p className="text-2xl font-bold text-cockpit-out-text">{formatPrice(totals.processorFees)}</p>
         </div>
         <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4">
           <p className="text-neutral-400 text-xs mb-1">{t('getnet.netMerchant')}</p>
-          <p className="text-2xl font-bold text-cockpit-green">{formatPrice(totals.net)}</p>
+          <p className="text-2xl font-bold text-cockpit-in-text">{formatPrice(totals.net)}</p>
         </div>
       </div>
 
@@ -108,7 +108,7 @@ const GetnetDashboard: React.FC<GetnetDashboardProps> = () => {
                 </div>
                 <div className="text-right">
                   <p className="text-white">{formatPrice(f.gross)}</p>
-                  <p className="text-cockpit-red text-xs">-{formatPrice(f.processorFees + f.platformFees)} {t('getnet.feesLabel')}</p>
+                  <p className="text-cockpit-out-text text-xs">-{formatPrice(f.processorFees + f.platformFees)} {t('getnet.feesLabel')}</p>
                 </div>
               </div>
             ))}
@@ -134,7 +134,7 @@ const GetnetDashboard: React.FC<GetnetDashboardProps> = () => {
                 </div>
                 <div className="text-right">
                   <p className="text-white">{formatPrice(txn.amount_centavos / 100)}</p>
-                  <p className={`text-xs ${txn.status === 'approved' ? 'text-cockpit-green' : 'text-cockpit-yellow'}`}>
+                  <p className={`text-xs ${txn.status === 'approved' ? 'text-cockpit-in-text' : 'text-cockpit-attention-text'}`}>
                     {txn.status}
                   </p>
                 </div>

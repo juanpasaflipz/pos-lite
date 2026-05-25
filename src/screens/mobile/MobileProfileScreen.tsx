@@ -58,8 +58,8 @@ const MobileProfileScreen: React.FC = () => {
           <div className="flex items-center gap-2">
             {isOnline ? (
               <>
-                <Wifi className="w-4 h-4 text-cockpit-green" />
-                <span className="text-sm text-cockpit-green font-semibold">{t('mobileProfile.online')}</span>
+                <Wifi className="w-4 h-4 text-cockpit-in-text" />
+                <span className="text-sm text-cockpit-in-text font-semibold">{t('mobileProfile.online')}</span>
               </>
             ) : (
               <>

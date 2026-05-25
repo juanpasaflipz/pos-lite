@@ -43,9 +43,9 @@ export default function ParkedCartsModal({
         <div className="bg-cockpit-blue text-white p-6 rounded-t-2xl flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold">{t('parkedCarts.title')}</h2>
-            <p className="text-cockpit-blue text-sm">{t('parkedCarts.subtitle')}</p>
+            <p className="text-cockpit-system-text text-sm">{t('parkedCarts.subtitle')}</p>
           </div>
-          <button onClick={onClose} className="text-cockpit-blue hover:text-white">
+          <button onClick={onClose} className="text-cockpit-system-text hover:text-white">
             <X className="w-6 h-6" />
           </button>
         </div>

@@ -195,10 +195,10 @@ export default function DisplayMenuScreen() {
       <div className="mx-auto grid max-w-7xl grid-cols-1 gap-6 p-6 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="space-y-6">
           {error ? (
-            <div className="rounded-xl border border-cockpit-red/40 bg-cockpit-red/10 p-4 text-sm text-cockpit-red">{error}</div>
+            <div className="rounded-xl border border-cockpit-red/40 bg-cockpit-red/10 p-4 text-sm text-cockpit-out-text">{error}</div>
           ) : null}
           {message ? (
-            <div className="rounded-xl border border-cockpit-green/40 bg-cockpit-green/10 p-4 text-sm text-cockpit-green">{message}</div>
+            <div className="rounded-xl border border-cockpit-green/40 bg-cockpit-green/10 p-4 text-sm text-cockpit-in-text">{message}</div>
           ) : null}
 
           <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
@@ -459,7 +459,7 @@ export default function DisplayMenuScreen() {
                         <button
                           type="button"
                           onClick={() => handleDeleteAsset(asset.id)}
-                          className="inline-flex items-center gap-2 rounded-lg border border-cockpit-red/40 bg-cockpit-red/10 px-3 py-2 text-sm text-cockpit-red hover:bg-cockpit-red/20"
+                          className="inline-flex items-center gap-2 rounded-lg border border-cockpit-red/40 bg-cockpit-red/10 px-3 py-2 text-sm text-cockpit-out-text hover:bg-cockpit-red/20"
                         >
                           <Trash2 size={16} />
                           Delete

@@ -36,9 +36,9 @@ export default function QuickOrdersModal({
         <div className="bg-cockpit-green text-white p-6 rounded-t-2xl flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold">{t('quickOrders.title')}</h2>
-            <p className="text-cockpit-green text-sm">{t('quickOrders.subtitle')}</p>
+            <p className="text-cockpit-in-text text-sm">{t('quickOrders.subtitle')}</p>
           </div>
-          <button onClick={onClose} className="text-cockpit-green hover:text-white">
+          <button onClick={onClose} className="text-cockpit-in-text hover:text-white">
             <X className="w-6 h-6" />
           </button>
         </div>
@@ -95,7 +95,7 @@ export default function QuickOrdersModal({
             ) : (
               <button
                 onClick={() => onShowSaveTemplate(true)}
-                className="w-full py-3 bg-neutral-800 text-cockpit-green font-bold rounded-lg hover:bg-neutral-700 border border-neutral-700 transition-all"
+                className="w-full py-3 bg-neutral-800 text-cockpit-in-text font-bold rounded-lg hover:bg-neutral-700 border border-neutral-700 transition-all"
               >
                 {t('quickOrders.saveCurrentCart')}
               </button>

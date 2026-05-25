@@ -46,7 +46,7 @@ export default function LoyaltyScreen() {
             <Link to="/admin" className="p-2 hover:bg-neutral-800 rounded-lg transition-colors">
               <ArrowLeft size={24} />
             </Link>
-            <Heart className="text-cockpit-blue" size={28} />
+            <Heart className="text-cockpit-system-text" size={28} />
             <h1 className="text-3xl font-black tracking-tighter">{t('loyalty.title')}</h1>
           </div>
         </div>
@@ -60,7 +60,7 @@ export default function LoyaltyScreen() {
                 onClick={() => setActiveTab(tab.key)}
                 className={`flex items-center gap-2 px-5 py-3 font-semibold text-sm rounded-t-lg transition-colors ${
                   activeTab === tab.key
-                    ? 'bg-neutral-950 text-cockpit-blue border-t-2 border-cockpit-blue'
+                    ? 'bg-neutral-950 text-cockpit-system-text border-t-2 border-cockpit-blue'
                     : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
                 }`}
               >
@@ -356,7 +356,7 @@ function CustomersTab() {
                                 />
                               </label>
                             </div>
-                            {editError && <p className="text-sm text-cockpit-red">{editError}</p>}
+                            {editError && <p className="text-sm text-cockpit-out-text">{editError}</p>}
                             <div className="flex gap-2 justify-end">
                               <button
                                 onClick={(e) => { e.stopPropagation(); cancelEdit(); }}
@@ -380,7 +380,7 @@ function CustomersTab() {
                         <div className="grid grid-cols-3 gap-4">
                           <div>
                             <p className="text-xs text-neutral-400 mb-1">{t('loyalty.customers.detail.referralCode')}</p>
-                            <p className="text-cockpit-blue font-bold">{expandedDetail.referral_code}</p>
+                            <p className="text-cockpit-system-text font-bold">{expandedDetail.referral_code}</p>
                           </div>
                           <div>
                             <p className="text-xs text-neutral-400 mb-1">{t('loyalty.customers.detail.totalStamps')}</p>
@@ -407,13 +407,13 @@ function CustomersTab() {
                                   </div>
                                   <div className="flex items-center gap-2">
                                     {card.completed === 1 && !card.redeemed && (
-                                      <span className="text-xs bg-cockpit-green/20 text-cockpit-green px-2 py-1 rounded">{t('loyalty.customers.detail.ready')}</span>
+                                      <span className="text-xs bg-cockpit-green/20 text-cockpit-in-text px-2 py-1 rounded">{t('loyalty.customers.detail.ready')}</span>
                                     )}
                                     {card.redeemed === 1 && (
                                       <span className="text-xs bg-neutral-700 text-neutral-400 px-2 py-1 rounded">{t('loyalty.customers.detail.redeemed')}</span>
                                     )}
                                     {!card.completed && (
-                                      <span className="text-xs bg-cockpit-blue/20 text-cockpit-blue px-2 py-1 rounded">{t('loyalty.customers.detail.active')}</span>
+                                      <span className="text-xs bg-cockpit-blue/20 text-cockpit-system-text px-2 py-1 rounded">{t('loyalty.customers.detail.active')}</span>
                                     )}
                                   </div>
                                 </div>
@@ -519,7 +519,7 @@ function AnalyticsTab() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
           <p className="text-neutral-400 text-sm">{t('loyalty.analytics.kpi.totalMembers')}</p>
-          <p className="text-3xl font-bold text-cockpit-blue mt-1">{analytics.totalMembers}</p>
+          <p className="text-3xl font-bold text-cockpit-system-text mt-1">{analytics.totalMembers}</p>
         </div>
         <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
           <p className="text-neutral-400 text-sm">{t('loyalty.analytics.kpi.newThisMonth')}</p>
@@ -531,7 +531,7 @@ function AnalyticsTab() {
         </div>
         <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
           <p className="text-neutral-400 text-sm">{t('loyalty.analytics.kpi.redemptionRate')}</p>
-          <p className="text-3xl font-bold text-cockpit-green mt-1">{analytics.redemptionRate}%</p>
+          <p className="text-3xl font-bold text-cockpit-in-text mt-1">{analytics.redemptionRate}%</p>
         </div>
       </div>
 
@@ -570,7 +570,7 @@ function AnalyticsTab() {
                     <p className="text-neutral-400 text-xs">{c.orders_count} {t('loyalty.analytics.orders')}</p>
                   </div>
                 </div>
-                <p className="text-cockpit-blue font-bold">{formatPrice(c.total_spent)}</p>
+                <p className="text-cockpit-system-text font-bold">{formatPrice(c.total_spent)}</p>
               </div>
             ))}
           </div>
@@ -601,7 +601,7 @@ function ReferralsTab() {
     <div className="space-y-6">
       <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
         <p className="text-neutral-400 text-sm">{t('loyalty.referrals.totalReferrals')}</p>
-        <p className="text-3xl font-bold text-cockpit-blue mt-1">{data.totalReferrals}</p>
+        <p className="text-3xl font-bold text-cockpit-system-text mt-1">{data.totalReferrals}</p>
       </div>
 
       {/* Leaderboard */}
@@ -619,7 +619,7 @@ function ReferralsTab() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-cockpit-blue font-bold">{r.referral_count} {t('loyalty.referrals.referralCount')}</p>
+                  <p className="text-cockpit-system-text font-bold">{r.referral_count} {t('loyalty.referrals.referralCount')}</p>
                   <p className="text-neutral-400 text-xs">+{r.total_bonus_stamps} {t('loyalty.referrals.bonusStamps')}</p>
                 </div>
               </div>
@@ -637,13 +637,13 @@ function ReferralsTab() {
               <div key={r.id} className="flex items-center justify-between p-3 bg-neutral-800 rounded-lg">
                 <div>
                   <p className="text-white text-sm">
-                    <span className="text-cockpit-blue font-medium">{r.referrer_name}</span>
+                    <span className="text-cockpit-system-text font-medium">{r.referrer_name}</span>
                     {' '}{t('loyalty.referrals.referred')}{' '}
-                    <span className="text-cockpit-blue font-medium">{r.referee_name}</span>
+                    <span className="text-cockpit-system-text font-medium">{r.referee_name}</span>
                   </p>
                   <p className="text-neutral-400 text-xs">{formatDate(new Date(r.created_at))}</p>
                 </div>
-                <p className="text-cockpit-green text-sm">+{r.referrer_stamps_added} {t('loyalty.referrals.stampsEach')}</p>
+                <p className="text-cockpit-in-text text-sm">+{r.referrer_stamps_added} {t('loyalty.referrals.stampsEach')}</p>
               </div>
             ))}
           </div>

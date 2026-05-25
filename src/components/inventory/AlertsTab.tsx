@@ -43,7 +43,7 @@ export default function AlertsTab({
         </div>
       ) : alerts.length === 0 ? (
         <div className="text-center py-12">
-          <CheckCircle className="mx-auto text-cockpit-green mb-3" size={40} />
+          <CheckCircle className="mx-auto text-cockpit-in-text mb-3" size={40} />
           <p className="text-neutral-400">{t('alerts.noAlerts')}</p>
           <p className="text-neutral-500 text-sm mt-1">{t('alerts.withinRanges')}</p>
         </div>
@@ -65,8 +65,8 @@ export default function AlertsTab({
                   <div className="flex items-center gap-2 mb-1">
                     <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
                       alert.severity === 'critical' ? 'bg-brand-900/30 text-brand-400' :
-                      alert.severity === 'high' ? 'bg-cockpit-yellow/30 text-cockpit-yellow' :
-                      'bg-cockpit-yellow/30 text-cockpit-yellow'
+                      alert.severity === 'high' ? 'bg-cockpit-yellow/30 text-cockpit-attention-text' :
+                      'bg-cockpit-yellow/30 text-cockpit-attention-text'
                     }`}>
                       {alert.severity}
                     </span>
@@ -93,7 +93,7 @@ export default function AlertsTab({
                   </button>
                 )}
                 {alert.acknowledged && (
-                  <span className="px-3 py-2 text-cockpit-green text-xs font-medium ml-4">
+                  <span className="px-3 py-2 text-cockpit-in-text text-xs font-medium ml-4">
                     {t('alerts.acknowledged')}
                   </span>
                 )}

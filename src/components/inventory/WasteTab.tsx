@@ -108,7 +108,7 @@ export default function WasteTab({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div className="p-4 bg-neutral-800 rounded-lg">
                 <p className="text-neutral-400 text-sm">{t('waste.report.totalCost')}</p>
-                <p className="text-2xl font-bold text-cockpit-red">
+                <p className="text-2xl font-bold text-cockpit-out-text">
                   ${wasteReport.summary.total_waste_cost.toLocaleString()}
                 </p>
               </div>
@@ -122,7 +122,7 @@ export default function WasteTab({
                   {Object.entries(wasteReport.summary.by_reason).map(([reason, data]) => (
                     <div key={reason} className="flex justify-between text-sm">
                       <span className="text-neutral-300">{t(`waste.reasons.${reason}`)}</span>
-                      <span className="text-cockpit-red">${data.cost.toLocaleString()} ({data.count})</span>
+                      <span className="text-cockpit-out-text">${data.cost.toLocaleString()} ({data.count})</span>
                     </div>
                   ))}
                 </div>
@@ -142,7 +142,7 @@ export default function WasteTab({
                           {item.total_quantity} {item.unit} | {item.entry_count} entries | Top: {t(`waste.reasons.${item.top_reason}`)}
                         </p>
                       </div>
-                      <span className="text-cockpit-red font-medium">${item.total_cost.toLocaleString()}</span>
+                      <span className="text-cockpit-out-text font-medium">${item.total_cost.toLocaleString()}</span>
                     </div>
                   ))}
                 </div>
@@ -179,13 +179,13 @@ export default function WasteTab({
                 {wasteEntries.slice(0, 50).map((entry) => (
                   <tr key={entry.id} className="border-b border-neutral-800 hover:bg-neutral-800/50">
                     <td className="px-6 py-4 font-medium text-white">{entry.item_name}</td>
-                    <td className="px-6 py-4 text-cockpit-red">{entry.quantity} {entry.unit}</td>
+                    <td className="px-6 py-4 text-cockpit-out-text">{entry.quantity} {entry.unit}</td>
                     <td className="px-6 py-4">
-                      <span className="px-2 py-1 bg-cockpit-red/20 text-cockpit-red rounded text-xs font-medium">
+                      <span className="px-2 py-1 bg-cockpit-red/20 text-cockpit-out-text rounded text-xs font-medium">
                         {t(`waste.reasons.${entry.reason}`)}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-cockpit-red">${Number(entry.cost_at_time).toFixed(2)}</td>
+                    <td className="px-6 py-4 text-cockpit-out-text">${Number(entry.cost_at_time).toFixed(2)}</td>
                     <td className="px-6 py-4 text-neutral-500 text-sm">{entry.notes || '-'}</td>
                     <td className="px-6 py-4 text-neutral-500 text-sm">
                       {formatDateTime(new Date(entry.created_at))}

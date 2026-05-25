@@ -72,7 +72,7 @@ const ResetPasswordScreen: React.FC = () => {
           {success ? (
             <div className="text-center space-y-6">
               <div className="w-16 h-16 rounded-full bg-cockpit-green/20 flex items-center justify-center mx-auto">
-                <CheckCircle className="w-8 h-8 text-cockpit-green" />
+                <CheckCircle className="w-8 h-8 text-cockpit-in-text" />
               </div>
               <div>
                 <h1 className="text-3xl font-bold text-white">{t('resetPassword.passwordReset')}</h1>
@@ -90,14 +90,14 @@ const ResetPasswordScreen: React.FC = () => {
               {/* ==================== Form State ==================== */}
               <div className="text-center">
                 <div className="w-16 h-16 rounded-full bg-cockpit-green/20 flex items-center justify-center mx-auto mb-4">
-                  <KeyRound className="w-8 h-8 text-cockpit-green" />
+                  <KeyRound className="w-8 h-8 text-cockpit-in-text" />
                 </div>
                 <h1 className="text-3xl font-bold text-white">{t('resetPassword.setNewPassword')}</h1>
                 <p className="text-neutral-400 mt-2">{t('resetPassword.chooseStrong')}</p>
               </div>
 
               {!token && (
-                <div className="p-3 rounded-lg bg-cockpit-red/30 border border-cockpit-red text-cockpit-red text-sm flex items-start gap-2">
+                <div className="p-3 rounded-lg bg-cockpit-red/30 border border-cockpit-red text-cockpit-out-text text-sm flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
                   {t('resetPassword.invalidLinkLogin')}
                 </div>
@@ -129,7 +129,7 @@ const ResetPasswordScreen: React.FC = () => {
                 </div>
 
                 {error && (
-                  <div className="p-3 rounded-lg bg-cockpit-red/30 border border-cockpit-red text-cockpit-red text-sm">
+                  <div className="p-3 rounded-lg bg-cockpit-red/30 border border-cockpit-red text-cockpit-out-text text-sm">
                     {error}
                   </div>
                 )}

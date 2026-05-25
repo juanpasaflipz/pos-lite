@@ -228,15 +228,15 @@ export default function TimeClockPanel() {
   return (
     <div className="space-y-6">
       {error && (
-        <div className="rounded-xl border border-cockpit-red bg-cockpit-red/40 px-4 py-3 text-sm text-cockpit-red">{error}</div>
+        <div className="rounded-xl border border-cockpit-red bg-cockpit-red/40 px-4 py-3 text-sm text-cockpit-out-text">{error}</div>
       )}
 
       {flagged.length > 0 && (
         <div className="rounded-xl border border-cockpit-yellow bg-cockpit-yellow/40 px-4 py-3 flex items-start gap-3">
-          <AlertTriangle size={18} className="text-cockpit-yellow mt-0.5 shrink-0" />
-          <div className="text-sm text-cockpit-yellow">
+          <AlertTriangle size={18} className="text-cockpit-attention-text mt-0.5 shrink-0" />
+          <div className="text-sm text-cockpit-attention-text">
             <p className="font-semibold">{flagged.length} shift(s) open more than 12 hours</p>
-            <p className="mt-1 text-cockpit-yellow/80">Likely forgot to clock out. Edit the row to set the correct clock-out time.</p>
+            <p className="mt-1 text-cockpit-attention-text/80">Likely forgot to clock out. Edit the row to set the correct clock-out time.</p>
           </div>
         </div>
       )}
@@ -254,10 +254,10 @@ export default function TimeClockPanel() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {liveActive.map(a => (
               <div key={a.id} className="rounded-xl border border-cockpit-green bg-cockpit-green/20 p-4">
-                <p className="text-xs uppercase tracking-wide text-cockpit-green">{a.employee_role}</p>
+                <p className="text-xs uppercase tracking-wide text-cockpit-in-text">{a.employee_role}</p>
                 <p className="text-xl font-bold text-white mt-1">{a.employee_name}</p>
                 <p className="text-sm text-neutral-300 mt-2">
-                  Since {formatDateTime(a.clock_in_at)} · <span className="text-cockpit-green">{formatDuration(a.elapsed_seconds)}</span>
+                  Since {formatDateTime(a.clock_in_at)} · <span className="text-cockpit-in-text">{formatDuration(a.elapsed_seconds)}</span>
                 </p>
               </div>
             ))}
@@ -315,7 +315,7 @@ export default function TimeClockPanel() {
                     </td>
                     <td className="px-4 py-3">
                       {row.openShift && (
-                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-cockpit-green/60 border border-cockpit-green text-cockpit-green">
+                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-cockpit-green/60 border border-cockpit-green text-cockpit-in-text">
                           on shift
                         </span>
                       )}
@@ -354,7 +354,7 @@ export default function TimeClockPanel() {
                     <td className="px-4 py-3 text-neutral-300 tabular-nums">{formatDateTime(row.clock_in_at)}</td>
                     <td className="px-4 py-3 text-neutral-300 tabular-nums">
                       {row.clock_out_at ? formatDateTime(row.clock_out_at) : (
-                        <span className={row.flagged_long_open ? 'text-cockpit-yellow font-medium' : 'text-cockpit-green'}>
+                        <span className={row.flagged_long_open ? 'text-cockpit-attention-text font-medium' : 'text-cockpit-in-text'}>
                           {row.flagged_long_open ? 'Open >12h' : 'Open'}
                         </span>
                       )}
@@ -370,11 +370,11 @@ export default function TimeClockPanel() {
                             <span className="block text-neutral-400">Cash sales: {formatMoney(row.cash_drawer.cash_sales_total)}</span>
                             <span className="block text-neutral-400">Expected drawer: {formatMoney(row.cash_drawer.expected_cash_total)}</span>
                             <span className="block text-neutral-400">Counted close: {formatMoney(row.cash_drawer.closing_total)}</span>
-                            <span className={`block font-semibold ${row.cash_drawer.variance_total === 0 ? 'text-neutral-300' : (row.cash_drawer.variance_total || 0) > 0 ? 'text-cockpit-green' : 'text-cockpit-red'}`}>
+                            <span className={`block font-semibold ${row.cash_drawer.variance_total === 0 ? 'text-neutral-300' : (row.cash_drawer.variance_total || 0) > 0 ? 'text-cockpit-in-text' : 'text-cockpit-out-text'}`}>
                               Over / short: {row.cash_drawer.variance_total != null && row.cash_drawer.variance_total > 0 ? '+' : ''}{formatMoney(row.cash_drawer.variance_total)}
                             </span>
                             {row.cash_drawer.variance_note && (
-                              <span className="block text-[11px] text-cockpit-yellow">Manager note: {row.cash_drawer.variance_note}</span>
+                              <span className="block text-[11px] text-cockpit-attention-text">Manager note: {row.cash_drawer.variance_note}</span>
                             )}
                           </>
                         ) : (
@@ -525,7 +525,7 @@ export default function TimeClockPanel() {
                 {(() => {
                   const variance = Math.round((totalFromCounts(cashEditing.closingCounts) - cashEditing.expectedCashTotal) * 100) / 100;
                   return (
-                    <span className={`font-bold ${variance === 0 ? 'text-white' : variance > 0 ? 'text-cockpit-green' : 'text-cockpit-red'}`}>
+                    <span className={`font-bold ${variance === 0 ? 'text-white' : variance > 0 ? 'text-cockpit-in-text' : 'text-cockpit-out-text'}`}>
                       {variance > 0 ? '+' : ''}{formatMoney(variance)}
                     </span>
                   );

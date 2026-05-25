@@ -258,9 +258,9 @@ export default function AIMenuBuilderModal({ isOpen, onClose, onMenuCreated, isF
 
               {error && (
                 <div className="mb-4 flex items-start gap-3 bg-cockpit-red/20 border border-cockpit-red/40 rounded-lg p-3">
-                  <AlertTriangle size={16} className="text-cockpit-red flex-shrink-0 mt-0.5" />
+                  <AlertTriangle size={16} className="text-cockpit-out-text flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-cockpit-red text-sm">{error}</p>
+                    <p className="text-cockpit-out-text text-sm">{error}</p>
                     <p className="text-neutral-400 text-xs mt-1">
                       {t('aiMenuBuilder.errorHint')}
                     </p>
@@ -282,7 +282,7 @@ export default function AIMenuBuilderModal({ isOpen, onClose, onMenuCreated, isF
                   // Open FAB modal via DOM event
                   window.dispatchEvent(new CustomEvent('open-ai-assistant', { detail: { context: 'menu' } }));
                 }}
-                className="w-full mt-3 py-2.5 text-cockpit-blue hover:text-cockpit-blue/90 text-xs flex items-center justify-center gap-2 transition-colors"
+                className="w-full mt-3 py-2.5 text-cockpit-system-text hover:text-cockpit-system-text/90 text-xs flex items-center justify-center gap-2 transition-colors"
               >
                 <MessageSquare size={14} /> {t('aiMenuBuilder.tryAssistant')}
               </button>
@@ -375,7 +375,7 @@ export default function AIMenuBuilderModal({ isOpen, onClose, onMenuCreated, isF
                               className="p-1 hover:bg-cockpit-red/30 rounded transition-colors flex-shrink-0"
                               title="Remove item"
                             >
-                              <Trash2 size={14} className="text-neutral-500 hover:text-cockpit-red/90" />
+                              <Trash2 size={14} className="text-neutral-500 hover:text-cockpit-out-text/90" />
                             </button>
                           </div>
                         ))}
@@ -419,13 +419,13 @@ export default function AIMenuBuilderModal({ isOpen, onClose, onMenuCreated, isF
               {/* Plan limit warning */}
               {limitWarning && (
                 <div className="flex items-start gap-3 bg-cockpit-yellow/20 border border-cockpit-yellow/40 rounded-lg p-3">
-                  <AlertTriangle size={16} className="text-cockpit-yellow flex-shrink-0 mt-0.5" />
-                  <p className="text-cockpit-yellow text-sm">{limitWarning}</p>
+                  <AlertTriangle size={16} className="text-cockpit-attention-text flex-shrink-0 mt-0.5" />
+                  <p className="text-cockpit-attention-text text-sm">{limitWarning}</p>
                 </div>
               )}
 
               {error && (
-                <div className="text-cockpit-red text-sm bg-cockpit-red/20 border border-cockpit-red/40 rounded-lg p-3">{error}</div>
+                <div className="text-cockpit-out-text text-sm bg-cockpit-red/20 border border-cockpit-red/40 rounded-lg p-3">{error}</div>
               )}
 
               <div className="flex gap-3">
@@ -500,7 +500,7 @@ export default function AIMenuBuilderModal({ isOpen, onClose, onMenuCreated, isF
               {stats.warnings.length > 0 && (
                 <div className="bg-cockpit-yellow/20 border border-cockpit-yellow/40 rounded-lg p-3">
                   {stats.warnings.map((w, i) => (
-                    <p key={i} className="text-cockpit-yellow text-sm flex items-start gap-2">
+                    <p key={i} className="text-cockpit-attention-text text-sm flex items-start gap-2">
                       <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" /> {w}
                     </p>
                   ))}

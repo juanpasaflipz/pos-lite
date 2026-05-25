@@ -166,7 +166,7 @@ export default function ItemsView({
                     className={`flex-1 px-4 py-2 rounded-lg transition-colors font-medium min-h-[44px] ${
                       item.active
                         ? 'bg-brand-600/20 text-brand-400 hover:bg-brand-600/30 border border-brand-800'
-                        : 'bg-cockpit-green/20 text-cockpit-green hover:bg-cockpit-green/30 border border-cockpit-green'
+                        : 'bg-cockpit-green/20 text-cockpit-in-text hover:bg-cockpit-green/30 border border-cockpit-green'
                     }`}
                   >
                     {item.active ? t('menu.deactivate') : t('menu.activate')}

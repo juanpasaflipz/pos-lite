@@ -55,9 +55,9 @@ export default function LaborStrip() {
     else if (laborPct >= warn) tone = 'warn';
   }
   const toneClasses = {
-    good: { ring: 'border-cockpit-green/50', bg: 'bg-cockpit-green/20', text: 'text-cockpit-green' },
-    warn: { ring: 'border-cockpit-yellow/50', bg: 'bg-cockpit-yellow/20', text: 'text-cockpit-yellow' },
-    critical: { ring: 'border-cockpit-red/50', bg: 'bg-cockpit-red/20', text: 'text-cockpit-red' },
+    good: { ring: 'border-cockpit-green/50', bg: 'bg-cockpit-green/20', text: 'text-cockpit-in-text' },
+    warn: { ring: 'border-cockpit-yellow/50', bg: 'bg-cockpit-yellow/20', text: 'text-cockpit-attention-text' },
+    critical: { ring: 'border-cockpit-red/50', bg: 'bg-cockpit-red/20', text: 'text-cockpit-out-text' },
   }[tone];
 
   const onClockCount = data.employees.filter(e => e.has_open_shift).length;
@@ -116,7 +116,7 @@ export default function LaborStrip() {
         </div>
 
         {overtimeEmployees.length > 0 && (
-          <div className="mt-3 flex items-start gap-2 text-sm text-cockpit-yellow">
+          <div className="mt-3 flex items-start gap-2 text-sm text-cockpit-attention-text">
             <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
             <span>
               {t('payroll.laborStrip.overtimeAlert', {
@@ -146,12 +146,12 @@ export default function LaborStrip() {
                   <td className="py-2 text-neutral-200">
                     {e.employee_name}
                     {e.has_open_shift && (
-                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-cockpit-green/40 text-cockpit-green">
+                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-cockpit-green/40 text-cockpit-in-text">
                         {t('payroll.table.onClock')}
                       </span>
                     )}
                     {e.hours_overtime > 0 && (
-                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-cockpit-yellow/40 text-cockpit-yellow">
+                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-cockpit-yellow/40 text-cockpit-attention-text">
                         OT
                       </span>
                     )}

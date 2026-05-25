@@ -40,8 +40,8 @@ export default function MenuGrid({
       {!searchQuery && filteredPopularItems.length > 0 && (
         <div className="mb-6 pb-6 border-b border-neutral-800/60">
           <div className="flex items-center gap-2 mb-3.5">
-            <Star className="w-4 h-4 text-cockpit-yellow fill-cockpit-yellow" />
-            <p className="text-sm font-semibold text-cockpit-yellow uppercase tracking-wider">{t('favorites.title')}</p>
+            <Star className="w-4 h-4 text-cockpit-attention-text fill-cockpit-yellow" />
+            <p className="text-sm font-semibold text-cockpit-attention-text uppercase tracking-wider">{t('favorites.title')}</p>
           </div>
           <div className="flex gap-3.5 overflow-x-auto pb-3 scrollbar-hide">
             {filteredPopularItems.map((item) => {
@@ -58,7 +58,7 @@ export default function MenuGrid({
                   }`}
                 >
                   <p className="font-bold text-white text-sm line-clamp-2 leading-snug">{brandItemMap?.get(item.id)?.custom_name || item.name}</p>
-                  <p className="font-bold text-cockpit-yellow text-base mt-2">{formatPrice(brandItemMap?.get(item.id)?.custom_price ?? item.price)}</p>
+                  <p className="font-bold text-cockpit-attention-text text-base mt-2">{formatPrice(brandItemMap?.get(item.id)?.custom_price ?? item.price)}</p>
                 </button>
               );
             })}

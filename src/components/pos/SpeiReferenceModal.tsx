@@ -77,8 +77,8 @@ const SpeiReferenceModal: React.FC<SpeiReferenceModalProps> = ({
 
           {/* Instructions */}
           <div className="bg-cockpit-blue/30 border border-cockpit-blue/50 p-4 rounded-lg">
-            <p className="text-cockpit-blue text-sm font-semibold mb-2">{t('spei.instructions')}</p>
-            <ol className="text-cockpit-blue/80 text-sm space-y-1 list-decimal list-inside">
+            <p className="text-cockpit-system-text text-sm font-semibold mb-2">{t('spei.instructions')}</p>
+            <ol className="text-cockpit-system-text/80 text-sm space-y-1 list-decimal list-inside">
               <li>{t('spei.step1')}</li>
               <li>{t('spei.step2')}</li>
               <li>{t('spei.step3')}</li>

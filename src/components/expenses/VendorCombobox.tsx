@@ -174,7 +174,7 @@ const VendorCombobox: React.FC<Props> = ({ value, onChange, placeholder, autoFoc
           aria-expanded={open}
         />
         {value.id && (
-          <Check size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-cockpit-green" aria-label={t('expenses.vendorLinked')} />
+          <Check size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-cockpit-in-text" aria-label={t('expenses.vendorLinked')} />
         )}
         {loading && !value.id && (
           <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 animate-spin" />
@@ -185,7 +185,7 @@ const VendorCombobox: React.FC<Props> = ({ value, onChange, placeholder, autoFoc
         <button
           type="button"
           onClick={() => handleSelect(duplicateWarning)}
-          className="mt-1 w-full flex items-center gap-2 px-3 py-2 text-left bg-cockpit-yellow/40 border border-cockpit-yellow/60 rounded-lg text-cockpit-yellow text-xs hover:bg-cockpit-yellow/60 transition-colors"
+          className="mt-1 w-full flex items-center gap-2 px-3 py-2 text-left bg-cockpit-yellow/40 border border-cockpit-yellow/60 rounded-lg text-cockpit-attention-text text-xs hover:bg-cockpit-yellow/60 transition-colors"
         >
           <AlertCircle size={14} className="shrink-0" />
           <span>{t('expenses.didYouMean', { name: duplicateWarning.name })}</span>
@@ -218,7 +218,7 @@ const VendorCombobox: React.FC<Props> = ({ value, onChange, placeholder, autoFoc
                     </div>
                   )}
                 </div>
-                {value.id === s.id && <Check size={14} className="text-cockpit-green shrink-0" />}
+                {value.id === s.id && <Check size={14} className="text-cockpit-in-text shrink-0" />}
               </button>
             );
           })}

@@ -97,7 +97,7 @@ const MobileCashPayment: React.FC<Props> = ({ total, onConfirm, onClose, isProce
           {/* Change display */}
           {amountNum > 0 && (
             <div className={`text-center py-2 rounded-xl ${isSufficient ? 'bg-cockpit-green/10' : 'bg-cockpit-red/10'}`}>
-              <p className={`text-lg font-bold ${isSufficient ? 'text-cockpit-green' : 'text-cockpit-red'}`}>
+              <p className={`text-lg font-bold ${isSufficient ? 'text-cockpit-in-text' : 'text-cockpit-out-text'}`}>
                 {isSufficient
                   ? t('mobilePOS.changeDue', { amount: formatPrice(change) })
                   : t('mobilePOS.insufficientAmount')}

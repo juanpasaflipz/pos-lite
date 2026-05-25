@@ -491,14 +491,14 @@ export default function ModifierManagement() {
                       </button>
                       <button
                         onClick={() => handleToggleGroup(group)}
-                        className={`px-3 py-1 rounded-lg text-sm font-medium ${group.active ? 'bg-cockpit-green/30 text-cockpit-green' : 'bg-neutral-800 text-neutral-500'}`}
+                        className={`px-3 py-1 rounded-lg text-sm font-medium ${group.active ? 'bg-cockpit-green/30 text-cockpit-in-text' : 'bg-neutral-800 text-neutral-500'}`}
                       >
                         {group.active ? t('menu.active') : t('menu.inactive')}
                       </button>
                       <button
                         onClick={() => handleDeleteGroup(group)}
                         title={t('modifiers.deleteGroup')}
-                        className="p-2 text-neutral-400 hover:text-cockpit-red/90 hover:bg-neutral-800 rounded-lg transition-colors"
+                        className="p-2 text-neutral-400 hover:text-cockpit-out-text/90 hover:bg-neutral-800 rounded-lg transition-colors"
                       >
                         <Trash2 size={18} />
                       </button>
@@ -540,7 +540,7 @@ export default function ModifierManagement() {
                           <div className="flex items-center gap-3">
                             <span className={`text-white ${!mod.active ? 'line-through text-neutral-500' : ''}`}>{mod.name}</span>
                             {mod.price_adjustment !== 0 && (
-                              <span className="text-xs font-bold text-cockpit-yellow">
+                              <span className="text-xs font-bold text-cockpit-attention-text">
                                 {mod.price_adjustment > 0 ? '+' : ''}{formatPrice(mod.price_adjustment)}
                               </span>
                             )}
@@ -562,7 +562,7 @@ export default function ModifierManagement() {
                             <button
                               onClick={() => handleDeleteModifier(mod.id, mod.name)}
                               title={t('modifiers.deleteModifier')}
-                              className="p-1 text-neutral-500 hover:text-cockpit-red/90 transition-colors"
+                              className="p-1 text-neutral-500 hover:text-cockpit-out-text/90 transition-colors"
                             >
                               <Trash2 size={14} />
                             </button>
@@ -759,13 +759,13 @@ export default function ModifierManagement() {
                     <button
                       onClick={() => handleDeleteCombo(combo)}
                       title={t('modifiers.combos.deleteCombo')}
-                      className="p-2 text-neutral-400 hover:text-cockpit-red/90 hover:bg-neutral-800 rounded-lg transition-colors"
+                      className="p-2 text-neutral-400 hover:text-cockpit-out-text/90 hover:bg-neutral-800 rounded-lg transition-colors"
                     >
                       <Trash2 size={18} />
                     </button>
                     <button
                       onClick={() => handleToggleCombo(combo)}
-                      className={`px-3 py-1 rounded-lg text-sm font-medium ${combo.active ? 'bg-cockpit-green/30 text-cockpit-green' : 'bg-neutral-800 text-neutral-500'}`}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium ${combo.active ? 'bg-cockpit-green/30 text-cockpit-in-text' : 'bg-neutral-800 text-neutral-500'}`}
                     >
                       {combo.active ? t('modifiers.combos.active') : t('modifiers.combos.inactive')}
                     </button>

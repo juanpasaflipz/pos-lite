@@ -22,7 +22,7 @@ const CancellationModal = lazy(
 function InvoiceStatusBadge({ status, t }: { status: CfdiInvoice['status']; t: (key: string) => string }) {
   if (status === 'valid') {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-cockpit-green/30 text-cockpit-green border border-cockpit-green">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-cockpit-green/30 text-cockpit-in-text border border-cockpit-green">
         <CheckCircle size={12} />
         {t('invoicing.statusValid')}
       </span>
@@ -30,14 +30,14 @@ function InvoiceStatusBadge({ status, t }: { status: CfdiInvoice['status']; t: (
   }
   if (status === 'cancelled') {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-cockpit-red/30 text-cockpit-red border border-cockpit-red">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-cockpit-red/30 text-cockpit-out-text border border-cockpit-red">
         <XCircle size={12} />
         {t('invoicing.statusCancelled')}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-cockpit-yellow/30 text-cockpit-yellow border border-cockpit-yellow">
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-cockpit-yellow/30 text-cockpit-attention-text border border-cockpit-yellow">
       <AlertTriangle size={12} />
       {t('invoicing.statusCancellationPending')}
     </span>
@@ -253,7 +253,7 @@ export default function InvoiceListTab({ catalogs, onError, onSuccess }: Invoice
                           <button
                             onClick={() => setCancellingInvoice(inv)}
                             title={t('invoicing.cancelInvoice')}
-                            className="p-2 hover:bg-cockpit-red/30 rounded-lg transition-colors text-neutral-400 hover:text-cockpit-red/90"
+                            className="p-2 hover:bg-cockpit-red/30 rounded-lg transition-colors text-neutral-400 hover:text-cockpit-out-text/90"
                           >
                             <XCircle size={16} />
                           </button>

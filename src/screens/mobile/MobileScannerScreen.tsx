@@ -306,8 +306,8 @@ const MobileScannerScreen: React.FC = () => {
           {/* Receipt done overlay */}
           {!cameraActive && receiptStep === 'done' && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-neutral-900 gap-4">
-              <CircleCheck className="w-16 h-16 text-cockpit-green" />
-              <span className="text-cockpit-green font-bold text-lg">{t('mobileScanner.expenseSaved')}</span>
+              <CircleCheck className="w-16 h-16 text-cockpit-in-text" />
+              <span className="text-cockpit-in-text font-bold text-lg">{t('mobileScanner.expenseSaved')}</span>
               {receiptMatches && receiptMatches.length > 0 && (
                 <span className="text-neutral-400 text-sm">{t('mobileScanner.inventoryUpdated', { count: receiptMatches.length })}</span>
               )}
@@ -546,7 +546,7 @@ const MobileScannerScreen: React.FC = () => {
                           <p className="text-sm text-white font-semibold">{entry.item.name}</p>
                           <p className="text-xs text-neutral-500">+{entry.quantity} {entry.item.unit}</p>
                         </div>
-                        <span className="text-sm text-cockpit-green font-bold">{entry.newQuantity}</span>
+                        <span className="text-sm text-cockpit-in-text font-bold">{entry.newQuantity}</span>
                       </div>
                     ))}
                   </div>
@@ -558,7 +558,7 @@ const MobileScannerScreen: React.FC = () => {
           {/* Error */}
           {error && (
             <div className="bg-cockpit-red/30 border border-cockpit-red rounded-xl p-3">
-              <p className="text-cockpit-red text-sm">{error}</p>
+              <p className="text-cockpit-out-text text-sm">{error}</p>
             </div>
           )}
         </div>

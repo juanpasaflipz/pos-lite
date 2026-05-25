@@ -265,7 +265,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
               {receivedNum > 0 && (
                 <div className="text-center pt-2 border-t border-neutral-700">
                   <p className="text-neutral-400 text-sm">{t('payment.changeDue')}</p>
-                  <p className="text-2xl font-bold text-cockpit-green">{formatPrice(changeDue)}</p>
+                  <p className="text-2xl font-bold text-cockpit-in-text">{formatPrice(changeDue)}</p>
                 </div>
               )}
             </div>
@@ -283,7 +283,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
               </p>
               <button
                 onClick={handleCancelTerminal}
-                className="text-cockpit-red text-sm font-semibold hover:text-cockpit-red/90 transition-colors"
+                className="text-cockpit-out-text text-sm font-semibold hover:text-cockpit-out-text/90 transition-colors"
               >
                 {t('payment.cancelCharge')}
               </button>
@@ -291,7 +291,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
           )}
 
           {terminalError && (
-            <p className="text-cockpit-red text-sm text-center font-medium">{terminalError}</p>
+            <p className="text-cockpit-out-text text-sm text-center font-medium">{terminalError}</p>
           )}
 
           {/* Payment Buttons */}

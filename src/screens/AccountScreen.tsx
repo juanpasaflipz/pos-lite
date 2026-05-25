@@ -30,7 +30,7 @@ interface AccountData {
 function PlanBadge({ plan }: { plan: string }) {
   const styles: Record<string, string> = {
     free: 'bg-neutral-700/50 text-neutral-400',
-    pro: 'bg-cockpit-green/20 text-cockpit-green',
+    pro: 'bg-cockpit-green/20 text-cockpit-in-text',
   };
   return (
     <span className={`px-2.5 py-1 text-xs font-semibold rounded-full uppercase ${styles[plan] || styles.free}`}>
@@ -331,9 +331,9 @@ export default function AccountScreen() {
         {billingBanner && (
           <div className={`border rounded-lg p-4 ${
             billingBanner.type === 'success'
-              ? 'bg-cockpit-green/20 border-cockpit-green text-cockpit-green'
+              ? 'bg-cockpit-green/20 border-cockpit-green text-cockpit-in-text'
               : billingBanner.type === 'error'
-                ? 'bg-cockpit-yellow/20 border-cockpit-yellow text-cockpit-yellow'
+                ? 'bg-cockpit-yellow/20 border-cockpit-yellow text-cockpit-attention-text'
                 : 'bg-brand-900/20 border-brand-800 text-brand-200'
           }`}>
             <p>{billingBanner.text}</p>
@@ -349,7 +349,7 @@ export default function AccountScreen() {
           </div>
         ) : error ? (
           <div className="bg-cockpit-red/30 border border-cockpit-red rounded-lg p-4">
-            <p className="text-cockpit-red">{error}</p>
+            <p className="text-cockpit-out-text">{error}</p>
           </div>
         ) : account && (
           <>
@@ -429,7 +429,7 @@ export default function AccountScreen() {
                       <button
                         type="button"
                         onClick={() => setPromoState('expanded')}
-                        className="text-sm text-cockpit-green hover:text-cockpit-green/90 transition-colors"
+                        className="text-sm text-cockpit-in-text hover:text-cockpit-in-text/90 transition-colors"
                       >
                         {t('account.havePromo')}
                       </button>
@@ -470,17 +470,17 @@ export default function AccountScreen() {
                           </button>
                         </div>
                         {promoState === 'invalid' && promoError && (
-                          <p className="text-cockpit-red text-sm">{promoError}</p>
+                          <p className="text-cockpit-out-text text-sm">{promoError}</p>
                         )}
                       </div>
                     )}
 
                     {promoState === 'valid' && (
                       <div className="flex items-center gap-2 p-3 bg-cockpit-green/20 border border-cockpit-green/50 rounded-lg">
-                        <Check className="w-4 h-4 text-cockpit-green flex-shrink-0" />
-                        <span className="text-cockpit-green font-semibold text-sm">{promoCode}</span>
+                        <Check className="w-4 h-4 text-cockpit-in-text flex-shrink-0" />
+                        <span className="text-cockpit-in-text font-semibold text-sm">{promoCode}</span>
                         <span className="text-neutral-400 text-sm mx-1">&mdash;</span>
-                        <span className="text-cockpit-green text-sm flex-1">{promoDescription}</span>
+                        <span className="text-cockpit-in-text text-sm flex-1">{promoDescription}</span>
                         <button
                           type="button"
                           onClick={handleRemovePromo}
@@ -497,7 +497,7 @@ export default function AccountScreen() {
                   <div>
                     <p className="text-neutral-400 text-sm">{t('account.currentPlan')}</p>
                     <p className="text-white font-bold capitalize flex items-center gap-2">
-                      <Crown size={16} className="text-cockpit-green" />
+                      <Crown size={16} className="text-cockpit-in-text" />
                       {t('account.proMonthly')}
                     </p>
                   </div>
@@ -548,7 +548,7 @@ export default function AccountScreen() {
                     {saving ? t('account.saving') : t('account.saveChanges')}
                   </button>
                   {saveMsg && (
-                    <span className="text-sm text-cockpit-green flex items-center gap-1">
+                    <span className="text-sm text-cockpit-in-text flex items-center gap-1">
                       <Check size={14} /> {saveMsg}
                     </span>
                   )}
@@ -596,7 +596,7 @@ export default function AccountScreen() {
                   />
                 </div>
                 {pwMsg && (
-                  <div className={`flex items-center gap-2 text-sm ${pwMsg.type === 'success' ? 'text-cockpit-green' : 'text-cockpit-red'}`}>
+                  <div className={`flex items-center gap-2 text-sm ${pwMsg.type === 'success' ? 'text-cockpit-in-text' : 'text-cockpit-out-text'}`}>
                     {pwMsg.type === 'success' ? <Check size={14} /> : <AlertCircle size={14} />}
                     {pwMsg.text}
                   </div>
@@ -656,8 +656,8 @@ export default function AccountScreen() {
                   return (
                     <div className="space-y-4">
                       <div className="flex items-center gap-2">
-                        <Wifi size={16} className="text-cockpit-green" />
-                        <span className="text-sm font-semibold text-cockpit-green">{t('account.connected')}</span>
+                        <Wifi size={16} className="text-cockpit-in-text" />
+                        <span className="text-sm font-semibold text-cockpit-in-text">{t('account.connected')}</span>
                         <span className="text-xs text-neutral-500 ml-2">ID: {mpUserId}</span>
                       </div>
 
@@ -704,7 +704,7 @@ export default function AccountScreen() {
                           </button>
                         </div>
                         {mpSaved && (
-                          <p className="text-cockpit-green text-xs mt-1 flex items-center gap-1">
+                          <p className="text-cockpit-in-text text-xs mt-1 flex items-center gap-1">
                             <Check size={12} /> {t('account.saved')}
                           </p>
                         )}
@@ -720,7 +720,7 @@ export default function AccountScreen() {
               <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <Landmark className="text-cockpit-green" size={22} />
+                    <Landmark className="text-cockpit-in-text" size={22} />
                     <h2 className="text-lg font-bold text-white">{t('account.bankConnections')}</h2>
                   </div>
                   <button
@@ -808,7 +808,7 @@ export default function AccountScreen() {
                     <p className="text-neutral-400 text-sm">{t('account.financialDataAnalysis')}</p>
                     <p className="text-white text-sm font-medium mt-0.5">
                       {consentStatus?.consented ? (
-                        <span className="text-cockpit-green flex items-center gap-1">
+                        <span className="text-cockpit-in-text flex items-center gap-1">
                           <Check size={14} /> {t('account.consented')}
                           {consentStatus.consent_at && (
                             <span className="text-neutral-500 font-normal ml-1">
@@ -871,7 +871,7 @@ export default function AccountScreen() {
                   {consentStatus?.consented && (
                     <button
                       onClick={() => setShowRevokeModal(true)}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 border border-cockpit-red/50 text-cockpit-red text-sm rounded-lg hover:bg-cockpit-red/20 transition-colors"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 border border-cockpit-red/50 text-cockpit-out-text text-sm rounded-lg hover:bg-cockpit-red/20 transition-colors"
                     >
                       <ShieldOff size={14} /> {t('account.revokeConsent')}
                     </button>

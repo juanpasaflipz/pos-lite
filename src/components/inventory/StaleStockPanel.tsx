@@ -81,20 +81,20 @@ const StaleStockPanel: React.FC<Props> = ({ onItemUpdated }) => {
         className="w-full flex items-center justify-between px-4 py-3 hover:bg-cockpit-yellow/50 transition-colors"
       >
         <div className="flex items-center gap-2">
-          <AlertTriangle size={18} className="text-cockpit-yellow" />
-          <span className="font-semibold text-cockpit-yellow">
+          <AlertTriangle size={18} className="text-cockpit-attention-text" />
+          <span className="font-semibold text-cockpit-attention-text">
             {t('stale.title', { defaultValue: 'Stale stock check' })}
           </span>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-cockpit-yellow/60 text-cockpit-yellow">
+          <span className="text-xs px-2 py-0.5 rounded-full bg-cockpit-yellow/60 text-cockpit-attention-text">
             {items.length}
           </span>
         </div>
-        {expanded ? <ChevronUp size={16} className="text-cockpit-yellow" /> : <ChevronDown size={16} className="text-cockpit-yellow" />}
+        {expanded ? <ChevronUp size={16} className="text-cockpit-attention-text" /> : <ChevronDown size={16} className="text-cockpit-attention-text" />}
       </button>
 
       {expanded && (
         <div className="px-4 pb-4 space-y-2">
-          <p className="text-xs text-cockpit-yellow/80 pb-1">
+          <p className="text-xs text-cockpit-attention-text/80 pb-1">
             {t('stale.hint', {
               defaultValue: 'These items are past their typical shelf life. Confirm what\'s still good and log the rest as waste.',
             })}
@@ -135,7 +135,7 @@ const StaleStockPanel: React.FC<Props> = ({ onItemUpdated }) => {
                   type="button"
                   onClick={() => handleStillHere(item)}
                   disabled={busyId === item.id}
-                  className="flex items-center justify-center gap-1.5 py-2 bg-neutral-800 hover:bg-cockpit-green/30 hover:text-cockpit-green/90 text-neutral-200 text-sm rounded-md border border-neutral-700 hover:border-cockpit-green/90 transition-colors disabled:opacity-50 min-h-[40px]"
+                  className="flex items-center justify-center gap-1.5 py-2 bg-neutral-800 hover:bg-cockpit-green/30 hover:text-cockpit-in-text/90 text-neutral-200 text-sm rounded-md border border-neutral-700 hover:border-cockpit-green/90 transition-colors disabled:opacity-50 min-h-[40px]"
                 >
                   {busyId === item.id
                     ? <Loader2 size={14} className="animate-spin" />
@@ -146,7 +146,7 @@ const StaleStockPanel: React.FC<Props> = ({ onItemUpdated }) => {
                   type="button"
                   onClick={() => handleWasted(item)}
                   disabled={busyId === item.id}
-                  className="flex items-center justify-center gap-1.5 py-2 bg-neutral-800 hover:bg-cockpit-red/40 hover:text-cockpit-red/90 text-neutral-200 text-sm rounded-md border border-neutral-700 hover:border-cockpit-red/90 transition-colors disabled:opacity-50 min-h-[40px]"
+                  className="flex items-center justify-center gap-1.5 py-2 bg-neutral-800 hover:bg-cockpit-red/40 hover:text-cockpit-out-text/90 text-neutral-200 text-sm rounded-md border border-neutral-700 hover:border-cockpit-red/90 transition-colors disabled:opacity-50 min-h-[40px]"
                 >
                   {busyId === item.id
                     ? <Loader2 size={14} className="animate-spin" />
@@ -159,7 +159,7 @@ const StaleStockPanel: React.FC<Props> = ({ onItemUpdated }) => {
           <button
             type="button"
             onClick={load}
-            className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-cockpit-yellow/70 hover:text-cockpit-yellow/90 transition-colors"
+            className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-cockpit-attention-text/70 hover:text-cockpit-attention-text/90 transition-colors"
           >
             <RotateCcw size={12} />
             {t('common:buttons.refresh', { defaultValue: 'Refresh' })}

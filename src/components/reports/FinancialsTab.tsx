@@ -119,7 +119,7 @@ export default function FinancialsTab({
           </div>
           <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
             <p className="text-neutral-400 text-sm">{t('sales.financials.netProfitActual')}</p>
-            <p className={`text-3xl font-bold mt-2 ${financialData.net_profit >= 0 ? 'text-cockpit-green' : 'text-brand-400'}`}>
+            <p className={`text-3xl font-bold mt-2 ${financialData.net_profit >= 0 ? 'text-cockpit-in-text' : 'text-brand-400'}`}>
               {formatPrice(financialData.net_profit)}
             </p>
           </div>
@@ -149,13 +149,13 @@ export default function FinancialsTab({
               <tbody>
                 {financialData.rows.map((row) => {
                   const isOver = row.diff_amount > 0;
-                  const diffColor = row.diff_amount === 0 ? 'text-neutral-400' : isOver ? 'text-brand-400' : 'text-cockpit-green';
+                  const diffColor = row.diff_amount === 0 ? 'text-neutral-400' : isOver ? 'text-brand-400' : 'text-cockpit-in-text';
                   return (
                     <tr key={row.category} className="border-b border-neutral-800 hover:bg-neutral-800/50">
                       <td className="px-4 py-3 font-medium text-white">
                         {row.label}
                         {row.auto_calculated && (
-                          <span className="ml-2 px-1.5 py-0.5 text-xs bg-cockpit-blue/50 text-cockpit-blue rounded">{t('sales.financials.auto')}</span>
+                          <span className="ml-2 px-1.5 py-0.5 text-xs bg-cockpit-blue/50 text-cockpit-system-text rounded">{t('sales.financials.auto')}</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right text-neutral-300">
@@ -216,7 +216,7 @@ export default function FinancialsTab({
                   </td>
                   <td className="px-4 py-4 text-right font-bold text-white">{formatPrice(financialData.target_net_profit)}</td>
                   <td className="px-4 py-4 text-right font-bold text-white">{formatPrice(financialData.net_profit)}</td>
-                  <td className={`px-4 py-4 text-right font-bold ${financialData.net_profit - financialData.target_net_profit >= 0 ? 'text-cockpit-green' : 'text-brand-400'}`}>
+                  <td className={`px-4 py-4 text-right font-bold ${financialData.net_profit - financialData.target_net_profit >= 0 ? 'text-cockpit-in-text' : 'text-brand-400'}`}>
                     {financialData.net_profit - financialData.target_net_profit > 0 ? '+' : ''}
                     {formatPrice(Math.round((financialData.net_profit - financialData.target_net_profit) * 100) / 100)}
                   </td>

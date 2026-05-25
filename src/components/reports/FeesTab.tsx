@@ -32,15 +32,15 @@ export default function FeesTab({ feesData }: FeesTabProps) {
         </div>
         <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
           <p className="text-neutral-400 text-sm">{t('sales.fees.netRevenue')}</p>
-          <p className="text-2xl font-bold text-cockpit-green">{formatPrice(feesData.net_revenue || 0)}</p>
+          <p className="text-2xl font-bold text-cockpit-in-text">{formatPrice(feesData.net_revenue || 0)}</p>
         </div>
         <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
           <p className="text-neutral-400 text-sm">{t('sales.fees.feePercent')}</p>
-          <p className="text-2xl font-bold text-cockpit-yellow">{(feesData.fee_percent || 0).toFixed(2)}%</p>
+          <p className="text-2xl font-bold text-cockpit-attention-text">{(feesData.fee_percent || 0).toFixed(2)}%</p>
         </div>
         <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
           <p className="text-neutral-400 text-sm">{t('sales.fees.tipsCollected')}</p>
-          <p className="text-2xl font-bold text-cockpit-blue">{formatPrice(feesData.tips_collected || 0)}</p>
+          <p className="text-2xl font-bold text-cockpit-system-text">{formatPrice(feesData.tips_collected || 0)}</p>
         </div>
       </div>
 
@@ -69,9 +69,9 @@ export default function FeesTab({ feesData }: FeesTabProps) {
                     <td className="py-2.5 px-2 text-neutral-300 text-right">{p.count}</td>
                     <td className="py-2.5 px-2 text-neutral-300 text-right">{formatPrice(p.revenue)}</td>
                     <td className="py-2.5 px-2 text-brand-400 text-right">{formatPrice(p.fees)}</td>
-                    <td className="py-2.5 px-2 text-cockpit-yellow text-right">{p.fee_percent.toFixed(2)}%</td>
-                    <td className="py-2.5 px-2 text-cockpit-blue text-right">{formatPrice(p.tips)}</td>
-                    <td className="py-2.5 pl-2 text-cockpit-green text-right">{formatPrice(p.net)}</td>
+                    <td className="py-2.5 px-2 text-cockpit-attention-text text-right">{p.fee_percent.toFixed(2)}%</td>
+                    <td className="py-2.5 px-2 text-cockpit-system-text text-right">{formatPrice(p.tips)}</td>
+                    <td className="py-2.5 pl-2 text-cockpit-in-text text-right">{formatPrice(p.net)}</td>
                   </tr>
                 ))}
               </tbody>

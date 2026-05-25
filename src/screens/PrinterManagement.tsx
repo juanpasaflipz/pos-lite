@@ -162,7 +162,7 @@ export default function PrinterManagement() {
                     </div>
                     <button
                       onClick={() => handleTogglePrinter(printer)}
-                      className={`px-3 py-1 rounded-lg text-sm font-medium ${printer.active ? 'bg-cockpit-green/30 text-cockpit-green' : 'bg-neutral-800 text-neutral-500'}`}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium ${printer.active ? 'bg-cockpit-green/30 text-cockpit-in-text' : 'bg-neutral-800 text-neutral-500'}`}
                     >
                       {printer.active ? t('printers.active') : t('printers.inactive')}
                     </button>

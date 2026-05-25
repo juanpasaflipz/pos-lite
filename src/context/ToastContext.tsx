@@ -33,10 +33,10 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, [removeToast]);
 
   const STYLE_MAP: Record<ToastType, string> = {
-    success: 'border-cockpit-green/60 bg-cockpit-green/20 text-cockpit-green',
-    error:   'border-cockpit-red/60 bg-cockpit-red/20 text-cockpit-red',
-    warning: 'border-cockpit-yellow/60 bg-cockpit-yellow/20 text-cockpit-yellow',
-    info:    'border-cockpit-blue/60 bg-cockpit-blue/20 text-cockpit-blue',
+    success: 'border-cockpit-green/60 bg-cockpit-green/20 text-cockpit-in-text',
+    error:   'border-cockpit-red/60 bg-cockpit-red/20 text-cockpit-out-text',
+    warning: 'border-cockpit-yellow/60 bg-cockpit-yellow/20 text-cockpit-attention-text',
+    info:    'border-cockpit-blue/60 bg-cockpit-blue/20 text-cockpit-system-text',
   };
 
   return (

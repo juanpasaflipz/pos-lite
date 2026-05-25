@@ -17,9 +17,9 @@ const TIER_BORDER_CLASS: Record<TimeTier, string> = {
 };
 
 const TIER_TIME_TEXT_CLASS: Record<TimeTier, string> = {
-  fresh: 'text-cockpit-green',
-  warning: 'text-cockpit-yellow',
-  critical: 'text-cockpit-red',
+  fresh: 'text-cockpit-in-text',
+  warning: 'text-cockpit-attention-text',
+  critical: 'text-cockpit-out-text',
 };
 
 const MobileKitchenScreen: React.FC = () => {
@@ -136,7 +136,7 @@ const MobileKitchenScreen: React.FC = () => {
           </div>
         ) : orders.length === 0 ? (
           <div className="text-center py-20">
-            <p className="text-2xl font-bold text-cockpit-green">{t('mobileKitchen.allClear')}</p>
+            <p className="text-2xl font-bold text-cockpit-in-text">{t('mobileKitchen.allClear')}</p>
             <p className="text-neutral-500 mt-1">{t('mobileKitchen.noPendingOrders')}</p>
           </div>
         ) : (

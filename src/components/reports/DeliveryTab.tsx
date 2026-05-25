@@ -48,7 +48,7 @@ export default function DeliveryTab({ deliveryData, channelData }: DeliveryTabPr
                   <div className="flex justify-between"><span className="text-neutral-400">{t('sales.overview.columns.orders')}</span><span className="text-white">{p.order_count || 0}</span></div>
                   <div className="flex justify-between"><span className="text-neutral-400">{t('sales.chartLegend.revenue')}</span><span className="text-white">{fmt(p.revenue || 0)}</span></div>
                   <div className="flex justify-between"><span className="text-neutral-400">{t('sales.deliveryTab.commissionWithPercent', { percent: p.commission_percent })}</span><span className="text-brand-400">{fmt(p.total_commission || 0)}</span></div>
-                  <div className="flex justify-between"><span className="text-neutral-400">{t('sales.deliveryTab.netRevenue')}</span><span className="text-cockpit-green font-bold">{fmt(p.net_revenue || 0)}</span></div>
+                  <div className="flex justify-between"><span className="text-neutral-400">{t('sales.deliveryTab.netRevenue')}</span><span className="text-cockpit-in-text font-bold">{fmt(p.net_revenue || 0)}</span></div>
                 </div>
               </div>
             ))}

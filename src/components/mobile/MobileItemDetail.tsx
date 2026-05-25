@@ -189,7 +189,7 @@ const MobileItemDetail: React.FC<Props> = ({ item, onAdd, onClose }) => {
                             <span className="font-medium text-sm">{mod.name}</span>
                           </div>
                           {mod.price_adjustment !== 0 && (
-                            <span className={`text-sm font-bold ${mod.price_adjustment > 0 ? 'text-cockpit-yellow' : 'text-cockpit-green'}`}>
+                            <span className={`text-sm font-bold ${mod.price_adjustment > 0 ? 'text-cockpit-attention-text' : 'text-cockpit-in-text'}`}>
                               {mod.price_adjustment > 0 ? '+' : ''}{formatPrice(mod.price_adjustment)}
                             </span>
                           )}

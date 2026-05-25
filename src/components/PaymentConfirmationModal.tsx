@@ -134,7 +134,7 @@ const PaymentConfirmationModal: React.FC<PaymentConfirmationModalProps> = ({
 
           {/* Error message */}
           {error && (
-            <p className="text-cockpit-red text-sm text-center font-medium">{error}</p>
+            <p className="text-cockpit-out-text text-sm text-center font-medium">{error}</p>
           )}
 
           {/* Confirm button */}

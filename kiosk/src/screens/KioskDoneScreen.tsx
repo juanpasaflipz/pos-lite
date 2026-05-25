@@ -47,7 +47,7 @@ const KioskDoneScreen: React.FC = () => {
       )}
       <button
         onClick={finish}
-        className="h-20 px-12 rounded-lg bg-white text-cockpit-green text-2xl font-black"
+        className="h-20 px-12 rounded-lg bg-white text-cockpit-in-text text-2xl font-black"
       >
         Listo
       </button>

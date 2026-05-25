@@ -102,10 +102,10 @@ export default function AIInsightsTab({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-neutral-900 p-5 rounded-lg border border-neutral-800">
           <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle className="text-cockpit-red" size={18} />
+            <AlertTriangle className="text-cockpit-out-text" size={18} />
             <p className="text-neutral-400 text-sm">{t('insights.kpis.itemsAtRisk')}</p>
           </div>
-          <p className="text-3xl font-bold text-cockpit-red">{insights.kpis.itemsAtRisk}</p>
+          <p className="text-3xl font-bold text-cockpit-out-text">{insights.kpis.itemsAtRisk}</p>
           <p className="text-neutral-500 text-xs mt-1">
             {t('insights.kpis.criticalAndHigh', { critical: insights.kpis.criticalCount, high: insights.kpis.highCount })}
           </p>
@@ -113,22 +113,22 @@ export default function AIInsightsTab({
 
         <div className="bg-neutral-900 p-5 rounded-lg border border-neutral-800">
           <div className="flex items-center gap-2 mb-2">
-            <ClipboardList className="text-cockpit-yellow" size={18} />
+            <ClipboardList className="text-cockpit-attention-text" size={18} />
             <p className="text-neutral-400 text-sm">{t('insights.kpis.prepActions')}</p>
           </div>
-          <p className="text-3xl font-bold text-cockpit-yellow">{insights.kpis.prepActionsNeeded}</p>
+          <p className="text-3xl font-bold text-cockpit-attention-text">{insights.kpis.prepActionsNeeded}</p>
           <p className="text-neutral-500 text-xs mt-1">{t('insights.kpis.actionsNeeded')}</p>
         </div>
 
         <div className="bg-neutral-900 p-5 rounded-lg border border-neutral-800">
           <div className="flex items-center gap-2 mb-2">
             {insights.kpis.wasteTrendPercent <= 0
-              ? <TrendingDown className="text-cockpit-green" size={18} />
-              : <TrendingUp className="text-cockpit-red" size={18} />
+              ? <TrendingDown className="text-cockpit-in-text" size={18} />
+              : <TrendingUp className="text-cockpit-out-text" size={18} />
             }
             <p className="text-neutral-400 text-sm">{t('insights.kpis.wasteTrend')}</p>
           </div>
-          <p className={`text-3xl font-bold ${insights.kpis.wasteTrendPercent <= 0 ? 'text-cockpit-green' : 'text-cockpit-red'}`}>
+          <p className={`text-3xl font-bold ${insights.kpis.wasteTrendPercent <= 0 ? 'text-cockpit-in-text' : 'text-cockpit-out-text'}`}>
             {insights.kpis.wasteTrendPercent > 0 ? '+' : ''}{insights.kpis.wasteTrendPercent}%
           </p>
           <p className="text-neutral-500 text-xs mt-1">{t('insights.kpis.vsLastPeriod')}</p>
@@ -191,7 +191,7 @@ export default function AIInsightsTab({
         </div>
         {insights.forecasts.length === 0 ? (
           <div className="text-center py-8">
-            <CheckCircle className="mx-auto text-cockpit-green mb-3" size={40} />
+            <CheckCircle className="mx-auto text-cockpit-in-text mb-3" size={40} />
             <p className="text-neutral-400">{t('insights.reorder.noData')}</p>
           </div>
         ) : (
@@ -208,10 +208,10 @@ export default function AIInsightsTab({
                   >
                     {isExpanded ? <ChevronDown size={16} className="text-neutral-400" /> : <ChevronRight size={16} className="text-neutral-400" />}
                     <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
-                      level === 'critical' ? 'bg-cockpit-red/30 text-cockpit-red' :
-                      level === 'high' ? 'bg-cockpit-yellow/30 text-cockpit-yellow' :
-                      level === 'medium' ? 'bg-cockpit-yellow/30 text-cockpit-yellow' :
-                      'bg-cockpit-green/30 text-cockpit-green'
+                      level === 'critical' ? 'bg-cockpit-red/30 text-cockpit-out-text' :
+                      level === 'high' ? 'bg-cockpit-yellow/30 text-cockpit-attention-text' :
+                      level === 'medium' ? 'bg-cockpit-yellow/30 text-cockpit-attention-text' :
+                      'bg-cockpit-green/30 text-cockpit-in-text'
                     }`}>
                       {level}
                     </span>
@@ -275,7 +275,7 @@ export default function AIInsightsTab({
             if (actionItems.length === 0) {
               return (
                 <div className="text-center py-8">
-                  <CheckCircle className="mx-auto text-cockpit-green mb-3" size={32} />
+                  <CheckCircle className="mx-auto text-cockpit-in-text mb-3" size={32} />
                   <p className="text-neutral-400">{t('insights.prep.noActions')}</p>
                 </div>
               );
@@ -288,7 +288,7 @@ export default function AIInsightsTab({
                       <div className="flex items-center gap-2">
                         <p className="text-white font-medium">{item.item_name}</p>
                         <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          item.prep_action === 'restock_needed' ? 'bg-cockpit-red/30 text-cockpit-red' : 'bg-cockpit-yellow/30 text-cockpit-yellow'
+                          item.prep_action === 'restock_needed' ? 'bg-cockpit-red/30 text-cockpit-out-text' : 'bg-cockpit-yellow/30 text-cockpit-attention-text'
                         }`}>
                           {item.prep_action === 'restock_needed' ? t('insights.prep.restockNeeded') : t('insights.prep.prepExtra')}
                         </span>
@@ -315,7 +315,7 @@ export default function AIInsightsTab({
       {/* Waste Intelligence */}
       <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
         <div className="flex items-center gap-2 mb-1">
-          <Trash2 className="text-cockpit-red" size={20} />
+          <Trash2 className="text-cockpit-out-text" size={20} />
           <h3 className="font-semibold text-white">{t('insights.waste.title')}</h3>
         </div>
         <p className="text-neutral-500 text-xs mb-4">{t('insights.waste.chartTitle')}</p>
@@ -349,13 +349,13 @@ export default function AIInsightsTab({
                   <p className="text-white font-medium">{alert.item_name || alert.message || 'Waste Alert'}</p>
                   <div className="flex flex-wrap gap-x-4 mt-1">
                     {alert.waste_rate != null && (
-                      <span className="text-cockpit-red text-xs">{t('insights.waste.wasteRate', { rate: (alert.waste_rate * 100).toFixed(1) })}</span>
+                      <span className="text-cockpit-out-text text-xs">{t('insights.waste.wasteRate', { rate: (alert.waste_rate * 100).toFixed(1) })}</span>
                     )}
                     {alert.top_reason && (
                       <span className="text-neutral-500 text-xs">{t('insights.waste.topReason', { reason: alert.top_reason })}</span>
                     )}
                     {alert.total_waste_cost != null && (
-                      <span className="text-cockpit-red text-xs">{t('insights.waste.cost', { cost: alert.total_waste_cost.toFixed(2) })}</span>
+                      <span className="text-cockpit-out-text text-xs">{t('insights.waste.cost', { cost: alert.total_waste_cost.toFixed(2) })}</span>
                     )}
                   </div>
                   {alert.message && alert.item_name && (
@@ -380,14 +380,14 @@ export default function AIInsightsTab({
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <h4 className="text-cockpit-green font-semibold text-sm mb-3">{t('insights.push.pushTitle')}</h4>
+              <h4 className="text-cockpit-in-text font-semibold text-sm mb-3">{t('insights.push.pushTitle')}</h4>
               {insights.pushItems.length > 0 ? (
                 <div className="space-y-2">
                   {insights.pushItems.map((item) => (
                     <div key={item.menu_item_id} className="p-3 bg-cockpit-green/10 border border-cockpit-green/30 rounded-lg">
                       <p className="text-white font-medium">{item.name}</p>
                       <div className="flex flex-wrap gap-x-4 mt-1">
-                        <span className="text-cockpit-green text-xs">{t('insights.push.reason', { reason: item.reason })}</span>
+                        <span className="text-cockpit-in-text text-xs">{t('insights.push.reason', { reason: item.reason })}</span>
                         {item.ingredient_name && (
                           <span className="text-neutral-500 text-xs">{t('insights.push.ingredient', { name: item.ingredient_name })}</span>
                         )}
@@ -400,14 +400,14 @@ export default function AIInsightsTab({
               )}
             </div>
             <div>
-              <h4 className="text-cockpit-red font-semibold text-sm mb-3">{t('insights.push.avoidTitle')}</h4>
+              <h4 className="text-cockpit-out-text font-semibold text-sm mb-3">{t('insights.push.avoidTitle')}</h4>
               {insights.avoidItems.length > 0 ? (
                 <div className="space-y-2">
                   {insights.avoidItems.map((item) => (
                     <div key={item.menu_item_id} className="p-3 bg-cockpit-red/10 border border-cockpit-red/30 rounded-lg">
                       <p className="text-white font-medium">{item.name}</p>
                       <div className="flex flex-wrap gap-x-4 mt-1">
-                        <span className="text-cockpit-red text-xs">{t('insights.push.reason', { reason: item.reason })}</span>
+                        <span className="text-cockpit-out-text text-xs">{t('insights.push.reason', { reason: item.reason })}</span>
                         {item.ingredient_name && (
                           <span className="text-neutral-500 text-xs">{t('insights.push.ingredient', { name: item.ingredient_name })}</span>
                         )}

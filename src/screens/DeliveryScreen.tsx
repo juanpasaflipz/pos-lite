@@ -308,7 +308,7 @@ export default function DeliveryScreen() {
                             <td className="text-right p-3 text-white">{p.order_count}</td>
                             <td className="text-right p-3 text-white">{formatPrice(p.gross_revenue)}</td>
                             <td className="text-right p-3 text-brand-400">-{formatPrice(p.total_commission)} ({p.commission_percent}%)</td>
-                            <td className="text-right p-3 text-cockpit-green font-bold">{formatPrice(p.net_revenue)}</td>
+                            <td className="text-right p-3 text-cockpit-in-text font-bold">{formatPrice(p.net_revenue)}</td>
                             <td className="text-right p-3 text-neutral-300">{formatPrice(p.avg_order_value)}</td>
                           </tr>
                         ))}
@@ -497,7 +497,7 @@ export default function DeliveryScreen() {
                               <p className="text-neutral-500 text-sm">{brand.platform_name} &middot; {brand.item_count} items</p>
                               {brand.description && <p className="text-neutral-400 text-sm mt-1">{brand.description}</p>}
                             </div>
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${brand.active ? 'bg-cockpit-green/30 text-cockpit-green' : 'bg-neutral-800 text-neutral-500'}`}>
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${brand.active ? 'bg-cockpit-green/30 text-cockpit-in-text' : 'bg-neutral-800 text-neutral-500'}`}>
                               {brand.active ? t('delivery.active') : t('delivery.inactive')}
                             </span>
                           </div>
@@ -573,7 +573,7 @@ export default function DeliveryScreen() {
                       </div>
                       <button
                         onClick={() => handleTogglePlatform(platform)}
-                        className={`px-4 py-2 rounded-lg font-medium ${platform.active ? 'bg-cockpit-green/30 text-cockpit-green' : 'bg-neutral-800 text-neutral-500'}`}
+                        className={`px-4 py-2 rounded-lg font-medium ${platform.active ? 'bg-cockpit-green/30 text-cockpit-in-text' : 'bg-neutral-800 text-neutral-500'}`}
                       >
                         {platform.active ? t('delivery.active') : t('delivery.inactive')}
                       </button>

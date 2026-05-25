@@ -51,7 +51,7 @@ export default function KioskHeldOrdersBanner({ onClaim, onError }: Props) {
   const bannerTone = hasStranded
     ? 'bg-cockpit-yellow/15 border-cockpit-yellow/50 hover:bg-cockpit-yellow/25'
     : 'bg-brand-600/15 border-brand-600/40 hover:bg-brand-600/25';
-  const headlineTone = hasStranded ? 'text-cockpit-yellow' : 'text-brand-200';
+  const headlineTone = hasStranded ? 'text-cockpit-attention-text' : 'text-brand-200';
   const subline = hasStranded
     ? 'Una o más necesitan rescate del terminal'
     : 'Toca para reclamar a la caja';
@@ -63,7 +63,7 @@ export default function KioskHeldOrdersBanner({ onClaim, onError }: Props) {
         className={`mx-4 mt-2 mb-1 flex items-center gap-3 rounded-lg border px-4 py-2 text-left transition-colors ${bannerTone}`}
       >
         {hasStranded ? (
-          <AlertTriangle className="h-5 w-5 text-cockpit-yellow shrink-0" />
+          <AlertTriangle className="h-5 w-5 text-cockpit-attention-text shrink-0" />
         ) : (
           <Smartphone className="h-5 w-5 text-brand-400 shrink-0" />
         )}
@@ -111,7 +111,7 @@ export default function KioskHeldOrdersBanner({ onClaim, onError }: Props) {
                           {order.customer_name || 'Cliente'}
                         </p>
                         {stranded && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-cockpit-yellow/20 border border-cockpit-yellow/40 text-cockpit-yellow text-[10px] font-black uppercase px-2 py-0.5 tracking-wide">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-cockpit-yellow/20 border border-cockpit-yellow/40 text-cockpit-attention-text text-[10px] font-black uppercase px-2 py-0.5 tracking-wide">
                             <AlertTriangle className="h-3 w-3" />
                             Terminal expiró
                           </span>

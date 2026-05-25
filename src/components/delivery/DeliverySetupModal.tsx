@@ -188,7 +188,7 @@ export default function DeliverySetupModal({ isOpen, onClose, onDeliverySetup }:
 
               {error && (
                 <div className="bg-cockpit-red/20 border border-cockpit-red/50 rounded-lg p-3">
-                  <p className="text-cockpit-red text-sm">{error}</p>
+                  <p className="text-cockpit-out-text text-sm">{error}</p>
                 </div>
               )}
 
@@ -212,7 +212,7 @@ export default function DeliverySetupModal({ isOpen, onClose, onDeliverySetup }:
           {step === 'done' && result && (
             <div className="flex flex-col items-center justify-center py-8 gap-4">
               <div className="w-14 h-14 rounded-full bg-cockpit-green/30 flex items-center justify-center">
-                <Check size={28} className="text-cockpit-green" />
+                <Check size={28} className="text-cockpit-in-text" />
               </div>
               <div className="text-center">
                 <p className="text-white font-bold text-lg">{t('delivery.platformsReady')}</p>

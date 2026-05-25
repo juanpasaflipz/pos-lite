@@ -85,7 +85,7 @@ export default function PermissionsScreen() {
           )}
           {success && (
             <div className="bg-cockpit-green/30 border border-cockpit-green rounded-lg p-4 mb-6">
-              <p className="text-cockpit-green">{success}</p>
+              <p className="text-cockpit-in-text">{success}</p>
             </div>
           )}
 

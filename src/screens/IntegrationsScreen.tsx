@@ -107,12 +107,12 @@ function ServiceCard({ serviceKey, schema, stored, onSave, onDelete, t }: Servic
           </div>
           <div className="flex items-center gap-2">
             {hasStored && (
-              <span className="text-xs font-semibold text-cockpit-green bg-cockpit-green/10 px-2 py-0.5 rounded-full">
+              <span className="text-xs font-semibold text-cockpit-in-text bg-cockpit-green/10 px-2 py-0.5 rounded-full">
                 {t('integrations.configured')}
               </span>
             )}
             {saved && (
-              <span className="text-xs font-semibold text-cockpit-green flex items-center gap-1">
+              <span className="text-xs font-semibold text-cockpit-in-text flex items-center gap-1">
                 <Check size={12} /> {t('integrations.saved')}
               </span>
             )}
@@ -133,7 +133,7 @@ function ServiceCard({ serviceKey, schema, stored, onSave, onDelete, t }: Servic
             {hasStored && (
               <button
                 onClick={() => setConfirmDelete(true)}
-                className="p-2 text-neutral-600 hover:text-cockpit-red/90 transition-colors"
+                className="p-2 text-neutral-600 hover:text-cockpit-out-text/90 transition-colors"
                 title={t('integrations.deleteCredentials')}
               >
                 <Trash2 size={16} />
@@ -170,7 +170,7 @@ function ServiceCard({ serviceKey, schema, stored, onSave, onDelete, t }: Servic
             ))}
 
             {error && (
-              <p className="text-cockpit-red text-sm flex items-center gap-1">
+              <p className="text-cockpit-out-text text-sm flex items-center gap-1">
                 <AlertCircle size={14} /> {error}
               </p>
             )}
@@ -197,7 +197,7 @@ function ServiceCard({ serviceKey, schema, stored, onSave, onDelete, t }: Servic
         {/* Delete confirmation */}
         {confirmDelete && (
           <div className="mt-3 bg-cockpit-red/20 border border-cockpit-red/40 rounded-lg p-3 flex items-center justify-between">
-            <p className="text-cockpit-red text-sm">{t('integrations.deleteConfirm', { service: schema.label })}</p>
+            <p className="text-cockpit-out-text text-sm">{t('integrations.deleteConfirm', { service: schema.label })}</p>
             <div className="flex gap-2">
               <button
                 onClick={handleDelete}
@@ -287,7 +287,7 @@ export default function IntegrationsScreen() {
           </div>
         ) : error ? (
           <div className="bg-cockpit-red/30 border border-cockpit-red rounded-lg p-4">
-            <p className="text-cockpit-red">{error}</p>
+            <p className="text-cockpit-out-text">{error}</p>
           </div>
         ) : schema ? (
           <div className="space-y-6">

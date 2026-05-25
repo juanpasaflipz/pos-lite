@@ -128,7 +128,7 @@ export default function CategoryManagementView({
                       onClick={() => onToggleCategory(cat.id)}
                       className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                         cat.active
-                          ? 'bg-cockpit-green/30 text-cockpit-green hover:bg-cockpit-green/50'
+                          ? 'bg-cockpit-green/30 text-cockpit-in-text hover:bg-cockpit-green/50'
                           : 'bg-neutral-700 text-neutral-400 hover:bg-neutral-600'
                       }`}
                     >

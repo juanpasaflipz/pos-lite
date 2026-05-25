@@ -39,7 +39,7 @@ const OverviewTab: React.FC = () => {
       .catch((e) => setError(e.message));
   }, []);
 
-  if (error) return <div className="text-cockpit-red">{error}</div>;
+  if (error) return <div className="text-cockpit-out-text">{error}</div>;
   if (!overview) return <div className="text-neutral-400">{t('overview.loading')}</div>;
 
   const totalTenants = overview.total_tenants ?? 0;

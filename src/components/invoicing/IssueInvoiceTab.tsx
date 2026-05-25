@@ -247,7 +247,7 @@ export default function IssueInvoiceTab({ catalogs, onError, onSuccess }: IssueI
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-neutral-400 mb-1">
-                  {t('invoicing.rfc')} <span className="text-cockpit-red">*</span>
+                  {t('invoicing.rfc')} <span className="text-cockpit-out-text">*</span>
                 </label>
                 <input
                   type="text"
@@ -263,7 +263,7 @@ export default function IssueInvoiceTab({ catalogs, onError, onSuccess }: IssueI
 
               <div>
                 <label className="block text-sm font-medium text-neutral-400 mb-1">
-                  {t('invoicing.legalName')} <span className="text-cockpit-red">*</span>
+                  {t('invoicing.legalName')} <span className="text-cockpit-out-text">*</span>
                 </label>
                 <input
                   type="text"
@@ -278,7 +278,7 @@ export default function IssueInvoiceTab({ catalogs, onError, onSuccess }: IssueI
 
               <div>
                 <label className="block text-sm font-medium text-neutral-400 mb-1">
-                  {t('invoicing.taxRegime')} <span className="text-cockpit-red">*</span>
+                  {t('invoicing.taxRegime')} <span className="text-cockpit-out-text">*</span>
                 </label>
                 <select
                   value={receptorForm.tax_regime}
@@ -298,7 +298,7 @@ export default function IssueInvoiceTab({ catalogs, onError, onSuccess }: IssueI
 
               <div>
                 <label className="block text-sm font-medium text-neutral-400 mb-1">
-                  {t('invoicing.postalCode')} <span className="text-cockpit-red">*</span>
+                  {t('invoicing.postalCode')} <span className="text-cockpit-out-text">*</span>
                 </label>
                 <input
                   type="text"
@@ -358,8 +358,8 @@ export default function IssueInvoiceTab({ catalogs, onError, onSuccess }: IssueI
       {issuedInvoice && (
         <div className="bg-cockpit-green/20 rounded-lg border border-cockpit-green p-6">
           <div className="flex items-center gap-3 mb-4">
-            <CheckCircle className="text-cockpit-green" size={24} />
-            <h3 className="text-lg font-bold text-cockpit-green">
+            <CheckCircle className="text-cockpit-in-text" size={24} />
+            <h3 className="text-lg font-bold text-cockpit-in-text">
               {t('invoicing.invoiceIssuedSuccess')}
             </h3>
           </div>

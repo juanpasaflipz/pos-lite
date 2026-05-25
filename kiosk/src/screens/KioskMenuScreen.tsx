@@ -235,7 +235,7 @@ const KioskMenuScreen: React.FC = () => {
             </div>
           )}
           {error && (
-            <div className="h-full flex items-center justify-center text-2xl text-cockpit-red">
+            <div className="h-full flex items-center justify-center text-2xl text-cockpit-out-text">
               {error}
             </div>
           )}

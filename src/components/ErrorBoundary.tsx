@@ -51,7 +51,7 @@ export default class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="min-h-screen flex items-center justify-center bg-neutral-950 p-8">
           <div className="max-w-lg w-full bg-neutral-900 rounded-xl border border-cockpit-red/40 p-6">
-            <h2 className="text-xl font-bold text-cockpit-red mb-2">
+            <h2 className="text-xl font-bold text-cockpit-out-text mb-2">
               {chunkError ? 'A new version is available' : 'Something went wrong'}
             </h2>
             <pre className="text-sm text-neutral-300 whitespace-pre-wrap break-words mb-4">

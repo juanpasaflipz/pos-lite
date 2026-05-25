@@ -98,7 +98,7 @@ const SuggestionsPanel: React.FC<Props> = ({
           {s.reason && (
             <p
               className={`mt-2 text-sm font-semibold leading-snug line-clamp-2 ${
-                accent === 'amber' ? 'text-cockpit-yellow' : 'text-brand-200'
+                accent === 'amber' ? 'text-cockpit-attention-text' : 'text-brand-200'
               }`}
             >
               {s.reason}

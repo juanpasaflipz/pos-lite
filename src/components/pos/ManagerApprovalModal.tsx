@@ -54,7 +54,7 @@ const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
           <Lock className="w-5 h-5" />
           <div>
             <h2 className="text-lg font-bold">{title || t('managerApproval.title')}</h2>
-            <p className="text-cockpit-yellow text-xs">{message || t('managerApproval.subtitle')}</p>
+            <p className="text-cockpit-attention-text text-xs">{message || t('managerApproval.subtitle')}</p>
           </div>
         </div>
         <div className="p-5 space-y-4">
@@ -67,7 +67,7 @@ const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
             ))}
           </div>
           {error && (
-            <p className="text-cockpit-red text-sm text-center">{error}</p>
+            <p className="text-cockpit-out-text text-sm text-center">{error}</p>
           )}
           <div className="grid grid-cols-3 gap-2">
             {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (

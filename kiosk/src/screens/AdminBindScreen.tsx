@@ -72,7 +72,7 @@ const AdminBindScreen: React.FC = () => {
             spellCheck={false}
             className="w-full px-5 py-4 text-xl bg-neutral-900 border-2 border-neutral-800 focus:border-brand-600 rounded-xl outline-none mb-4"
           />
-          {error && <p className="text-cockpit-red mb-4">{error}</p>}
+          {error && <p className="text-cockpit-out-text mb-4">{error}</p>}
           <button
             onClick={onLoadTenants}
             disabled={busy || !secret.trim()}
@@ -86,7 +86,7 @@ const AdminBindScreen: React.FC = () => {
       {tenants && (
         <div className="flex-1">
           <p className="text-neutral-400 mb-4">Pick a tenant to bind this iPad to:</p>
-          {error && <p className="text-cockpit-red mb-4">{error}</p>}
+          {error && <p className="text-cockpit-out-text mb-4">{error}</p>}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {tenants.map((t) => (
               <button

@@ -147,7 +147,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
                   }`}
                 >
                   {isFirstComboItem && (
-                    <p className="text-xs font-bold text-cockpit-yellow mb-1 uppercase tracking-wider">{t('cart.combo')}</p>
+                    <p className="text-xs font-bold text-cockpit-attention-text mb-1 uppercase tracking-wider">{t('cart.combo')}</p>
                   )}
                   <div className="flex justify-between items-start mb-1">
                     <div className="flex-1">
@@ -198,7 +198,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
                   {item.discount && (
                     <div className="mb-1.5 px-2 py-1 bg-cockpit-yellow/30 border border-cockpit-yellow rounded text-xs flex items-center justify-between">
                       <div className="flex-1 min-w-0">
-                        <p className="text-cockpit-yellow font-semibold">
+                        <p className="text-cockpit-attention-text font-semibold">
                           {item.discount.type === 'comp'
                             ? t('discount.compLabel')
                             : item.discount.type === 'percent'
@@ -208,7 +208,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
                       </div>
                       <button
                         onClick={() => onApplyLineDiscount(item)}
-                        className="text-cockpit-yellow hover:text-white text-xs font-bold ml-2"
+                        className="text-cockpit-attention-text hover:text-white text-xs font-bold ml-2"
                       >
                         {t('discount.edit')}
                       </button>
@@ -225,7 +225,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
                       {!item.discount && (
                         <button
                           onClick={() => onApplyLineDiscount(item)}
-                          className="px-2 py-1.5 text-xs bg-neutral-700 text-cockpit-yellow rounded hover:bg-neutral-600 transition-all"
+                          className="px-2 py-1.5 text-xs bg-neutral-700 text-cockpit-attention-text rounded hover:bg-neutral-600 transition-all"
                         >
                           <Percent className="w-3.5 h-3.5" />
                         </button>
@@ -241,8 +241,8 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
         {/* Combo Detection Banner */}
         {comboSuggestion && (
           <div className="mx-3 mb-2 bg-cockpit-yellow/30 border border-cockpit-yellow rounded-lg p-2.5">
-            <p className="text-cockpit-yellow font-bold text-xs">{t('comboDetection.title')}</p>
-            <p className="text-cockpit-yellow text-xs mt-0.5">
+            <p className="text-cockpit-attention-text font-bold text-xs">{t('comboDetection.title')}</p>
+            <p className="text-cockpit-attention-text text-xs mt-0.5">
               {t('comboDetection.message', { name: comboSuggestion.combo.name, savings: formatPrice(comboSuggestion.savings) })}
             </p>
             <button
@@ -261,7 +261,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
             <span className="font-bold text-brand-500">{formatPrice(total)}</span>
           </div>
           {totalDiscount > 0 && (
-            <div className="flex justify-between text-cockpit-yellow text-xs font-semibold">
+            <div className="flex justify-between text-cockpit-attention-text text-xs font-semibold">
               <span>{t('totals.discount')}</span>
               <span>-{formatPrice(totalDiscount)}</span>
             </div>

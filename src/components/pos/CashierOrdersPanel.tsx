@@ -35,9 +35,9 @@ const TIER_ACCENT: Record<TimeTier, string> = {
 };
 
 const TIER_TIME_TEXT: Record<TimeTier, string> = {
-  fresh: 'text-cockpit-green',
-  warning: 'text-cockpit-yellow',
-  critical: 'text-cockpit-red',
+  fresh: 'text-cockpit-in-text',
+  warning: 'text-cockpit-attention-text',
+  critical: 'text-cockpit-out-text',
 };
 
 function formatElapsed(seconds: number): string {

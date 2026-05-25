@@ -282,8 +282,8 @@ function OrderStatusTracker({ orderId, onNewOrder }: {
         {/* Ready state */}
         {isReady && (
           <div className="bg-cockpit-green/15 border border-cockpit-green/40 rounded-xl p-4 text-center mb-4 animate-pulse">
-            <p className="text-cockpit-green font-bold text-lg">Your order is ready!</p>
-            <p className="text-cockpit-green/70 text-sm mt-1">Please pick it up at the counter</p>
+            <p className="text-cockpit-in-text font-bold text-lg">Your order is ready!</p>
+            <p className="text-cockpit-in-text/70 text-sm mt-1">Please pick it up at the counter</p>
           </div>
         )}
 
@@ -299,7 +299,7 @@ function OrderStatusTracker({ orderId, onNewOrder }: {
 
         {/* Error */}
         {error && (
-          <p className="text-cockpit-red text-sm text-center mb-4">{error}</p>
+          <p className="text-cockpit-out-text text-sm text-center mb-4">{error}</p>
         )}
 
         {/* Actions */}
@@ -607,7 +607,7 @@ export default function CustomerOrderScreen() {
           </p>
 
           {error && (
-            <div className="mb-4 px-3 py-2 bg-cockpit-red/20 border border-cockpit-red/50 rounded-lg text-cockpit-red text-sm">
+            <div className="mb-4 px-3 py-2 bg-cockpit-red/20 border border-cockpit-red/50 rounded-lg text-cockpit-out-text text-sm">
               {error}
             </div>
           )}
@@ -662,7 +662,7 @@ export default function CustomerOrderScreen() {
     return (
       <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-6">
         <div className="text-center">
-          <p className="text-cockpit-red mb-4">{error}</p>
+          <p className="text-cockpit-out-text mb-4">{error}</p>
           <button
             onClick={() => window.location.reload()}
             className="text-brand-400 underline"
@@ -721,7 +721,7 @@ export default function CustomerOrderScreen() {
 
       {/* Error banner */}
       {error && (
-        <div className="mx-4 mt-3 px-4 py-2 bg-cockpit-red/20 border border-cockpit-red/50 rounded-lg text-cockpit-red text-sm">
+        <div className="mx-4 mt-3 px-4 py-2 bg-cockpit-red/20 border border-cockpit-red/50 rounded-lg text-cockpit-out-text text-sm">
           {error}
         </div>
       )}
@@ -975,7 +975,7 @@ export default function CustomerOrderScreen() {
                         </div>
                         <button
                           onClick={() => dispatch({ type: 'REMOVE_ITEM', cartId: ci.cartId })}
-                          className="text-neutral-600 hover:text-cockpit-red p-1 ml-2"
+                          className="text-neutral-600 hover:text-cockpit-out-text p-1 ml-2"
                         >
                           <X size={16} />
                         </button>

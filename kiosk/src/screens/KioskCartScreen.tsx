@@ -129,7 +129,7 @@ const KioskCartScreen: React.FC = () => {
 
       <footer className="p-4 border-t border-neutral-800 bg-neutral-950 space-y-3">
         {holdError && (
-          <p className="text-cockpit-red text-base font-bold text-center">{holdError}</p>
+          <p className="text-cockpit-out-text text-base font-bold text-center">{holdError}</p>
         )}
         <button
           disabled={count === 0 || holding}

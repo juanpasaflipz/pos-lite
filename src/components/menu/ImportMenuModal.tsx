@@ -152,7 +152,7 @@ export default function ImportMenuModal({ isOpen, onClose, onImportComplete }: P
               </div>
 
               {error && (
-                <div className="text-cockpit-red text-sm bg-cockpit-red/20 border border-cockpit-red/40 rounded-lg p-3">{error}</div>
+                <div className="text-cockpit-out-text text-sm bg-cockpit-red/20 border border-cockpit-red/40 rounded-lg p-3">{error}</div>
               )}
 
               <div className="flex items-center justify-between pt-2">
@@ -180,7 +180,7 @@ export default function ImportMenuModal({ isOpen, onClose, onImportComplete }: P
                 </div>
                 {preview.invalid_count > 0 && (
                   <div className="flex-1 bg-neutral-800/60 rounded-lg p-3 text-center">
-                    <p className="text-2xl font-bold text-cockpit-yellow">{preview.invalid_count}</p>
+                    <p className="text-2xl font-bold text-cockpit-attention-text">{preview.invalid_count}</p>
                     <p className="text-neutral-400 text-xs mt-1">{t('menuImport.skippedRows')}</p>
                   </div>
                 )}
@@ -251,11 +251,11 @@ export default function ImportMenuModal({ isOpen, onClose, onImportComplete }: P
               {preview.invalid_count > 0 && (
                 <div className="bg-cockpit-yellow/20 border border-cockpit-yellow/40 rounded-lg p-3">
                   <div className="flex items-start gap-2">
-                    <AlertTriangle size={14} className="text-cockpit-yellow flex-shrink-0 mt-0.5" />
-                    <div className="text-sm text-cockpit-yellow">
+                    <AlertTriangle size={14} className="text-cockpit-attention-text flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-cockpit-attention-text">
                       <p className="font-medium mb-1">{t('menuImport.rowsSkipped', { count: preview.invalid_count })}</p>
                       {preview.invalid_rows.slice(0, 3).map((r, i) => (
-                        <p key={i} className="text-xs text-cockpit-yellow/80">
+                        <p key={i} className="text-xs text-cockpit-attention-text/80">
                           Row {r.row}: {r.reason}
                         </p>
                       ))}
@@ -265,7 +265,7 @@ export default function ImportMenuModal({ isOpen, onClose, onImportComplete }: P
               )}
 
               {error && (
-                <div className="text-cockpit-red text-sm bg-cockpit-red/20 border border-cockpit-red/40 rounded-lg p-3">{error}</div>
+                <div className="text-cockpit-out-text text-sm bg-cockpit-red/20 border border-cockpit-red/40 rounded-lg p-3">{error}</div>
               )}
 
               <div className="flex gap-3">
@@ -325,7 +325,7 @@ export default function ImportMenuModal({ isOpen, onClose, onImportComplete }: P
               {stats.warnings.length > 0 && (
                 <div className="bg-cockpit-yellow/20 border border-cockpit-yellow/40 rounded-lg p-3">
                   {stats.warnings.map((w, i) => (
-                    <p key={i} className="text-cockpit-yellow text-sm flex items-start gap-2">
+                    <p key={i} className="text-cockpit-attention-text text-sm flex items-start gap-2">
                       <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" /> {w}
                     </p>
                   ))}

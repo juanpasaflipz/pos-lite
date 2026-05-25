@@ -294,7 +294,7 @@ export default function AgentChat({ isOpen, onClose }: AgentChatProps) {
               {msg.action_results && msg.action_results.length > 0 && (
                 <div className="mt-2 space-y-1">
                   {msg.action_results.map((result, ri) => (
-                    <div key={ri} className={`text-xs px-2 py-1 rounded ${result.success ? 'text-cockpit-green bg-cockpit-green/20' : 'text-neutral-500 bg-neutral-800/50'}`}>
+                    <div key={ri} className={`text-xs px-2 py-1 rounded ${result.success ? 'text-cockpit-in-text bg-cockpit-green/20' : 'text-neutral-500 bg-neutral-800/50'}`}>
                       {result.message}
                     </div>
                   ))}
