@@ -158,9 +158,9 @@ export default function ComboBuilder({ onAddCombo, onClose }: ComboBuilderProps)
 
               {/* Savings Display */}
               {savings > 0 && allSlotsFilled && (
-                <div className="bg-green-900/30 border border-green-800 rounded-lg p-4 text-center">
-                  <p className="text-green-400 font-bold text-lg">{t('comboBuilder.youSave', { amount: formatPrice(savings) })}</p>
-                  <p className="text-green-300 text-sm">
+                <div className="bg-cockpit-green/30 border border-cockpit-green rounded-lg p-4 text-center">
+                  <p className="text-cockpit-green font-bold text-lg">{t('comboBuilder.youSave', { amount: formatPrice(savings) })}</p>
+                  <p className="text-cockpit-green text-sm">
                     {t('comboBuilder.individual')}: {formatPrice(individualTotal)} → {t('comboBuilder.comboLabel')}: {formatPrice(selectedCombo.combo_price)}
                   </p>
                 </div>

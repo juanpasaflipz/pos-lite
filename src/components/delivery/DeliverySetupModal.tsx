@@ -26,9 +26,9 @@ const DEFAULT_PLATFORMS: PlatformOption[] = [
 ];
 
 const PLATFORM_COLORS: Record<string, string> = {
-  uber_eats: 'bg-green-600',
-  rappi: 'bg-orange-500',
-  didi_food: 'bg-orange-600',
+  uber_eats: 'bg-cockpit-green',
+  rappi: 'bg-cockpit-yellow',
+  didi_food: 'bg-cockpit-yellow',
 };
 
 export default function DeliverySetupModal({ isOpen, onClose, onDeliverySetup }: Props) {
@@ -187,8 +187,8 @@ export default function DeliverySetupModal({ isOpen, onClose, onDeliverySetup }:
               ))}
 
               {error && (
-                <div className="bg-red-900/20 border border-red-800/50 rounded-lg p-3">
-                  <p className="text-red-400 text-sm">{error}</p>
+                <div className="bg-cockpit-red/20 border border-cockpit-red/50 rounded-lg p-3">
+                  <p className="text-cockpit-red text-sm">{error}</p>
                 </div>
               )}
 
@@ -211,8 +211,8 @@ export default function DeliverySetupModal({ isOpen, onClose, onDeliverySetup }:
 
           {step === 'done' && result && (
             <div className="flex flex-col items-center justify-center py-8 gap-4">
-              <div className="w-14 h-14 rounded-full bg-green-900/30 flex items-center justify-center">
-                <Check size={28} className="text-green-400" />
+              <div className="w-14 h-14 rounded-full bg-cockpit-green/30 flex items-center justify-center">
+                <Check size={28} className="text-cockpit-green" />
               </div>
               <div className="text-center">
                 <p className="text-white font-bold text-lg">{t('delivery.platformsReady')}</p>

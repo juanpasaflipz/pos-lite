@@ -103,10 +103,10 @@ export default function PayrollPanel() {
   return (
     <div className="space-y-6">
       {error && (
-        <div className="bg-red-900/30 border border-red-800 rounded-lg p-3 text-red-300 text-sm">{error}</div>
+        <div className="bg-cockpit-red/30 border border-cockpit-red rounded-lg p-3 text-cockpit-red text-sm">{error}</div>
       )}
       {savedFlash && (
-        <div className="bg-emerald-900/30 border border-emerald-800 rounded-lg p-3 text-emerald-300 text-sm">{savedFlash}</div>
+        <div className="bg-cockpit-green/30 border border-cockpit-green rounded-lg p-3 text-cockpit-green text-sm">{savedFlash}</div>
       )}
 
       <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 space-y-4">

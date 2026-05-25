@@ -52,8 +52,8 @@ export default function MarginTab({ marginData }: MarginTabProps) {
                   <td className="px-4 py-3 text-white">{day.date}</td>
                   <td className="px-4 py-3 text-right text-neutral-300">{day.orders}</td>
                   <td className="px-4 py-3 text-right text-neutral-300">{fmt(day.revenue)}</td>
-                  <td className="px-4 py-3 text-right text-amber-400">{fmt(day.cogs)}</td>
-                  <td className="px-4 py-3 text-right text-green-400">{fmt(day.contribution_margin)}</td>
+                  <td className="px-4 py-3 text-right text-cockpit-yellow">{fmt(day.cogs)}</td>
+                  <td className="px-4 py-3 text-right text-cockpit-green">{fmt(day.contribution_margin)}</td>
                   <td className="px-4 py-3 text-right font-bold text-white">{day.margin_percent}%</td>
                 </tr>
               ))}

@@ -74,27 +74,27 @@ const StaleStockPanel: React.FC<Props> = ({ onItemUpdated }) => {
   if (items.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-amber-800/60 bg-amber-950/30 overflow-hidden mb-4">
+    <div className="rounded-xl border border-cockpit-yellow/60 bg-cockpit-yellow/30 overflow-hidden mb-4">
       <button
         type="button"
         onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-amber-950/50 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-cockpit-yellow/50 transition-colors"
       >
         <div className="flex items-center gap-2">
-          <AlertTriangle size={18} className="text-amber-400" />
-          <span className="font-semibold text-amber-100">
+          <AlertTriangle size={18} className="text-cockpit-yellow" />
+          <span className="font-semibold text-cockpit-yellow">
             {t('stale.title', { defaultValue: 'Stale stock check' })}
           </span>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-900/60 text-amber-200">
+          <span className="text-xs px-2 py-0.5 rounded-full bg-cockpit-yellow/60 text-cockpit-yellow">
             {items.length}
           </span>
         </div>
-        {expanded ? <ChevronUp size={16} className="text-amber-300" /> : <ChevronDown size={16} className="text-amber-300" />}
+        {expanded ? <ChevronUp size={16} className="text-cockpit-yellow" /> : <ChevronDown size={16} className="text-cockpit-yellow" />}
       </button>
 
       {expanded && (
         <div className="px-4 pb-4 space-y-2">
-          <p className="text-xs text-amber-200/80 pb-1">
+          <p className="text-xs text-cockpit-yellow/80 pb-1">
             {t('stale.hint', {
               defaultValue: 'These items are past their typical shelf life. Confirm what\'s still good and log the rest as waste.',
             })}
@@ -102,7 +102,7 @@ const StaleStockPanel: React.FC<Props> = ({ onItemUpdated }) => {
           {items.map((item) => (
             <div
               key={item.id}
-              className="rounded-lg border border-amber-900/50 bg-neutral-950 p-3 space-y-2"
+              className="rounded-lg border border-cockpit-yellow/50 bg-neutral-950 p-3 space-y-2"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -135,7 +135,7 @@ const StaleStockPanel: React.FC<Props> = ({ onItemUpdated }) => {
                   type="button"
                   onClick={() => handleStillHere(item)}
                   disabled={busyId === item.id}
-                  className="flex items-center justify-center gap-1.5 py-2 bg-neutral-800 hover:bg-emerald-900/30 hover:text-emerald-300 text-neutral-200 text-sm rounded-md border border-neutral-700 hover:border-emerald-800 transition-colors disabled:opacity-50 min-h-[40px]"
+                  className="flex items-center justify-center gap-1.5 py-2 bg-neutral-800 hover:bg-cockpit-green/30 hover:text-cockpit-green/90 text-neutral-200 text-sm rounded-md border border-neutral-700 hover:border-cockpit-green/90 transition-colors disabled:opacity-50 min-h-[40px]"
                 >
                   {busyId === item.id
                     ? <Loader2 size={14} className="animate-spin" />
@@ -146,7 +146,7 @@ const StaleStockPanel: React.FC<Props> = ({ onItemUpdated }) => {
                   type="button"
                   onClick={() => handleWasted(item)}
                   disabled={busyId === item.id}
-                  className="flex items-center justify-center gap-1.5 py-2 bg-neutral-800 hover:bg-red-950/40 hover:text-red-300 text-neutral-200 text-sm rounded-md border border-neutral-700 hover:border-red-800 transition-colors disabled:opacity-50 min-h-[40px]"
+                  className="flex items-center justify-center gap-1.5 py-2 bg-neutral-800 hover:bg-cockpit-red/40 hover:text-cockpit-red/90 text-neutral-200 text-sm rounded-md border border-neutral-700 hover:border-cockpit-red/90 transition-colors disabled:opacity-50 min-h-[40px]"
                 >
                   {busyId === item.id
                     ? <Loader2 size={14} className="animate-spin" />
@@ -159,7 +159,7 @@ const StaleStockPanel: React.FC<Props> = ({ onItemUpdated }) => {
           <button
             type="button"
             onClick={load}
-            className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-amber-300/70 hover:text-amber-300 transition-colors"
+            className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-cockpit-yellow/70 hover:text-cockpit-yellow/90 transition-colors"
           >
             <RotateCcw size={12} />
             {t('common:buttons.refresh', { defaultValue: 'Refresh' })}

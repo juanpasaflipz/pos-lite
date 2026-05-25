@@ -20,11 +20,11 @@ export default function COGSTab({ cogsData }: COGSTabProps) {
         </div>
         <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
           <p className="text-neutral-400 text-sm">{t('sales.cogs.totalCogs')}</p>
-          <p className="text-3xl font-bold text-amber-500 mt-2">{fmt(cogsData.totals.total_cogs)}</p>
+          <p className="text-3xl font-bold text-cockpit-yellow mt-2">{fmt(cogsData.totals.total_cogs)}</p>
         </div>
         <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
           <p className="text-neutral-400 text-sm">{t('sales.cogs.grossMargin')}</p>
-          <p className="text-3xl font-bold text-green-400 mt-2">{fmt(cogsData.totals.total_margin)}</p>
+          <p className="text-3xl font-bold text-cockpit-green mt-2">{fmt(cogsData.totals.total_margin)}</p>
         </div>
         <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
           <p className="text-neutral-400 text-sm">{t('sales.cogs.marginPercent')}</p>
@@ -52,10 +52,10 @@ export default function COGSTab({ cogsData }: COGSTabProps) {
                   <td className="px-4 py-3 font-medium text-white">{item.item_name}</td>
                   <td className="px-4 py-3 text-right text-neutral-300">{item.quantity_sold}</td>
                   <td className="px-4 py-3 text-right text-neutral-300">{fmt(item.revenue)}</td>
-                  <td className="px-4 py-3 text-right text-amber-400">{fmt(item.cogs)}</td>
-                  <td className="px-4 py-3 text-right text-green-400">{fmt(item.margin)}</td>
+                  <td className="px-4 py-3 text-right text-cockpit-yellow">{fmt(item.cogs)}</td>
+                  <td className="px-4 py-3 text-right text-cockpit-green">{fmt(item.margin)}</td>
                   <td className="px-4 py-3 text-right">
-                    <span className={`font-bold ${item.margin_percent >= 60 ? 'text-green-400' : item.margin_percent >= 40 ? 'text-amber-400' : 'text-brand-400'}`}>
+                    <span className={`font-bold ${item.margin_percent >= 60 ? 'text-cockpit-green' : item.margin_percent >= 40 ? 'text-cockpit-yellow' : 'text-brand-400'}`}>
                       {item.margin_percent}%
                     </span>
                   </td>

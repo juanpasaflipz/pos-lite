@@ -87,7 +87,7 @@ export default function ScanTab({
               onClick={onCameraToggle}
               className={`px-4 py-2 rounded-lg transition-colors font-medium ${
                 cameraActive
-                  ? 'bg-red-600 text-white hover:bg-red-700'
+                  ? 'bg-cockpit-red text-white hover:bg-cockpit-red/90'
                   : 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
               }`}
             >

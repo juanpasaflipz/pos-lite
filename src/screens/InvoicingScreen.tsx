@@ -103,12 +103,12 @@ export default function InvoicingScreen() {
       <div className="max-w-7xl mx-auto p-6">
         {/* Alerts */}
         {error && (
-          <div className="bg-red-900/30 border border-red-800 rounded-lg p-4 mb-6 flex items-start gap-3">
-            <XCircle className="text-red-400 flex-shrink-0 mt-0.5" size={18} />
-            <p className="text-red-300 text-sm">{error}</p>
+          <div className="bg-cockpit-red/30 border border-cockpit-red rounded-lg p-4 mb-6 flex items-start gap-3">
+            <XCircle className="text-cockpit-red flex-shrink-0 mt-0.5" size={18} />
+            <p className="text-cockpit-red text-sm">{error}</p>
             <button
               onClick={() => setError(null)}
-              className="ml-auto text-red-500 hover:text-red-300"
+              className="ml-auto text-cockpit-red hover:text-cockpit-red/90"
             >
               <XCircle size={16} />
             </button>
@@ -116,9 +116,9 @@ export default function InvoicingScreen() {
         )}
 
         {success && (
-          <div className="bg-green-900/30 border border-green-800 rounded-lg p-4 mb-6 flex items-start gap-3">
-            <CheckCircle className="text-green-400 flex-shrink-0 mt-0.5" size={18} />
-            <p className="text-green-300 text-sm">{success}</p>
+          <div className="bg-cockpit-green/30 border border-cockpit-green rounded-lg p-4 mb-6 flex items-start gap-3">
+            <CheckCircle className="text-cockpit-green flex-shrink-0 mt-0.5" size={18} />
+            <p className="text-cockpit-green text-sm">{success}</p>
           </div>
         )}
 

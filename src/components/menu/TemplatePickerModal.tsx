@@ -126,7 +126,7 @@ export default function TemplatePickerModal({ isOpen, onClose, onTemplateApplied
                   <Loader2 size={24} className="text-brand-500 animate-spin" />
                 </div>
               ) : error ? (
-                <div className="text-red-400 text-sm text-center py-8">{error}</div>
+                <div className="text-cockpit-red text-sm text-center py-8">{error}</div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {templates.map(tmpl => (
@@ -184,14 +184,14 @@ export default function TemplatePickerModal({ isOpen, onClose, onTemplateApplied
 
               {/* Plan limit warning */}
               {limitWarning && (
-                <div className="flex items-start gap-3 bg-amber-900/20 border border-amber-700/40 rounded-lg p-3">
-                  <AlertTriangle size={16} className="text-amber-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-amber-300 text-sm">{limitWarning}</p>
+                <div className="flex items-start gap-3 bg-cockpit-yellow/20 border border-cockpit-yellow/40 rounded-lg p-3">
+                  <AlertTriangle size={16} className="text-cockpit-yellow flex-shrink-0 mt-0.5" />
+                  <p className="text-cockpit-yellow text-sm">{limitWarning}</p>
                 </div>
               )}
 
               {error && (
-                <div className="text-red-400 text-sm bg-red-900/20 border border-red-800/40 rounded-lg p-3">{error}</div>
+                <div className="text-cockpit-red text-sm bg-cockpit-red/20 border border-cockpit-red/40 rounded-lg p-3">{error}</div>
               )}
 
               <button
@@ -261,9 +261,9 @@ export default function TemplatePickerModal({ isOpen, onClose, onTemplateApplied
               </div>
 
               {stats.warnings.length > 0 && (
-                <div className="bg-amber-900/20 border border-amber-700/40 rounded-lg p-3">
+                <div className="bg-cockpit-yellow/20 border border-cockpit-yellow/40 rounded-lg p-3">
                   {stats.warnings.map((w, i) => (
-                    <p key={i} className="text-amber-300 text-sm flex items-start gap-2">
+                    <p key={i} className="text-cockpit-yellow text-sm flex items-start gap-2">
                       <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" /> {w}
                     </p>
                   ))}

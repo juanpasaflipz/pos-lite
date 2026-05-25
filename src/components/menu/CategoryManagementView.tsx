@@ -71,7 +71,7 @@ export default function CategoryManagementView({
               />
             </div>
             <div className="flex gap-2">
-              <button onClick={onCreateCategory} className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700">
+              <button onClick={onCreateCategory} className="px-4 py-2 bg-cockpit-green text-white rounded-lg font-medium hover:bg-cockpit-green/90">
                 <Check size={18} className="inline mr-1" /> {t('common:buttons.create')}
               </button>
               <button onClick={() => onShowCategoryForm(false)} className="px-4 py-2 bg-neutral-700 text-white rounded-lg font-medium hover:bg-neutral-600">
@@ -100,7 +100,7 @@ export default function CategoryManagementView({
                     placeholder={t('menu.categoryForm.order')}
                     className="w-20 bg-neutral-700 border border-neutral-600 rounded-lg p-2 text-white focus:outline-none focus:border-brand-600"
                   />
-                  <button onClick={onUpdateCategory} className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                  <button onClick={onUpdateCategory} className="p-2 bg-cockpit-green text-white rounded-lg hover:bg-cockpit-green/90">
                     <Check size={18} />
                   </button>
                   <button onClick={() => onEditingCategoryId(null)} className="p-2 bg-neutral-700 text-white rounded-lg hover:bg-neutral-600">
@@ -128,7 +128,7 @@ export default function CategoryManagementView({
                       onClick={() => onToggleCategory(cat.id)}
                       className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                         cat.active
-                          ? 'bg-green-900/30 text-green-400 hover:bg-green-900/50'
+                          ? 'bg-cockpit-green/30 text-cockpit-green hover:bg-cockpit-green/50'
                           : 'bg-neutral-700 text-neutral-400 hover:bg-neutral-600'
                       }`}
                     >

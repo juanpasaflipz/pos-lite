@@ -55,9 +55,9 @@ export default function LaborStrip() {
     else if (laborPct >= warn) tone = 'warn';
   }
   const toneClasses = {
-    good: { ring: 'border-emerald-700/50', bg: 'bg-emerald-900/20', text: 'text-emerald-400' },
-    warn: { ring: 'border-amber-700/50', bg: 'bg-amber-900/20', text: 'text-amber-400' },
-    critical: { ring: 'border-red-700/50', bg: 'bg-red-900/20', text: 'text-red-400' },
+    good: { ring: 'border-cockpit-green/50', bg: 'bg-cockpit-green/20', text: 'text-cockpit-green' },
+    warn: { ring: 'border-cockpit-yellow/50', bg: 'bg-cockpit-yellow/20', text: 'text-cockpit-yellow' },
+    critical: { ring: 'border-cockpit-red/50', bg: 'bg-cockpit-red/20', text: 'text-cockpit-red' },
   }[tone];
 
   const onClockCount = data.employees.filter(e => e.has_open_shift).length;
@@ -116,7 +116,7 @@ export default function LaborStrip() {
         </div>
 
         {overtimeEmployees.length > 0 && (
-          <div className="mt-3 flex items-start gap-2 text-sm text-amber-300">
+          <div className="mt-3 flex items-start gap-2 text-sm text-cockpit-yellow">
             <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
             <span>
               {t('payroll.laborStrip.overtimeAlert', {
@@ -146,12 +146,12 @@ export default function LaborStrip() {
                   <td className="py-2 text-neutral-200">
                     {e.employee_name}
                     {e.has_open_shift && (
-                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-emerald-900/40 text-emerald-300">
+                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-cockpit-green/40 text-cockpit-green">
                         {t('payroll.table.onClock')}
                       </span>
                     )}
                     {e.hours_overtime > 0 && (
-                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-300">
+                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-cockpit-yellow/40 text-cockpit-yellow">
                         OT
                       </span>
                     )}

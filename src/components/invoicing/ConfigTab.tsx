@@ -26,15 +26,15 @@ function ConfigStatusBadge({ config, t }: { config: CfdiConfig | null; t: (key: 
   }
   if (config.active) {
     return (
-      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-green-900/30 text-green-400 border border-green-800">
-        <span className="w-2 h-2 rounded-full bg-green-400" />
+      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-cockpit-green/30 text-cockpit-green border border-cockpit-green">
+        <span className="w-2 h-2 rounded-full bg-cockpit-green" />
         {t('invoicing.statusActive')}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-900/30 text-amber-400 border border-amber-800">
-      <span className="w-2 h-2 rounded-full bg-amber-400" />
+    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-cockpit-yellow/30 text-cockpit-yellow border border-cockpit-yellow">
+      <span className="w-2 h-2 rounded-full bg-cockpit-yellow" />
       {t('invoicing.statusCsdRequired')}
     </span>
   );
@@ -201,7 +201,7 @@ export default function ConfigTab({ config, catalogs, onConfigUpdate, onError, o
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-neutral-400 mb-1">
-              {t('invoicing.rfc')} <span className="text-red-400">*</span>
+              {t('invoicing.rfc')} <span className="text-cockpit-red">*</span>
             </label>
             <input
               type="text"
@@ -215,7 +215,7 @@ export default function ConfigTab({ config, catalogs, onConfigUpdate, onError, o
 
           <div>
             <label className="block text-sm font-medium text-neutral-400 mb-1">
-              {t('invoicing.legalName')} <span className="text-red-400">*</span>
+              {t('invoicing.legalName')} <span className="text-cockpit-red">*</span>
             </label>
             <input
               type="text"
@@ -228,7 +228,7 @@ export default function ConfigTab({ config, catalogs, onConfigUpdate, onError, o
 
           <div>
             <label className="block text-sm font-medium text-neutral-400 mb-1">
-              {t('invoicing.taxRegime')} <span className="text-red-400">*</span>
+              {t('invoicing.taxRegime')} <span className="text-cockpit-red">*</span>
             </label>
             <select
               value={cfdiForm.tax_regime}
@@ -246,7 +246,7 @@ export default function ConfigTab({ config, catalogs, onConfigUpdate, onError, o
 
           <div>
             <label className="block text-sm font-medium text-neutral-400 mb-1">
-              {t('invoicing.postalCode')} <span className="text-red-400">*</span>
+              {t('invoicing.postalCode')} <span className="text-cockpit-red">*</span>
             </label>
             <input
               type="text"
@@ -339,7 +339,7 @@ export default function ConfigTab({ config, catalogs, onConfigUpdate, onError, o
               {config.csd_uploaded && config.csd_valid_until && (
                 <p className="text-neutral-400 text-sm">
                   {t('invoicing.validUntil')}{' '}
-                  <span className="text-green-400">
+                  <span className="text-cockpit-green">
                     {formatDate(config.csd_valid_until)}
                   </span>
                 </p>
@@ -434,14 +434,14 @@ export default function ConfigTab({ config, catalogs, onConfigUpdate, onError, o
             <div
               className={`mt-4 p-4 rounded-lg border ${
                 testResult.success
-                  ? 'bg-green-900/30 border-green-800'
-                  : 'bg-red-900/30 border-red-800'
+                  ? 'bg-cockpit-green/30 border-cockpit-green'
+                  : 'bg-cockpit-red/30 border-cockpit-red'
               }`}
             >
               {testResult.success ? (
                 <div className="flex items-center gap-2">
-                  <CheckCircle className="text-green-400" size={18} />
-                  <span className="text-green-300 text-sm">
+                  <CheckCircle className="text-cockpit-green" size={18} />
+                  <span className="text-cockpit-green text-sm">
                     {t('invoicing.connectionSuccess')}
                     {testResult.expires_at &&
                       ` — CSD valid until ${formatDate(testResult.expires_at)}`}
@@ -449,8 +449,8 @@ export default function ConfigTab({ config, catalogs, onConfigUpdate, onError, o
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <XCircle className="text-red-400" size={18} />
-                  <span className="text-red-300 text-sm">
+                  <XCircle className="text-cockpit-red" size={18} />
+                  <span className="text-cockpit-red text-sm">
                     {t('invoicing.errorLabel')}: {testResult.error || t('invoicing.couldNotConnect')}
                   </span>
                 </div>

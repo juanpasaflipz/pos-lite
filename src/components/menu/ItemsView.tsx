@@ -81,7 +81,7 @@ export default function ItemsView({
           onClick={() => onSetItemSubTab('live')}
           className={`px-5 py-2.5 rounded-lg font-medium text-sm transition-colors ${
             itemSubTab === 'live'
-              ? 'bg-green-600 text-white'
+              ? 'bg-cockpit-green text-white'
               : 'bg-neutral-800 text-neutral-400 border border-neutral-700 hover:text-white'
           }`}
         >
@@ -91,7 +91,7 @@ export default function ItemsView({
           onClick={() => onSetItemSubTab('pre-menu')}
           className={`px-5 py-2.5 rounded-lg font-medium text-sm transition-colors ${
             itemSubTab === 'pre-menu'
-              ? 'bg-amber-600 text-white'
+              ? 'bg-cockpit-yellow text-neutral-900'
               : 'bg-neutral-800 text-neutral-400 border border-neutral-700 hover:text-white'
           }`}
         >
@@ -166,7 +166,7 @@ export default function ItemsView({
                     className={`flex-1 px-4 py-2 rounded-lg transition-colors font-medium min-h-[44px] ${
                       item.active
                         ? 'bg-brand-600/20 text-brand-400 hover:bg-brand-600/30 border border-brand-800'
-                        : 'bg-green-600/20 text-green-400 hover:bg-green-600/30 border border-green-800'
+                        : 'bg-cockpit-green/20 text-cockpit-green hover:bg-cockpit-green/30 border border-cockpit-green'
                     }`}
                   >
                     {item.active ? t('menu.deactivate') : t('menu.activate')}

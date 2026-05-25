@@ -40,10 +40,10 @@ export default function CategoriesTab({ categoryData }: CategoriesTabProps) {
               <h4 className="text-lg font-bold text-white mb-3">{cat.category_name}</h4>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between"><span className="text-neutral-400">{t('sales.categories.revenue')}</span><span className="text-white font-bold">{fmt(cat.revenue)}</span></div>
-                <div className="flex justify-between"><span className="text-neutral-400">{t('sales.categories.cogs')}</span><span className="text-amber-400 font-bold">{fmt(cat.cogs)}</span></div>
-                <div className="flex justify-between"><span className="text-neutral-400">{t('sales.categories.margin')}</span><span className="text-green-400 font-bold">{fmt(cat.margin)}</span></div>
+                <div className="flex justify-between"><span className="text-neutral-400">{t('sales.categories.cogs')}</span><span className="text-cockpit-yellow font-bold">{fmt(cat.cogs)}</span></div>
+                <div className="flex justify-between"><span className="text-neutral-400">{t('sales.categories.margin')}</span><span className="text-cockpit-green font-bold">{fmt(cat.margin)}</span></div>
                 <div className="flex justify-between"><span className="text-neutral-400">{t('sales.categories.marginPercent')}</span>
-                  <span className={`font-bold ${cat.margin_percent >= 60 ? 'text-green-400' : cat.margin_percent >= 40 ? 'text-amber-400' : 'text-brand-400'}`}>
+                  <span className={`font-bold ${cat.margin_percent >= 60 ? 'text-cockpit-green' : cat.margin_percent >= 40 ? 'text-cockpit-yellow' : 'text-brand-400'}`}>
                     {cat.margin_percent}%
                   </span>
                 </div>

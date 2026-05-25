@@ -444,7 +444,7 @@ export default function ModifierManagement() {
                   </button>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={handleCreateGroup} className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700">{t('common:buttons.create')}</button>
+                  <button onClick={handleCreateGroup} className="px-4 py-2 bg-cockpit-green text-white rounded-lg font-medium hover:bg-cockpit-green/90">{t('common:buttons.create')}</button>
                   <button onClick={() => setShowAddGroup(false)} className="px-4 py-2 bg-neutral-700 text-white rounded-lg font-medium hover:bg-neutral-600">{t('common:buttons.cancel')}</button>
                 </div>
               </div>
@@ -466,7 +466,7 @@ export default function ModifierManagement() {
                           }}
                           className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg p-2 text-white font-bold focus:outline-none focus:border-brand-600"
                         />
-                        <button onClick={() => handleSaveGroup(group.id)} title={t('common:buttons.save')} className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700"><Check size={16} /></button>
+                        <button onClick={() => handleSaveGroup(group.id)} title={t('common:buttons.save')} className="p-2 bg-cockpit-green text-white rounded-lg hover:bg-cockpit-green/90"><Check size={16} /></button>
                         <button onClick={cancelEditGroup} title={t('common:buttons.cancel')} className="p-2 bg-neutral-700 text-white rounded-lg hover:bg-neutral-600"><X size={16} /></button>
                       </div>
                     ) : (
@@ -491,14 +491,14 @@ export default function ModifierManagement() {
                       </button>
                       <button
                         onClick={() => handleToggleGroup(group)}
-                        className={`px-3 py-1 rounded-lg text-sm font-medium ${group.active ? 'bg-green-900/30 text-green-400' : 'bg-neutral-800 text-neutral-500'}`}
+                        className={`px-3 py-1 rounded-lg text-sm font-medium ${group.active ? 'bg-cockpit-green/30 text-cockpit-green' : 'bg-neutral-800 text-neutral-500'}`}
                       >
                         {group.active ? t('menu.active') : t('menu.inactive')}
                       </button>
                       <button
                         onClick={() => handleDeleteGroup(group)}
                         title={t('modifiers.deleteGroup')}
-                        className="p-2 text-neutral-400 hover:text-red-400 hover:bg-neutral-800 rounded-lg transition-colors"
+                        className="p-2 text-neutral-400 hover:text-cockpit-red/90 hover:bg-neutral-800 rounded-lg transition-colors"
                       >
                         <Trash2 size={18} />
                       </button>
@@ -532,7 +532,7 @@ export default function ModifierManagement() {
                             }}
                             className="w-24 bg-neutral-700 border border-neutral-600 rounded-lg p-1.5 text-white text-sm focus:outline-none focus:border-brand-600"
                           />
-                          <button onClick={() => handleSaveMod(mod.id)} title={t('common:buttons.save')} className="p-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700"><Check size={14} /></button>
+                          <button onClick={() => handleSaveMod(mod.id)} title={t('common:buttons.save')} className="p-1.5 bg-cockpit-green text-white rounded-lg hover:bg-cockpit-green/90"><Check size={14} /></button>
                           <button onClick={cancelEditMod} title={t('common:buttons.cancel')} className="p-1.5 bg-neutral-700 text-white rounded-lg hover:bg-neutral-600"><X size={14} /></button>
                         </div>
                       ) : (
@@ -540,7 +540,7 @@ export default function ModifierManagement() {
                           <div className="flex items-center gap-3">
                             <span className={`text-white ${!mod.active ? 'line-through text-neutral-500' : ''}`}>{mod.name}</span>
                             {mod.price_adjustment !== 0 && (
-                              <span className="text-xs font-bold text-amber-400">
+                              <span className="text-xs font-bold text-cockpit-yellow">
                                 {mod.price_adjustment > 0 ? '+' : ''}{formatPrice(mod.price_adjustment)}
                               </span>
                             )}
@@ -562,7 +562,7 @@ export default function ModifierManagement() {
                             <button
                               onClick={() => handleDeleteModifier(mod.id, mod.name)}
                               title={t('modifiers.deleteModifier')}
-                              className="p-1 text-neutral-500 hover:text-red-400 transition-colors"
+                              className="p-1 text-neutral-500 hover:text-cockpit-red/90 transition-colors"
                             >
                               <Trash2 size={14} />
                             </button>
@@ -587,7 +587,7 @@ export default function ModifierManagement() {
                         placeholder={t('modifiers.priceAdj')}
                         className="w-24 bg-neutral-800 border border-neutral-700 rounded-lg p-2 text-white text-sm focus:outline-none focus:border-brand-600"
                       />
-                      <button onClick={() => handleCreateModifier(group.id)} className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium">{t('common:buttons.add')}</button>
+                      <button onClick={() => handleCreateModifier(group.id)} className="px-3 py-2 bg-cockpit-green text-white rounded-lg text-sm font-medium">{t('common:buttons.add')}</button>
                       <button onClick={() => setShowAddModifier(null)} className="px-3 py-2 bg-neutral-700 text-white rounded-lg text-sm font-medium">X</button>
                     </div>
                   ) : (
@@ -725,7 +725,7 @@ export default function ModifierManagement() {
                 <div className="flex gap-2 pt-2">
                   <button
                     onClick={handleSaveCombo}
-                    className="px-6 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 flex items-center gap-2"
+                    className="px-6 py-2 bg-cockpit-green text-white rounded-lg font-medium hover:bg-cockpit-green/90 flex items-center gap-2"
                   >
                     <Check size={18} />
                     {editingComboId ? t('menu.form.saveChanges') : t('modifiers.combos.createCombo')}
@@ -759,13 +759,13 @@ export default function ModifierManagement() {
                     <button
                       onClick={() => handleDeleteCombo(combo)}
                       title={t('modifiers.combos.deleteCombo')}
-                      className="p-2 text-neutral-400 hover:text-red-400 hover:bg-neutral-800 rounded-lg transition-colors"
+                      className="p-2 text-neutral-400 hover:text-cockpit-red/90 hover:bg-neutral-800 rounded-lg transition-colors"
                     >
                       <Trash2 size={18} />
                     </button>
                     <button
                       onClick={() => handleToggleCombo(combo)}
-                      className={`px-3 py-1 rounded-lg text-sm font-medium ${combo.active ? 'bg-green-900/30 text-green-400' : 'bg-neutral-800 text-neutral-500'}`}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium ${combo.active ? 'bg-cockpit-green/30 text-cockpit-green' : 'bg-neutral-800 text-neutral-500'}`}
                     >
                       {combo.active ? t('modifiers.combos.active') : t('modifiers.combos.inactive')}
                     </button>

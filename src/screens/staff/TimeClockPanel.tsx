@@ -228,15 +228,15 @@ export default function TimeClockPanel() {
   return (
     <div className="space-y-6">
       {error && (
-        <div className="rounded-xl border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">{error}</div>
+        <div className="rounded-xl border border-cockpit-red bg-cockpit-red/40 px-4 py-3 text-sm text-cockpit-red">{error}</div>
       )}
 
       {flagged.length > 0 && (
-        <div className="rounded-xl border border-amber-800 bg-amber-950/40 px-4 py-3 flex items-start gap-3">
-          <AlertTriangle size={18} className="text-amber-400 mt-0.5 shrink-0" />
-          <div className="text-sm text-amber-200">
+        <div className="rounded-xl border border-cockpit-yellow bg-cockpit-yellow/40 px-4 py-3 flex items-start gap-3">
+          <AlertTriangle size={18} className="text-cockpit-yellow mt-0.5 shrink-0" />
+          <div className="text-sm text-cockpit-yellow">
             <p className="font-semibold">{flagged.length} shift(s) open more than 12 hours</p>
-            <p className="mt-1 text-amber-300/80">Likely forgot to clock out. Edit the row to set the correct clock-out time.</p>
+            <p className="mt-1 text-cockpit-yellow/80">Likely forgot to clock out. Edit the row to set the correct clock-out time.</p>
           </div>
         </div>
       )}
@@ -253,11 +253,11 @@ export default function TimeClockPanel() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {liveActive.map(a => (
-              <div key={a.id} className="rounded-xl border border-green-800 bg-green-950/20 p-4">
-                <p className="text-xs uppercase tracking-wide text-green-400">{a.employee_role}</p>
+              <div key={a.id} className="rounded-xl border border-cockpit-green bg-cockpit-green/20 p-4">
+                <p className="text-xs uppercase tracking-wide text-cockpit-green">{a.employee_role}</p>
                 <p className="text-xl font-bold text-white mt-1">{a.employee_name}</p>
                 <p className="text-sm text-neutral-300 mt-2">
-                  Since {formatDateTime(a.clock_in_at)} · <span className="text-green-300">{formatDuration(a.elapsed_seconds)}</span>
+                  Since {formatDateTime(a.clock_in_at)} · <span className="text-cockpit-green">{formatDuration(a.elapsed_seconds)}</span>
                 </p>
               </div>
             ))}
@@ -315,7 +315,7 @@ export default function TimeClockPanel() {
                     </td>
                     <td className="px-4 py-3">
                       {row.openShift && (
-                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-950/60 border border-green-800 text-green-300">
+                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-cockpit-green/60 border border-cockpit-green text-cockpit-green">
                           on shift
                         </span>
                       )}
@@ -349,12 +349,12 @@ export default function TimeClockPanel() {
               </thead>
               <tbody>
                 {shifts.map(row => (
-                  <tr key={row.id} className={`border-t border-neutral-800 ${row.flagged_long_open ? 'bg-amber-950/10' : ''}`}>
+                  <tr key={row.id} className={`border-t border-neutral-800 ${row.flagged_long_open ? 'bg-cockpit-yellow/10' : ''}`}>
                     <td className="px-4 py-3 text-white">{row.employee_name}</td>
                     <td className="px-4 py-3 text-neutral-300 tabular-nums">{formatDateTime(row.clock_in_at)}</td>
                     <td className="px-4 py-3 text-neutral-300 tabular-nums">
                       {row.clock_out_at ? formatDateTime(row.clock_out_at) : (
-                        <span className={row.flagged_long_open ? 'text-amber-400 font-medium' : 'text-green-400'}>
+                        <span className={row.flagged_long_open ? 'text-cockpit-yellow font-medium' : 'text-cockpit-green'}>
                           {row.flagged_long_open ? 'Open >12h' : 'Open'}
                         </span>
                       )}
@@ -370,11 +370,11 @@ export default function TimeClockPanel() {
                             <span className="block text-neutral-400">Cash sales: {formatMoney(row.cash_drawer.cash_sales_total)}</span>
                             <span className="block text-neutral-400">Expected drawer: {formatMoney(row.cash_drawer.expected_cash_total)}</span>
                             <span className="block text-neutral-400">Counted close: {formatMoney(row.cash_drawer.closing_total)}</span>
-                            <span className={`block font-semibold ${row.cash_drawer.variance_total === 0 ? 'text-neutral-300' : (row.cash_drawer.variance_total || 0) > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            <span className={`block font-semibold ${row.cash_drawer.variance_total === 0 ? 'text-neutral-300' : (row.cash_drawer.variance_total || 0) > 0 ? 'text-cockpit-green' : 'text-cockpit-red'}`}>
                               Over / short: {row.cash_drawer.variance_total != null && row.cash_drawer.variance_total > 0 ? '+' : ''}{formatMoney(row.cash_drawer.variance_total)}
                             </span>
                             {row.cash_drawer.variance_note && (
-                              <span className="block text-[11px] text-amber-300">Manager note: {row.cash_drawer.variance_note}</span>
+                              <span className="block text-[11px] text-cockpit-yellow">Manager note: {row.cash_drawer.variance_note}</span>
                             )}
                           </>
                         ) : (
@@ -525,7 +525,7 @@ export default function TimeClockPanel() {
                 {(() => {
                   const variance = Math.round((totalFromCounts(cashEditing.closingCounts) - cashEditing.expectedCashTotal) * 100) / 100;
                   return (
-                    <span className={`font-bold ${variance === 0 ? 'text-white' : variance > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <span className={`font-bold ${variance === 0 ? 'text-white' : variance > 0 ? 'text-cockpit-green' : 'text-cockpit-red'}`}>
                       {variance > 0 ? '+' : ''}{formatMoney(variance)}
                     </span>
                   );

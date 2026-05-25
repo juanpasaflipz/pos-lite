@@ -64,7 +64,7 @@ export default function VarianceTab({
                     <td className="px-6 py-4 font-medium text-white">{row.name}</td>
                     <td className="px-6 py-4 text-neutral-300">{row.count_sessions}</td>
                     <td className="px-6 py-4">
-                      <span className={avgVar < 0 ? 'text-brand-400' : avgVar > 0 ? 'text-amber-400' : 'text-green-400'}>
+                      <span className={avgVar < 0 ? 'text-brand-400' : avgVar > 0 ? 'text-cockpit-yellow' : 'text-cockpit-green'}>
                         {avgVar > 0 ? '+' : ''}{avgVar.toFixed(1)}
                       </span>
                     </td>
@@ -79,8 +79,8 @@ export default function VarianceTab({
                     <td className="px-6 py-4">
                       <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
                         risk === 'high' ? 'bg-brand-900/30 text-brand-400' :
-                        risk === 'medium' ? 'bg-amber-900/30 text-amber-400' :
-                        'bg-green-900/30 text-green-400'
+                        risk === 'medium' ? 'bg-cockpit-yellow/30 text-cockpit-yellow' :
+                        'bg-cockpit-green/30 text-cockpit-green'
                       }`}>
                         {risk}
                       </span>

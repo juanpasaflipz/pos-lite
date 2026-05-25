@@ -193,7 +193,7 @@ const ReceiptScanModal: React.FC<Props> = ({ onParsed, onClose }) => {
                   )}
 
                   {error && (
-                    <p className="text-red-400 text-sm text-center">{error}</p>
+                    <p className="text-cockpit-red text-sm text-center">{error}</p>
                   )}
 
                   {result && step === 'scan-results' && (
@@ -215,7 +215,7 @@ const ReceiptScanModal: React.FC<Props> = ({ onParsed, onClose }) => {
                             </div>
                           )}
                           {result.vendor_match && result.vendor_match.score < 1 && (
-                            <div className="rounded-md border border-emerald-800/60 bg-emerald-950/40 px-2 py-1.5 text-xs text-emerald-200">
+                            <div className="rounded-md border border-cockpit-green/60 bg-cockpit-green/40 px-2 py-1.5 text-xs text-cockpit-green">
                               {t('expenses.matchedExistingVendor', { name: result.vendor_match.name })}
                             </div>
                           )}

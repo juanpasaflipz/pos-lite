@@ -153,7 +153,7 @@ const ExpenseFormModal: React.FC<Props> = ({ expense, initialData, onSave, onClo
                 <button
                   type="button"
                   onClick={handleRemoveReceipt}
-                  className="absolute -top-2 -right-2 p-1 bg-neutral-700 rounded-full text-white hover:bg-red-600 transition-colors"
+                  className="absolute -top-2 -right-2 p-1 bg-neutral-700 rounded-full text-white hover:bg-cockpit-red/90 transition-colors"
                 >
                   <X size={14} />
                 </button>

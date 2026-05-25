@@ -16,9 +16,9 @@ type View = 'list' | 'create' | 'detail';
 
 const STATUS_COLORS: Record<string, string> = {
   draft: 'bg-neutral-600',
-  submitted: 'bg-blue-600',
-  partial: 'bg-amber-600',
-  received: 'bg-green-600',
+  submitted: 'bg-cockpit-blue',
+  partial: 'bg-cockpit-yellow',
+  received: 'bg-cockpit-green',
   cancelled: 'bg-brand-600',
 };
 
@@ -237,8 +237,8 @@ export default function PurchaseOrderScreen() {
           </div>
         )}
         {success && (
-          <div className="bg-green-900/30 border border-green-800 rounded-lg p-4 mb-6">
-            <p className="text-green-300">{success}</p>
+          <div className="bg-cockpit-green/30 border border-cockpit-green rounded-lg p-4 mb-6">
+            <p className="text-cockpit-green">{success}</p>
           </div>
         )}
 
@@ -517,7 +517,7 @@ export default function PurchaseOrderScreen() {
               {selectedPO.status === 'draft' && (
                 <button
                   onClick={() => handleSubmitPO(selectedPO.id)}
-                  className="px-6 py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                  className="px-6 py-3 bg-cockpit-blue text-white font-bold rounded-lg hover:bg-cockpit-blue/90 flex items-center gap-2"
                 >
                   <Send size={18} /> {t('purchaseOrders.actions.submitPo')}
                 </button>
@@ -526,7 +526,7 @@ export default function PurchaseOrderScreen() {
                 <button
                   onClick={() => handleReceivePO(selectedPO.id)}
                   disabled={receiving}
-                  className="px-6 py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+                  className="px-6 py-3 bg-cockpit-green text-white font-bold rounded-lg hover:bg-cockpit-green/90 disabled:opacity-50 flex items-center gap-2"
                 >
                   <Package size={18} /> {receiving ? t('purchaseOrders.actions.receiving') : t('purchaseOrders.actions.receiveItems')}
                 </button>

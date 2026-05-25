@@ -140,9 +140,9 @@ export default function RosterPanel() {
   const roleBadge = (role: RoleType) => {
     switch (role) {
       case 'admin': return 'bg-brand-600/20 text-brand-400 border border-brand-800';
-      case 'manager': return 'bg-purple-600/20 text-purple-400 border border-purple-800';
-      case 'kitchen': return 'bg-blue-600/20 text-blue-400 border border-blue-800';
-      case 'cashier': return 'bg-green-600/20 text-green-400 border border-green-800';
+      case 'manager': return 'bg-cockpit-blue/20 text-cockpit-blue border border-cockpit-blue';
+      case 'kitchen': return 'bg-cockpit-blue/20 text-cockpit-blue border border-cockpit-blue';
+      case 'cashier': return 'bg-cockpit-green/20 text-cockpit-green border border-cockpit-green';
       default: return 'bg-neutral-600/20 text-neutral-400 border border-neutral-700';
     }
   };
@@ -252,7 +252,7 @@ export default function RosterPanel() {
                     className={`px-4 py-2 rounded-lg font-medium transition-colors min-h-[44px] flex items-center justify-center ${
                       employee.active
                         ? 'bg-brand-600/20 text-brand-400 hover:bg-brand-600/30 border border-brand-800'
-                        : 'bg-green-600/20 text-green-400 hover:bg-green-600/30 border border-green-800'
+                        : 'bg-cockpit-green/20 text-cockpit-green hover:bg-cockpit-green/30 border border-cockpit-green'
                     }`}
                   >
                     {employee.active ? t('employees.deactivate') : t('employees.activate')}

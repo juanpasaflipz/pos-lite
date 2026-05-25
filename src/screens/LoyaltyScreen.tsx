@@ -46,7 +46,7 @@ export default function LoyaltyScreen() {
             <Link to="/admin" className="p-2 hover:bg-neutral-800 rounded-lg transition-colors">
               <ArrowLeft size={24} />
             </Link>
-            <Heart className="text-purple-500" size={28} />
+            <Heart className="text-cockpit-blue" size={28} />
             <h1 className="text-3xl font-black tracking-tighter">{t('loyalty.title')}</h1>
           </div>
         </div>
@@ -60,7 +60,7 @@ export default function LoyaltyScreen() {
                 onClick={() => setActiveTab(tab.key)}
                 className={`flex items-center gap-2 px-5 py-3 font-semibold text-sm rounded-t-lg transition-colors ${
                   activeTab === tab.key
-                    ? 'bg-neutral-950 text-purple-400 border-t-2 border-purple-500'
+                    ? 'bg-neutral-950 text-cockpit-blue border-t-2 border-cockpit-blue'
                     : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
                 }`}
               >
@@ -212,7 +212,7 @@ function CustomersTab() {
         <div
           key={i}
           className={`w-4 h-4 rounded-full ${
-            i < earned ? 'bg-purple-500' : 'bg-neutral-700'
+            i < earned ? 'bg-cockpit-blue' : 'bg-neutral-700'
           }`}
         />
       );
@@ -232,10 +232,10 @@ function CustomersTab() {
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             placeholder={t('loyalty.customers.searchPlaceholder')}
-            className="w-full pl-10 pr-4 py-3 bg-neutral-900 border border-neutral-800 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-purple-600"
+            className="w-full pl-10 pr-4 py-3 bg-neutral-900 border border-neutral-800 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-cockpit-blue"
           />
         </div>
-        <button onClick={handleSearch} className="px-6 py-3 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 transition-colors">
+        <button onClick={handleSearch} className="px-6 py-3 bg-cockpit-blue text-white font-bold rounded-lg hover:bg-cockpit-blue/90 transition-colors">
           {t('common:buttons.search')}
         </button>
       </div>
@@ -284,7 +284,7 @@ function CustomersTab() {
                     <tr>
                       <td colSpan={7} className="bg-neutral-800/30 p-4">
                         {editing && editForm ? (
-                          <div className="bg-neutral-900 border border-purple-700/40 rounded-lg p-4 mb-4 space-y-3">
+                          <div className="bg-neutral-900 border border-cockpit-blue/40 rounded-lg p-4 mb-4 space-y-3">
                             <div className="grid grid-cols-2 gap-3">
                               <label className="block">
                                 <span className="text-xs text-neutral-400">{t('loyalty.customers.edit.name')}</span>
@@ -292,7 +292,7 @@ function CustomersTab() {
                                   type="text"
                                   value={editForm.name}
                                   onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                                  className="mt-1 w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-white focus:outline-none focus:border-purple-600"
+                                  className="mt-1 w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-white focus:outline-none focus:border-cockpit-blue"
                                   disabled={savingEdit}
                                 />
                               </label>
@@ -303,7 +303,7 @@ function CustomersTab() {
                                     value={editForm.country_code}
                                     onChange={(e) => setEditForm({ ...editForm, country_code: e.target.value })}
                                     disabled={savingEdit}
-                                    className="bg-neutral-800 border border-neutral-700 rounded px-2 py-2 text-white text-sm focus:outline-none focus:border-purple-600"
+                                    className="bg-neutral-800 border border-neutral-700 rounded px-2 py-2 text-white text-sm focus:outline-none focus:border-cockpit-blue"
                                   >
                                     <option value="MX">🇲🇽 +52</option>
                                     <option value="US">🇺🇸 +1</option>
@@ -314,7 +314,7 @@ function CustomersTab() {
                                     value={editForm.phone}
                                     onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
                                     placeholder="5545879933"
-                                    className="flex-1 bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-white font-mono focus:outline-none focus:border-purple-600"
+                                    className="flex-1 bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-white font-mono focus:outline-none focus:border-cockpit-blue"
                                     disabled={savingEdit}
                                   />
                                 </div>
@@ -327,7 +327,7 @@ function CustomersTab() {
                                   step="1"
                                   value={editForm.orders_count}
                                   onChange={(e) => setEditForm({ ...editForm, orders_count: e.target.value })}
-                                  className="mt-1 w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-white focus:outline-none focus:border-purple-600"
+                                  className="mt-1 w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-white focus:outline-none focus:border-cockpit-blue"
                                   disabled={savingEdit}
                                 />
                               </label>
@@ -339,7 +339,7 @@ function CustomersTab() {
                                   step="0.01"
                                   value={editForm.total_spent}
                                   onChange={(e) => setEditForm({ ...editForm, total_spent: e.target.value })}
-                                  className="mt-1 w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-white focus:outline-none focus:border-purple-600"
+                                  className="mt-1 w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-white focus:outline-none focus:border-cockpit-blue"
                                   disabled={savingEdit}
                                 />
                               </label>
@@ -351,12 +351,12 @@ function CustomersTab() {
                                   step="1"
                                   value={editForm.stamps_earned}
                                   onChange={(e) => setEditForm({ ...editForm, stamps_earned: e.target.value })}
-                                  className="mt-1 w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-white focus:outline-none focus:border-purple-600"
+                                  className="mt-1 w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-white focus:outline-none focus:border-cockpit-blue"
                                   disabled={savingEdit}
                                 />
                               </label>
                             </div>
-                            {editError && <p className="text-sm text-red-400">{editError}</p>}
+                            {editError && <p className="text-sm text-cockpit-red">{editError}</p>}
                             <div className="flex gap-2 justify-end">
                               <button
                                 onClick={(e) => { e.stopPropagation(); cancelEdit(); }}
@@ -368,7 +368,7 @@ function CustomersTab() {
                               <button
                                 onClick={(e) => { e.stopPropagation(); saveEdit(c.id); }}
                                 disabled={savingEdit}
-                                className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold rounded-lg disabled:opacity-50"
+                                className="flex items-center gap-2 px-4 py-2 bg-cockpit-blue hover:bg-cockpit-blue/90 text-white text-sm font-bold rounded-lg disabled:opacity-50"
                               >
                                 <Save size={14} />
                                 {savingEdit ? t('loyalty.customers.edit.saving') : t('loyalty.customers.edit.save')}
@@ -380,7 +380,7 @@ function CustomersTab() {
                         <div className="grid grid-cols-3 gap-4">
                           <div>
                             <p className="text-xs text-neutral-400 mb-1">{t('loyalty.customers.detail.referralCode')}</p>
-                            <p className="text-purple-400 font-bold">{expandedDetail.referral_code}</p>
+                            <p className="text-cockpit-blue font-bold">{expandedDetail.referral_code}</p>
                           </div>
                           <div>
                             <p className="text-xs text-neutral-400 mb-1">{t('loyalty.customers.detail.totalStamps')}</p>
@@ -407,13 +407,13 @@ function CustomersTab() {
                                   </div>
                                   <div className="flex items-center gap-2">
                                     {card.completed === 1 && !card.redeemed && (
-                                      <span className="text-xs bg-green-600/20 text-green-400 px-2 py-1 rounded">{t('loyalty.customers.detail.ready')}</span>
+                                      <span className="text-xs bg-cockpit-green/20 text-cockpit-green px-2 py-1 rounded">{t('loyalty.customers.detail.ready')}</span>
                                     )}
                                     {card.redeemed === 1 && (
                                       <span className="text-xs bg-neutral-700 text-neutral-400 px-2 py-1 rounded">{t('loyalty.customers.detail.redeemed')}</span>
                                     )}
                                     {!card.completed && (
-                                      <span className="text-xs bg-purple-600/20 text-purple-400 px-2 py-1 rounded">{t('loyalty.customers.detail.active')}</span>
+                                      <span className="text-xs bg-cockpit-blue/20 text-cockpit-blue px-2 py-1 rounded">{t('loyalty.customers.detail.active')}</span>
                                     )}
                                   </div>
                                 </div>
@@ -444,7 +444,7 @@ function CustomersTab() {
                         <div className="mt-4 flex gap-2">
                           <button
                             onClick={(e) => { e.stopPropagation(); handleAddStamp(c.id); }}
-                            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white text-sm font-bold rounded-lg hover:bg-purple-700 transition-colors"
+                            className="flex items-center gap-2 px-4 py-2 bg-cockpit-blue text-white text-sm font-bold rounded-lg hover:bg-cockpit-blue/90 transition-colors"
                           >
                             <Plus size={14} /> {t('loyalty.customers.addStamp')}
                           </button>
@@ -519,7 +519,7 @@ function AnalyticsTab() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
           <p className="text-neutral-400 text-sm">{t('loyalty.analytics.kpi.totalMembers')}</p>
-          <p className="text-3xl font-bold text-purple-400 mt-1">{analytics.totalMembers}</p>
+          <p className="text-3xl font-bold text-cockpit-blue mt-1">{analytics.totalMembers}</p>
         </div>
         <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
           <p className="text-neutral-400 text-sm">{t('loyalty.analytics.kpi.newThisMonth')}</p>
@@ -531,7 +531,7 @@ function AnalyticsTab() {
         </div>
         <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
           <p className="text-neutral-400 text-sm">{t('loyalty.analytics.kpi.redemptionRate')}</p>
-          <p className="text-3xl font-bold text-green-400 mt-1">{analytics.redemptionRate}%</p>
+          <p className="text-3xl font-bold text-cockpit-green mt-1">{analytics.redemptionRate}%</p>
         </div>
       </div>
 
@@ -570,7 +570,7 @@ function AnalyticsTab() {
                     <p className="text-neutral-400 text-xs">{c.orders_count} {t('loyalty.analytics.orders')}</p>
                   </div>
                 </div>
-                <p className="text-purple-400 font-bold">{formatPrice(c.total_spent)}</p>
+                <p className="text-cockpit-blue font-bold">{formatPrice(c.total_spent)}</p>
               </div>
             ))}
           </div>
@@ -601,7 +601,7 @@ function ReferralsTab() {
     <div className="space-y-6">
       <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
         <p className="text-neutral-400 text-sm">{t('loyalty.referrals.totalReferrals')}</p>
-        <p className="text-3xl font-bold text-purple-400 mt-1">{data.totalReferrals}</p>
+        <p className="text-3xl font-bold text-cockpit-blue mt-1">{data.totalReferrals}</p>
       </div>
 
       {/* Leaderboard */}
@@ -619,7 +619,7 @@ function ReferralsTab() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-purple-400 font-bold">{r.referral_count} {t('loyalty.referrals.referralCount')}</p>
+                  <p className="text-cockpit-blue font-bold">{r.referral_count} {t('loyalty.referrals.referralCount')}</p>
                   <p className="text-neutral-400 text-xs">+{r.total_bonus_stamps} {t('loyalty.referrals.bonusStamps')}</p>
                 </div>
               </div>
@@ -637,13 +637,13 @@ function ReferralsTab() {
               <div key={r.id} className="flex items-center justify-between p-3 bg-neutral-800 rounded-lg">
                 <div>
                   <p className="text-white text-sm">
-                    <span className="text-purple-400 font-medium">{r.referrer_name}</span>
+                    <span className="text-cockpit-blue font-medium">{r.referrer_name}</span>
                     {' '}{t('loyalty.referrals.referred')}{' '}
-                    <span className="text-purple-400 font-medium">{r.referee_name}</span>
+                    <span className="text-cockpit-blue font-medium">{r.referee_name}</span>
                   </p>
                   <p className="text-neutral-400 text-xs">{formatDate(new Date(r.created_at))}</p>
                 </div>
-                <p className="text-green-400 text-sm">+{r.referrer_stamps_added} {t('loyalty.referrals.stampsEach')}</p>
+                <p className="text-cockpit-green text-sm">+{r.referrer_stamps_added} {t('loyalty.referrals.stampsEach')}</p>
               </div>
             ))}
           </div>
@@ -713,7 +713,7 @@ function SettingsTab() {
                   onClick={() => handleSave(s.key, entry.value === 'true' ? 'false' : 'true')}
                   disabled={saving}
                   className={`w-14 h-7 rounded-full transition-colors relative ${
-                    entry.value === 'true' ? 'bg-purple-600' : 'bg-neutral-700'
+                    entry.value === 'true' ? 'bg-cockpit-blue' : 'bg-neutral-700'
                   }`}
                 >
                   <div className={`w-5 h-5 bg-white rounded-full absolute top-1 transition-all ${
@@ -727,7 +727,7 @@ function SettingsTab() {
                   onBlur={(e) => {
                     if (e.target.value !== entry.value) handleSave(s.key, e.target.value);
                   }}
-                  className="w-48 bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white text-right focus:outline-none focus:border-purple-600"
+                  className="w-48 bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white text-right focus:outline-none focus:border-cockpit-blue"
                 />
               )}
             </div>

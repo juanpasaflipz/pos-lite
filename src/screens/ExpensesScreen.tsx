@@ -38,11 +38,11 @@ import { useToast } from '../context/ToastContext';
 
 
 const CATEGORY_COLORS: Record<string, string> = {
-  food_cost: 'bg-orange-500/20 text-orange-400',
-  supplies: 'bg-blue-500/20 text-blue-400',
-  utilities: 'bg-yellow-500/20 text-yellow-400',
-  rent: 'bg-purple-500/20 text-purple-400',
-  marketing: 'bg-pink-500/20 text-pink-400',
+  food_cost: 'bg-cockpit-yellow/20 text-cockpit-yellow',
+  supplies: 'bg-cockpit-blue/20 text-cockpit-blue',
+  utilities: 'bg-cockpit-yellow/20 text-cockpit-yellow',
+  rent: 'bg-cockpit-blue/20 text-cockpit-blue',
+  marketing: 'bg-cockpit-red/20 text-cockpit-red',
   other: 'bg-neutral-500/20 text-neutral-400',
 };
 
@@ -96,10 +96,10 @@ const ExpenseDetail: React.FC<ExpenseDetailProps> = ({ expense, onEdit, onDelete
     <div className="px-4 pb-4 space-y-3 animate-in slide-in-from-top-2">
       {/* Inventory updated badge */}
       {inventoryMatches && inventoryMatches.length > 0 && (
-        <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-lg">
-          <Package size={14} className="text-green-400 shrink-0" />
+        <div className="flex items-center gap-2 px-3 py-2 bg-cockpit-green/10 border border-cockpit-green/20 rounded-lg">
+          <Package size={14} className="text-cockpit-green shrink-0" />
           <div className="text-sm">
-            <span className="text-green-400 font-medium">{t('expenses.inventoryUpdated')}</span>
+            <span className="text-cockpit-green font-medium">{t('expenses.inventoryUpdated')}</span>
             <span className="text-neutral-400"> — </span>
             <span className="text-neutral-300">
               {inventoryMatches.map(m => `${m.inventory_item_name} (+${m.quantity})`).join(', ')}
@@ -169,7 +169,7 @@ const ExpenseDetail: React.FC<ExpenseDetailProps> = ({ expense, onEdit, onDelete
         </button>
         <button
           onClick={onDelete}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 text-red-400 text-sm rounded-lg border border-neutral-700 hover:bg-red-950/30 hover:border-red-800 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 text-cockpit-red text-sm rounded-lg border border-neutral-700 hover:bg-cockpit-red/30 hover:border-cockpit-red/90 transition-colors"
         >
           <Trash2 size={13} />
           {t('common:buttons.delete')}
@@ -502,7 +502,7 @@ const ExpensesScreen: React.FC = () => {
                             <Image size={12} className="text-brand-400 shrink-0" />
                           )}
                           {(expense.receipt_data as any)?.inventory_matches?.length > 0 && (
-                            <Package size={12} className="text-green-400 shrink-0" />
+                            <Package size={12} className="text-cockpit-green shrink-0" />
                           )}
                         </div>
                         <div className="flex items-center gap-2 text-xs text-neutral-500">

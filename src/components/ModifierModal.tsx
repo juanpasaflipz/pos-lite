@@ -140,7 +140,7 @@ export default function ModifierModal({ item, onConfirm, onClose }: ModifierModa
                         <span className="font-medium">{mod.name}</span>
                       </div>
                       {mod.price_adjustment !== 0 && (
-                        <span className={`font-bold ${mod.price_adjustment > 0 ? 'text-amber-400' : 'text-green-400'}`}>
+                        <span className={`font-bold ${mod.price_adjustment > 0 ? 'text-cockpit-yellow' : 'text-cockpit-green'}`}>
                           {mod.price_adjustment > 0 ? '+' : ''}{formatPrice(mod.price_adjustment)}
                         </span>
                       )}

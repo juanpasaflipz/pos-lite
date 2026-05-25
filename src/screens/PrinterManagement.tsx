@@ -142,7 +142,7 @@ export default function PrinterManagement() {
                     />
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={handleCreatePrinter} className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700">{t('common:buttons.create')}</button>
+                    <button onClick={handleCreatePrinter} className="px-4 py-2 bg-cockpit-green text-white rounded-lg font-medium hover:bg-cockpit-green/90">{t('common:buttons.create')}</button>
                     <button onClick={() => setShowAddPrinter(false)} className="px-4 py-2 bg-neutral-700 text-white rounded-lg font-medium hover:bg-neutral-600">{t('common:buttons.cancel')}</button>
                   </div>
                 </div>
@@ -162,7 +162,7 @@ export default function PrinterManagement() {
                     </div>
                     <button
                       onClick={() => handleTogglePrinter(printer)}
-                      className={`px-3 py-1 rounded-lg text-sm font-medium ${printer.active ? 'bg-green-900/30 text-green-400' : 'bg-neutral-800 text-neutral-500'}`}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium ${printer.active ? 'bg-cockpit-green/30 text-cockpit-green' : 'bg-neutral-800 text-neutral-500'}`}
                     >
                       {printer.active ? t('printers.active') : t('printers.inactive')}
                     </button>

@@ -163,9 +163,9 @@ export default function DeliveryScreen() {
 
   const getPlatformColor = (name: string) => {
     switch (name) {
-      case 'uber_eats': return 'bg-green-600';
-      case 'rappi': return 'bg-orange-500';
-      case 'didi_food': return 'bg-orange-600';
+      case 'uber_eats': return 'bg-cockpit-green';
+      case 'rappi': return 'bg-cockpit-yellow';
+      case 'didi_food': return 'bg-cockpit-yellow';
       default: return 'bg-neutral-600';
     }
   };
@@ -308,7 +308,7 @@ export default function DeliveryScreen() {
                             <td className="text-right p-3 text-white">{p.order_count}</td>
                             <td className="text-right p-3 text-white">{formatPrice(p.gross_revenue)}</td>
                             <td className="text-right p-3 text-brand-400">-{formatPrice(p.total_commission)} ({p.commission_percent}%)</td>
-                            <td className="text-right p-3 text-green-400 font-bold">{formatPrice(p.net_revenue)}</td>
+                            <td className="text-right p-3 text-cockpit-green font-bold">{formatPrice(p.net_revenue)}</td>
                             <td className="text-right p-3 text-neutral-300">{formatPrice(p.avg_order_value)}</td>
                           </tr>
                         ))}
@@ -356,7 +356,7 @@ export default function DeliveryScreen() {
                         {order.platform_status === 'received' && (
                           <button
                             onClick={() => handleUpdateOrderStatus(order.id, 'confirmed')}
-                            className="px-3 py-1 bg-green-600 text-white text-sm rounded-lg font-medium hover:bg-green-700"
+                            className="px-3 py-1 bg-cockpit-green text-white text-sm rounded-lg font-medium hover:bg-cockpit-green/90"
                           >
                             {t('delivery.actions.confirm')}
                           </button>
@@ -364,7 +364,7 @@ export default function DeliveryScreen() {
                         {order.platform_status === 'confirmed' && (
                           <button
                             onClick={() => handleUpdateOrderStatus(order.id, 'ready_for_pickup')}
-                            className="px-3 py-1 bg-amber-600 text-white text-sm rounded-lg font-medium hover:bg-amber-700"
+                            className="px-3 py-1 bg-cockpit-yellow text-neutral-900 text-sm rounded-lg font-medium hover:bg-cockpit-yellow/90"
                           >
                             {t('delivery.actions.readyForPickup')}
                           </button>
@@ -372,7 +372,7 @@ export default function DeliveryScreen() {
                         {order.platform_status === 'ready_for_pickup' && (
                           <button
                             onClick={() => handleUpdateOrderStatus(order.id, 'picked_up')}
-                            className="px-3 py-1 bg-blue-600 text-white text-sm rounded-lg font-medium hover:bg-blue-700"
+                            className="px-3 py-1 bg-cockpit-blue text-white text-sm rounded-lg font-medium hover:bg-cockpit-blue/90"
                           >
                             {t('delivery.actions.pickedUp')}
                           </button>
@@ -497,7 +497,7 @@ export default function DeliveryScreen() {
                               <p className="text-neutral-500 text-sm">{brand.platform_name} &middot; {brand.item_count} items</p>
                               {brand.description && <p className="text-neutral-400 text-sm mt-1">{brand.description}</p>}
                             </div>
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${brand.active ? 'bg-green-900/30 text-green-400' : 'bg-neutral-800 text-neutral-500'}`}>
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${brand.active ? 'bg-cockpit-green/30 text-cockpit-green' : 'bg-neutral-800 text-neutral-500'}`}>
                               {brand.active ? t('delivery.active') : t('delivery.inactive')}
                             </span>
                           </div>
@@ -573,7 +573,7 @@ export default function DeliveryScreen() {
                       </div>
                       <button
                         onClick={() => handleTogglePlatform(platform)}
-                        className={`px-4 py-2 rounded-lg font-medium ${platform.active ? 'bg-green-900/30 text-green-400' : 'bg-neutral-800 text-neutral-500'}`}
+                        className={`px-4 py-2 rounded-lg font-medium ${platform.active ? 'bg-cockpit-green/30 text-cockpit-green' : 'bg-neutral-800 text-neutral-500'}`}
                       >
                         {platform.active ? t('delivery.active') : t('delivery.inactive')}
                       </button>

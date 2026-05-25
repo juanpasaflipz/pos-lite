@@ -74,21 +74,21 @@ type Tone = 'in' | 'out' | 'system';
 const TONE_STYLES: Record<Tone, { primary: string; secondary: string; icon: string }> = {
   in: {
     primary:
-      'bg-cockpit-green/15 border-cockpit-green/70 hover:border-cockpit-green hover:bg-cockpit-green/25 shadow-[0_0_24px_-8px_rgba(52,168,83,0.55)] hover:shadow-[0_0_36px_-6px_rgba(52,168,83,0.7)]',
+      'bg-cockpit-green/15 border-cockpit-green/70 hover:border-cockpit-green/90 hover:bg-cockpit-green/25 shadow-[0_0_24px_-8px_rgba(52,168,83,0.55)] hover:shadow-[0_0_36px_-6px_rgba(52,168,83,0.7)]',
     secondary:
       'bg-cockpit-green/5 border-cockpit-green/30 hover:border-cockpit-green/60 hover:bg-cockpit-green/10',
     icon: 'text-cockpit-green',
   },
   out: {
     primary:
-      'bg-cockpit-red/15 border-cockpit-red/70 hover:border-cockpit-red hover:bg-cockpit-red/25 shadow-[0_0_24px_-8px_rgba(234,67,53,0.55)] hover:shadow-[0_0_36px_-6px_rgba(234,67,53,0.7)]',
+      'bg-cockpit-red/15 border-cockpit-red/70 hover:border-cockpit-red/90 hover:bg-cockpit-red/25 shadow-[0_0_24px_-8px_rgba(234,67,53,0.55)] hover:shadow-[0_0_36px_-6px_rgba(234,67,53,0.7)]',
     secondary:
       'bg-cockpit-red/5 border-cockpit-red/30 hover:border-cockpit-red/60 hover:bg-cockpit-red/10',
     icon: 'text-cockpit-red',
   },
   system: {
     primary:
-      'bg-cockpit-blue/15 border-cockpit-blue/70 hover:border-cockpit-blue hover:bg-cockpit-blue/25 shadow-[0_0_24px_-8px_rgba(66,133,244,0.55)] hover:shadow-[0_0_36px_-6px_rgba(66,133,244,0.7)]',
+      'bg-cockpit-blue/15 border-cockpit-blue/70 hover:border-cockpit-blue/90 hover:bg-cockpit-blue/25 shadow-[0_0_24px_-8px_rgba(66,133,244,0.55)] hover:shadow-[0_0_36px_-6px_rgba(66,133,244,0.7)]',
     secondary:
       'bg-cockpit-blue/5 border-cockpit-blue/30 hover:border-cockpit-blue/60 hover:bg-cockpit-blue/10',
     icon: 'text-cockpit-blue',
@@ -209,10 +209,10 @@ export default function OwnerCockpitScreen() {
         />
 
         {isAdmin && (
-          <div className="mt-4 p-5 bg-neutral-900 border border-red-900/40 rounded-xl">
+          <div className="mt-4 p-5 bg-neutral-900 border border-cockpit-red/40 rounded-xl">
             <div className="flex items-center gap-2 mb-2">
-              <Trash2 size={16} className="text-red-400" />
-              <h3 className="text-red-400 font-semibold text-sm">Danger zone</h3>
+              <Trash2 size={16} className="text-cockpit-red" />
+              <h3 className="text-cockpit-red font-semibold text-sm">Danger zone</h3>
             </div>
             <p className="text-neutral-400 text-xs mb-4">
               Bulk-delete all unpaid and pending-terminal orders. Useful for clearing test orders.
@@ -220,7 +220,7 @@ export default function OwnerCockpitScreen() {
             <button
               onClick={handlePurgeUnpaid}
               disabled={purging}
-              className="px-4 py-2 bg-red-900/40 border border-red-900/60 text-red-300 text-sm font-semibold rounded-lg hover:bg-red-900/60 transition-all disabled:opacity-50"
+              className="px-4 py-2 bg-cockpit-red/40 border border-cockpit-red/60 text-cockpit-red text-sm font-semibold rounded-lg hover:bg-cockpit-red/60 transition-all disabled:opacity-50"
             >
               {purging ? 'Deleting\u2026' : 'Delete all unpaid orders'}
             </button>

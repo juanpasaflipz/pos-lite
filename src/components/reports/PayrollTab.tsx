@@ -152,13 +152,13 @@ export default function PayrollTab() {
   const critical = snapshot.labor_critical_pct ?? 30;
   const laborTone =
     laborPct == null ? 'text-neutral-300' :
-    laborPct >= critical ? 'text-red-400' :
-    laborPct >= warn ? 'text-amber-400' : 'text-emerald-400';
+    laborPct >= critical ? 'text-cockpit-red' :
+    laborPct >= warn ? 'text-cockpit-yellow' : 'text-cockpit-green';
 
   return (
     <div className="space-y-6">
       {error && (
-        <div className="bg-red-900/30 border border-red-800 rounded-lg p-3 text-red-300 text-sm">{error}</div>
+        <div className="bg-cockpit-red/30 border border-cockpit-red rounded-lg p-3 text-cockpit-red text-sm">{error}</div>
       )}
 
       {/* Period nav + actions */}
@@ -197,7 +197,7 @@ export default function PayrollTab() {
 
         <div className="ml-auto flex items-center gap-2">
           {isFrozen && (
-            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-900/30 border border-blue-800/50 text-blue-300 text-xs">
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-cockpit-blue/30 border border-cockpit-blue/50 text-cockpit-blue text-xs">
               <Lock size={12} /> {t('payroll.frozen')}
             </span>
           )}
@@ -236,7 +236,7 @@ export default function PayrollTab() {
           <p className="text-xs text-neutral-400 uppercase tracking-wide">{t('payroll.kpi.hours')}</p>
           <p className="text-2xl font-bold text-white mt-1">{hoursFmt(totals.hours_worked)}</p>
           {totals.hours_overtime > 0 && (
-            <p className="text-xs text-amber-400 mt-1">
+            <p className="text-xs text-cockpit-yellow mt-1">
               {t('payroll.kpi.otHours', { hours: hoursFmt(totals.hours_overtime) })}
             </p>
           )}
@@ -280,7 +280,7 @@ export default function PayrollTab() {
                     <div className="flex items-center gap-2">
                       <span>{e.employee_name}</span>
                       {e.has_open_shift && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-900/40 text-emerald-300">
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-cockpit-green/40 text-cockpit-green">
                           {t('payroll.table.onClock')}
                         </span>
                       )}
@@ -296,7 +296,7 @@ export default function PayrollTab() {
                   <td className="px-4 py-3 text-right tabular-nums text-neutral-200">{hoursFmt(e.hours_worked)}</td>
                   <td className="px-4 py-3 text-right tabular-nums">
                     {e.hours_overtime > 0 ? (
-                      <span className="inline-flex items-center gap-1 text-amber-400">
+                      <span className="inline-flex items-center gap-1 text-cockpit-yellow">
                         <AlertTriangle size={12} /> {hoursFmt(e.hours_overtime)}
                       </span>
                     ) : (
@@ -313,7 +313,7 @@ export default function PayrollTab() {
               <tr>
                 <td className="px-4 py-3 font-bold text-white" colSpan={3}>{t('payroll.table.totals')}</td>
                 <td className="px-4 py-3 text-right tabular-nums text-white font-bold">{hoursFmt(totals.hours_worked)}</td>
-                <td className="px-4 py-3 text-right tabular-nums text-amber-400 font-bold">
+                <td className="px-4 py-3 text-right tabular-nums text-cockpit-yellow font-bold">
                   {totals.hours_overtime > 0 ? hoursFmt(totals.hours_overtime) : '—'}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums text-white font-bold">{money(totals.base_pay_cents)}</td>
@@ -326,9 +326,9 @@ export default function PayrollTab() {
       </div>
 
       {totals.hours_overtime > 0 && (
-        <div className="bg-amber-900/20 border border-amber-800/60 rounded-lg p-4 flex items-start gap-3">
-          <AlertTriangle size={20} className="text-amber-400 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-amber-200">
+        <div className="bg-cockpit-yellow/20 border border-cockpit-yellow/60 rounded-lg p-4 flex items-start gap-3">
+          <AlertTriangle size={20} className="text-cockpit-yellow flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-cockpit-yellow">
             <p className="font-semibold">{t('payroll.otAdvisory.title')}</p>
             <p className="mt-1">
               {t('payroll.otAdvisory.body', { threshold: snapshot.overtime_threshold_hours ?? 48 })}

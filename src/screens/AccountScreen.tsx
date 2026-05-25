@@ -30,7 +30,7 @@ interface AccountData {
 function PlanBadge({ plan }: { plan: string }) {
   const styles: Record<string, string> = {
     free: 'bg-neutral-700/50 text-neutral-400',
-    pro: 'bg-teal-600/20 text-teal-400',
+    pro: 'bg-cockpit-green/20 text-cockpit-green',
   };
   return (
     <span className={`px-2.5 py-1 text-xs font-semibold rounded-full uppercase ${styles[plan] || styles.free}`}>
@@ -55,7 +55,7 @@ function UsageBar({ label, current, limit, unlimitedText }: { label: string; cur
       </div>
       {isUnlimited ? (
         <div className="w-full bg-neutral-800 rounded-full h-2.5">
-          <div className="h-2.5 rounded-full bg-teal-600/30 w-full" />
+          <div className="h-2.5 rounded-full bg-cockpit-green/30 w-full" />
         </div>
       ) : (
         <div className="w-full bg-neutral-800 rounded-full h-2.5">
@@ -331,9 +331,9 @@ export default function AccountScreen() {
         {billingBanner && (
           <div className={`border rounded-lg p-4 ${
             billingBanner.type === 'success'
-              ? 'bg-green-900/20 border-green-800 text-green-300'
+              ? 'bg-cockpit-green/20 border-cockpit-green text-cockpit-green'
               : billingBanner.type === 'error'
-                ? 'bg-amber-900/20 border-amber-800 text-amber-200'
+                ? 'bg-cockpit-yellow/20 border-cockpit-yellow text-cockpit-yellow'
                 : 'bg-brand-900/20 border-brand-800 text-brand-200'
           }`}>
             <p>{billingBanner.text}</p>
@@ -348,8 +348,8 @@ export default function AccountScreen() {
             ))}
           </div>
         ) : error ? (
-          <div className="bg-red-900/30 border border-red-800 rounded-lg p-4">
-            <p className="text-red-300">{error}</p>
+          <div className="bg-cockpit-red/30 border border-cockpit-red rounded-lg p-4">
+            <p className="text-cockpit-red">{error}</p>
           </div>
         ) : account && (
           <>
@@ -417,7 +417,7 @@ export default function AccountScreen() {
                     <button
                       onClick={() => handleSubscribe('pro')}
                       disabled={billingLoading !== null}
-                      className="px-4 py-2 bg-teal-600 text-white text-sm font-semibold rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50"
+                      className="px-4 py-2 bg-cockpit-green text-white text-sm font-semibold rounded-lg hover:bg-cockpit-green/90 transition-colors disabled:opacity-50"
                     >
                       {billingLoading === 'pro' ? t('upgrade.redirecting') : t('account.proMonthly')}
                     </button>
@@ -429,7 +429,7 @@ export default function AccountScreen() {
                       <button
                         type="button"
                         onClick={() => setPromoState('expanded')}
-                        className="text-sm text-teal-500 hover:text-teal-400 transition-colors"
+                        className="text-sm text-cockpit-green hover:text-cockpit-green/90 transition-colors"
                       >
                         {t('account.havePromo')}
                       </button>
@@ -449,7 +449,7 @@ export default function AccountScreen() {
                               }
                             }}
                             placeholder={t('account.enterCode')}
-                            className="flex-1 px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm placeholder-neutral-500 focus:outline-none focus:border-teal-600"
+                            className="flex-1 px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm placeholder-neutral-500 focus:outline-none focus:border-cockpit-green"
                             disabled={promoState === 'loading'}
                             onKeyDown={e => { if (e.key === 'Enter') handleValidatePromo(); }}
                           />
@@ -457,7 +457,7 @@ export default function AccountScreen() {
                             type="button"
                             onClick={handleValidatePromo}
                             disabled={promoState === 'loading' || !promoInput.trim()}
-                            className="px-4 py-2 bg-teal-600 text-white text-sm font-semibold rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50"
+                            className="px-4 py-2 bg-cockpit-green text-white text-sm font-semibold rounded-lg hover:bg-cockpit-green/90 transition-colors disabled:opacity-50"
                           >
                             {promoState === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : t('buttons.apply')}
                           </button>
@@ -470,17 +470,17 @@ export default function AccountScreen() {
                           </button>
                         </div>
                         {promoState === 'invalid' && promoError && (
-                          <p className="text-red-400 text-sm">{promoError}</p>
+                          <p className="text-cockpit-red text-sm">{promoError}</p>
                         )}
                       </div>
                     )}
 
                     {promoState === 'valid' && (
-                      <div className="flex items-center gap-2 p-3 bg-green-900/20 border border-green-800/50 rounded-lg">
-                        <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
-                        <span className="text-green-400 font-semibold text-sm">{promoCode}</span>
+                      <div className="flex items-center gap-2 p-3 bg-cockpit-green/20 border border-cockpit-green/50 rounded-lg">
+                        <Check className="w-4 h-4 text-cockpit-green flex-shrink-0" />
+                        <span className="text-cockpit-green font-semibold text-sm">{promoCode}</span>
                         <span className="text-neutral-400 text-sm mx-1">&mdash;</span>
-                        <span className="text-green-300 text-sm flex-1">{promoDescription}</span>
+                        <span className="text-cockpit-green text-sm flex-1">{promoDescription}</span>
                         <button
                           type="button"
                           onClick={handleRemovePromo}
@@ -497,7 +497,7 @@ export default function AccountScreen() {
                   <div>
                     <p className="text-neutral-400 text-sm">{t('account.currentPlan')}</p>
                     <p className="text-white font-bold capitalize flex items-center gap-2">
-                      <Crown size={16} className="text-teal-500" />
+                      <Crown size={16} className="text-cockpit-green" />
                       {t('account.proMonthly')}
                     </p>
                   </div>
@@ -548,7 +548,7 @@ export default function AccountScreen() {
                     {saving ? t('account.saving') : t('account.saveChanges')}
                   </button>
                   {saveMsg && (
-                    <span className="text-sm text-teal-400 flex items-center gap-1">
+                    <span className="text-sm text-cockpit-green flex items-center gap-1">
                       <Check size={14} /> {saveMsg}
                     </span>
                   )}
@@ -596,7 +596,7 @@ export default function AccountScreen() {
                   />
                 </div>
                 {pwMsg && (
-                  <div className={`flex items-center gap-2 text-sm ${pwMsg.type === 'success' ? 'text-teal-400' : 'text-red-400'}`}>
+                  <div className={`flex items-center gap-2 text-sm ${pwMsg.type === 'success' ? 'text-cockpit-green' : 'text-cockpit-red'}`}>
                     {pwMsg.type === 'success' ? <Check size={14} /> : <AlertCircle size={14} />}
                     {pwMsg.text}
                   </div>
@@ -656,8 +656,8 @@ export default function AccountScreen() {
                   return (
                     <div className="space-y-4">
                       <div className="flex items-center gap-2">
-                        <Wifi size={16} className="text-green-400" />
-                        <span className="text-sm font-semibold text-green-400">{t('account.connected')}</span>
+                        <Wifi size={16} className="text-cockpit-green" />
+                        <span className="text-sm font-semibold text-cockpit-green">{t('account.connected')}</span>
                         <span className="text-xs text-neutral-500 ml-2">ID: {mpUserId}</span>
                       </div>
 
@@ -704,7 +704,7 @@ export default function AccountScreen() {
                           </button>
                         </div>
                         {mpSaved && (
-                          <p className="text-teal-400 text-xs mt-1 flex items-center gap-1">
+                          <p className="text-cockpit-green text-xs mt-1 flex items-center gap-1">
                             <Check size={12} /> {t('account.saved')}
                           </p>
                         )}
@@ -720,7 +720,7 @@ export default function AccountScreen() {
               <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <Landmark className="text-green-500" size={22} />
+                    <Landmark className="text-cockpit-green" size={22} />
                     <h2 className="text-lg font-bold text-white">{t('account.bankConnections')}</h2>
                   </div>
                   <button
@@ -739,7 +739,7 @@ export default function AccountScreen() {
                   </span>
                   <div className="flex-1 bg-neutral-800 rounded-full h-1.5">
                     <div
-                      className="h-1.5 rounded-full bg-green-500 transition-all"
+                      className="h-1.5 rounded-full bg-cockpit-green transition-all"
                       style={{
                         width: `${Math.min(
                           (bankConnections.filter(c => c.status !== 'disconnected').length / Math.max(maxBankConns, 1)) * 100,
@@ -808,7 +808,7 @@ export default function AccountScreen() {
                     <p className="text-neutral-400 text-sm">{t('account.financialDataAnalysis')}</p>
                     <p className="text-white text-sm font-medium mt-0.5">
                       {consentStatus?.consented ? (
-                        <span className="text-green-400 flex items-center gap-1">
+                        <span className="text-cockpit-green flex items-center gap-1">
                           <Check size={14} /> {t('account.consented')}
                           {consentStatus.consent_at && (
                             <span className="text-neutral-500 font-normal ml-1">
@@ -871,7 +871,7 @@ export default function AccountScreen() {
                   {consentStatus?.consented && (
                     <button
                       onClick={() => setShowRevokeModal(true)}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 border border-red-800/50 text-red-400 text-sm rounded-lg hover:bg-red-900/20 transition-colors"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 border border-cockpit-red/50 text-cockpit-red text-sm rounded-lg hover:bg-cockpit-red/20 transition-colors"
                     >
                       <ShieldOff size={14} /> {t('account.revokeConsent')}
                     </button>
@@ -958,7 +958,7 @@ export default function AccountScreen() {
                         setRevokeLoading(false);
                       }}
                       disabled={revokeLoading}
-                      className="flex-1 py-2.5 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                      className="flex-1 py-2.5 bg-cockpit-red text-white font-semibold rounded-lg hover:bg-cockpit-red/90 transition-colors disabled:opacity-50"
                     >
                       {revokeLoading ? t('account.revoking') : t('account.revokeConsent')}
                     </button>

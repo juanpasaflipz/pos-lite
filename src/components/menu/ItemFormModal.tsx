@@ -176,7 +176,7 @@ export default function ItemFormModal({
                 onClick={() => onFormData({ ...formData, active: true })}
                 className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors min-h-[40px] ${
                   formData.active
-                    ? 'bg-green-600 text-white'
+                    ? 'bg-cockpit-green text-white'
                     : 'text-neutral-400 hover:text-white'
                 }`}
               >
@@ -187,7 +187,7 @@ export default function ItemFormModal({
                 onClick={() => onFormData({ ...formData, active: false })}
                 className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors min-h-[40px] ${
                   !formData.active
-                    ? 'bg-amber-600 text-white'
+                    ? 'bg-cockpit-yellow text-neutral-900'
                     : 'text-neutral-400 hover:text-white'
                 }`}
               >
@@ -259,7 +259,7 @@ export default function ItemFormModal({
           <div className="mt-6 pt-6 border-t border-neutral-800">
             {confirmDelete ? (
               <div className="space-y-3">
-                <p className="text-sm text-red-300">
+                <p className="text-sm text-cockpit-red">
                   {t('menu.form.confirmDeleteItem', { name: formData.name })}
                 </p>
                 <div className="flex gap-3">
@@ -273,7 +273,7 @@ export default function ItemFormModal({
                   <button
                     onClick={onDeleteItem}
                     disabled={actionLoading}
-                    className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2 min-h-[44px]"
+                    className="flex-1 px-4 py-2 bg-cockpit-red text-white rounded-lg hover:bg-cockpit-red/90 transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2 min-h-[44px]"
                   >
                     <Trash2 size={18} />
                     {actionLoading ? t('menu.form.deleting') : t('menu.form.confirmDelete')}
@@ -284,7 +284,7 @@ export default function ItemFormModal({
               <button
                 onClick={() => setConfirmDelete(true)}
                 disabled={actionLoading}
-                className="w-full px-4 py-2 border border-red-900 text-red-400 rounded-lg hover:bg-red-950/50 transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2 min-h-[44px]"
+                className="w-full px-4 py-2 border border-cockpit-red text-cockpit-red rounded-lg hover:bg-cockpit-red/50 transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2 min-h-[44px]"
               >
                 <Trash2 size={18} />
                 {t('menu.form.deleteItem')}

@@ -84,19 +84,19 @@ const GetnetSetup: React.FC = () => {
           <p className="text-sm text-neutral-400">{t('getnet.subtitle')}</p>
         </div>
         {status?.enabled && (
-          <span className="px-3 py-1 bg-green-600/20 text-green-400 text-sm font-semibold rounded-full">
+          <span className="px-3 py-1 bg-cockpit-green/20 text-cockpit-green text-sm font-semibold rounded-full">
             {t('getnet.active')}
           </span>
         )}
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-600/10 border border-red-600/30 rounded-lg text-red-400 text-sm">
+        <div className="mb-4 p-3 bg-cockpit-red/10 border border-cockpit-red/30 rounded-lg text-cockpit-red text-sm">
           {error}
         </div>
       )}
       {success && (
-        <div className="mb-4 p-3 bg-green-600/10 border border-green-600/30 rounded-lg text-green-400 text-sm">
+        <div className="mb-4 p-3 bg-cockpit-green/10 border border-cockpit-green/30 rounded-lg text-cockpit-green text-sm">
           {success}
         </div>
       )}
@@ -164,7 +164,7 @@ const GetnetSetup: React.FC = () => {
               type="button"
               onClick={handleDisable}
               disabled={saving}
-              className="px-6 py-3 bg-red-600/20 text-red-400 font-bold rounded-lg hover:bg-red-600/30 transition-all"
+              className="px-6 py-3 bg-cockpit-red/20 text-cockpit-red font-bold rounded-lg hover:bg-cockpit-red/30 transition-all"
             >
               {t('common:buttons.disable')}
             </button>

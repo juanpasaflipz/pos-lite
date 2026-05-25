@@ -239,7 +239,7 @@ const ExpenseInventoryLines: React.FC<Props> = ({ value, onChange, totalAmount }
           {t('expenses.matchToInventory')}
         </label>
         {linesTotal > 0 && (
-          <span className={`text-xs ${totalMismatch ? 'text-amber-400' : 'text-neutral-500'}`}>
+          <span className={`text-xs ${totalMismatch ? 'text-cockpit-yellow' : 'text-neutral-500'}`}>
             ${linesTotal.toFixed(2)}
             {totalAmount != null && totalAmount > 0 && ` / $${totalAmount.toFixed(2)}`}
           </span>
@@ -471,7 +471,7 @@ const LineRowEditor: React.FC<RowProps> = ({
               <button
                 type="button"
                 onClick={onRemove}
-                className="p-1 text-brand-400 hover:text-red-400 transition-colors shrink-0"
+                className="p-1 text-brand-400 hover:text-cockpit-red/90 transition-colors shrink-0"
                 aria-label="Remove"
               >
                 <Trash2 size={14} />

@@ -370,7 +370,7 @@ export default function RecipeManagementScreen() {
 
       <div className="max-w-7xl mx-auto p-6 space-y-6">
         {error && (
-          <div className="rounded-xl border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">
+          <div className="rounded-xl border border-cockpit-red bg-cockpit-red/40 px-4 py-3 text-sm text-cockpit-red">
             {error}
           </div>
         )}
@@ -427,10 +427,10 @@ export default function RecipeManagementScreen() {
                 const badgeTone = foodCostPct == null
                   ? 'border-neutral-800 bg-neutral-900 text-neutral-500'
                   : foodCostPct > 35
-                    ? 'border-red-800 bg-red-950/50 text-red-300'
+                    ? 'border-cockpit-red bg-cockpit-red/50 text-cockpit-red'
                     : foodCostPct > 30
-                      ? 'border-amber-800 bg-amber-950/50 text-amber-300'
-                      : 'border-green-800 bg-green-950/40 text-green-300';
+                      ? 'border-cockpit-yellow bg-cockpit-yellow/50 text-cockpit-yellow'
+                      : 'border-cockpit-green bg-cockpit-green/40 text-cockpit-green';
                 return (
                   <button
                     key={item.id}
@@ -448,8 +448,8 @@ export default function RecipeManagementScreen() {
                       </div>
                       <span className={`text-[11px] px-2 py-1 rounded-full border ${
                         missingRecipe
-                          ? 'border-amber-700 bg-amber-950/50 text-amber-300'
-                          : 'border-green-800 bg-green-950/40 text-green-300'
+                          ? 'border-cockpit-yellow bg-cockpit-yellow/50 text-cockpit-yellow'
+                          : 'border-cockpit-green bg-cockpit-green/40 text-cockpit-green'
                       }`}>
                         {missingRecipe ? t('recipe.missingRecipe') : t('recipe.hasRecipe')}
                       </span>
@@ -541,7 +541,7 @@ export default function RecipeManagementScreen() {
                                   type="button"
                                   onClick={() => handleDeleteIngredient(ingredient.id)}
                                   disabled={deletingIngredientId === ingredient.id}
-                                  className="shrink-0 px-3 rounded-lg border border-neutral-700 bg-neutral-900 text-neutral-400 hover:text-red-300 hover:border-red-800 disabled:opacity-50 transition-colors inline-flex items-center"
+                                  className="shrink-0 px-3 rounded-lg border border-neutral-700 bg-neutral-900 text-neutral-400 hover:text-cockpit-red/90 hover:border-cockpit-red/90 disabled:opacity-50 transition-colors inline-flex items-center"
                                   title={t('recipe.deleteIngredient')}
                                 >
                                   <Trash2 size={16} />
@@ -578,7 +578,7 @@ export default function RecipeManagementScreen() {
 
                           <button
                             onClick={() => removeIngredientRow(index)}
-                            className="mt-6 h-11 w-11 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-red-300 hover:border-red-800 transition-colors flex items-center justify-center"
+                            className="mt-6 h-11 w-11 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-cockpit-red/90 hover:border-cockpit-red/90 transition-colors flex items-center justify-center"
                             title={t('common:buttons.remove')}
                           >
                             <MinusCircle size={18} />
@@ -861,7 +861,7 @@ export default function RecipeManagementScreen() {
                       type="button"
                       onClick={() => handleDeleteIngredient(item.id)}
                       disabled={deletingIngredientId === item.id}
-                      className="shrink-0 px-3 py-2 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-red-300 hover:border-red-800 disabled:opacity-50 transition-colors inline-flex items-center gap-2 text-sm"
+                      className="shrink-0 px-3 py-2 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-cockpit-red/90 hover:border-cockpit-red/90 disabled:opacity-50 transition-colors inline-flex items-center gap-2 text-sm"
                       title={t('recipe.deleteIngredient')}
                     >
                       <Trash2 size={16} />

@@ -315,14 +315,14 @@ const RecurringRow: React.FC<RowProps> = ({ rule, onEdit, onDelete }) => {
           <span>{formatPrice(rule.expected_amount)} / {t(`expenses.frequencies.${rule.frequency}`, { defaultValue: rule.frequency })}</span>
           <span className="text-neutral-600">·</span>
           <span className="flex items-center gap-0.5">
-            <AlertTriangle size={11} className="text-amber-500" />
+            <AlertTriangle size={11} className="text-cockpit-yellow" />
             ±{rule.variance_threshold_pct}%
           </span>
         </div>
       </button>
       <button
         onClick={onDelete}
-        className="p-2 text-neutral-500 hover:text-red-400 transition-colors"
+        className="p-2 text-neutral-500 hover:text-cockpit-red/90 transition-colors"
         aria-label={t('common:buttons.delete', { defaultValue: 'Delete' })}
       >
         <Trash2 size={14} />

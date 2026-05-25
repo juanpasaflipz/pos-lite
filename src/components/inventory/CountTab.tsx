@@ -113,7 +113,7 @@ export default function CountTab({
                       <td className="px-6 py-4 text-neutral-300">{count.counted_quantity}</td>
                       <td className="px-6 py-4 text-neutral-300">{count.system_quantity}</td>
                       <td className="px-6 py-4">
-                        <span className={count.variance !== 0 ? (count.variance < 0 ? 'text-brand-400' : 'text-amber-400') : 'text-green-400'}>
+                        <span className={count.variance !== 0 ? (count.variance < 0 ? 'text-brand-400' : 'text-cockpit-yellow') : 'text-cockpit-green'}>
                           {count.variance > 0 ? '+' : ''}{count.variance}
                         </span>
                       </td>

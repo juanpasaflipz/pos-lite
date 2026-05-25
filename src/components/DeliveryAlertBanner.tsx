@@ -9,12 +9,12 @@ interface DeliveryAlertBannerProps {
 }
 
 const PLATFORM_COLORS: Record<string, { border: string; bg: string; text: string }> = {
-  uber_eats:  { border: 'border-green-500',  bg: 'bg-green-950',  text: 'text-green-400' },
-  rappi:      { border: 'border-orange-500', bg: 'bg-orange-950', text: 'text-orange-400' },
-  didi_food:  { border: 'border-amber-500',  bg: 'bg-amber-950',  text: 'text-amber-400' },
+  uber_eats:  { border: 'border-cockpit-green',  bg: 'bg-cockpit-green',  text: 'text-cockpit-green' },
+  rappi:      { border: 'border-cockpit-yellow', bg: 'bg-cockpit-yellow', text: 'text-cockpit-yellow' },
+  didi_food:  { border: 'border-cockpit-yellow',  bg: 'bg-cockpit-yellow',  text: 'text-cockpit-yellow' },
 };
 
-const DEFAULT_COLORS = { border: 'border-blue-500', bg: 'bg-blue-950', text: 'text-blue-400' };
+const DEFAULT_COLORS = { border: 'border-cockpit-blue', bg: 'bg-cockpit-blue', text: 'text-cockpit-blue' };
 
 function formatElapsed(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -71,7 +71,7 @@ const DeliveryAlertBanner: React.FC<DeliveryAlertBannerProps> = ({ alerts, onDis
             {/* Elapsed time */}
             <span
               className={`font-mono text-sm font-bold flex-shrink-0 ${
-                isUrgent ? 'text-red-400 animate-pulse' : colors.text
+                isUrgent ? 'text-cockpit-red animate-pulse' : colors.text
               }`}
             >
               {formatElapsed(alert.elapsedSeconds)}
