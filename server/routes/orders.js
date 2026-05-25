@@ -514,8 +514,41 @@ async function buildOrderFromRequest(req) {
   let itemsTotal = 0;
   const orderItems = [];
 
+  // Batched prefetch: collect every menu_item / modifier / brand-pair we need
+  // and resolve them in three queries up front. Replaces an N+1 inside the
+  // per-item loop that, for an 8-item × 4-modifier order, ran 41+ sequential
+  // SELECTs inside the held tenant connection.
+  const menuItemIds = [...new Set(items.map((i) => i.menu_item_id))];
+  const modifierIds = [...new Set(items.flatMap((i) => i.modifiers || []))];
+  const brandPairs = items.filter((i) => i.virtual_brand_id);
+
+  const menuItemRows = menuItemIds.length
+    ? await all('SELECT id, name, price FROM menu_items WHERE id = ANY($1::int[])', [menuItemIds])
+    : [];
+  const menuItemMap = new Map(menuItemRows.map((r) => [r.id, r]));
+
+  const modifierRows = modifierIds.length
+    ? await all('SELECT id, name, price_adjustment FROM modifiers WHERE id = ANY($1::int[])', [modifierIds])
+    : [];
+  const modifierMap = new Map(modifierRows.map((r) => [r.id, r]));
+
+  const brandKey = (vbId, miId) => `${vbId}:${miId}`;
+  let brandMap = new Map();
+  if (brandPairs.length > 0) {
+    const vbIds = brandPairs.map((i) => i.virtual_brand_id);
+    const miIds = brandPairs.map((i) => i.menu_item_id);
+    const brandRows = await all(
+      `SELECT vbi.virtual_brand_id, vbi.menu_item_id, vbi.custom_name, vbi.custom_price
+       FROM virtual_brand_items vbi
+       JOIN unnest($1::int[], $2::int[]) AS pairs(vb_id, mi_id)
+         ON vbi.virtual_brand_id = pairs.vb_id AND vbi.menu_item_id = pairs.mi_id`,
+      [vbIds, miIds]
+    );
+    brandMap = new Map(brandRows.map((r) => [brandKey(r.virtual_brand_id, r.menu_item_id), r]));
+  }
+
   for (const item of items) {
-    const menuItem = await get('SELECT id, name, price FROM menu_items WHERE id = $1', [item.menu_item_id]);
+    const menuItem = menuItemMap.get(item.menu_item_id);
     if (!menuItem) {
       const err = new Error(`Menu item ${item.menu_item_id} not found`);
       err.status = 404;
@@ -527,7 +560,7 @@ async function buildOrderFromRequest(req) {
     const resolvedModifiers = [];
     if (item.modifiers && item.modifiers.length > 0) {
       for (const modId of item.modifiers) {
-        const mod = await get('SELECT id, name, price_adjustment FROM modifiers WHERE id = $1', [modId]);
+        const mod = modifierMap.get(modId);
         if (mod) {
           modifierTotal += Number(mod.price_adjustment);
           resolvedModifiers.push(mod);
@@ -541,10 +574,7 @@ async function buildOrderFromRequest(req) {
     const virtualBrandId = item.virtual_brand_id || null;
 
     if (virtualBrandId) {
-      const brandItem = await get(
-        'SELECT custom_name, custom_price FROM virtual_brand_items WHERE virtual_brand_id = $1 AND menu_item_id = $2',
-        [virtualBrandId, item.menu_item_id]
-      );
+      const brandItem = brandMap.get(brandKey(virtualBrandId, item.menu_item_id));
       if (brandItem) {
         if (brandItem.custom_name) itemName = brandItem.custom_name;
         if (brandItem.custom_price != null) basePrice = Number(brandItem.custom_price);
