@@ -553,6 +553,7 @@
     "didiFood": "DiDi Food",
     "delivery": "Delivery",
     "itemCount": "{{count}} producto(s)",
+    "moreItems": "+ {{count}} más",
     "noName": "Sin nombre",
     "start": "Iniciar",
     "markReady": "Listo",

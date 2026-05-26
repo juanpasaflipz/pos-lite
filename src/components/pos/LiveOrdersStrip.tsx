@@ -177,18 +177,21 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, refreshKey }: Liv
     }
   };
 
-  // Calm empty state — minimal height so the menu grid stays the focus.
+  // Calm empty state — slightly taller than before so it reads as the "stage"
+  // for incoming orders, but still doesn't crowd the menu grid.
   if (!loading && orders.length === 0) {
     return (
-      <div className="border-b border-neutral-800/60 bg-neutral-950 px-5 py-3 lg:px-6 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-neutral-500 text-sm">
-          <Clock className="w-4 h-4" />
-          <span className="font-semibold">{t('liveStrip.empty')}</span>
-          <span className="hidden sm:inline text-neutral-600">· {t('liveStrip.emptyHint')}</span>
+      <div className="border-b border-neutral-800/60 bg-neutral-950 px-5 lg:px-6 py-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 text-neutral-500">
+          <Clock className="w-5 h-5" />
+          <div className="flex flex-col">
+            <span className="font-bold text-sm text-neutral-300">{t('liveStrip.empty')}</span>
+            <span className="text-xs text-neutral-600">{t('liveStrip.emptyHint')}</span>
+          </div>
         </div>
         <button
           onClick={onViewAll}
-          className="text-xs font-bold text-neutral-400 hover:text-white transition-colors flex items-center gap-1"
+          className="text-xs font-bold text-neutral-400 hover:text-white transition-colors flex items-center gap-1 px-2 py-1 rounded-md hover:bg-neutral-800"
         >
           {t('liveStrip.viewAll')}
           <ChevronRight className="w-3 h-3" />
@@ -201,22 +204,22 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, refreshKey }: Liv
     <div className="border-b border-neutral-800/60 bg-neutral-950">
       {/* Counter row */}
       <div className="flex items-center justify-between gap-2 px-5 lg:px-6 pt-3 pb-2">
-        <div className="flex items-center gap-3 flex-wrap text-xs font-bold uppercase tracking-wider">
+        <div className="flex items-center gap-3 flex-wrap text-sm font-bold uppercase tracking-wider">
           <span className="inline-flex items-center gap-1.5 text-cockpit-attention-text">
-            <span className="w-2 h-2 rounded-full bg-cockpit-yellow" />
-            <span>{counts.preparing}</span>
-            <span className="text-neutral-400 font-semibold normal-case tracking-normal">{t('liveStrip.preparing')}</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-cockpit-yellow" />
+            <span className="text-base">{counts.preparing}</span>
+            <span className="text-neutral-400 font-semibold normal-case tracking-normal text-xs">{t('liveStrip.preparing')}</span>
           </span>
           <span className="inline-flex items-center gap-1.5 text-cockpit-in-text">
-            <span className="w-2 h-2 rounded-full bg-cockpit-green" />
-            <span>{counts.ready}</span>
-            <span className="text-neutral-400 font-semibold normal-case tracking-normal">{t('liveStrip.readyCount')}</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-cockpit-green" />
+            <span className="text-base">{counts.ready}</span>
+            <span className="text-neutral-400 font-semibold normal-case tracking-normal text-xs">{t('liveStrip.readyCount')}</span>
           </span>
           {counts.unpaid > 0 && (
             <span className="inline-flex items-center gap-1.5 text-brand-300">
-              <CreditCard className="w-3 h-3" />
-              <span>{counts.unpaid}</span>
-              <span className="text-neutral-400 font-semibold normal-case tracking-normal">{t('liveStrip.unpaid')}</span>
+              <CreditCard className="w-3.5 h-3.5" />
+              <span className="text-base">{counts.unpaid}</span>
+              <span className="text-neutral-400 font-semibold normal-case tracking-normal text-xs">{t('liveStrip.unpaid')}</span>
             </span>
           )}
         </div>
@@ -231,7 +234,7 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, refreshKey }: Liv
 
       {/* Card strip */}
       <div className="px-5 lg:px-6 pb-3">
-        <div className="flex gap-2.5 overflow-x-auto scrollbar-hide -mx-1 px-1">
+        <div className="flex gap-3 overflow-x-auto scrollbar-hide -mx-1 px-1">
           {orders.map((order) => {
             const elapsed = Math.max(0, Math.floor((now - new Date(order.created_at).getTime()) / 1000));
             const tier = getTimeTier(elapsed);
@@ -240,67 +243,90 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, refreshKey }: Liv
             const busy = actionId === order.id;
             const channel = describeChannel(order, t);
             const isReady = order.status === 'ready';
-            const itemCount = (order.items || []).reduce((sum, it) => sum + (it.quantity || 0), 0);
+            const items = order.items || [];
+            const itemCount = items.reduce((sum, it) => sum + (it.quantity || 0), 0);
+            const visibleItems = items.slice(0, 3);
+            const overflow = items.length - visibleItems.length;
 
             return (
               <div
                 key={order.id}
-                className={`flex-shrink-0 w-56 bg-neutral-900 rounded-lg border border-neutral-800 border-l-4 ${TIER_ACCENT[tier]} ${
+                className={`flex-shrink-0 w-72 bg-neutral-900 rounded-lg border border-neutral-800 border-l-4 ${TIER_ACCENT[tier]} ${
                   tier === 'critical' ? 'ring-1 ring-cockpit-red/40' : ''
                 } flex flex-col`}
               >
-                {/* Top: order # + elapsed/ready */}
-                <div className="flex items-center justify-between px-2.5 pt-2">
-                  <span className="text-base font-black text-white leading-none">#{order.order_number}</span>
-                  {isReady ? (
-                    <span className="inline-flex items-center gap-1 bg-cockpit-green text-neutral-900 px-1.5 py-0.5 rounded-full text-[10px] font-black uppercase">
-                      <Check size={10} strokeWidth={3} />
-                      <span>{t('liveStrip.readyBadge')}</span>
-                    </span>
-                  ) : (
-                    <span className={`inline-flex items-center gap-1 text-xs font-bold ${TIER_TIME_TEXT[tier]} ${tier === 'critical' ? 'animate-pulse' : ''}`}>
-                      <Clock className="w-3 h-3" />
-                      {formatElapsed(elapsed)}
-                    </span>
-                  )}
-                </div>
-
-                {/* Channel + customer */}
-                <div className="px-2.5 pt-1.5 space-y-0.5">
-                  <div className={`flex items-center gap-1.5 text-xs font-bold ${channel.accent}`}>
-                    <channel.Icon className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span className="truncate">{channel.label}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-xs text-neutral-300 min-h-[16px]">
-                    {order.customer_name ? (
-                      <>
-                        <User className="w-3 h-3 text-neutral-500 flex-shrink-0" />
-                        <span className="truncate font-semibold">{order.customer_name}</span>
-                      </>
+                {/* Header: order # · customer/channel · elapsed */}
+                <div className="px-3 pt-2.5 pb-2 border-b border-neutral-800/70">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-2xl font-black text-white leading-none">#{order.order_number}</span>
+                    {isReady ? (
+                      <span className="inline-flex items-center gap-1 bg-cockpit-green text-neutral-900 px-2 py-0.5 rounded-full text-[10px] font-black uppercase">
+                        <Check size={11} strokeWidth={3} />
+                        <span>{t('liveStrip.readyBadge')}</span>
+                      </span>
                     ) : (
-                      <span className="text-neutral-600 italic text-[11px]">{t('liveStrip.noName')}</span>
+                      <span className={`inline-flex items-center gap-1 text-sm font-bold ${TIER_TIME_TEXT[tier]} ${tier === 'critical' ? 'animate-pulse' : ''}`}>
+                        <Clock className="w-3.5 h-3.5" />
+                        {formatElapsed(elapsed)}
+                      </span>
                     )}
                   </div>
-                  <div className="text-[11px] text-neutral-500 font-semibold">
-                    {t('liveStrip.itemCount', { count: itemCount })}
+
+                  {/* Customer name — the primary "who is this" line. */}
+                  <div className="mt-1.5 flex items-center gap-1.5 min-h-[18px]">
+                    {order.customer_name ? (
+                      <>
+                        <User className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0" />
+                        <span className="truncate font-bold text-sm text-white">{order.customer_name}</span>
+                      </>
+                    ) : (
+                      <span className="text-neutral-500 italic text-xs">{t('liveStrip.noName')}</span>
+                    )}
+                  </div>
+
+                  {/* Channel + payment chip on one row */}
+                  <div className="mt-1 flex items-center gap-2 flex-wrap">
+                    <span className={`inline-flex items-center gap-1 text-[11px] font-bold ${channel.accent}`}>
+                      <channel.Icon className="w-3 h-3 flex-shrink-0" />
+                      <span className="truncate">{channel.label}</span>
+                    </span>
+                    {!paid && (
+                      <span className="bg-cockpit-yellow text-neutral-900 px-1.5 py-0.5 rounded-full text-[10px] font-black uppercase">
+                        {t('liveStrip.unpaid')}
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                {/* Status / payment badges */}
-                <div className="px-2.5 pt-1.5 flex items-center gap-1 flex-wrap">
-                  {!paid && (
-                    <span className="bg-cockpit-yellow text-neutral-900 px-1.5 py-0.5 rounded-full text-[10px] font-black uppercase">
-                      {t('ordersPanel.unpaid')}
+                {/* Items — what the customer actually ordered. */}
+                <div className="px-3 py-2 flex-1 min-h-[78px]">
+                  {items.length > 0 ? (
+                    <ul className="space-y-0.5">
+                      {visibleItems.map((it, idx) => (
+                        <li key={it.id ?? idx} className="text-xs text-neutral-200 leading-snug truncate">
+                          <span className="font-black text-white tabular-nums">{it.quantity}×</span>{' '}
+                          <span className="font-semibold">{it.item_name}</span>
+                        </li>
+                      ))}
+                      {overflow > 0 && (
+                        <li className="text-[11px] text-neutral-500 font-semibold italic">
+                          {t('liveStrip.moreItems', { count: overflow })}
+                        </li>
+                      )}
+                    </ul>
+                  ) : (
+                    <span className="text-[11px] text-neutral-600 italic">
+                      {t('liveStrip.itemCount', { count: itemCount })}
                     </span>
                   )}
                 </div>
 
                 {/* Actions */}
-                <div className="px-2.5 py-2 mt-auto flex items-center gap-1.5">
+                <div className="px-3 pb-2.5 flex items-center gap-2">
                   {!paid && (
                     <button
                       onClick={() => onCharge(order)}
-                      className="flex-1 px-2 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-black rounded-md transition-colors min-h-[36px] uppercase tracking-wide"
+                      className="flex-1 px-2 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-black rounded-md transition-colors min-h-[40px] uppercase tracking-wide"
                     >
                       {t('liveStrip.charge')}
                     </button>
@@ -313,7 +339,7 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, refreshKey }: Liv
                         isReady
                           ? 'bg-cockpit-green text-neutral-900 hover:brightness-110'
                           : 'bg-neutral-700 text-white hover:bg-neutral-600'
-                      } disabled:opacity-50 text-xs font-black rounded-md transition-colors min-h-[36px] uppercase tracking-wide`}
+                      } disabled:opacity-50 text-xs font-black rounded-md transition-colors min-h-[40px] uppercase tracking-wide`}
                     >
                       {busy ? '…' : t(step.labelKey)}
                     </button>
