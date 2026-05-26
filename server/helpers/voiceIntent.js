@@ -139,9 +139,22 @@ export function buildConfirmationMessage(parsed) {
     return `⚠️ Registrar merma:\n${lines}${reasons ? `\nMotivo: ${reasons}` : ''}\n\nResponde SI para guardar, NO para cancelar.`;
   }
   if (parsed.intent === 'record_purchase') {
+    // Purchase lines get a (NUEVO) tag for items enrichPurchaseItems() flagged
+    // as not in inventory yet — owner sees what new SKUs they're approving.
+    const purchaseLines = items
+      .slice(0, 8)
+      .map((it) => {
+        const q = Number(it.quantity);
+        const unit = it.unit || '';
+        const name = it.raw_name || '(item)';
+        const qstr = Number.isFinite(q) ? (Number.isInteger(q) ? q : q.toFixed(2)) : '?';
+        const tag = it._will_create ? ' (NUEVO)' : '';
+        return `• ${qstr} ${unit} ${name}${tag}`.replace(/\s+/g, ' ').trim();
+      })
+      .join('\n');
     const vendor = parsed.vendor ? `\nProveedor: ${parsed.vendor}` : '';
     const total = parsed.total_amount ? `\nTotal: $${Number(parsed.total_amount).toFixed(2)}` : '';
-    return `📦 Registrar compra:\n${lines}${vendor}${total}\n\nResponde SI para guardar, NO para cancelar.`;
+    return `📦 Registrar compra:\n${purchaseLines}${vendor}${total}\n\nResponde SI para guardar, NO para cancelar.`;
   }
   if (parsed.intent === 'count_inventory') {
     return `📋 Conteo físico:\n${lines}\n\nResponde SI para guardar, NO para cancelar.`;
@@ -178,6 +191,46 @@ export function parseConfirmReply(text) {
   if (CONFIRM_TOKENS.has(first)) return 'confirm';
   if (CANCEL_TOKENS.has(first)) return 'cancel';
   return 'unclear';
+}
+
+// Pre-confirmation enrichment for record_purchase intents. Runs server-side
+// fuzzy match against existing inventory (pg_trgm) for any line the parser
+// couldn't bind to an id. If still no match, flag the item as _will_create
+// so buildConfirmationMessage shows "(NUEVO)" and executePurchase inserts
+// a new inventory_items row on SI. Must be called inside withTenant().
+export async function enrichPurchaseItems(parsed) {
+  if (!parsed || parsed.intent !== 'record_purchase') return parsed;
+  const items = Array.isArray(parsed.items) ? parsed.items : [];
+  for (const it of items) {
+    // Derive per-unit price once so the cost-price math has a value to use
+    // whether the line came from voice (unit_price) or from a receipt
+    // photo (only amount + quantity).
+    if (it.unit_price == null && Number(it.amount) > 0 && Number(it.quantity) > 0) {
+      it.unit_price = Number(it.amount) / Number(it.quantity);
+    }
+    if (it.inventory_item_id) continue;
+    if (!it.raw_name || typeof it.raw_name !== 'string') continue;
+    try {
+      const match = await get(
+        `SELECT id FROM inventory_items
+         WHERE similarity(name, $1) > 0.4
+         ORDER BY similarity(name, $1) DESC
+         LIMIT 1`,
+        [it.raw_name.trim()]
+      );
+      if (match?.id) {
+        it.inventory_item_id = match.id;
+        it._fuzzy_matched = true;
+      } else {
+        it._will_create = true;
+      }
+    } catch {
+      // pg_trgm not available — assume the item is new so the owner can still
+      // approve and the auto-create path runs.
+      it._will_create = true;
+    }
+  }
+  return parsed;
 }
 
 // === EXECUTORS ===
@@ -234,6 +287,24 @@ async function executePurchase(parsed, employeeId) {
     throw new Error('Purchase total amount missing or invalid');
   }
   const today = new Date().toISOString().slice(0, 10);
+
+  // Auto-create inventory items for lines enrichPurchaseItems() flagged as new.
+  // SI on the confirmation is the approval gate; we already showed "(NUEVO)"
+  // next to these lines. Insert at qty=0/cost=0 so the existing restock loop
+  // below handles the cost-price seeding through its normal path.
+  for (const it of parsed.items || []) {
+    if (it.inventory_item_id) continue;
+    if (!it._will_create) continue;
+    if (!it.raw_name || typeof it.raw_name !== 'string') continue;
+    const unit = it.unit || 'pcs';
+    const created = await get(
+      `INSERT INTO inventory_items (name, quantity, unit, cost_price)
+       VALUES ($1, 0, $2, 0)
+       RETURNING id`,
+      [it.raw_name.trim(), unit]
+    );
+    if (created?.id) it.inventory_item_id = created.id;
+  }
 
   // Mirror the receipt_data shape used by /api/expenses/scan-receipt so the
   // expense list UI shows the line items the same way.

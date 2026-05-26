@@ -34,6 +34,7 @@ import {
   parseConfirmReply,
   executeIntent,
   buildSuccessMessage,
+  enrichPurchaseItems,
 } from '../helpers/voiceIntent.js';
 import { parseReceiptImage, persistReceiptBuffer } from '../helpers/receiptVision.js';
 import { sendWhatsAppText, sendSMSReply } from '../helpers/twilio.js';
@@ -343,12 +344,24 @@ router.post('/inbound', async (req, res) => {
     }
   }
 
+  // Enrich purchase intents: server-side fuzzy match against inventory for
+  // anything the parser couldn't bind, and flag the rest as _will_create so
+  // the confirmation tags them "(NUEVO)" and executePurchase auto-creates
+  // them on SI. Non-fatal — the purchase still works without it.
+  if (parsed.intent === 'record_purchase') {
+    try {
+      await withTenant(employee.tenant_id, async () => enrichPurchaseItems(parsed));
+    } catch (err) {
+      console.warn('[TwilioInbound] purchase enrichment failed (non-fatal):', err.message);
+    }
+  }
+
   const summary = buildConfirmationMessage(parsed);
   // A receipt photo may parse cleanly (vendor + total) with zero matched
   // inventory lines — e.g. a terminal slip. Allow record_purchase to be
   // executable on a valid total alone; executePurchase handles empty items[].
   const hasMatchedItems = Array.isArray(parsed.items)
-    && parsed.items.some((it) => it.inventory_item_id || it.menu_item_id);
+    && parsed.items.some((it) => it.inventory_item_id || it.menu_item_id || it._will_create);
   const hasValidPurchaseTotal = parsed.intent === 'record_purchase'
     && Number(parsed.total_amount) > 0;
   const isExecutable = ['log_waste', 'record_purchase', 'count_inventory', 'toggle_menu_item'].includes(parsed.intent)
