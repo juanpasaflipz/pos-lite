@@ -1,15 +1,15 @@
 // Voice-note intent parsing + execution.
 //
 // Input: a transcript like "tiré tres burritos, se quemaron" or
-//        "llegaron 20 kilos de arrachera de Sigma, 2800 pesos".
+//        "se acabó el chicharrón" or "ya hay tortillas".
 // Output: { intent, items, ... } that the webhook turns into a SI/NO
-//         confirmation, then writes to /api/waste, /api/expenses, or
-//         /api/inventory/:id/count once the user confirms.
+//         confirmation, then writes to waste_log / expenses / inventory_counts
+//         / menu_items once the user confirms.
 //
-// The Claude call gets the live inventory list (name + id + unit) so it can
-// bind item_id directly. For purchases, the vendor name comes back as free
-// text and the route does a pg_trgm fuzzy match (same pattern as the receipt
-// scanner in routes/expenses.js).
+// The Claude call gets the live INVENTORY list (for waste/purchase/count
+// intents) and the MENU list (for toggle_menu_item) so it can bind item_id
+// directly. Vendor names come back as free text and the executor does a
+// pg_trgm fuzzy match (same pattern as the receipt scanner).
 
 import { all, get, run, getTenantId } from '../db/index.js';
 import { detectOverpay } from './inventory.js';
@@ -17,27 +17,35 @@ import { detectOverpay } from './inventory.js';
 const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
 
-const VOICE_INTENT_PROMPT = `You parse a restaurant staff voice note (Spanish or English) into a structured action for an inventory + expense system. The note will be one of:
+const VOICE_INTENT_PROMPT = `You parse a restaurant staff voice/text note (Spanish or English) into a structured action. The note will be one of:
 
-  1. WASTE   — "tiré 3 burritos", "se echó a perder un kilo de pollo", "wasted 2 lb steak"
-  2. PURCHASE — "llegaron 20 kilos de arrachera de Sigma, 2800 pesos", "received 5 cases of beer for 1750"
-  3. COUNT   — "conteo: pollo 14 kilos, arrachera 8 kilos", "we have 12 cases of beer"
+  1. WASTE         — "tiré 3 burritos", "se echó a perder un kilo de pollo", "wasted 2 lb steak"
+  2. PURCHASE      — "llegaron 20 kilos de arrachera de Sigma, 2800 pesos", "received 5 cases of beer for 1750"
+  3. COUNT         — "conteo: pollo 14 kilos, arrachera 8 kilos", "we have 12 cases of beer"
+  4. TOGGLE_MENU   — "se acabó el chicharrón", "86 the carne asada", "ya no hay tacos al pastor"
+                  OR "ya hay tortillas", "vuelve el pollo", "activate the burrito"
 
-You will be given the current INVENTORY list (id, name, unit) and a hint for the most likely intent. Bind each spoken item to one inventory_item_id when possible; if no confident match, set inventory_item_id to null and put the spoken name in raw_name.
+You will be given two lists:
+  - INVENTORY (id, name, unit) — raw ingredients you waste / buy / count
+  - MENU (id, name, active) — sellable menu items you 86 (deactivate) or reactivate
+
+Bind each spoken item to the correct id based on the intent: WASTE/PURCHASE/COUNT → inventory_item_id; TOGGLE_MENU → menu_item_id. If no confident match, set the id to null and put the spoken name in raw_name.
 
 Return ONLY valid JSON, no prose, with this exact schema:
 {
-  "intent": "log_waste" | "record_purchase" | "count_inventory" | "unknown",
+  "intent": "log_waste" | "record_purchase" | "count_inventory" | "toggle_menu_item" | "unknown",
   "confidence": number (0-1),
   "clarifying_question": "string or null — Spanish, one short sentence asking what's missing",
   "items": [
     {
       "inventory_item_id": number | null,
+      "menu_item_id": number | null,
       "raw_name": "string — item name as spoken",
-      "quantity": number,
-      "unit": "string — unit as spoken, lowercase (kg, g, l, ml, pcs, box, case)",
+      "quantity": number | null,
+      "unit": "string or null — lowercase (kg, g, l, ml, pcs, box, case)",
       "reason": "spoilage" | "prep_error" | "dropped" | "expired" | "other" | null,
-      "unit_price": number | null
+      "unit_price": number | null,
+      "active": boolean | null
     }
   ],
   "vendor": "string or null — supplier name as spoken (only for purchases)",
@@ -47,19 +55,26 @@ Return ONLY valid JSON, no prose, with this exact schema:
 }
 
 Rules:
-- Convert quantity to the inventory item's own unit when you can (e.g. inventory is kg, voice says "500 gramos" → quantity 0.5, unit kg).
-- For WASTE, infer reason from keywords: quemado/burnt → prep_error; vencido/expired/echó a perder → spoilage or expired; tiré/dropped → dropped; default → other.
-- For PURCHASE, total_amount is the total spent (number, no currency). If only line totals are mentioned, sum them.
-- For COUNT, quantity is the counted on-hand amount in the inventory's unit.
-- If the transcript is unclear or refers to items not in INVENTORY, set intent to "unknown" and put a short Spanish clarifying_question.
+- TOGGLE_MENU: set "active" per item. Deactivation cues ("se acabó", "ya no hay", "86", "agotado", "no queda") → false. Reactivation cues ("ya hay", "vuelve", "regresa", "activate", "está disponible") → true. quantity/unit/reason all null for this intent.
+- WASTE: infer reason — quemado/burnt → prep_error; vencido/expired/echó a perder → spoilage or expired; tiré/dropped → dropped; default → other.
+- PURCHASE: total_amount is the total spent (number, no currency). If only line totals are mentioned, sum them.
+- COUNT: quantity is the counted on-hand amount in the inventory's unit.
+- Convert spoken quantity to the inventory item's unit when sensible (e.g. inventory in kg, voice says "500 gramos" → quantity 0.5, unit kg).
+- If the transcript is unclear or refers to items not in INVENTORY/MENU, set intent to "unknown" and put a short Spanish clarifying_question.
 - Numbers as JSON numbers, no strings, no currency symbols.`;
 
-function buildUserMessage(transcript, inventory) {
-  const lines = inventory.slice(0, 200).map(
+function buildUserMessage(transcript, inventory, menu) {
+  const invLines = inventory.slice(0, 150).map(
     (i) => `- id=${i.id} name="${i.name}" unit=${i.unit || ''}`
   );
+  const menuLines = menu.slice(0, 150).map(
+    (m) => `- id=${m.id} name="${m.name}" active=${m.active ? 'true' : 'false'}`
+  );
   return `INVENTORY:
-${lines.join('\n')}
+${invLines.join('\n')}
+
+MENU:
+${menuLines.join('\n')}
 
 TRANSCRIPT:
 """${transcript}"""
@@ -71,9 +86,10 @@ export async function parseVoiceIntent(transcript) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured');
 
-  const inventory = await all(
-    'SELECT id, name, unit FROM inventory_items ORDER BY name ASC LIMIT 200'
-  );
+  const [inventory, menu] = await Promise.all([
+    all('SELECT id, name, unit FROM inventory_items ORDER BY name ASC LIMIT 150'),
+    all('SELECT id, name, active FROM menu_items ORDER BY name ASC LIMIT 150'),
+  ]);
 
   const res = await fetch(CLAUDE_URL, {
     method: 'POST',
@@ -86,7 +102,7 @@ export async function parseVoiceIntent(transcript) {
       model: CLAUDE_MODEL,
       max_tokens: 1024,
       system: VOICE_INTENT_PROMPT,
-      messages: [{ role: 'user', content: buildUserMessage(transcript, inventory) }],
+      messages: [{ role: 'user', content: buildUserMessage(transcript, inventory, menu) }],
     }),
   });
 
@@ -129,6 +145,16 @@ export function buildConfirmationMessage(parsed) {
   }
   if (parsed.intent === 'count_inventory') {
     return `📋 Conteo físico:\n${lines}\n\nResponde SI para guardar, NO para cancelar.`;
+  }
+  if (parsed.intent === 'toggle_menu_item') {
+    // Mixed: some on, some off. Show an explicit marker per item so the
+    // staff can see exactly what each direction will do before confirming.
+    const togLines = items.slice(0, 8).map((it) => {
+      const marker = it.active ? '🟢' : '📴';
+      const verb = it.active ? 'disponible' : 'agotado';
+      return `${marker} ${it.raw_name || '(item)'} (${verb})`;
+    }).join('\n');
+    return `Cambiar disponibilidad:\n${togLines}\n\nResponde SI para guardar, NO para cancelar.`;
   }
   return 'No entendí la acción. Cancela con NO o repite el mensaje.';
 }
@@ -342,11 +368,38 @@ async function executeCount(parsed, employeeId) {
   return { resource_type: 'inventory_count', resource_ids: created.map((c) => c.resource_id), summary: created };
 }
 
+async function executeToggleMenuItem(parsed, _employeeId) {
+  const changed = [];
+  for (const it of parsed.items || []) {
+    if (!it.menu_item_id || typeof it.active !== 'boolean') continue;
+    const item = await get(
+      'SELECT id, name, active FROM menu_items WHERE id = $1',
+      [it.menu_item_id]
+    );
+    if (!item) continue;
+    if (item.active === it.active) {
+      // Already in the requested state — record as a no-op so the audit trail
+      // is honest about what actually changed.
+      changed.push({ resource_id: item.id, item_name: item.name, active: it.active, noop: true });
+      continue;
+    }
+    await run('UPDATE menu_items SET active = $1 WHERE id = $2', [it.active, item.id]);
+    changed.push({ resource_id: item.id, item_name: item.name, active: it.active, noop: false });
+  }
+  if (!changed.length) throw new Error('No menu items matched');
+  return {
+    resource_type: 'menu_item',
+    resource_ids: changed.map((c) => c.resource_id),
+    summary: changed,
+  };
+}
+
 export async function executeIntent(parsed, employeeId) {
   switch (parsed.intent) {
-    case 'log_waste':       return executeWaste(parsed, employeeId);
-    case 'record_purchase': return executePurchase(parsed, employeeId);
-    case 'count_inventory': return executeCount(parsed, employeeId);
+    case 'log_waste':         return executeWaste(parsed, employeeId);
+    case 'record_purchase':   return executePurchase(parsed, employeeId);
+    case 'count_inventory':   return executeCount(parsed, employeeId);
+    case 'toggle_menu_item':  return executeToggleMenuItem(parsed, employeeId);
     default:
       throw new Error(`Cannot execute intent: ${parsed.intent}`);
   }
@@ -363,6 +416,16 @@ export function buildSuccessMessage(intent, result) {
   if (intent === 'count_inventory') {
     const items = (result.summary || []).map((s) => `${s.item_name} (${s.variance >= 0 ? '+' : ''}${Number(s.variance).toFixed(2)})`).join(', ');
     return `✅ Conteo guardado: ${items}`;
+  }
+  if (intent === 'toggle_menu_item') {
+    const off = (result.summary || []).filter((s) => !s.active && !s.noop).map((s) => s.item_name);
+    const on = (result.summary || []).filter((s) => s.active && !s.noop).map((s) => s.item_name);
+    const noop = (result.summary || []).filter((s) => s.noop).map((s) => s.item_name);
+    const parts = [];
+    if (off.length) parts.push(`📴 Agotado: ${off.join(', ')}`);
+    if (on.length) parts.push(`🟢 Disponible: ${on.join(', ')}`);
+    if (noop.length) parts.push(`(sin cambio: ${noop.join(', ')})`);
+    return `✅ ${parts.join(' · ')}`;
   }
   return '✅ Guardado.';
 }

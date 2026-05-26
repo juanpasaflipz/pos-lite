@@ -302,9 +302,9 @@ router.post('/inbound', async (req, res) => {
   }
 
   const summary = buildConfirmationMessage(parsed);
-  const isExecutable = ['log_waste', 'record_purchase', 'count_inventory'].includes(parsed.intent)
+  const isExecutable = ['log_waste', 'record_purchase', 'count_inventory', 'toggle_menu_item'].includes(parsed.intent)
     && Array.isArray(parsed.items) && parsed.items.length > 0
-    && parsed.items.some((it) => it.inventory_item_id);
+    && parsed.items.some((it) => it.inventory_item_id || it.menu_item_id);
 
   await withTenant(employee.tenant_id, async () => {
     await run(
