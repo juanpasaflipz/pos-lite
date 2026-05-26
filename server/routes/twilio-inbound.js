@@ -217,7 +217,11 @@ router.post('/inbound', async (req, res) => {
     if (pending) {
       if (replyKind === 'confirm') {
         try {
-          const parsed = pending.parsed_json;
+          // parsed_json is a JSONB column but porsager/postgres + unsafe()
+          // round-trips it as a JSON-encoded string instead of a JS object.
+          // Parse defensively so historical and current rows both work.
+          let parsed = pending.parsed_json;
+          if (typeof parsed === 'string') parsed = JSON.parse(parsed);
           const result = await withTenant(employee.tenant_id, async () => {
             const out = await executeIntent(parsed, employee.id);
             await run(
