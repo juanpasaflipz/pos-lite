@@ -35,6 +35,7 @@ import {
   executeIntent,
   buildSuccessMessage,
 } from '../helpers/voiceIntent.js';
+import { parseReceiptImage, persistReceiptBuffer } from '../helpers/receiptVision.js';
 import { sendWhatsAppText, sendSMSReply } from '../helpers/twilio.js';
 
 const router = Router();
@@ -266,45 +267,88 @@ router.post('/inbound', async (req, res) => {
   let transcript = body;
   let mediaUrlStored = null;
   let mediaTypeStored = null;
+  let parsed = null;
 
-  // Audio transcription is WhatsApp-only — MX SMS strips MMS audio
-  // inconsistently across carriers. SMS senders use text intents.
+  // Media on WhatsApp only — MX SMS strips MMS attachments inconsistently.
+  // Audio → Whisper → voice-intent path. Image → Claude vision → receipt
+  // path (already returns the voice-intent shape, so downstream is shared).
   if (channelIsWA && numMedia > 0 && mediaUrl0) {
+    let buffer, contentType;
     try {
-      const { buffer, contentType } = await fetchTwilioMedia(mediaUrl0, {
+      ({ buffer, contentType } = await fetchTwilioMedia(mediaUrl0, {
         accountSid: TWILIO_SID, authToken: TWILIO_TOKEN,
-      });
+      }));
       mediaUrlStored = mediaUrl0;
       mediaTypeStored = contentType;
-      transcript = await transcribeAudio(buffer, contentType, { language: 'es' });
     } catch (err) {
-      console.error('[TwilioInbound] transcription failed:', err.message);
-      await reply(from, to, '❌ No pude transcribir el audio. Intenta de nuevo o escribe el mensaje.');
+      console.error('[TwilioInbound] media fetch failed:', err.message);
+      await reply(from, to, '❌ No pude descargar el archivo. Intenta de nuevo.');
+      return ack();
+    }
+
+    if (contentType && contentType.startsWith('image/')) {
+      try {
+        parsed = await withTenant(employee.tenant_id, async () =>
+          parseReceiptImage(buffer, contentType, body)
+        );
+        // Persist the photo so the expense keeps a stable URL after the
+        // Twilio media URL expires. Non-fatal — voice_intents.media_url
+        // still has the Twilio URL as a fallback.
+        try {
+          const persistedUrl = await persistReceiptBuffer(buffer, contentType);
+          mediaUrlStored = persistedUrl;
+          if (parsed && typeof parsed === 'object') parsed.receipt_image_url = persistedUrl;
+        } catch (persistErr) {
+          console.warn('[TwilioInbound] receipt persist failed (non-fatal):', persistErr.message);
+        }
+        transcript = body || '[receipt photo]';
+      } catch (err) {
+        console.error('[TwilioInbound] receipt vision failed:', err.message);
+        await reply(from, to, '❌ No pude leer la foto del recibo. Intenta con otra foto o escríbeme los datos.');
+        return ack();
+      }
+    } else if (contentType && contentType.startsWith('audio/')) {
+      try {
+        transcript = await transcribeAudio(buffer, contentType, { language: 'es' });
+      } catch (err) {
+        console.error('[TwilioInbound] transcription failed:', err.message);
+        await reply(from, to, '❌ No pude transcribir el audio. Intenta de nuevo o escribe el mensaje.');
+        return ack();
+      }
+    } else {
+      await reply(from, to, 'No puedo leer este tipo de archivo. Manda foto del recibo o nota de voz.');
       return ack();
     }
   }
 
-  if (!transcript) {
+  if (!parsed && !transcript) {
     const hint = channelIsWA
-      ? 'Manda una nota de voz o escribe lo que quieres registrar.'
+      ? 'Manda foto del recibo, nota de voz, o escribe lo que quieres registrar.'
       : 'Escribe lo que quieres registrar (ej: "tiré 3 burritos" o "llegaron 10 kilos de pollo de Sigma, 1500 pesos").';
     await reply(from, to, hint);
     return ack();
   }
 
-  let parsed;
-  try {
-    parsed = await withTenant(employee.tenant_id, async () => parseVoiceIntent(transcript));
-  } catch (err) {
-    console.error('[TwilioInbound] intent parse failed:', err.message);
-    await reply(from, to, '❌ No pude procesar el mensaje. Intenta de nuevo.');
-    return ack();
+  if (!parsed) {
+    try {
+      parsed = await withTenant(employee.tenant_id, async () => parseVoiceIntent(transcript));
+    } catch (err) {
+      console.error('[TwilioInbound] intent parse failed:', err.message);
+      await reply(from, to, '❌ No pude procesar el mensaje. Intenta de nuevo.');
+      return ack();
+    }
   }
 
   const summary = buildConfirmationMessage(parsed);
-  const isExecutable = ['log_waste', 'record_purchase', 'count_inventory', 'toggle_menu_item'].includes(parsed.intent)
-    && Array.isArray(parsed.items) && parsed.items.length > 0
+  // A receipt photo may parse cleanly (vendor + total) with zero matched
+  // inventory lines — e.g. a terminal slip. Allow record_purchase to be
+  // executable on a valid total alone; executePurchase handles empty items[].
+  const hasMatchedItems = Array.isArray(parsed.items)
     && parsed.items.some((it) => it.inventory_item_id || it.menu_item_id);
+  const hasValidPurchaseTotal = parsed.intent === 'record_purchase'
+    && Number(parsed.total_amount) > 0;
+  const isExecutable = ['log_waste', 'record_purchase', 'count_inventory', 'toggle_menu_item'].includes(parsed.intent)
+    && (hasMatchedItems || hasValidPurchaseTotal);
 
   await withTenant(employee.tenant_id, async () => {
     await run(

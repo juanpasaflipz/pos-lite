@@ -264,22 +264,24 @@ async function executePurchase(parsed, employeeId) {
     `SELECT 1 AS ok FROM information_schema.columns
      WHERE table_schema = 'public' AND table_name = 'expenses' AND column_name = 'vendor_id'`
   );
+  const receiptImageUrl = parsed.receipt_image_url || null;
+  const noteDefault = receiptImageUrl ? 'Logged via WhatsApp receipt photo' : 'Logged via WhatsApp voice note';
   let expense;
   if (hasVendorId) {
     expense = await get(
-      `INSERT INTO expenses (tenant_id, category, vendor, vendor_id, amount, expense_date, payment_method, notes, receipt_data, created_by, payee)
-       VALUES ($1, 'food_cost', $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO expenses (tenant_id, category, vendor, vendor_id, amount, expense_date, payment_method, notes, receipt_data, receipt_image_url, created_by, payee)
+       VALUES ($1, 'food_cost', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [tid, parsed.vendor || null, vendorId, amount, today, parsed.payment_method || null,
-       parsed.note || 'Logged via WhatsApp voice note', JSON.stringify(receiptData), employeeId, parsed.vendor || null]
+       parsed.note || noteDefault, JSON.stringify(receiptData), receiptImageUrl, employeeId, parsed.vendor || null]
     );
   } else {
     expense = await get(
-      `INSERT INTO expenses (tenant_id, category, vendor, amount, expense_date, payment_method, notes, receipt_data, created_by, payee)
-       VALUES ($1, 'food_cost', $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO expenses (tenant_id, category, vendor, amount, expense_date, payment_method, notes, receipt_data, receipt_image_url, created_by, payee)
+       VALUES ($1, 'food_cost', $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [tid, parsed.vendor || null, amount, today, parsed.payment_method || null,
-       parsed.note || 'Logged via WhatsApp voice note', JSON.stringify(receiptData), employeeId, parsed.vendor || null]
+       parsed.note || noteDefault, JSON.stringify(receiptData), receiptImageUrl, employeeId, parsed.vendor || null]
     );
   }
 
