@@ -157,7 +157,27 @@ export function buildConfirmationMessage(parsed) {
     return `📦 Registrar compra:\n${purchaseLines}${vendor}${total}\n\nResponde SI para guardar, NO para cancelar.`;
   }
   if (parsed.intent === 'count_inventory') {
-    return `📋 Conteo físico:\n${lines}\n\nResponde SI para guardar, NO para cancelar.`;
+    // Surface SKUs the photo showed but inventory doesn't have, so the owner
+    // knows what got skipped (no auto-create on counts — by design).
+    const unmatched = items.filter((it) => it._unmatched && it.raw_name).map((it) => it.raw_name);
+    const skipped = unmatched.length
+      ? `\n(no en inventario: ${unmatched.slice(0, 6).join(', ')}${unmatched.length > 6 ? '…' : ''})`
+      : '';
+    const matchedLines = items
+      .filter((it) => it.inventory_item_id)
+      .slice(0, 8)
+      .map((it) => {
+        const q = Number(it.quantity);
+        const unit = it.unit || '';
+        const name = it.raw_name || '(item)';
+        const qstr = Number.isFinite(q) ? (Number.isInteger(q) ? q : q.toFixed(2)) : '?';
+        return `• ${qstr} ${unit} ${name}`.replace(/\s+/g, ' ').trim();
+      })
+      .join('\n');
+    if (!matchedLines) {
+      return `No reconocí ningún artículo en tu inventario.${skipped}\n\nAgrega los SKUs primero y vuelve a mandar la foto.`;
+    }
+    return `📋 Conteo físico:\n${matchedLines}${skipped}\n\nResponde SI para guardar, NO para cancelar.`;
   }
   if (parsed.intent === 'toggle_menu_item') {
     // Mixed: some on, some off. Show an explicit marker per item so the
@@ -193,19 +213,26 @@ export function parseConfirmReply(text) {
   return 'unclear';
 }
 
-// Pre-confirmation enrichment for record_purchase intents. Runs server-side
-// fuzzy match against existing inventory (pg_trgm) for any line the parser
-// couldn't bind to an id. If still no match, flag the item as _will_create
-// so buildConfirmationMessage shows "(NUEVO)" and executePurchase inserts
-// a new inventory_items row on SI. Must be called inside withTenant().
-export async function enrichPurchaseItems(parsed) {
-  if (!parsed || parsed.intent !== 'record_purchase') return parsed;
+// Pre-confirmation enrichment for record_purchase and count_inventory intents.
+// Runs server-side fuzzy match against existing inventory (pg_trgm) for any
+// line the parser couldn't bind to an id. For purchase intents, true misses
+// are flagged _will_create so buildConfirmationMessage shows "(NUEVO)" and
+// executePurchase inserts a new inventory_items row on SI. For count intents,
+// misses stay unbound — executeCount drops them, and buildConfirmationMessage
+// surfaces them as "(no en inventario: ...)" so the operator knows what got
+// skipped. Auto-creating SKUs from a count is disabled by design (no per-line
+// price anchor, too easy to spawn duplicates from spelling drift).
+// Must be called inside withTenant().
+export async function enrichItemBindings(parsed) {
+  if (!parsed) return parsed;
+  if (parsed.intent !== 'record_purchase' && parsed.intent !== 'count_inventory') return parsed;
+  const allowCreate = parsed.intent === 'record_purchase';
   const items = Array.isArray(parsed.items) ? parsed.items : [];
   for (const it of items) {
-    // Derive per-unit price once so the cost-price math has a value to use
+    // Derive per-unit price once so cost-price math has a value to use
     // whether the line came from voice (unit_price) or from a receipt
-    // photo (only amount + quantity).
-    if (it.unit_price == null && Number(it.amount) > 0 && Number(it.quantity) > 0) {
+    // photo (only amount + quantity). Purchase-only.
+    if (allowCreate && it.unit_price == null && Number(it.amount) > 0 && Number(it.quantity) > 0) {
       it.unit_price = Number(it.amount) / Number(it.quantity);
     }
     if (it.inventory_item_id) continue;
@@ -221,17 +248,23 @@ export async function enrichPurchaseItems(parsed) {
       if (match?.id) {
         it.inventory_item_id = match.id;
         it._fuzzy_matched = true;
-      } else {
+      } else if (allowCreate) {
         it._will_create = true;
+      } else {
+        it._unmatched = true;
       }
     } catch {
-      // pg_trgm not available — assume the item is new so the owner can still
-      // approve and the auto-create path runs.
-      it._will_create = true;
+      // pg_trgm not available. For purchases, fall through to auto-create so
+      // the owner can still approve. For counts, leave unmatched.
+      if (allowCreate) it._will_create = true;
+      else it._unmatched = true;
     }
   }
   return parsed;
 }
+
+// Backwards-compatible alias — kept so external callers don't break.
+export const enrichPurchaseItems = enrichItemBindings;
 
 // === EXECUTORS ===
 // Each must be called inside withTenant() so RLS + tenant defaults work.

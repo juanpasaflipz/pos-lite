@@ -25,43 +25,58 @@ const CLAUDE_MODEL = 'claude-sonnet-4-6';
 
 const ALLOWED_MEDIA = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
-const RECEIPT_VISION_PROMPT = `You parse a photo from a Mexican restaurant operator. The photo is one of these document types (don't ask which — just read what you see):
-  - Preprinted "Nota de Venta" or "Remisión" with handwritten line items
-  - Thermal payment terminal slip (Fiserv, clip.mx, Mercado Pago) — usually total + card mask only
-  - Handwritten shopping list with prices
-  - Standard printed supermarket receipt
+const RECEIPT_VISION_PROMPT = `You parse a photo from a Mexican restaurant operator. The photo is ONE of these (classify first, then extract):
 
-You will receive an INVENTORY list (id, name, unit). Bind each line in the photo to the closest inventory id when confident; accept colloquial Spanish (jitomate=tomate, aguacate, cebolla, chiles secos, etc.). If no confident match, set inventory_item_id=null and put the written description in raw_name.
+(A) RECEIPT / PURCHASE EVIDENCE → intent="record_purchase"
+    - Preprinted "Nota de Venta" or "Remisión" with handwritten line items
+    - Thermal payment terminal slip (Fiserv, clip.mx, Mercado Pago) — total + card mask only
+    - Handwritten shopping list with prices
+    - Standard printed supermarket receipt
+
+(B) INVENTORY COUNT → intent="count_inventory"
+    - Photo of a fridge, freezer, walk-in, shelf, pantry, bar back, or any storage
+      where the operator is showing stock-on-hand they want recorded.
+    - Identify each visible product brand/variant and count visible units of each.
+      (Beer brands: Dos Equis Lager, Dos Equis Ámbar, Bohemia, Bohemia Vienna,
+       Heineken, Tecate, Amstel Ultra, Indio, Modelo, Victoria, etc. Sodas: Coca,
+       Sprite, Topo Chico, etc. Etc.)
+    - Be honest about hidden back rows — count only what you can see, lower
+      confidence, and add a note like "approximated; back rows hidden".
+
+(C) NEITHER → intent="unknown" with a Spanish clarifying_question
+
+You will receive an INVENTORY list (id, name, unit). For BOTH intents, bind each line / counted brand to the closest inventory id when confident; accept colloquial Spanish (jitomate=tomate, XX=Dos Equis, etc.). If no confident match, set inventory_item_id=null and put the description in raw_name.
 
 Return ONLY valid JSON, no prose:
 {
-  "intent": "record_purchase" | "unknown",
+  "intent": "record_purchase" | "count_inventory" | "unknown",
   "confidence": number (0-1),
-  "clarifying_question": "string or null — Spanish, one short sentence if image is not a receipt",
+  "clarifying_question": "string or null — Spanish, one short sentence if intent=unknown",
   "items": [
     {
       "inventory_item_id": number | null,
       "menu_item_id": null,
-      "raw_name": "string — item description as written",
+      "raw_name": "string — brand / item description",
       "quantity": number | null,
-      "unit": "kg" | "g" | "l" | "ml" | "pcs" | "box" | "case" | null,
-      "unit_price": number | null,
-      "amount": number | null
+      "unit": "kg" | "g" | "l" | "ml" | "pcs" | "btl" | "can" | "box" | "case" | null,
+      "unit_price": number | null,   // record_purchase only; null for count
+      "amount": number | null        // record_purchase only; null for count
     }
   ],
-  "vendor": "string or null — supplier / store name as printed",
+  "vendor": "string or null — supplier / store name (record_purchase only)",
   "total_amount": number | null,
   "payment_method": "cash" | "card" | "transfer" | null,
-  "note": "string or null — date, invoice number, or other useful context"
+  "note": "string or null — date, invoice number, count caveats, or other useful context"
 }
 
 Rules:
-- If the photo is not a receipt/nota/shopping list (e.g. food, person, room, screenshot of something else), set intent="unknown" and put a Spanish clarifying_question like "Esa foto no parece un recibo. ¿Qué quieres registrar?".
-- A payment terminal slip with only a total is STILL intent="record_purchase" — leave items=[] and populate total_amount + payment_method. The owner will pair it with the matching nota later.
+- If image is neither a receipt nor a count-able shelf/fridge (a person, raw food, prep area, screenshot, etc.), set intent="unknown" and put a Spanish clarifying_question like "Esa foto no parece recibo ni inventario. ¿Qué quieres registrar?".
+- A payment terminal slip with only a total is STILL intent="record_purchase" — leave items=[] and populate total_amount + payment_method.
+- For count_inventory: set vendor=null, total_amount=null, payment_method=null. Each item's unit_price and amount must be null. Use "pcs" or "btl"/"can" as appropriate.
 - Numbers as JSON numbers — no currency symbols, no thousands separators.
 - Convert weights to kg/L when sensible. If a unit can't be determined, use null. Do not guess.
 - Skip subtotal/tax/change/discount/loyalty lines from items[].
-- If there is a CAPTION from the owner, use it as a hint for vendor/category.`;
+- If there is a CAPTION from the owner, use it as a hint (e.g. "conteo" → prefer count_inventory; vendor name → prefer record_purchase).`;
 
 function buildUserContent(inventory, caption) {
   const lines = inventory.slice(0, 150).map(

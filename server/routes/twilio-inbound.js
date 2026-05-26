@@ -34,7 +34,7 @@ import {
   parseConfirmReply,
   executeIntent,
   buildSuccessMessage,
-  enrichPurchaseItems,
+  enrichItemBindings,
 } from '../helpers/voiceIntent.js';
 import { parseReceiptImage, persistReceiptBuffer } from '../helpers/receiptVision.js';
 import { sendWhatsAppText, sendSMSReply } from '../helpers/twilio.js';
@@ -344,15 +344,16 @@ router.post('/inbound', async (req, res) => {
     }
   }
 
-  // Enrich purchase intents: server-side fuzzy match against inventory for
-  // anything the parser couldn't bind, and flag the rest as _will_create so
-  // the confirmation tags them "(NUEVO)" and executePurchase auto-creates
-  // them on SI. Non-fatal — the purchase still works without it.
-  if (parsed.intent === 'record_purchase') {
+  // Enrich purchase + count intents: server-side fuzzy match against inventory
+  // for anything the parser couldn't bind. Purchases flag misses as _will_create
+  // (auto-create on SI); counts flag misses as _unmatched (surfaced in the
+  // confirmation, dropped on execute). Non-fatal — the intent still works
+  // with whatever Claude bound directly.
+  if (parsed.intent === 'record_purchase' || parsed.intent === 'count_inventory') {
     try {
-      await withTenant(employee.tenant_id, async () => enrichPurchaseItems(parsed));
+      await withTenant(employee.tenant_id, async () => enrichItemBindings(parsed));
     } catch (err) {
-      console.warn('[TwilioInbound] purchase enrichment failed (non-fatal):', err.message);
+      console.warn('[TwilioInbound] enrichment failed (non-fatal):', err.message);
     }
   }
 
