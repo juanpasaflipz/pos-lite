@@ -458,7 +458,25 @@ router.get('/split/:order_id/status', requireAuth('pos_access'), async (req, res
               const mpOrder = await getPointOrder(accessToken, s.payment_intent_id, tenant.mp_default_terminal_id);
               const mapped = mapPointOrderStatus(mpOrder);
               if (mapped === 'paid') {
-                await run(`UPDATE order_payments SET status = 'paid' WHERE id = $1`, [s.id]);
+                // Reconcile any tip the customer added at the terminal device.
+                const payment = mpOrder?.transactions?.payments?.[0];
+                const grossAmount = Number(payment?.paid_amount ?? payment?.amount ?? mpOrder?.total_amount ?? 0);
+                const requestedAmount = Number(payment?.amount ?? 0);
+                const splitBill = Number(s.amount) || 0;
+                const splitCashierTip = Number(s.tip) || 0;
+                const referenceAmount = requestedAmount > 0 ? requestedAmount : (splitBill + splitCashierTip);
+                const customerTerminalTip = Math.max(0, Math.round((grossAmount - referenceAmount) * 100) / 100);
+                const totalTip = Math.round((splitCashierTip + customerTerminalTip) * 100) / 100;
+
+                if (customerTerminalTip > 0) {
+                  await run(
+                    `UPDATE order_payments SET status = 'paid', tip = $1 WHERE id = $2`,
+                    [totalTip, s.id]
+                  );
+                  s.tip = totalTip;
+                } else {
+                  await run(`UPDATE order_payments SET status = 'paid' WHERE id = $1`, [s.id]);
+                }
                 s.status = 'paid';
               } else if (mapped === 'failed') {
                 await run(`UPDATE order_payments SET status = 'failed' WHERE id = $1`, [s.id]);
@@ -1014,8 +1032,21 @@ async function recordMpTerminalPayment(orderId, tenantId, mpOrder, mpAccessToken
 
   const payment = mpOrder?.transactions?.payments?.[0];
   const grossAmount = Number(payment?.paid_amount ?? payment?.amount ?? mpOrder?.total_amount ?? 0);
-  const orderRow = await get('SELECT tip FROM orders WHERE id = $1', [orderId]);
-  const tipAmount = Number(orderRow?.tip || 0);
+  const requestedAmount = Number(payment?.amount ?? 0);
+
+  const orderRow = await get('SELECT total, tip FROM orders WHERE id = $1', [orderId]);
+  const orderTotal = Number(orderRow?.total || 0);
+  const cashierTip = Number(orderRow?.tip || 0);
+
+  // What we asked MP to charge. Prefer MP's echoed `amount`; fall back to what we sent.
+  const referenceAmount = requestedAmount > 0 ? requestedAmount : (orderTotal + cashierTip);
+  const customerTerminalTip = Math.max(0, Math.round((grossAmount - referenceAmount) * 100) / 100);
+  const totalTip = Math.round((cashierTip + customerTerminalTip) * 100) / 100;
+  const billAmount = Math.round((grossAmount - totalTip) * 100) / 100;
+
+  if (customerTerminalTip > 0) {
+    await run('UPDATE orders SET tip = $1 WHERE id = $2', [totalTip, orderId]);
+  }
 
   const fees = await extractMpFees(mpAccessToken, mpOrder);
 
@@ -1026,8 +1057,8 @@ async function recordMpTerminalPayment(orderId, tenantId, mpOrder, mpAccessToken
     [
       tenantId,
       orderId,
-      grossAmount,
-      tipAmount,
+      billAmount,
+      totalTip,
       mpOrder?.id ?? null,
       fees.fee,
       fees.net,

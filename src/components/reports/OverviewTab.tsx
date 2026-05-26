@@ -40,10 +40,14 @@ export default function OverviewTab({
     <div className="space-y-6">
       <LaborStrip />
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
         <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
-          <p className="text-neutral-400 text-sm font-medium">{t('sales.kpi.totalRevenue')}</p>
+          <p className="text-neutral-400 text-sm font-medium">{t('sales.kpi.netSales')}</p>
           <p className="text-3xl font-bold text-brand-500 mt-2">{fmt(salesData?.total_revenue || 0)}</p>
+        </div>
+        <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
+          <p className="text-neutral-400 text-sm font-medium">{t('sales.kpi.iva')}</p>
+          <p className="text-3xl font-bold text-white mt-2">{fmt(salesData?.tax_total || 0)}</p>
         </div>
         <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
           <p className="text-neutral-400 text-sm font-medium">{t('sales.kpi.orderCount')}</p>

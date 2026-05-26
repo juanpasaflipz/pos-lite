@@ -296,6 +296,7 @@ export interface SalesReport {
   order_count: number;
   avg_ticket: number;
   tip_total: number;
+  tax_total?: number;
   data?: any[];
 }
 

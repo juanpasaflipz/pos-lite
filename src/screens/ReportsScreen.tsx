@@ -163,7 +163,8 @@ export default function ReportsScreen() {
     const headers = [t('sales.csvHeaders.metric'), t('sales.csvHeaders.value')];
     const rows = [
       [t('sales.csvHeaders.period'), `${getPeriodLabel(period)} (${getDateRangeLabel(period)})`],
-      [t('sales.csvHeaders.totalRevenue'), salesData?.total_revenue || 0],
+      [t('sales.csvHeaders.netSales'), salesData?.total_revenue || 0],
+      [t('sales.csvHeaders.iva'), salesData?.tax_total || 0],
       [t('sales.csvHeaders.orderCount'), salesData?.order_count || 0],
       [t('sales.csvHeaders.avgTicket'), salesData?.avg_ticket || 0],
       [t('sales.csvHeaders.totalTips'), salesData?.tip_total || 0],

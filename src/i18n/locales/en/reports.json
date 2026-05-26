@@ -25,12 +25,16 @@
       "value": "Value",
       "period": "Period",
       "totalRevenue": "Total Revenue",
+      "netSales": "Net Sales (excl. IVA)",
+      "iva": "IVA (16%)",
       "orderCount": "Order Count",
       "avgTicket": "Avg Ticket",
       "totalTips": "Total Tips"
     },
     "kpi": {
       "totalRevenue": "Total Revenue",
+      "netSales": "Net Sales (excl. IVA)",
+      "iva": "IVA (16%)",
       "orderCount": "Order Count",
       "avgTicket": "Avg Ticket",
       "totalTips": "Total Tips",
