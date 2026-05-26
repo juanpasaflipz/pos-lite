@@ -110,6 +110,7 @@ export interface Order {
   order_fulfillment_type?: 'for_here' | 'to_go' | null;
   loyalty_customer_id?: number | null;
   customer_name?: string | null;
+  delivery_platform?: string | null;
   table_number?: string | null;
   invoice_token?: string;
   cfdi_invoice_id?: number;

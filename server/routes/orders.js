@@ -912,16 +912,24 @@ router.get('/kitchen/active', async (req, res) => {
       ? ['pending', 'confirmed', 'preparing', 'ready']
       : ['pending', 'confirmed', 'preparing'];
 
-    // Single query: fetch orders + items + modifiers in one round trip
+    // Single query: fetch orders + items + modifiers in one round trip.
+    // Customer name resolution order: loyalty customer → kiosk/QR call-name →
+    // delivery platform customer name (Uber/Rappi/DiDi). Same field powers
+    // both the KDS ticket header and the cashier's live-orders strip.
     const rows = await all(`
       SELECT o.id AS order_id, o.order_number, o.status, o.payment_method, o.source, o.order_fulfillment_type, o.created_at,
              o.estimated_ready_minutes, o.table_number, o.first_kds_seen_at, o.payment_status, o.paid_at, o.total,
              e.name AS employee_name,
+             COALESCE(lc.name, o.customer_call_name, do_row.customer_name) AS customer_name,
+             dp.name AS delivery_platform,
              oi.id AS item_id, oi.item_name, oi.quantity, oi.notes, oi.combo_instance_id,
              oi.virtual_brand_id, vb.name AS brand_name, vb.primary_color AS brand_color,
              oim.modifier_name, oim.price_adjustment
       FROM orders o
       JOIN employees e ON o.employee_id = e.id
+      LEFT JOIN loyalty_customers lc ON lc.id = o.loyalty_customer_id
+      LEFT JOIN delivery_orders do_row ON do_row.order_id = o.id
+      LEFT JOIN delivery_platforms dp ON dp.id = do_row.platform_id
       LEFT JOIN order_items oi ON oi.order_id = o.id
       LEFT JOIN virtual_brands vb ON oi.virtual_brand_id = vb.id
       LEFT JOIN order_item_modifiers oim ON oim.order_item_id = oi.id
@@ -948,6 +956,8 @@ router.get('/kitchen/active', async (req, res) => {
           table_number: row.table_number,
           first_kds_seen_at: row.first_kds_seen_at,
           employee_name: row.employee_name,
+          customer_name: row.customer_name,
+          delivery_platform: row.delivery_platform,
           items: new Map(),
         });
       }

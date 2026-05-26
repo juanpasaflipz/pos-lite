@@ -1,34 +1,30 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { SlidersHorizontal, Star } from 'lucide-react';
+import { SlidersHorizontal } from 'lucide-react';
 import { MenuItem } from '../../types';
 import { formatPrice } from '../../utils/currency';
 import MenuItemImage from '../MenuItemImage';
 
 interface MenuGridProps {
   filteredItems: MenuItem[];
-  filteredPopularItems: MenuItem[];
   brandItemMap: Map<number, { custom_name: string | null; custom_price: number | null }> | null;
   itemModifierCache: Record<number, boolean>;
   soldOutItemIds: Set<number>;
   pushItemIds: Set<number>;
   avoidItemIds: Set<number>;
   lowStockItemIds: Set<number>;
-  searchQuery: string;
   onItemTap: (item: MenuItem) => void;
   onAddToast: (message: string, type: 'success' | 'error' | 'info') => void;
 }
 
 export default function MenuGrid({
   filteredItems,
-  filteredPopularItems,
   brandItemMap,
   itemModifierCache,
   soldOutItemIds,
   pushItemIds,
   avoidItemIds,
   lowStockItemIds,
-  searchQuery,
   onItemTap,
   onAddToast,
 }: MenuGridProps) {
@@ -36,36 +32,6 @@ export default function MenuGrid({
 
   return (
     <div className="flex-1 overflow-y-auto p-5 lg:p-6">
-      {/* Favorites / Popular Items Row */}
-      {!searchQuery && filteredPopularItems.length > 0 && (
-        <div className="mb-6 pb-6 border-b border-neutral-800/60">
-          <div className="flex items-center gap-2 mb-3.5">
-            <Star className="w-4 h-4 text-cockpit-attention-text fill-cockpit-yellow" />
-            <p className="text-sm font-semibold text-cockpit-attention-text uppercase tracking-wider">{t('favorites.title')}</p>
-          </div>
-          <div className="flex gap-3.5 overflow-x-auto pb-3 scrollbar-hide">
-            {filteredPopularItems.map((item) => {
-              const isSoldOut = soldOutItemIds.has(item.id);
-              return (
-                <button
-                  key={`pop-${item.id}`}
-                  onClick={() => !isSoldOut && onItemTap(item)}
-                  disabled={isSoldOut}
-                  className={`flex-shrink-0 w-40 rounded-xl p-4 transition-all touch-manipulation border ${
-                    isSoldOut
-                      ? 'bg-neutral-900/40 border-neutral-700 opacity-50 cursor-not-allowed'
-                      : 'bg-neutral-900 border-cockpit-yellow/50 hover:border-cockpit-yellow/90 active:scale-95'
-                  }`}
-                >
-                  <p className="font-bold text-white text-sm line-clamp-2 leading-snug">{brandItemMap?.get(item.id)?.custom_name || item.name}</p>
-                  <p className="font-bold text-cockpit-attention-text text-base mt-2">{formatPrice(brandItemMap?.get(item.id)?.custom_price ?? item.price)}</p>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-5 lg:gap-6 items-start">
         {filteredItems.map((item) => {
           const isPush = pushItemIds.has(item.id);

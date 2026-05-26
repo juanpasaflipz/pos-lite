@@ -21,7 +21,6 @@ import {
   getCachedCategories,
   getCachedMenuItems,
   getCachedItemsWithModifiers,
-  getCachedPopularItems,
   getCachedCategorySuggestedOrder,
   getCachedCombos,
   getCachedOrderTemplates,
@@ -67,6 +66,7 @@ import POSHeaderBar from '../components/pos/POSHeaderBar';
 import MenuGrid from '../components/pos/MenuGrid';
 import CartPanel from '../components/pos/CartPanel';
 import CashierOrdersPanel from '../components/pos/CashierOrdersPanel';
+import LiveOrdersStrip from '../components/pos/LiveOrdersStrip';
 import QuickOrdersModal from '../components/pos/QuickOrdersModal';
 import ParkedCartsModal from '../components/pos/ParkedCartsModal';
 
@@ -114,8 +114,10 @@ const POSScreen: React.FC = () => {
   // Tracks whether we've already auto-prompted the loyalty modal for the current
   // cart cycle. Resets when the cart goes empty (cleared, paid, or parked).
   const [loyaltyPromptedThisCart, setLoyaltyPromptedThisCart] = useState(false);
-  const [popularItems, setPopularItems] = useState<MenuItem[]>([]);
   const [categorySuggestedOrder, setCategorySuggestedOrder] = useState<number[]>([]);
+  // Bumped after a new order is created/charged, so the live-orders strip
+  // refreshes immediately instead of waiting for its 8s poll tick.
+  const [ordersRefreshKey, setOrdersRefreshKey] = useState(0);
   const [comboDefinitions, setComboDefinitions] = useState<ComboDefinition[]>([]);
   const [templates, setTemplates] = useState<OrderTemplate[]>([]);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -222,11 +224,10 @@ const POSScreen: React.FC = () => {
     const loadData = async () => {
       try {
         setLoading(true);
-        const [categoriesData, itemsData, modifierItemsData, popularData, categoryOrderData, combosData, templatesData, brandsData] = await Promise.all([
+        const [categoriesData, itemsData, modifierItemsData, categoryOrderData, combosData, templatesData, brandsData] = await Promise.all([
           getCachedCategories(),
           getCachedMenuItems(),
           getCachedItemsWithModifiers().catch(() => ({ itemIds: [] })),
-          getCachedPopularItems(8).catch(() => []),
           getCachedCategorySuggestedOrder().catch(() => []),
           getCachedCombos().catch(() => []),
           getCachedOrderTemplates().catch(() => []),
@@ -239,7 +240,6 @@ const POSScreen: React.FC = () => {
           cache[id] = true;
         }
         setItemModifierCache(cache);
-        setPopularItems(popularData);
         setCategorySuggestedOrder(categoryOrderData);
         setComboDefinitions(combosData);
         setTemplates(templatesData);
@@ -301,6 +301,11 @@ const POSScreen: React.FC = () => {
   };
 
   const generateCartId = () => `cart_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+  // Force the live-orders strip to refetch on its next render — used after
+  // any flow that mutates the order pipeline so the cashier sees the change
+  // immediately instead of waiting up to 8s for the next poll.
+  const bumpOrders = () => setOrdersRefreshKey((k) => k + 1);
 
   // ==================== Derived Data ====================
 
@@ -399,11 +404,6 @@ const POSScreen: React.FC = () => {
     );
     return sortedCategories.filter(cat => categoryIdsWithItems.has(cat.id));
   }, [sortedCategories, brandItemMap, menuItems]);
-
-  const filteredPopularItems = useMemo(() => {
-    if (!brandItemMap) return popularItems;
-    return popularItems.filter(item => brandItemMap.has(item.id));
-  }, [popularItems, brandItemMap]);
 
   const lineDiscountAmount = (item: CartItem): number => {
     if (!item.discount) return 0;
@@ -762,6 +762,7 @@ const POSScreen: React.FC = () => {
         setShowPaymentModal(false);
         setShowReceiptModal(true);
         clearCart();
+        bumpOrders();
         addToast(t('toast.cashDone', { change: formatPrice(result.change_due) }), 'success');
       }
     } catch (error) {
@@ -786,6 +787,7 @@ const POSScreen: React.FC = () => {
       setShowPaymentModal(false);
       setPreCreatedOrderId(null);
       clearCart();
+      bumpOrders();
       addToast(t('toast.oxxoGenerated'), 'success');
     } catch (error) {
       addToast(error instanceof Error ? error.message : t('toast.oxxoFailed'), 'error');
@@ -809,6 +811,7 @@ const POSScreen: React.FC = () => {
       setShowPaymentModal(false);
       setPreCreatedOrderId(null);
       clearCart();
+      bumpOrders();
       addToast(t('toast.speiGenerated'), 'success');
     } catch (error) {
       addToast(error instanceof Error ? error.message : t('toast.speiFailed'), 'error');
@@ -885,6 +888,7 @@ const POSScreen: React.FC = () => {
     setShowSplitPayment(false);
     setShowReceiptModal(true);
     clearCart();
+    bumpOrders();
     addToast(t('toast.splitDone'), 'success');
   };
 
@@ -916,6 +920,7 @@ const POSScreen: React.FC = () => {
     }
     setPaymentOrder(null);
     setShowPaymentConfirmation(false);
+    bumpOrders();
   };
 
   // ==================== Render ====================
@@ -993,16 +998,20 @@ const POSScreen: React.FC = () => {
           onDismiss={dismissSuggestion}
         />
 
+        <LiveOrdersStrip
+          onViewAll={() => setShowOrdersPanel(true)}
+          onCharge={handleCobrar}
+          refreshKey={ordersRefreshKey}
+        />
+
         <MenuGrid
           filteredItems={filteredItems}
-          filteredPopularItems={filteredPopularItems}
           brandItemMap={brandItemMap}
           itemModifierCache={itemModifierCache}
           soldOutItemIds={soldOutItemIds}
           pushItemIds={pushItemIds}
           avoidItemIds={avoidItemIds}
           lowStockItemIds={lowStockItemIds}
-          searchQuery={searchQuery}
           onItemTap={handleItemTap}
           onAddToast={addToast}
         />
@@ -1231,6 +1240,7 @@ const POSScreen: React.FC = () => {
             clearCart();
             setShowPaymentModal(false);
             setPreCreatedOrderId(null);
+            bumpOrders();
             addToast(t('toast.mpConfirmed'), 'success');
           }}
           onCancel={() => { setShowPaymentModal(false); setPreCreatedOrderId(null); }}
@@ -1290,6 +1300,16 @@ const POSScreen: React.FC = () => {
           onPaymentConfirmed={handlePaymentConfirmed}
         />
       )}
+
+      <CashierOrdersPanel
+        isOpen={showOrdersPanel}
+        onClose={() => setShowOrdersPanel(false)}
+        onCharge={(order) => {
+          setShowOrdersPanel(false);
+          handleCobrar(order);
+        }}
+      />
+
 
       {/* Toast Notifications */}
       <div className={`fixed right-4 space-y-2 z-[60] pointer-events-none ${plan === 'free' ? 'bottom-16' : 'bottom-4'}`}>
