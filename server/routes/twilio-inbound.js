@@ -1,18 +1,27 @@
-// Inbound WhatsApp / SMS webhook → voice ops.
+// Inbound Twilio webhook → voice ops. Handles WhatsApp + SMS on the same route.
 //
-// Flow (new message):
-//   verify Twilio signature → resolve employee by phone (cross-tenant lookup
-//   via adminSql) → if media: fetch + Whisper → Claude intent parse → write
-//   voice_intents row (status='pending_confirm') → reply with SI/NO prompt.
+// Channel detection: `From` starts with `whatsapp:` for WA, plain E.164 for SMS.
+// Voice notes (audio attachments) only work on WhatsApp — SMS in MX strips
+// MMS audio inconsistently across carriers, so we transcribe only when WA.
 //
-// Flow (confirmation reply):
-//   verify signature → resolve employee → find most recent pending_confirm
-//   row for this employee → if SI: executeIntent() inside withTenant() and
-//   reply with success; if NO: mark cancelled; if unclear: re-prompt.
+// Multi-tenant safety: this number also carries outbound loyalty SMS, so
+// customers who reply to a stamp/receipt message will hit this webhook. We
+// silently ack any sender that's a loyalty_customers row in any tenant —
+// the existing 24-hour Twilio session window lets us reply if we wanted to,
+// but customers replying to loyalty messages should get silence, not a
+// confused bot interaction.
 //
-// Idempotency: twilio_message_sid is UNIQUE on voice_intents — if Twilio
-// retries we no-op. WhatsApp/Twilio webhook timeout is 15s; the full flow
-// (Whisper + Claude + reply send) fits inside that comfortably.
+// Flow (new message from a known employee):
+//   verify signature → resolve employee by phone → if WA media: Whisper
+//   transcribe → Claude intent parse → write voice_intents row
+//   (pending_confirm) → reply with SI/NO prompt.
+//
+// Flow (confirmation reply from known employee):
+//   verify signature → find most recent pending_confirm for this employee
+//   → if SI: executeIntent() inside withTenant() and reply success; if NO:
+//   mark cancelled; if unclear with a pending: re-prompt.
+//
+// Idempotency: twilio_message_sid is UNIQUE on voice_intents; retries no-op.
 
 import { Router } from 'express';
 import express from 'express';
@@ -26,12 +35,10 @@ import {
   executeIntent,
   buildSuccessMessage,
 } from '../helpers/voiceIntent.js';
-import { sendWhatsAppText } from '../helpers/twilio.js';
+import { sendWhatsAppText, sendSMSReply } from '../helpers/twilio.js';
 
 const router = Router();
 
-// Twilio sends application/x-www-form-urlencoded. Parser scoped to this router
-// only so we don't disturb global JSON parsing.
 router.use(express.urlencoded({ extended: false }));
 
 const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
@@ -46,17 +53,15 @@ function isWhatsApp(addr) {
   return String(addr || '').startsWith('whatsapp:');
 }
 
-// Twilio webhook signature:
-//   HMAC-SHA1(authToken, url + concat(sortedKey + sortedValue ...))  → base64
-// docs: https://www.twilio.com/docs/usage/webhooks/webhooks-security
+// Twilio webhook signature: HMAC-SHA1(authToken, url + concat(sortedKey + sortedValue ...)) → base64.
+// Behind Railway's proxy chain we try a few URL permutations because the
+// reverse proxy can yield slightly different host/protocol than what Twilio
+// signed. https://www.twilio.com/docs/usage/webhooks/webhooks-security
 function verifyTwilioSignature(req, authToken) {
   if (!authToken) return false;
   const sig = req.get('x-twilio-signature');
   if (!sig) return false;
 
-  // Try multiple URL forms — Railway's proxy chain can produce a slightly
-  // different host/protocol than what Twilio signed. Sandbox webhook configs
-  // also vary: some users paste the URL with a trailing slash, some without.
   const proto = req.protocol;
   const xfHost = req.get('x-forwarded-host');
   const host = req.get('host');
@@ -73,42 +78,40 @@ function verifyTwilioSignature(req, authToken) {
   let suffix = '';
   for (const k of keys) suffix += k + (params[k] == null ? '' : String(params[k]));
 
-  let matched = null;
   for (const url of candidates) {
     const expected = crypto.createHmac('sha1', authToken).update(url + suffix).digest('base64');
     try {
       const a = Buffer.from(sig);
       const b = Buffer.from(expected);
-      if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
-        matched = url;
-        break;
-      }
+      if (a.length === b.length && crypto.timingSafeEqual(a, b)) return true;
     } catch {}
   }
-
-  if (!matched) {
-    // One-shot diagnostic: log what we tried so we can pin the mismatch.
-    console.warn('[TwilioInbound] signature mismatch. tried URLs:', [...candidates],
-      'param keys:', keys, 'received sig:', sig);
-  }
-  return matched !== null;
+  return false;
 }
 
-// Cross-tenant employee lookup. Uses adminSql to bypass RLS — the inbound
-// webhook is platform-level and doesn't yet have a tenant context. Tries the
-// raw form first, then falls back to common MX variants (with/without the
-// "1" mobile prefix). If multiple matches exist across tenants, picks the
-// most recently active employee — see scope note: one-number-per-pilot in v1.
-async function resolveEmployeeByPhone(rawPhone) {
-  const tries = new Set();
+// Build the set of phone formats to try when matching a sender.
+// WhatsApp sends MX as `+52` + 10 digits; SMS often comes with `+521` (the
+// MX mobile prefix). Stored values can be either. Generate all common forms.
+function phoneVariants(rawPhone) {
+  const out = new Set();
   const raw = String(rawPhone || '').trim();
-  if (!raw) return null;
-  tries.add(raw);
+  if (!raw) return out;
+  out.add(raw);
   const digits = raw.replace(/\D/g, '');
-  if (digits.length === 12 && digits.startsWith('52')) tries.add(`+521${digits.slice(2)}`);
-  if (digits.length === 13 && digits.startsWith('521')) tries.add(`+52${digits.slice(3)}`);
-  if (digits.length >= 10) tries.add(`+52${digits.slice(-10)}`);
+  if (digits.length === 12 && digits.startsWith('52')) out.add(`+521${digits.slice(2)}`);
+  if (digits.length === 13 && digits.startsWith('521')) out.add(`+52${digits.slice(3)}`);
+  if (digits.length >= 10) {
+    out.add(`+52${digits.slice(-10)}`);
+    out.add(`+521${digits.slice(-10)}`);
+  }
+  return out;
+}
 
+// Cross-tenant employee lookup via adminSql (bypasses RLS — webhook is
+// platform-level). Picks the most recently created match if a phone is
+// shared across tenants (rare; documented in scope as one-tenant pilot).
+async function resolveEmployeeByPhone(rawPhone) {
+  const tries = phoneVariants(rawPhone);
   for (const phone of tries) {
     const rows = await adminSql`
       SELECT id, tenant_id, name, role, active
@@ -119,6 +122,18 @@ async function resolveEmployeeByPhone(rawPhone) {
     if (rows.length > 0) return rows[0];
   }
   return null;
+}
+
+// Check if a phone belongs to any loyalty customer (any tenant). Used to
+// silently swallow inbound replies to loyalty SMS — customers shouldn't
+// get a confusing bot response when replying to a stamp/receipt message.
+async function isLoyaltyCustomerPhone(rawPhone) {
+  const tries = phoneVariants(rawPhone);
+  for (const phone of tries) {
+    const rows = await adminSql`SELECT 1 FROM loyalty_customers WHERE phone = ${phone} LIMIT 1`;
+    if (rows.length > 0) return true;
+  }
+  return false;
 }
 
 async function findPendingIntent(tenantId, employeeId) {
@@ -137,12 +152,22 @@ async function findPendingIntent(tenantId, employeeId) {
 async function expireStalePending(tenantId, employeeId) {
   await withTenant(tenantId, async () => {
     await run(
-      `UPDATE voice_intents
-       SET status = 'expired'
+      `UPDATE voice_intents SET status = 'expired'
        WHERE employee_id = $1 AND status = 'pending_confirm'`,
       [employeeId]
     );
   });
+}
+
+// Channel-aware reply. Picks WA or SMS based on the inbound `From` (we
+// always reply on the same channel the message arrived on). The `from`
+// override is the Twilio number that received the inbound — required so
+// SMS replies originate from JUANBERTOS not the platform default.
+async function reply(inboundFrom, inboundTo, body) {
+  if (isWhatsApp(inboundFrom)) {
+    return sendWhatsAppText(inboundFrom, body, { from: inboundTo });
+  }
+  return sendSMSReply(inboundFrom, body, { from: inboundTo });
 }
 
 router.post('/inbound', async (req, res) => {
@@ -159,24 +184,24 @@ router.post('/inbound', async (req, res) => {
   const body = String(req.body.Body || '').trim();
   const numMedia = parseInt(req.body.NumMedia || '0', 10);
   const mediaUrl0 = req.body.MediaUrl0;
-  const mediaType0 = req.body.MediaContentType0;
-
-  if (!isWhatsApp(from)) {
-    // v1 is WhatsApp-only. Quietly accept SMS (don't error) so Twilio doesn't retry.
-    return ack();
-  }
-
+  const channelIsWA = isWhatsApp(from);
   const fromPhone = stripWaPrefix(from);
+
   const employee = await resolveEmployeeByPhone(fromPhone);
 
   if (!employee) {
-    await sendWhatsAppText(from,
-      'No reconozco tu número. Pide al administrador que registre tu teléfono en el sistema.',
-      { from: to });
+    // Silent ack for anyone who's a loyalty customer or just unknown — this
+    // number doubles as the loyalty SMS sender, so we never want to confuse
+    // a customer replying to a stamp/receipt message.
+    if (await isLoyaltyCustomerPhone(fromPhone)) return ack();
+    // Unknown non-customer: send one friendly hint via the same channel,
+    // then nothing more (a real staff onboarding has them ask their manager).
+    await reply(from, to,
+      'No reconozco tu número. Pide al administrador que registre tu teléfono en el sistema.');
     return ack();
   }
 
-  // Idempotency: if we've already processed this MessageSid, skip.
+  // Idempotency: skip if we've already processed this MessageSid.
   if (messageSid) {
     const dup = await adminSql`
       SELECT id FROM voice_intents WHERE twilio_message_sid = ${messageSid} LIMIT 1
@@ -185,28 +210,25 @@ router.post('/inbound', async (req, res) => {
   }
 
   // === Confirmation reply path ===
-  // Text-only message that matches SI/NO and there's a pending intent waiting.
   if (numMedia === 0 && body) {
-    const reply = parseConfirmReply(body);
+    const replyKind = parseConfirmReply(body);
     const pending = await findPendingIntent(employee.tenant_id, employee.id);
     if (pending) {
-      if (reply === 'confirm') {
+      if (replyKind === 'confirm') {
         try {
           const parsed = pending.parsed_json;
           const result = await withTenant(employee.tenant_id, async () => {
             const out = await executeIntent(parsed, employee.id);
             await run(
               `UPDATE voice_intents
-               SET status = 'confirmed',
-                   confirmed_at = NOW(),
-                   executed_resource_type = $1,
-                   executed_resource_id = $2
+               SET status = 'confirmed', confirmed_at = NOW(),
+                   executed_resource_type = $1, executed_resource_id = $2
                WHERE id = $3`,
               [out.resource_type, out.resource_ids[0] || null, pending.id]
             );
             return out;
           });
-          await sendWhatsAppText(from, buildSuccessMessage(parsed.intent, result), { from: to });
+          await reply(from, to, buildSuccessMessage(parsed.intent, result));
         } catch (err) {
           console.error('[TwilioInbound] execute failed:', err.message);
           await withTenant(employee.tenant_id, async () => {
@@ -215,41 +237,39 @@ router.post('/inbound', async (req, res) => {
               [err.message?.slice(0, 500) || 'unknown', pending.id]
             );
           });
-          await sendWhatsAppText(from, `❌ No pude guardar: ${err.message}. Intenta de nuevo.`, { from: to });
+          await reply(from, to, `❌ No pude guardar: ${err.message}. Intenta de nuevo.`);
         }
         return ack();
       }
-      if (reply === 'cancel') {
+      if (replyKind === 'cancel') {
         await withTenant(employee.tenant_id, async () => {
           await run(`UPDATE voice_intents SET status = 'cancelled' WHERE id = $1`, [pending.id]);
         });
-        await sendWhatsAppText(from, 'Cancelado.', { from: to });
+        await reply(from, to, 'Cancelado.');
         return ack();
       }
       // Unclear reply with a pending intent — re-prompt with the same draft.
-      await sendWhatsAppText(from,
-        `No entendí. Responde SI o NO.\n\n${pending.draft_summary || ''}`,
-        { from: to });
+      await reply(from, to, `No entendí. Responde SI o NO.\n\n${pending.draft_summary || ''}`);
       return ack();
     }
     // No pending intent — text replies that aren't a new action just get a hint.
-    if (reply !== 'unclear') {
-      await sendWhatsAppText(from, 'No hay nada pendiente que confirmar. Manda una nota de voz para registrar merma, compra o conteo.', { from: to });
+    if (replyKind !== 'unclear') {
+      await reply(from, to, 'No hay nada pendiente que confirmar. Manda una nota de voz o texto para registrar merma, compra o conteo.');
       return ack();
     }
-    // Fall through: treat text as a new intent (e.g. "tiré 3 burritos" typed instead of voiced).
+    // Fall through: treat text as a new intent ("tiré 3 burritos" typed).
   }
 
   // === New intent path ===
-  // Expire any prior pending intent for this employee — starting a new one
-  // makes SI ambiguous against the old one.
   await expireStalePending(employee.tenant_id, employee.id);
 
   let transcript = body;
   let mediaUrlStored = null;
   let mediaTypeStored = null;
 
-  if (numMedia > 0 && mediaUrl0) {
+  // Audio transcription is WhatsApp-only — MX SMS strips MMS audio
+  // inconsistently across carriers. SMS senders use text intents.
+  if (channelIsWA && numMedia > 0 && mediaUrl0) {
     try {
       const { buffer, contentType } = await fetchTwilioMedia(mediaUrl0, {
         accountSid: TWILIO_SID, authToken: TWILIO_TOKEN,
@@ -259,23 +279,25 @@ router.post('/inbound', async (req, res) => {
       transcript = await transcribeAudio(buffer, contentType, { language: 'es' });
     } catch (err) {
       console.error('[TwilioInbound] transcription failed:', err.message);
-      await sendWhatsAppText(from, '❌ No pude transcribir el audio. Intenta de nuevo o escribe el mensaje.', { from: to });
+      await reply(from, to, '❌ No pude transcribir el audio. Intenta de nuevo o escribe el mensaje.');
       return ack();
     }
   }
 
   if (!transcript) {
-    await sendWhatsAppText(from, 'Manda una nota de voz o escribe lo que quieres registrar.', { from: to });
+    const hint = channelIsWA
+      ? 'Manda una nota de voz o escribe lo que quieres registrar.'
+      : 'Escribe lo que quieres registrar (ej: "tiré 3 burritos" o "llegaron 10 kilos de pollo de Sigma, 1500 pesos").';
+    await reply(from, to, hint);
     return ack();
   }
 
   let parsed;
   try {
-    // parseVoiceIntent reads inventory_items — must be inside tenant context.
     parsed = await withTenant(employee.tenant_id, async () => parseVoiceIntent(transcript));
   } catch (err) {
     console.error('[TwilioInbound] intent parse failed:', err.message);
-    await sendWhatsAppText(from, '❌ No pude procesar el mensaje. Intenta de nuevo.', { from: to });
+    await reply(from, to, '❌ No pude procesar el mensaje. Intenta de nuevo.');
     return ack();
   }
 
@@ -290,9 +312,10 @@ router.post('/inbound', async (req, res) => {
          (employee_id, source, twilio_message_sid, from_phone, to_phone,
           raw_body, media_url, media_content_type, transcript, parsed_json,
           draft_action, draft_summary, status)
-       VALUES ($1, 'whatsapp', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
       [
-        employee.id, messageSid || null, fromPhone, stripWaPrefix(to),
+        employee.id, channelIsWA ? 'whatsapp' : 'sms',
+        messageSid || null, fromPhone, stripWaPrefix(to),
         body || null, mediaUrlStored, mediaTypeStored, transcript,
         JSON.stringify(parsed), parsed.intent || 'unknown', summary,
         isExecutable ? 'pending_confirm' : 'unrecognized',
@@ -300,7 +323,7 @@ router.post('/inbound', async (req, res) => {
     );
   });
 
-  await sendWhatsAppText(from, summary, { from: to });
+  await reply(from, to, summary);
   return ack();
 });
 

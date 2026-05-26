@@ -246,6 +246,50 @@ export async function sendWhatsAppTemplate(to, messageType, variables, customerI
 }
 
 /**
+ * Send a free-form SMS reply from a specific Twilio number. Mirrors
+ * sendWhatsAppText but for the SMS channel: used by the inbound webhook
+ * to reply on the same number that received the message (loyalty traffic
+ * uses one MX SMS sender that also doubles as the voice-ops inbound).
+ *
+ * `to` and `from` must both be SMS-channel E.164 (no `whatsapp:` prefix).
+ * Body is GSM-7 sanitized and warned if it would split into multi-segment.
+ */
+export async function sendSMSReply(to, body, { from, sid, token } = {}) {
+  const accountSid = sid || PLATFORM_SID;
+  const authToken = token || PLATFORM_TOKEN;
+  const sender = (from || PLATFORM_PHONE || '').replace(/^whatsapp:/, '');
+  if (!accountSid || !authToken || !sender || !body) return null;
+
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+  const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+  const cleanBody = sanitizeForGsm7(String(body));
+  if (cleanBody.length > 160) {
+    console.warn(`[Twilio] SMS reply is ${cleanBody.length} chars — will split into multiple segments and may be sender-rotated by MX carriers.`);
+  }
+  const params = new URLSearchParams({ To: to, From: sender, Body: cleanBody });
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params,
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      console.error('[Twilio] SMS reply send failed:', data.message || data);
+      return null;
+    }
+    return data.sid;
+  } catch (err) {
+    console.error('[Twilio] SMS reply error:', err.message);
+    return null;
+  }
+}
+
+/**
  * Send a free-form WhatsApp text message. Only legal inside the 24-hour
  * session window (i.e. a reply to an inbound message from the same number).
  * Used by the voice-ops webhook to send confirmation prompts + success
