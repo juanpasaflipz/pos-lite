@@ -3,6 +3,7 @@ import { all, get, run, getTenantId } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getChargeFees } from '../stripe.js';
 import { getPlanLimits, planUpgradeError } from '../planLimits.js';
+import { computeSnapshot } from './payroll.js';
 
 const router = Router();
 
@@ -1101,10 +1102,10 @@ router.get('/refund-summary', requireAuth('view_reports'), async (req, res) => {
 
 const COST_CATEGORIES = [
   { key: 'food_cost', label: 'Food Cost', auto: true },
-  { key: 'labor', label: 'Labor', auto: false },
+  { key: 'labor', label: 'Labor', auto: true },
   { key: 'rent', label: 'Rent', auto: false },
   { key: 'utilities', label: 'Utilities', auto: false },
-  { key: 'stripe_fees', label: 'Stripe Fees', auto: true },
+  { key: 'mp_terminal_fees', label: 'MP Terminal Fees', auto: true },
   { key: 'delivery_commissions', label: 'Delivery Commissions', auto: true },
   { key: 'marketing', label: 'Marketing', auto: false },
   { key: 'insurance', label: 'Insurance', auto: false },
@@ -1154,26 +1155,33 @@ router.get('/financial-projection', requireAuth('view_reports'), async (req, res
     }
     foodCost = Math.round(foodCost * 100) / 100;
 
-    // Auto-calculate Stripe fees
-    let stripeFees = 0;
-    const cardOrders = await all(`
-      SELECT payment_intent_id
-      FROM orders
-      WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $3)::date >= $1 AND (COALESCE(paid_at, created_at) AT TIME ZONE $3)::date <= $2
-        AND payment_method = 'card'
-        AND payment_intent_id IS NOT NULL
-        AND payment_status = 'paid'
+    // Auto-calculate MP Terminal fees (stored locally on order_payments).
+    const mpFeesRow = await get(`
+      SELECT COALESCE(SUM(processor_fee), 0) AS total
+      FROM order_payments
+      WHERE (created_at AT TIME ZONE $3)::date >= $1
+        AND (created_at AT TIME ZONE $3)::date <= $2
+        AND payment_method = 'mp_terminal'
+        AND status = 'paid'
     `, [startDate, endDate, tz]);
+    const mpTerminalFees = Math.round((Number(mpFeesRow?.total) || 0) * 100) / 100;
 
-    for (const order of cardOrders) {
-      try {
-        const fees = await getChargeFees(order.payment_intent_id);
-        stripeFees += fees.fee || 0;
-      } catch {
-        // Skip failed Stripe lookups
-      }
+    // Auto-calculate Labor — sum base pay across the month from shifts × rates.
+    // computeSnapshot is keyed on [period_start, period_end) so passing the
+    // month start and the first-of-next-month gives the full-month range.
+    let laborCost = 0;
+    try {
+      const nextMonth = new Date(year, mon, 1);
+      const monthEndExclusive = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}-01`;
+      const snapshot = await computeSnapshot({
+        period_start: startDate,
+        period_end: monthEndExclusive,
+        tz,
+      });
+      laborCost = Math.round((snapshot.totals.base_pay_cents || 0)) / 100;
+    } catch (err) {
+      console.warn('Labor auto-calc failed:', err.message);
     }
-    stripeFees = Math.round(stripeFees * 100) / 100;
 
     // Auto-calculate delivery commissions
     const delRow = await get(`
@@ -1186,7 +1194,12 @@ router.get('/financial-projection', requireAuth('view_reports'), async (req, res
     const deliveryCommissions = Math.round((delRow?.total || 0) * 100) / 100;
 
     // Cache auto-calculated values (only if not manually overridden)
-    const autoValues = { food_cost: foodCost, stripe_fees: stripeFees, delivery_commissions: deliveryCommissions };
+    const autoValues = {
+      food_cost: foodCost,
+      mp_terminal_fees: mpTerminalFees,
+      delivery_commissions: deliveryCommissions,
+      labor: laborCost,
+    };
     for (const [cat, amount] of Object.entries(autoValues)) {
       // Check if a manual override exists
       const existing = await get(`SELECT auto_calculated FROM financial_actuals WHERE category = $1 AND period = $2`, [cat, month]);

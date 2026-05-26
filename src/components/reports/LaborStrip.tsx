@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Users, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Users, AlertTriangle, ChevronDown, ChevronUp, CalendarClock } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { getPayrollLive } from '../../api';
+import { getPayrollForecast, getPayrollLive } from '../../api';
+import type { PayrollForecast } from '../../api';
 import { PayrollSnapshot } from '../../types';
 
 const money = (cents: number) =>
@@ -18,6 +19,7 @@ const hoursFmt = (h: number) => `${(h || 0).toFixed(1)}h`;
 export default function LaborStrip() {
   const { t } = useTranslation('reports');
   const [data, setData] = useState<PayrollSnapshot | null>(null);
+  const [forecast, setForecast] = useState<PayrollForecast | null>(null);
   const [denied, setDenied] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
@@ -25,8 +27,14 @@ export default function LaborStrip() {
     let cancelled = false;
     const load = async () => {
       try {
-        const snap = await getPayrollLive();
-        if (!cancelled) setData(snap);
+        const [snap, fc] = await Promise.all([
+          getPayrollLive(),
+          getPayrollForecast().catch(() => null),
+        ]);
+        if (!cancelled) {
+          setData(snap);
+          setForecast(fc);
+        }
       } catch (err) {
         const status = (err as { status?: number })?.status;
         if (status === 403) {
@@ -104,6 +112,19 @@ export default function LaborStrip() {
             <p className="text-2xl font-bold text-white mt-1">{money(data.tip_pool_cents)}</p>
             <p className="text-xs text-neutral-500 mt-1">{t(`payroll.tipPolicy.${data.tip_policy}`)}</p>
           </div>
+
+          {forecast && forecast.totals.cost_cents > 0 && (
+            <div>
+              <p className="text-xs uppercase tracking-wide text-neutral-400 font-semibold flex items-center gap-1">
+                <CalendarClock size={12} />
+                Next 7 days scheduled
+              </p>
+              <p className="text-2xl font-bold text-white mt-1">{money(forecast.totals.cost_cents)}</p>
+              <p className="text-xs text-neutral-500 mt-1">
+                {hoursFmt(forecast.totals.hours_scheduled)} forecasted
+              </p>
+            </div>
+          )}
 
           <button
             onClick={() => setExpanded(v => !v)}

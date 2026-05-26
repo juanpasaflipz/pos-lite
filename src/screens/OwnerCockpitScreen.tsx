@@ -42,11 +42,11 @@ interface CockpitCard {
 
 const IN_CARDS: CockpitCard[] = [
   { to: '/pos', icon: <ShoppingCart size={32} />, label: 'POS', hint: 'Ring up sales', intensity: 'primary' },
-  { to: '/admin/reports', icon: <TrendingUp size={32} />, label: 'Sales', hint: 'Daily revenue', intensity: 'primary' },
+  { to: '/admin/reports?tab=overview', icon: <TrendingUp size={32} />, label: 'Sales', hint: 'Daily revenue', intensity: 'primary' },
   { to: '/admin/menu', icon: <UtensilsCrossed size={28} />, label: 'Menu', hint: 'Items & prices', intensity: 'secondary' },
   { to: '/admin/loyalty', icon: <Heart size={28} />, label: 'Loyalty', hint: 'Repeat customers', intensity: 'secondary' },
   { to: '/admin/delivery', icon: <Truck size={28} />, label: 'Delivery', hint: 'Rappi, Uber, DiDi', intensity: 'secondary' },
-  { to: '/admin/reports', icon: <BarChart3 size={28} />, label: 'Menu Performance', hint: 'Top sellers', intensity: 'secondary' },
+  { to: '/admin/reports?tab=engineering', icon: <BarChart3 size={28} />, label: 'Menu Performance', hint: 'Top sellers', intensity: 'secondary' },
 ];
 
 const OUT_CARDS: CockpitCard[] = [
@@ -59,7 +59,7 @@ const OUT_CARDS: CockpitCard[] = [
 ];
 
 const SYSTEM_CARDS: CockpitCard[] = [
-  { to: '/admin/reports', icon: <BarChart3 size={28} />, label: 'Reports', hint: 'Numbers & trends', intensity: 'primary' },
+  { to: '/admin/reports?tab=cashcard', icon: <BarChart3 size={28} />, label: 'Reports', hint: 'Numbers & trends', intensity: 'primary' },
   { to: '/admin/integrations', icon: <Plug size={28} />, label: 'Integrations', hint: 'Payments & apps', intensity: 'primary' },
   { to: '/admin/modifiers', icon: <SlidersHorizontal size={28} />, label: 'Modifiers', hint: 'Sizes, extras & add-ons', intensity: 'secondary' },
   { to: '/kitchen', icon: <Monitor size={28} />, label: 'Kitchen Display', hint: 'Order screen for cooks', intensity: 'secondary' },

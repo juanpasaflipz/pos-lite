@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Download, X } from 'lucide-react';
 import {
@@ -52,12 +52,24 @@ import PayrollTab from '../components/reports/PayrollTab';
 type Period = 'today' | 'week' | 'month';
 type Tab = 'overview' | 'cashcard' | 'cogs' | 'categories' | 'margin' | 'delivery' | 'fees' | 'refunds' | 'financials' | 'engineering' | 'payroll';
 
+const VALID_TABS: Tab[] = ['overview', 'cashcard', 'cogs', 'categories', 'margin', 'delivery', 'fees', 'refunds', 'financials', 'engineering', 'payroll'];
+
 export default function ReportsScreen() {
   const { t } = useTranslation('reports');
   const { currentEmployee } = useAuth();
   const { limits, timezone: tenantTz } = usePlan();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [period, setPeriod] = useState<Period>('today');
-  const [tab, setTab] = useState<Tab>('overview');
+  const requestedTab = (searchParams.get('tab') || '').toLowerCase();
+  const initialTab: Tab = (VALID_TABS as string[]).includes(requestedTab) ? (requestedTab as Tab) : 'overview';
+  const [tab, setTabState] = useState<Tab>(initialTab);
+  const setTab = (next: Tab) => {
+    setTabState(next);
+    const params = new URLSearchParams(searchParams);
+    if (next === 'overview') params.delete('tab');
+    else params.set('tab', next);
+    setSearchParams(params, { replace: true });
+  };
   const [salesData, setSalesData] = useState<SalesReport | null>(null);
   const [itemSales, setItemSales] = useState<ItemSalesReport | null>(null);
   const [employeePerf, setEmployeePerf] = useState<EmployeePerformanceReport[]>([]);

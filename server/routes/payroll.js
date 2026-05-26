@@ -241,6 +241,93 @@ router.get('/live', requireAuth('manage_payroll'), async (req, res) => {
 });
 
 /**
+ * GET /api/payroll/forecast?from=ISO&to=ISO
+ * Cost of the scheduled_shifts in [from, to). For each scheduled hour we
+ * apply the employee's current pay rate (hourly: hours × rate, salary: flat
+ * weekly_salary if any hours scheduled, commission/no_pay: 0). Cheap enough
+ * to recompute on every call.
+ *
+ * Defaults to next 7 days starting tomorrow if from/to omitted — answers
+ * "what is next week going to cost?".
+ */
+router.get('/forecast', requireAuth('manage_payroll'), async (req, res) => {
+  try {
+    const now = new Date();
+    const defaultFrom = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    defaultFrom.setHours(0, 0, 0, 0);
+    const defaultTo = new Date(defaultFrom.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const from = req.query.from ? new Date(req.query.from) : defaultFrom;
+    const to = req.query.to ? new Date(req.query.to) : defaultTo;
+
+    const rows = await all(`
+      SELECT
+        ss.employee_id,
+        e.name AS employee_name,
+        e.role AS employee_role,
+        e.pay_type,
+        e.hourly_rate_cents,
+        e.weekly_salary_cents,
+        COALESCE(SUM(
+          EXTRACT(EPOCH FROM (
+            LEAST(ss.ends_at, $2::timestamptz) - GREATEST(ss.starts_at, $1::timestamptz)
+          )) / 3600.0
+        ), 0)::numeric(8,2) AS hours_scheduled
+      FROM employees e
+      LEFT JOIN scheduled_shifts ss
+        ON ss.employee_id = e.id
+        AND ss.starts_at < $2::timestamptz
+        AND ss.ends_at > $1::timestamptz
+      WHERE e.active = true
+      GROUP BY e.id, e.name, e.role, e.pay_type, e.hourly_rate_cents, e.weekly_salary_cents
+      HAVING COALESCE(SUM(
+        EXTRACT(EPOCH FROM (
+          LEAST(ss.ends_at, $2::timestamptz) - GREATEST(ss.starts_at, $1::timestamptz)
+        )) / 3600.0
+      ), 0) > 0
+      ORDER BY e.name ASC
+    `, [from.toISOString(), to.toISOString()]);
+
+    const employees = rows.map(r => {
+      const hours = Number(r.hours_scheduled || 0);
+      let costCents = 0;
+      if (r.pay_type === 'hourly') {
+        costCents = Math.round(hours * Number(r.hourly_rate_cents));
+      } else if (r.pay_type === 'salary') {
+        costCents = hours > 0 ? Number(r.weekly_salary_cents) : 0;
+      }
+      return {
+        employee_id: r.employee_id,
+        employee_name: r.employee_name,
+        employee_role: r.employee_role,
+        pay_type: r.pay_type,
+        hourly_rate_cents: Number(r.hourly_rate_cents),
+        weekly_salary_cents: Number(r.weekly_salary_cents),
+        hours_scheduled: Number(hours.toFixed(2)),
+        cost_cents: costCents,
+      };
+    });
+
+    const totals = employees.reduce((acc, e) => {
+      acc.hours_scheduled += e.hours_scheduled;
+      acc.cost_cents += e.cost_cents;
+      return acc;
+    }, { hours_scheduled: 0, cost_cents: 0 });
+    totals.hours_scheduled = Number(totals.hours_scheduled.toFixed(2));
+
+    res.json({
+      from: from.toISOString(),
+      to: to.toISOString(),
+      employees,
+      totals,
+    });
+  } catch (error) {
+    console.error('Payroll forecast error:', error);
+    res.status(500).json({ error: 'Failed to compute scheduled labor forecast' });
+  }
+});
+
+/**
  * GET /api/payroll/period?from=YYYY-MM-DD&to=YYYY-MM-DD
  * Arbitrary window for historical inspection. If the window matches a closed
  * payroll_periods row exactly, returns the frozen snapshot instead of
@@ -666,6 +753,6 @@ router.get('/periods/:id/export.csv', requireAuth('manage_payroll'), async (req,
 });
 
 // ---------- helpers for callers outside this file ----------
-export { currentWeeklyPeriod, shiftWeeks };
+export { currentWeeklyPeriod, shiftWeeks, computeSnapshot };
 
 export default router;

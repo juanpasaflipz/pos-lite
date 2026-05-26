@@ -5,11 +5,16 @@ import {
   createScheduledShift,
   deleteScheduledShift,
   getEmployees,
+  getPayrollForecast,
   getScheduledShifts,
   updateScheduledShift,
 } from '../../api';
+import type { PayrollForecast } from '../../api';
 import { useToast } from '../../context/ToastContext';
 import type { Employee, ScheduledShiftRow } from '../../types';
+
+const moneyMXN = (cents: number) =>
+  new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format((cents || 0) / 100);
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -78,6 +83,7 @@ export default function SchedulePanel() {
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeek(new Date()));
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [shifts, setShifts] = useState<ScheduledShiftRow[]>([]);
+  const [forecast, setForecast] = useState<PayrollForecast | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<EditState | null>(null);
   const [saving, setSaving] = useState(false);
@@ -88,18 +94,29 @@ export default function SchedulePanel() {
   const load = async () => {
     try {
       setLoading(true);
-      const [emp, sched] = await Promise.all([
+      const [emp, sched, fc] = await Promise.all([
         getEmployees(),
         getScheduledShifts({ from: weekStart.toISOString(), to: weekEnd.toISOString() }),
+        getPayrollForecast({ from: weekStart.toISOString(), to: weekEnd.toISOString() })
+          .catch(() => null),
       ]);
       setEmployees(emp.filter(e => e.active));
       setShifts(sched);
+      setForecast(fc);
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Failed to load schedule', 'error');
     } finally {
       setLoading(false);
     }
   };
+
+  const forecastByEmployee = useMemo(() => {
+    const map = new Map<number, number>();
+    if (forecast) {
+      for (const e of forecast.employees) map.set(e.employee_id, e.cost_cents);
+    }
+    return map;
+  }, [forecast]);
 
   useEffect(() => { void load(); }, [weekStart.getTime()]);
 
@@ -245,6 +262,7 @@ export default function SchedulePanel() {
                   </th>
                 ))}
                 <th className="text-right px-4 py-3 min-w-[100px]">Total</th>
+                <th className="text-right px-4 py-3 min-w-[110px]">Forecast cost</th>
               </tr>
             </thead>
             <tbody>
@@ -292,9 +310,26 @@ export default function SchedulePanel() {
                     <td className="px-4 py-3 text-right text-white font-semibold tabular-nums">
                       {fmtDuration(total)}
                     </td>
+                    <td className="px-4 py-3 text-right text-neutral-200 tabular-nums">
+                      {forecastByEmployee.has(emp.id) ? moneyMXN(forecastByEmployee.get(emp.id) || 0) : '—'}
+                    </td>
                   </tr>
                 );
               })}
+              {forecast && forecast.totals.cost_cents > 0 && (
+                <tr className="border-t-2 border-neutral-700 bg-neutral-950">
+                  <td className="px-4 py-3 sticky left-0 bg-neutral-950 z-10 text-neutral-400 uppercase text-xs tracking-wide font-semibold">
+                    Week forecast
+                  </td>
+                  <td colSpan={7} />
+                  <td className="px-4 py-3 text-right text-white font-bold tabular-nums">
+                    {fmtDuration(Math.round(forecast.totals.hours_scheduled * 3600))}
+                  </td>
+                  <td className="px-4 py-3 text-right text-white font-bold tabular-nums">
+                    {moneyMXN(forecast.totals.cost_cents)}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
