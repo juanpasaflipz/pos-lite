@@ -4,22 +4,27 @@ import { ArrowRight, User, X } from 'lucide-react';
 interface Props {
   onSkip: () => void;
   onConfirm: (name: string) => void;
+  /** When true, hides skip/X — the cashier needs a name to find this order at the register. */
+  required?: boolean;
+  title?: string;
+  subtitle?: string;
 }
 
 const MAX_LEN = 40;
 
 /**
- * Asks anonymous customers for a first name so the cashier can call out the
- * order when it's ready. Strictly optional — Skip continues the flow with no
- * name set. Identified loyalty customers never see this modal (their name
- * already comes from the session).
+ * Asks anonymous customers for a first name. When `required`, the cashier
+ * needs the name to call out the order at pickup — no skip option. Identified
+ * loyalty customers never see this modal (their name comes from the session).
  */
-const KioskCallNameModal: React.FC<Props> = ({ onSkip, onConfirm }) => {
+const KioskCallNameModal: React.FC<Props> = ({ onSkip, onConfirm, required = false, title, subtitle }) => {
   const [name, setName] = useState('');
+  const trimmed = name.trim();
+  const canSubmit = required ? trimmed.length > 0 : true;
 
   const submit = () => {
-    const trimmed = name.trim();
     if (trimmed.length === 0) {
+      if (required) return;
       onSkip();
       return;
     }
@@ -31,18 +36,20 @@ const KioskCallNameModal: React.FC<Props> = ({ onSkip, onConfirm }) => {
       <div className="bg-neutral-900 rounded-xl border border-neutral-800 shadow-2xl w-full max-w-[560px] p-6 sm:p-8 space-y-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-3xl font-black leading-tight">¿Cómo te llamamos?</h2>
+            <h2 className="text-3xl font-black leading-tight">{title || '¿Cómo te llamamos?'}</h2>
             <p className="text-neutral-400 text-base font-bold mt-1">
-              Te llamamos por tu nombre cuando esté lista tu orden.
+              {subtitle || 'Te llamamos por tu nombre cuando esté lista tu orden.'}
             </p>
           </div>
-          <button
-            onClick={onSkip}
-            className="h-12 w-12 rounded-lg bg-neutral-800 active:bg-neutral-700 flex items-center justify-center shrink-0"
-            aria-label="Omitir"
-          >
-            <X className="h-6 w-6" />
-          </button>
+          {!required && (
+            <button
+              onClick={onSkip}
+              className="h-12 w-12 rounded-lg bg-neutral-800 active:bg-neutral-700 flex items-center justify-center shrink-0"
+              aria-label="Omitir"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          )}
         </div>
 
         <label className="block">
@@ -59,22 +66,25 @@ const KioskCallNameModal: React.FC<Props> = ({ onSkip, onConfirm }) => {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') submit();
               }}
-              placeholder="Tu nombre (opcional)"
+              placeholder={required ? 'Tu nombre' : 'Tu nombre (opcional)'}
               className="flex-1 bg-transparent outline-none text-2xl font-black placeholder:text-neutral-600"
             />
           </div>
         </label>
 
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={onSkip}
-            className="h-16 rounded-lg bg-neutral-800 active:bg-neutral-700 text-xl font-black touch-manipulation"
-          >
-            Omitir
-          </button>
+        <div className={required ? '' : 'grid grid-cols-2 gap-3'}>
+          {!required && (
+            <button
+              onClick={onSkip}
+              className="h-16 rounded-lg bg-neutral-800 active:bg-neutral-700 text-xl font-black touch-manipulation"
+            >
+              Omitir
+            </button>
+          )}
           <button
             onClick={submit}
-            className="h-16 rounded-lg bg-brand-600 active:bg-brand-700 text-xl font-black touch-manipulation inline-flex items-center justify-center gap-2"
+            disabled={!canSubmit}
+            className="h-16 w-full rounded-lg bg-brand-600 active:bg-brand-700 disabled:opacity-40 text-xl font-black touch-manipulation inline-flex items-center justify-center gap-2"
           >
             Continuar
             <ArrowRight className="h-6 w-6" />

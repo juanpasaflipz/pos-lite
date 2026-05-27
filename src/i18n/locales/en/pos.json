@@ -531,6 +531,7 @@
     "paid": "PAID",
     "unpaid": "UNPAID",
     "charge": "Charge",
+    "edit": "Edit",
     "start": "Start",
     "markReady": "Mark Ready",
     "complete": "Complete"

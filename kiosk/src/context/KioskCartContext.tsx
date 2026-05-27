@@ -17,41 +17,35 @@ function modifierKey(menuItemId: number, modifiers: KioskModifier[]): string {
   return `m${menuItemId}:${ids}`;
 }
 
-export interface KioskLastOrder {
-  id: number;
-  order_number: string | number;
-  total: number;
-  payment_status: string;
-  payment_choice: 'counter_cash' | 'terminal_card';
-}
-
 export type KioskFulfillmentType = 'for_here' | 'to_go';
 
 interface KioskCartState {
   lines: KioskCartLine[];
   count: number;
   total: number;
-  lastOrder: KioskLastOrder | null;
   callName: string | null;
   fulfillmentType: KioskFulfillmentType | null;
+  /** Non-null when the customer is adding to an existing dine-in order.
+   *  Cart submit calls the append-items endpoint instead of creating a new one. */
+  appendToOrderId: number | null;
   addItem: (item: KioskMenuItem, modifiers?: KioskModifier[]) => void;
   incrementLine: (lineKey: string) => void;
   decrementLine: (lineKey: string) => void;
   removeLine: (lineKey: string) => void;
   clearCart: () => void;
   replaceLines: (next: KioskCartLine[]) => void;
-  setLastOrder: (order: KioskLastOrder | null) => void;
   setCallName: (name: string | null) => void;
   setFulfillmentType: (type: KioskFulfillmentType | null) => void;
+  setAppendToOrderId: (orderId: number | null) => void;
 }
 
 const Ctx = createContext<KioskCartState | null>(null);
 
 export const KioskCartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [lines, setLines] = useState<KioskCartLine[]>([]);
-  const [lastOrder, setLastOrder] = useState<KioskLastOrder | null>(null);
   const [callName, setCallName] = useState<string | null>(null);
   const [fulfillmentType, setFulfillmentType] = useState<KioskFulfillmentType | null>(null);
+  const [appendToOrderId, setAppendToOrderId] = useState<number | null>(null);
 
   const addItem = useCallback((item: KioskMenuItem, modifiers: KioskModifier[] = []) => {
     const lineKey = modifierKey(item.id, modifiers);
@@ -102,6 +96,7 @@ export const KioskCartProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setLines([]);
     setCallName(null);
     setFulfillmentType(null);
+    setAppendToOrderId(null);
   }, []);
 
   const replaceLines = useCallback((next: KioskCartLine[]) => {
@@ -125,20 +120,20 @@ export const KioskCartProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       lines,
       count,
       total,
-      lastOrder,
       callName,
       fulfillmentType,
+      appendToOrderId,
       addItem,
       incrementLine,
       decrementLine,
       removeLine,
       clearCart,
       replaceLines,
-      setLastOrder,
       setCallName,
       setFulfillmentType,
+      setAppendToOrderId,
     };
-  }, [addItem, callName, clearCart, decrementLine, fulfillmentType, incrementLine, lastOrder, lines, removeLine, replaceLines]);
+  }, [addItem, appendToOrderId, callName, clearCart, decrementLine, fulfillmentType, incrementLine, lines, removeLine, replaceLines]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 };

@@ -435,6 +435,7 @@ router.get('/:id', async (req, res) => {
     const items = await all(`
       SELECT oi.id, oi.order_id, oi.menu_item_id, oi.item_name, oi.quantity, oi.unit_price, oi.notes, oi.combo_instance_id,
              oi.discount_amount, oi.discount_type, oi.discount_reason, oi.discount_authorized_by,
+             oi.added_at, oi.voided_at, oi.void_reason, oi.qty_changed_at, oi.original_quantity,
              oim.id AS mod_id, oim.modifier_id, oim.modifier_name, oim.price_adjustment
       FROM order_items oi
       LEFT JOIN order_item_modifiers oim ON oim.order_item_id = oi.id
@@ -451,6 +452,8 @@ router.get('/:id', async (req, res) => {
           notes: row.notes, combo_instance_id: row.combo_instance_id,
           discount_amount: row.discount_amount, discount_type: row.discount_type,
           discount_reason: row.discount_reason, discount_authorized_by: row.discount_authorized_by,
+          added_at: row.added_at, voided_at: row.voided_at, void_reason: row.void_reason,
+          qty_changed_at: row.qty_changed_at, original_quantity: row.original_quantity,
           modifiers: [],
         });
       }
@@ -942,6 +945,7 @@ router.get('/kitchen/active', async (req, res) => {
              dp.name AS delivery_platform,
              oi.id AS item_id, oi.item_name, oi.quantity, oi.notes, oi.combo_instance_id,
              oi.virtual_brand_id, vb.name AS brand_name, vb.primary_color AS brand_color,
+             oi.added_at, oi.voided_at, oi.void_reason, oi.qty_changed_at, oi.original_quantity,
              oim.modifier_name, oim.price_adjustment
       FROM orders o
       JOIN employees e ON o.employee_id = e.id
@@ -949,6 +953,9 @@ router.get('/kitchen/active', async (req, res) => {
       LEFT JOIN delivery_orders do_row ON do_row.order_id = o.id
       LEFT JOIN delivery_platforms dp ON dp.id = do_row.platform_id
       LEFT JOIN order_items oi ON oi.order_id = o.id
+        -- Drop voided items from KDS after 90s so kitchen sees the strike
+        -- briefly then it disappears, instead of cluttering forever.
+        AND (oi.voided_at IS NULL OR oi.voided_at > NOW() - INTERVAL '90 seconds')
       LEFT JOIN virtual_brands vb ON oi.virtual_brand_id = vb.id
       LEFT JOIN order_item_modifiers oim ON oim.order_item_id = oi.id
       WHERE o.status = ANY($1::text[])
@@ -991,6 +998,11 @@ router.get('/kitchen/active', async (req, res) => {
           virtual_brand_id: row.virtual_brand_id,
           brand_name: row.brand_name,
           brand_color: row.brand_color,
+          added_at: row.added_at,
+          voided_at: row.voided_at,
+          void_reason: row.void_reason,
+          qty_changed_at: row.qty_changed_at,
+          original_quantity: row.original_quantity,
           modifiers: [],
         });
       }
@@ -1187,6 +1199,392 @@ router.post('/:id/sms-receipt', requireAuth('pos_access'), async (req, res) => {
   } catch (error) {
     console.error('Error sending SMS receipt:', error);
     res.status(500).json({ error: 'Failed to send SMS receipt' });
+  }
+});
+
+// ---------- Edit-existing-order helpers ----------
+
+// Statuses past which the order is closed and edits are rejected outright.
+const EDIT_BLOCKED_STATUSES = new Set(['completed', 'cancelled']);
+
+/**
+ * Gate an edit on an already-sent order.
+ * - Unpaid: pos_access (already enforced by route middleware) is enough.
+ * - Paid:   actor must have void_orders, OR an approver with void_orders
+ *           must be supplied (mirrors the discount authorization pattern).
+ */
+async function authorizeOrderEdit({ actorEmployee, authorizedByEmployeeId, isPaid }) {
+  if (!isPaid) return actorEmployee.id;
+
+  const actorPerm = await get(
+    'SELECT granted FROM role_permissions WHERE role = $1 AND permission = $2',
+    [actorEmployee.role, 'void_orders']
+  );
+  if (actorPerm?.granted) return actorEmployee.id;
+
+  if (!authorizedByEmployeeId) {
+    const err = new Error('Manager approval required to edit a paid order');
+    err.status = 403;
+    throw err;
+  }
+  const approver = await get(
+    'SELECT id, role, active FROM employees WHERE id = $1',
+    [authorizedByEmployeeId]
+  );
+  if (!approver || !approver.active) {
+    const err = new Error('Invalid approver');
+    err.status = 403;
+    throw err;
+  }
+  const approverPerm = await get(
+    'SELECT granted FROM role_permissions WHERE role = $1 AND permission = $2',
+    [approver.role, 'void_orders']
+  );
+  if (!approverPerm?.granted) {
+    const err = new Error('Approver lacks void_orders permission');
+    err.status = 403;
+    throw err;
+  }
+  return approver.id;
+}
+
+/**
+ * Recompute order subtotal/tax/total from the live (non-voided) item rows.
+ * Mirrors the IVA-inclusive math used in buildOrderFromRequest. If the new
+ * total exceeds what was already paid, flip a paid order to 'partial' so the
+ * cashier sees they need to collect the delta via the existing payment flow.
+ */
+async function recomputeOrderTotals(conn, orderId) {
+  const items = await conn.unsafe(`
+    SELECT quantity, unit_price, COALESCE(discount_amount, 0) AS discount_amount
+    FROM order_items
+    WHERE order_id = $1 AND voided_at IS NULL
+  `, [orderId]);
+
+  let itemsTotal = 0;
+  for (const it of items) {
+    itemsTotal += Number(it.unit_price) * it.quantity - Number(it.discount_amount);
+  }
+
+  const [order] = await conn.unsafe(
+    `SELECT COALESCE(discount_amount, 0) AS order_discount,
+            COALESCE(total, 0) AS prev_total,
+            payment_status
+     FROM orders WHERE id = $1`,
+    [orderId]
+  );
+  const total = Math.max(0, Math.round((itemsTotal - Number(order.order_discount)) * 100) / 100);
+  const tax = Math.round((total - total / (1 + TAX_RATE)) * 100) / 100;
+  const subtotal = Math.round((total - tax) * 100) / 100;
+
+  let newPaymentStatus = order.payment_status;
+  if (order.payment_status === 'paid' && total > Number(order.prev_total)) {
+    newPaymentStatus = 'partial';
+  }
+
+  await conn.unsafe(
+    `UPDATE orders SET subtotal = $1, tax = $2, total = $3, payment_status = $4 WHERE id = $5`,
+    [subtotal, tax, total, newPaymentStatus, orderId]
+  );
+
+  return { subtotal, tax, total, payment_status: newPaymentStatus, prev_total: Number(order.prev_total) };
+}
+
+/**
+ * Resolve a single append-item payload to the row shape we insert. Reuses
+ * the same modifier/virtual-brand resolution rules as order creation but
+ * runs one item at a time — the edit path is low-volume.
+ */
+async function resolveAppendItem(item, conn) {
+  if (!item.quantity || item.quantity <= 0) {
+    const err = new Error(`Invalid quantity for item ${item.menu_item_id}`);
+    err.status = 400;
+    throw err;
+  }
+  const [menuItem] = await conn.unsafe(
+    'SELECT id, name, price FROM menu_items WHERE id = $1',
+    [item.menu_item_id]
+  );
+  if (!menuItem) {
+    const err = new Error(`Menu item ${item.menu_item_id} not found`);
+    err.status = 404;
+    throw err;
+  }
+
+  let modifierTotal = 0;
+  const resolvedModifiers = [];
+  if (item.modifiers && item.modifiers.length > 0) {
+    const modRows = await conn.unsafe(
+      'SELECT id, name, price_adjustment FROM modifiers WHERE id = ANY($1::int[])',
+      [item.modifiers]
+    );
+    for (const mod of modRows) {
+      modifierTotal += Number(mod.price_adjustment);
+      resolvedModifiers.push(mod);
+    }
+  }
+
+  let itemName = menuItem.name;
+  let basePrice = Number(menuItem.price);
+  const virtualBrandId = item.virtual_brand_id || null;
+  if (virtualBrandId) {
+    const [brandItem] = await conn.unsafe(
+      `SELECT custom_name, custom_price FROM virtual_brand_items
+       WHERE virtual_brand_id = $1 AND menu_item_id = $2`,
+      [virtualBrandId, item.menu_item_id]
+    );
+    if (brandItem) {
+      if (brandItem.custom_name) itemName = brandItem.custom_name;
+      if (brandItem.custom_price != null) basePrice = Number(brandItem.custom_price);
+    }
+  }
+
+  const unitPrice = basePrice + modifierTotal;
+  return {
+    menu_item_id: item.menu_item_id,
+    item_name: itemName,
+    quantity: item.quantity,
+    unit_price: unitPrice,
+    notes: item.notes || null,
+    combo_instance_id: item.combo_instance_id || null,
+    virtual_brand_id: virtualBrandId,
+    modifiers: resolvedModifiers,
+  };
+}
+
+// ---------- Edit-existing-order endpoints ----------
+
+// POST /api/orders/:id/items — append items to a sent (non-completed) order.
+// Body: { items: [...], authorized_by_employee_id?: number }
+router.post('/:id/items', requireAuth('pos_access'), async (req, res) => {
+  const { id } = req.params;
+  const { items, authorized_by_employee_id } = req.body || {};
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'items array is required' });
+  }
+
+  const conn = getConn();
+  try {
+    const order = await get(
+      'SELECT id, status, payment_status FROM orders WHERE id = $1',
+      [id]
+    );
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (EDIT_BLOCKED_STATUSES.has(order.status)) {
+      return res.status(400).json({ error: `Cannot edit ${order.status} order` });
+    }
+
+    const isPaid = order.payment_status === 'paid' || order.payment_status === 'completed';
+    const authorizedBy = await authorizeOrderEdit({
+      actorEmployee: req.employee,
+      authorizedByEmployeeId: authorized_by_employee_id,
+      isPaid,
+    });
+
+    const tenantId = req.tenant?.id || null;
+    const resolved = [];
+    for (const raw of items) {
+      resolved.push(await resolveAppendItem(raw, conn));
+    }
+
+    const insertedIds = [];
+    for (const r of resolved) {
+      const [row] = await conn.unsafe(`
+        INSERT INTO order_items (
+          tenant_id, order_id, menu_item_id, item_name, quantity, unit_price,
+          notes, combo_instance_id, virtual_brand_id, added_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+        RETURNING id
+      `, [
+        tenantId, id, r.menu_item_id, r.item_name, r.quantity, r.unit_price,
+        r.notes, r.combo_instance_id, r.virtual_brand_id,
+      ]);
+      insertedIds.push(row.id);
+
+      if (r.modifiers.length > 0) {
+        for (const mod of r.modifiers) {
+          await conn.unsafe(`
+            INSERT INTO order_item_modifiers (tenant_id, order_item_id, modifier_id, modifier_name, price_adjustment)
+            VALUES ($1, $2, $3, $4, $5)
+          `, [tenantId, row.id, mod.id, mod.name, mod.price_adjustment]);
+        }
+      }
+    }
+
+    const totals = await recomputeOrderTotals(conn, id);
+
+    audit({
+      tenantId: req.tenant?.id || 'default',
+      actorType: 'employee',
+      actorId: String(req.employee.id),
+      action: 'update',
+      resource: 'order',
+      resourceId: String(id),
+      details: {
+        edit: 'items_appended',
+        item_ids: insertedIds,
+        authorized_by: authorizedBy,
+        new_total: totals.total,
+      },
+      ip: req.ip,
+    });
+
+    res.json({ success: true, order_id: Number(id), inserted_item_ids: insertedIds, ...totals });
+  } catch (error) {
+    if (error?.status) return res.status(error.status).json({ error: error.message });
+    console.error('Error appending order items:', error);
+    res.status(500).json({ error: 'Failed to append items' });
+  }
+});
+
+// PATCH /api/orders/:id/items/:itemId — change quantity on a sent order line.
+// Body: { quantity: number, authorized_by_employee_id?: number }
+router.patch('/:id/items/:itemId', requireAuth('pos_access'), async (req, res) => {
+  const { id, itemId } = req.params;
+  const { quantity, authorized_by_employee_id } = req.body || {};
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    return res.status(400).json({ error: 'quantity must be a positive integer' });
+  }
+
+  const conn = getConn();
+  try {
+    const order = await get(
+      'SELECT id, status, payment_status FROM orders WHERE id = $1',
+      [id]
+    );
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (EDIT_BLOCKED_STATUSES.has(order.status)) {
+      return res.status(400).json({ error: `Cannot edit ${order.status} order` });
+    }
+
+    const item = await get(
+      'SELECT id, quantity, original_quantity, voided_at FROM order_items WHERE id = $1 AND order_id = $2',
+      [itemId, id]
+    );
+    if (!item) return res.status(404).json({ error: 'Item not found on order' });
+    if (item.voided_at) return res.status(400).json({ error: 'Item is voided' });
+
+    const isPaid = order.payment_status === 'paid' || order.payment_status === 'completed';
+    await authorizeOrderEdit({
+      actorEmployee: req.employee,
+      authorizedByEmployeeId: authorized_by_employee_id,
+      isPaid,
+    });
+
+    // Preserve the very first quantity so KDS can show "was 2, now 5".
+    const preserveOriginal = item.original_quantity == null;
+    await conn.unsafe(`
+      UPDATE order_items
+      SET quantity = $1,
+          qty_changed_at = NOW(),
+          original_quantity = ${preserveOriginal ? '$3' : 'original_quantity'}
+      WHERE id = $2
+    `, preserveOriginal ? [quantity, itemId, item.quantity] : [quantity, itemId]);
+
+    const totals = await recomputeOrderTotals(conn, id);
+
+    audit({
+      tenantId: req.tenant?.id || 'default',
+      actorType: 'employee',
+      actorId: String(req.employee.id),
+      action: 'update',
+      resource: 'order_item',
+      resourceId: String(itemId),
+      details: {
+        edit: 'quantity_changed',
+        from: item.quantity,
+        to: quantity,
+        order_id: Number(id),
+        new_total: totals.total,
+      },
+      ip: req.ip,
+    });
+
+    res.json({ success: true, item_id: Number(itemId), quantity, ...totals });
+  } catch (error) {
+    if (error?.status) return res.status(error.status).json({ error: error.message });
+    console.error('Error updating order item quantity:', error);
+    res.status(500).json({ error: 'Failed to update quantity' });
+  }
+});
+
+// DELETE /api/orders/:id/items/:itemId — soft-void a line on a sent order.
+// Body: { void_reason: string, authorized_by_employee_id?: number }
+router.delete('/:id/items/:itemId', requireAuth('pos_access'), async (req, res) => {
+  const { id, itemId } = req.params;
+  const { void_reason, authorized_by_employee_id } = req.body || {};
+  if (!void_reason || typeof void_reason !== 'string' || void_reason.trim().length < 2) {
+    return res.status(400).json({ error: 'void_reason is required' });
+  }
+
+  const conn = getConn();
+  try {
+    const order = await get(
+      'SELECT id, status, payment_status FROM orders WHERE id = $1',
+      [id]
+    );
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (EDIT_BLOCKED_STATUSES.has(order.status)) {
+      return res.status(400).json({ error: `Cannot edit ${order.status} order` });
+    }
+
+    const item = await get(
+      'SELECT id, voided_at FROM order_items WHERE id = $1 AND order_id = $2',
+      [itemId, id]
+    );
+    if (!item) return res.status(404).json({ error: 'Item not found on order' });
+    if (item.voided_at) return res.status(400).json({ error: 'Item already voided' });
+
+    const isPaid = order.payment_status === 'paid' || order.payment_status === 'completed';
+    const authorizedBy = await authorizeOrderEdit({
+      actorEmployee: req.employee,
+      authorizedByEmployeeId: authorized_by_employee_id,
+      isPaid,
+    });
+
+    await conn.unsafe(`
+      UPDATE order_items
+      SET voided_at = NOW(), voided_by = $1, void_reason = $2
+      WHERE id = $3
+    `, [authorizedBy, void_reason.trim(), itemId]);
+
+    // Block last-item void — an order with zero live items should be cancelled,
+    // not silently zeroed out. The cashier can use the existing cancel flow.
+    const [{ live_count }] = await conn.unsafe(
+      `SELECT COUNT(*)::int AS live_count FROM order_items WHERE order_id = $1 AND voided_at IS NULL`,
+      [id]
+    );
+    if (live_count === 0) {
+      // Roll back the void so the order keeps at least one live line.
+      await conn.unsafe(`UPDATE order_items SET voided_at = NULL, voided_by = NULL, void_reason = NULL WHERE id = $1`, [itemId]);
+      return res.status(400).json({ error: 'Cannot void the last item on an order. Cancel the order instead.' });
+    }
+
+    const totals = await recomputeOrderTotals(conn, id);
+
+    audit({
+      tenantId: req.tenant?.id || 'default',
+      actorType: 'employee',
+      actorId: String(req.employee.id),
+      action: 'update',
+      resource: 'order_item',
+      resourceId: String(itemId),
+      details: {
+        edit: 'voided',
+        reason: void_reason.trim(),
+        authorized_by: authorizedBy,
+        order_id: Number(id),
+        new_total: totals.total,
+      },
+      ip: req.ip,
+    });
+
+    res.json({ success: true, item_id: Number(itemId), voided: true, ...totals });
+  } catch (error) {
+    if (error?.status) return res.status(error.status).json({ error: error.message });
+    console.error('Error voiding order item:', error);
+    res.status(500).json({ error: 'Failed to void item' });
   }
 });
 

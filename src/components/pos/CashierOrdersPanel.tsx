@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, RefreshCw, Clock, Check } from 'lucide-react';
+import { X, RefreshCw, Clock, Check, Pencil } from 'lucide-react';
 import { getKitchenOrders, updateOrderStatus } from '../../api';
 import { Order } from '../../types';
 import { formatPrice } from '../../utils/currency';
 import { getTimeTier, isPaid, type TimeTier } from '../../lib/orderUrgency';
+import OrderEditModal from './OrderEditModal';
 
 interface CashierOrdersPanelProps {
   isOpen: boolean;
@@ -69,6 +70,7 @@ export default function CashierOrdersPanel({ isOpen, onClose, onCharge }: Cashie
   const [refreshing, setRefreshing] = useState(false);
   const [actionId, setActionId] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchOrders = useCallback(async () => {
@@ -223,26 +225,60 @@ export default function CashierOrdersPanel({ isOpen, onClose, onCharge }: Cashie
                   {/* Items */}
                   {order.items && order.items.length > 0 && (
                     <div className="px-3 pt-2 space-y-1.5">
-                      {order.items.map((item, i) => (
-                        <div key={i} className="bg-neutral-800/50 rounded-md px-2.5 py-1.5 border border-neutral-700/60">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-sm font-semibold text-white">{item.item_name}</span>
-                            <span className="bg-neutral-700 text-neutral-200 px-2 py-0.5 rounded-full font-bold text-xs">
-                              x{item.quantity}
-                            </span>
-                          </div>
-                          {item.modifiers && item.modifiers.length > 0 && (
-                            <div className="mt-0.5">
-                              {item.modifiers.map((mod, j) => (
-                                <p key={j} className="text-xs text-brand-400">+ {mod.modifier_name}</p>
-                              ))}
+                      {order.items.map((item, i) => {
+                        const isVoided = !!item.voided_at;
+                        const isAdded = !!item.added_at && !isVoided;
+                        const isQtyChanged = item.original_quantity != null && item.original_quantity !== item.quantity && !isVoided;
+                        return (
+                          <div
+                            key={i}
+                            className={`rounded-md px-2.5 py-1.5 border ${
+                              isVoided
+                                ? 'bg-cockpit-red/10 border-cockpit-red/40'
+                                : isAdded
+                                  ? 'bg-cockpit-yellow/10 border-cockpit-yellow/40'
+                                  : 'bg-neutral-800/50 border-neutral-700/60'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                                <span className={`text-sm font-semibold ${isVoided ? 'line-through text-neutral-400' : 'text-white'}`}>
+                                  {item.item_name}
+                                </span>
+                                {isAdded && (
+                                  <span className="text-[9px] font-black uppercase bg-cockpit-yellow text-neutral-900 px-1 py-0.5 rounded">NUEVO</span>
+                                )}
+                                {isVoided && (
+                                  <span className="text-[9px] font-black uppercase bg-cockpit-red text-white px-1 py-0.5 rounded">VOID</span>
+                                )}
+                              </div>
+                              <span className="bg-neutral-700 text-neutral-200 px-2 py-0.5 rounded-full font-bold text-xs">
+                                x{item.quantity}
+                                {isQtyChanged && (
+                                  <span className="ml-1 text-cockpit-blue">(was {item.original_quantity})</span>
+                                )}
+                              </span>
                             </div>
-                          )}
-                          {item.notes && (
-                            <p className="text-xs text-brand-300 italic mt-0.5 border-l-2 border-brand-500 pl-2">{item.notes}</p>
-                          )}
-                        </div>
-                      ))}
+                            {item.modifiers && item.modifiers.length > 0 && (
+                              <div className="mt-0.5">
+                                {item.modifiers.map((mod, j) => (
+                                  <p key={j} className={`text-xs ${isVoided ? 'line-through text-brand-400/60' : 'text-brand-400'}`}>
+                                    + {mod.modifier_name}
+                                  </p>
+                                ))}
+                              </div>
+                            )}
+                            {item.notes && (
+                              <p className={`text-xs italic mt-0.5 border-l-2 pl-2 ${isVoided ? 'border-cockpit-red text-brand-300/60' : 'border-brand-500 text-brand-300'}`}>
+                                {item.notes}
+                              </p>
+                            )}
+                            {isVoided && item.void_reason && (
+                              <p className="text-[10px] text-cockpit-red font-semibold mt-0.5">↳ {item.void_reason}</p>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -250,6 +286,16 @@ export default function CashierOrdersPanel({ isOpen, onClose, onCharge }: Cashie
                   <div className="flex items-center justify-between gap-2 px-3 py-3">
                     <span className="text-sm font-bold text-brand-500">{formatPrice(Number(order.total))}</span>
                     <div className="flex items-center gap-2">
+                      {/* Editar lets the cashier add/qty/void on a sent order.
+                          On a paid order, the modal prompts manager approval. */}
+                      <button
+                        onClick={() => setEditingOrder(order)}
+                        className="px-3 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-bold rounded-lg transition-colors min-h-[40px] inline-flex items-center gap-1.5"
+                        aria-label={t('ordersPanel.edit')}
+                      >
+                        <Pencil size={14} />
+                        {t('ordersPanel.edit')}
+                      </button>
                       {!paid && (
                         <button
                           onClick={() => onCharge(order)}
@@ -275,6 +321,13 @@ export default function CashierOrdersPanel({ isOpen, onClose, onCharge }: Cashie
           )}
         </div>
       </div>
+
+      <OrderEditModal
+        isOpen={editingOrder !== null}
+        order={editingOrder}
+        onClose={() => setEditingOrder(null)}
+        onChanged={fetchOrders}
+      />
     </div>
   );
 }

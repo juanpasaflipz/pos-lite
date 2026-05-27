@@ -68,7 +68,6 @@ function authHeaders({ tenantId, kioskToken }: AuthHeaders): HeadersInit {
   };
 }
 
-export type KioskPaymentChoice = 'counter_cash' | 'terminal_card';
 export type KioskFulfillmentType = 'for_here' | 'to_go';
 
 export interface KioskMenuItem {
@@ -136,42 +135,6 @@ export async function fetchModifierMap(auth: AuthHeaders): Promise<KioskModifier
   return body.map || {};
 }
 
-export interface KioskOrderResponse {
-  id: number;
-  order_number: string | number;
-  subtotal: number;
-  tax: number;
-  total: number;
-  payment_status: string;
-  status: string;
-}
-
-export async function createKioskOrder(
-  auth: AuthHeaders,
-  items: CreateKioskOrderLine[],
-  paymentChoice: KioskPaymentChoice,
-  customerToken?: string | null,
-  customerCallName?: string | null,
-  fulfillmentType?: KioskFulfillmentType | null,
-): Promise<KioskOrderResponse> {
-  const res = await fetch(`${API_BASE}/api/kiosk/orders`, {
-    method: 'POST',
-    headers: authHeaders(auth),
-    body: JSON.stringify({
-      items,
-      payment_choice: paymentChoice,
-      customer_token: customerToken || undefined,
-      customer_call_name: customerCallName || undefined,
-      fulfillment_type: fulfillmentType || undefined,
-    }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Order failed (${res.status})`);
-  }
-  return res.json();
-}
-
 export interface KioskHoldResponse {
   id: number;
   order_number: string | number;
@@ -180,22 +143,190 @@ export interface KioskHoldResponse {
   items: CreateKioskOrderLine[];
 }
 
+export interface HoldKioskOrderOpts {
+  customerToken?: string | null;
+  customerCallName?: string | null;
+  fulfillmentType?: KioskFulfillmentType | null;
+}
+
 export async function holdKioskOrder(
   auth: AuthHeaders,
   items: CreateKioskOrderLine[],
-  customerToken: string,
-  fulfillmentType?: KioskFulfillmentType | null,
+  opts: HoldKioskOrderOpts = {},
 ): Promise<KioskHoldResponse> {
   const res = await fetch(`${API_BASE}/api/kiosk/orders/hold`, {
     method: 'POST',
     headers: authHeaders(auth),
-    body: JSON.stringify({ items, customer_token: customerToken, fulfillment_type: fulfillmentType || undefined }),
+    body: JSON.stringify({
+      items,
+      customer_token: opts.customerToken || undefined,
+      customer_call_name: opts.customerCallName || undefined,
+      fulfillment_type: opts.fulfillmentType || undefined,
+    }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `Hold failed (${res.status})`);
   }
   return res.json();
+}
+
+// Dine-in pre-pay: fires the order to the kitchen with payment_status='unpaid'.
+// The customer eats first, then comes back via Pagar mi cuenta to pay.
+export interface KioskSendToKitchenResponse {
+  id: number;
+  order_number: string | number;
+  subtotal: number;
+  tax: number;
+  total: number;
+  status: string;
+  payment_status: string;
+  customer_call_name: string | null;
+  order_fulfillment_type: KioskFulfillmentType;
+}
+
+export async function sendKioskOrderToKitchen(
+  auth: AuthHeaders,
+  items: CreateKioskOrderLine[],
+  opts: HoldKioskOrderOpts = {},
+): Promise<KioskSendToKitchenResponse> {
+  const res = await fetch(`${API_BASE}/api/kiosk/orders/send-to-kitchen`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      items,
+      customer_token: opts.customerToken || undefined,
+      customer_call_name: opts.customerCallName || undefined,
+      fulfillment_type: opts.fulfillmentType || 'for_here',
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Send to kitchen failed (${res.status})`);
+  }
+  return res.json();
+}
+
+// Find open dine-in unpaid orders by name OR by loyalty session token.
+// Used by Welcome banner ("Hola Juan, tienes una cuenta abierta"),
+// Pagar mi cuenta lookup, and Agregar a mi orden lookup.
+export interface KioskOpenOrder {
+  id: number;
+  order_number: string | number;
+  subtotal: number;
+  tax: number;
+  total: number;
+  status: string;
+  payment_status: string;
+  customer_call_name: string | null;
+  order_fulfillment_type: KioskFulfillmentType;
+  created_at: string;
+  items: Array<{
+    order_item_id: number;
+    menu_item_id: number;
+    item_name: string;
+    quantity: number;
+    unit_price: number;
+    modifiers: KioskModifier[];
+  }>;
+}
+
+// Pagar mi cuenta — charges an existing dine-in order via MP terminal.
+export interface KioskTerminalChargeResponse {
+  success: true;
+  mp_order_id: string;
+  payment_status: string;
+}
+
+export async function chargeExistingKioskOrderOnTerminal(
+  auth: AuthHeaders,
+  orderId: number,
+): Promise<KioskTerminalChargeResponse> {
+  const res = await fetch(`${API_BASE}/api/kiosk/orders/${orderId}/mp-charge`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Terminal charge failed (${res.status})`);
+  }
+  return res.json();
+}
+
+// Polled by Pagar mi cuenta after the terminal charge fires. Backend reconciles
+// MP tip + records the payment row when status flips to 'paid'.
+export interface KioskOrderStatusResponse {
+  id: number;
+  order_number: string | number;
+  total: number;
+  payment_status: string;
+  invoice_token: string | null;
+}
+
+export async function fetchKioskOrderStatus(
+  auth: AuthHeaders,
+  orderId: number,
+): Promise<KioskOrderStatusResponse> {
+  const res = await fetch(`${API_BASE}/api/kiosk/orders/${orderId}/status`, {
+    headers: authHeaders(auth),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Status fetch failed (${res.status})`);
+  }
+  return res.json();
+}
+
+// Customer-initiated "Agregar a mi orden": appends items to an open dine-in
+// order. Backend requires the customer match the order's loyalty profile or
+// (case-insensitive) call name — the ownership boundary.
+export interface KioskAppendItemsResponse {
+  success: true;
+  order_id: number;
+  inserted_item_ids: number[];
+  subtotal: number;
+  tax: number;
+  total: number;
+}
+
+export async function appendItemsToKioskOrder(
+  auth: AuthHeaders,
+  orderId: number,
+  items: CreateKioskOrderLine[],
+  identity: { customerToken?: string | null; customerCallName?: string | null },
+): Promise<KioskAppendItemsResponse> {
+  const res = await fetch(`${API_BASE}/api/kiosk/orders/${orderId}/append-items`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      items,
+      customer_token: identity.customerToken || undefined,
+      customer_call_name: identity.customerCallName || undefined,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Append failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function fetchOpenOrders(
+  auth: AuthHeaders,
+  by: { name?: string; customerToken?: string },
+): Promise<KioskOpenOrder[]> {
+  const params = new URLSearchParams();
+  if (by.name) params.set('name', by.name);
+  if (by.customerToken) params.set('customer_token', by.customerToken);
+  const res = await fetch(`${API_BASE}/api/kiosk/orders/open?${params.toString()}`, {
+    headers: authHeaders(auth),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Open orders fetch failed (${res.status})`);
+  }
+  const body = await res.json();
+  return body.orders || [];
 }
 
 export interface KioskActiveDraft {
@@ -242,41 +373,6 @@ export async function resumeDraft(
   }
   const body = await res.json();
   return body.items;
-}
-
-export async function sendKioskOrderToTerminal(
-  auth: AuthHeaders,
-  orderId: number,
-): Promise<{ success: boolean; mp_order_id: string; payment_status: string }> {
-  const res = await fetch(`${API_BASE}/api/kiosk/orders/${orderId}/mp-charge`, {
-    method: 'POST',
-    headers: authHeaders(auth),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Terminal failed (${res.status})`);
-  }
-  return res.json();
-}
-
-export async function fetchKioskOrderStatus(
-  auth: AuthHeaders,
-  orderId: number,
-): Promise<{
-  id: number;
-  order_number: string | number;
-  total: number;
-  payment_status: string;
-  invoice_token: string | null;
-}> {
-  const res = await fetch(`${API_BASE}/api/kiosk/orders/${orderId}/status`, {
-    headers: authHeaders(auth),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Status failed (${res.status})`);
-  }
-  return res.json();
 }
 
 /* ==================== Customer identification & suggestions ==================== */

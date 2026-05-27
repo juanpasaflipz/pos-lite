@@ -86,6 +86,28 @@ CREATE TABLE IF NOT EXISTS cash_drawer_sessions (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS cash_paid_outs (
+  id SERIAL PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
+  shift_id INTEGER REFERENCES shifts(id) ON DELETE SET NULL,
+  drawer_session_id INTEGER REFERENCES cash_drawer_sessions(id) ON DELETE SET NULL,
+  by_employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+  amount_out NUMERIC(10,2) NOT NULL CHECK (amount_out > 0),
+  change_returned NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (change_returned >= 0),
+  net_amount NUMERIC(10,2) GENERATED ALWAYS AS (amount_out - change_returned) STORED,
+  payee TEXT,
+  reason TEXT NOT NULL DEFAULT 'other',
+  notes TEXT,
+  receipt_image_url TEXT,
+  no_receipt BOOLEAN NOT NULL DEFAULT false,
+  source TEXT NOT NULL DEFAULT 'pos',
+  voided_at TIMESTAMPTZ,
+  voided_by_employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+  void_reason TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (change_returned <= amount_out)
+);
+
 CREATE TABLE IF NOT EXISTS menu_categories (
   id SERIAL PRIMARY KEY,
   tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
@@ -157,7 +179,15 @@ CREATE TABLE IF NOT EXISTS order_items (
   discount_amount NUMERIC(10,2) DEFAULT 0,
   discount_type TEXT,
   discount_reason TEXT,
-  discount_authorized_by INTEGER REFERENCES employees(id)
+  discount_authorized_by INTEGER REFERENCES employees(id),
+  -- edit tracking (migration 0063): allows append / qty-change / soft-void
+  -- on a sent order while keeping the KDS audit trail intact.
+  added_at TIMESTAMPTZ,
+  voided_at TIMESTAMPTZ,
+  voided_by INTEGER REFERENCES employees(id),
+  void_reason TEXT,
+  qty_changed_at TIMESTAMPTZ,
+  original_quantity INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS inventory_items (
@@ -725,6 +755,9 @@ CREATE INDEX IF NOT EXISTS idx_order_payments_tenant ON order_payments(tenant_id
 CREATE INDEX IF NOT EXISTS idx_order_payments_order ON order_payments(tenant_id, order_id);
 CREATE INDEX IF NOT EXISTS idx_cash_drawer_sessions_tenant ON cash_drawer_sessions(tenant_id, opened_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cash_drawer_sessions_shift ON cash_drawer_sessions(tenant_id, shift_id);
+CREATE INDEX IF NOT EXISTS idx_cash_paid_outs_tenant_created ON cash_paid_outs(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cash_paid_outs_shift ON cash_paid_outs(tenant_id, shift_id) WHERE voided_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_cash_paid_outs_drawer ON cash_paid_outs(tenant_id, drawer_session_id) WHERE voided_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_printers_tenant ON printers(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_delivery_platforms_tenant ON delivery_platforms(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_delivery_orders_tenant ON delivery_orders(tenant_id);
@@ -766,7 +799,7 @@ DECLARE
 BEGIN
   FOR tbl IN
     SELECT unnest(ARRAY[
-      'employees', 'shifts', 'cash_drawer_sessions', 'menu_categories', 'menu_items', 'orders', 'order_items',
+      'employees', 'shifts', 'cash_drawer_sessions', 'cash_paid_outs', 'menu_categories', 'menu_items', 'orders', 'order_items',
       'inventory_items', 'menu_item_ingredients',
       'modifier_groups', 'modifiers', 'menu_item_modifier_groups', 'order_item_modifiers',
       'combo_definitions', 'combo_slots', 'order_payments', 'order_payment_items',

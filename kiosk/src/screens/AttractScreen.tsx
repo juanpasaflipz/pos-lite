@@ -20,7 +20,7 @@ const AttractScreen: React.FC = () => {
 
   return (
     <button
-      onClick={() => navigate('/fulfillment')}
+      onClick={() => navigate('/home')}
       className="h-full w-full bg-brand-700 flex flex-col items-center justify-center text-white touch-manipulation px-8"
     >
       {tenantName && (

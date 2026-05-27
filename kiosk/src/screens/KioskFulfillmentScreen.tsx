@@ -12,7 +12,10 @@ const KioskFulfillmentScreen: React.FC = () => {
 
   const choose = (type: KioskFulfillmentType) => {
     setFulfillmentType(type);
-    navigate('/welcome');
+    // Para Aquí: name-first identify, then send-to-kitchen (eat → pay later).
+    // Para Llevar: keeps the existing phone-first welcome with skip-to-menu
+    // (pay-upfront grab-and-go).
+    navigate(type === 'for_here' ? '/identify' : '/welcome');
   };
 
   return (

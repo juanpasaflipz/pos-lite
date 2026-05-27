@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Minus, Plus, Store, Trash2 } from 'lucide-react';
+import { ArrowLeft, Minus, Plus, Store, Trash2, Utensils } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useKioskBinding } from '../context/KioskBindingContext';
 import { useKioskCart } from '../context/KioskCartContext';
 import { useKioskCustomer } from '../context/KioskCustomerContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
-import { holdKioskOrder } from '../lib/kioskApi';
+import { appendItemsToKioskOrder, holdKioskOrder, sendKioskOrderToKitchen } from '../lib/kioskApi';
 import CartUpsellStrip from '../components/CartUpsellStrip';
 import KioskCallNameModal from '../components/KioskCallNameModal';
 
@@ -15,39 +15,105 @@ const KioskCartScreen: React.FC = () => {
   const navigate = useNavigate();
   const { tenantId, kioskToken } = useKioskBinding();
   const { session } = useKioskCustomer();
-  const { lines, count, total, callName, fulfillmentType, incrementLine, decrementLine, removeLine, setCallName } = useKioskCart();
+  const { lines, count, total, callName, fulfillmentType, appendToOrderId, incrementLine, decrementLine, removeLine, setCallName } = useKioskCart();
   const [holding, setHolding] = useState(false);
   const [holdError, setHoldError] = useState<string | null>(null);
   const [askingName, setAskingName] = useState(false);
   useIdleTimer(() => navigate('/'), 60_000);
 
-  const sendToRegister = async () => {
-    if (!session || !tenantId || !kioskToken || lines.length === 0 || holding) return;
+  // Three submit modes:
+  //   - Append:  customer entered via "Agregar a mi orden", appendToOrderId set.
+  //              We POST items into the existing dine-in order.
+  //   - Dine-in: Para Aquí, no append. New order, status=confirmed, unpaid,
+  //              fires to the kitchen. Customer pays later via "Pagar mi cuenta".
+  //   - Hold:    Para Llevar. Creates a draft the cashier claims at the counter.
+  const isAppend = appendToOrderId != null;
+  const isDineIn = fulfillmentType === 'for_here';
+
+  const submitOrder = async (resolvedCallName: string | null) => {
+    if (!tenantId || !kioskToken || lines.length === 0 || holding) return;
     setHolding(true);
     setHoldError(null);
     try {
-      const order = await holdKioskOrder(
-        { tenantId, kioskToken },
-        lines.map((line) => ({
-          menu_item_id: line.menu_item_id,
-          quantity: line.quantity,
-          modifier_ids: line.modifiers.map((m) => m.id),
-        })),
-        session.customerToken,
+      const apiItems = lines.map((line) => ({
+        menu_item_id: line.menu_item_id,
+        quantity: line.quantity,
+        modifier_ids: line.modifiers.map((m) => m.id),
+      }));
+
+      if (isAppend && appendToOrderId != null) {
+        const result = await appendItemsToKioskOrder(
+          { tenantId, kioskToken },
+          appendToOrderId,
+          apiItems,
+          {
+            customerToken: session?.customerToken ?? null,
+            customerCallName: resolvedCallName,
+          },
+        );
+        navigate('/hold-confirmed', {
+          replace: true,
+          state: {
+            mode: 'appended',
+            orderId: result.order_id,
+            orderNumber: result.order_id, // we don't have order_number in append response; show id
+            total: result.total,
+            addedCount: lines.reduce((sum, l) => sum + l.quantity, 0),
+            firstName: session?.firstName || resolvedCallName || undefined,
+          },
+        });
+        return;
+      }
+
+      const opts = {
+        customerToken: session?.customerToken ?? null,
+        customerCallName: resolvedCallName,
         fulfillmentType,
-      );
+      };
+      const order = isDineIn
+        ? await sendKioskOrderToKitchen({ tenantId, kioskToken }, apiItems, opts)
+        : await holdKioskOrder({ tenantId, kioskToken }, apiItems, opts);
       navigate('/hold-confirmed', {
         replace: true,
         state: {
+          mode: isDineIn ? 'kitchen' : 'hold',
+          orderId: order.id,
           orderNumber: order.order_number,
           total: order.total,
-          firstName: session.firstName,
+          firstName: session?.firstName || resolvedCallName || undefined,
         },
       });
     } catch (err) {
-      setHoldError(err instanceof Error ? err.message : 'No se pudo enviar a la caja');
+      setHoldError(
+        err instanceof Error
+          ? err.message
+          : isAppend
+            ? 'No se pudo agregar a tu cuenta'
+            : isDineIn
+              ? 'No se pudo enviar a la cocina'
+              : 'No se pudo enviar a la caja'
+      );
       setHolding(false);
     }
+  };
+
+  const handlePrimary = () => {
+    if (count === 0 || holding) return;
+    // Append mode: we already know who the customer is (lookup set callName /
+    // session). Skip the name prompt entirely.
+    if (isAppend) {
+      submitOrder(callName);
+      return;
+    }
+    if (session) {
+      submitOrder(null);
+      return;
+    }
+    if (callName) {
+      submitOrder(callName);
+      return;
+    }
+    setAskingName(true);
   };
 
   return (
@@ -133,40 +199,40 @@ const KioskCartScreen: React.FC = () => {
         )}
         <button
           disabled={count === 0 || holding}
-          onClick={() => {
-            if (!session && !callName) {
-              setAskingName(true);
-            } else {
-              navigate('/pay');
-            }
-          }}
+          onClick={handlePrimary}
           className="w-full min-h-20 bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-500 rounded-lg py-4 px-6 text-3xl font-black touch-manipulation flex items-center justify-between gap-4"
         >
-          <span>Pagar ahora</span>
+          <span className="inline-flex items-center gap-3">
+            {isAppend || isDineIn ? <Utensils className="h-7 w-7" /> : <Store className="h-7 w-7" />}
+            {holding
+              ? (isAppend ? 'Agregando…' : isDineIn ? 'Enviando a la cocina…' : 'Enviando…')
+              : (isAppend ? 'Agregar a mi cuenta' : isDineIn ? 'Enviar a la cocina' : 'Llamar a la caja')}
+          </span>
           <span>{money.format(total)}</span>
         </button>
-        {session && (
-          <button
-            disabled={count === 0 || holding}
-            onClick={sendToRegister}
-            className="w-full h-16 rounded-lg bg-neutral-800 active:bg-neutral-700 disabled:opacity-40 text-xl font-black touch-manipulation flex items-center justify-center gap-3"
-          >
-            <Store className="h-6 w-6" />
-            {holding ? 'Enviando…' : 'Enviar a caja y pagar después'}
-          </button>
-        )}
+        <p className="text-center text-sm text-neutral-500 font-bold">
+          {isAppend
+            ? 'Lo sumamos a tu cuenta abierta y a tu próximo cobro.'
+            : isDineIn
+              ? 'Te llamamos por tu nombre cuando esté lista. Pagas al final.'
+              : 'Un cajero llevará la terminal a tu mesa.'}
+        </p>
       </footer>
 
       {askingName && (
         <KioskCallNameModal
-          onSkip={() => {
-            setAskingName(false);
-            navigate('/pay');
-          }}
+          required
+          title="¿A nombre de quién?"
+          subtitle={
+            isDineIn
+              ? 'Usamos tu nombre para llamarte cuando esté lista y para encontrar tu cuenta al pagar.'
+              : 'El cajero te buscará por tu nombre para llevarte la terminal.'
+          }
+          onSkip={() => setAskingName(false)}
           onConfirm={(name) => {
             setCallName(name);
             setAskingName(false);
-            navigate('/pay');
+            submitOrder(name);
           }}
         />
       )}

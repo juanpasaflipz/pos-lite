@@ -82,12 +82,13 @@ async function seedTenantDefaults(tenantId) {
     'manage_modifiers', 'manage_ai', 'process_refunds', 'void_orders',
     'apply_discounts', 'view_dashboard', 'manage_permissions', 'manage_purchase_orders',
     'manage_loyalty', 'manage_branding', 'manage_invoicing', 'manage_payroll',
+    'manage_cash_paid_outs',
   ];
 
   const roleDefaults = {
     admin: allPermissions,
     manager: allPermissions.filter(p => p !== 'manage_permissions'),
-    cashier: ['pos_access', 'view_dashboard'],
+    cashier: ['pos_access', 'view_dashboard', 'manage_cash_paid_outs'],
     kitchen: ['kitchen_access'],
     bar: ['bar_access'],
   };

@@ -590,18 +590,23 @@ router.post('/orders', verifyKioskToken, async (req, res) => {
 });
 
 // POST /api/kiosk/orders/hold — park a kiosk cart server-side (status='draft_kiosk')
-// so the customer can resume on the iPad and the POS can claim it. Requires customer_token.
+// so the POS can claim it and the customer can come back to add more items.
+// Identified customer (token) or anonymous (call name) are both accepted.
 router.post('/orders/hold', verifyKioskToken, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
-    const { items, customer_token, fulfillment_type } = req.body || {};
+    const { items, customer_token, customer_call_name, fulfillment_type } = req.body || {};
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Cart is empty' });
     }
 
     const loyaltyCustomerId = verifyCustomerToken(customer_token, tenantId);
-    if (!loyaltyCustomerId) {
-      return res.status(401).json({ error: 'Identified customer required to hold an order' });
+    const callName = loyaltyCustomerId
+      ? null
+      : (typeof customer_call_name === 'string' ? customer_call_name.trim().slice(0, 40) || null : null);
+
+    if (!loyaltyCustomerId && !callName) {
+      return res.status(400).json({ error: 'Customer identification or call name required' });
     }
 
     const employeeId = await resolveKioskEmployee(tenantId, req.kiosk);
@@ -622,6 +627,14 @@ router.post('/orders/hold', verifyKioskToken, async (req, res) => {
     const fulfillmentType = normalizeKioskFulfillmentType(fulfillment_type);
 
     // Supersede any existing held drafts for this customer — only one active hold at a time.
+    // Loyalty: keyed by loyalty_customer_id. Anonymous: keyed by call_name within last 30 min
+    // so a stale "Juan" from yesterday doesn't get wiped by today's "Juan".
+    const supersedeFilter = loyaltyCustomerId
+      ? adminSql`o.loyalty_customer_id = ${loyaltyCustomerId}`
+      : adminSql`o.loyalty_customer_id IS NULL
+                   AND LOWER(o.customer_call_name) = LOWER(${callName})
+                   AND o.created_at > NOW() - INTERVAL '30 minutes'`;
+
     await adminSql`
       DELETE FROM order_item_modifiers
       WHERE tenant_id = ${tenantId}
@@ -629,35 +642,35 @@ router.post('/orders/hold', verifyKioskToken, async (req, res) => {
           SELECT oi.id FROM order_items oi
           JOIN orders o ON o.id = oi.order_id
           WHERE o.tenant_id = ${tenantId}
-            AND o.loyalty_customer_id = ${loyaltyCustomerId}
             AND o.status = 'draft_kiosk'
+            AND ${supersedeFilter}
         )
     `;
     await adminSql`
       DELETE FROM order_items
       WHERE tenant_id = ${tenantId}
         AND order_id IN (
-          SELECT id FROM orders
-          WHERE tenant_id = ${tenantId}
-            AND loyalty_customer_id = ${loyaltyCustomerId}
-            AND status = 'draft_kiosk'
+          SELECT o.id FROM orders o
+          WHERE o.tenant_id = ${tenantId}
+            AND o.status = 'draft_kiosk'
+            AND ${supersedeFilter}
         )
     `;
     await adminSql`
-      DELETE FROM orders
-      WHERE tenant_id = ${tenantId}
-        AND loyalty_customer_id = ${loyaltyCustomerId}
-        AND status = 'draft_kiosk'
+      DELETE FROM orders o
+      WHERE o.tenant_id = ${tenantId}
+        AND o.status = 'draft_kiosk'
+        AND ${supersedeFilter}
     `;
 
     const [order] = await adminSql`
       INSERT INTO orders (
         tenant_id, order_number, employee_id, status, subtotal, tax, total,
-        payment_status, source, loyalty_customer_id, order_fulfillment_type
+        payment_status, source, loyalty_customer_id, customer_call_name, order_fulfillment_type
       )
       VALUES (
         ${tenantId}, ${orderNumber}, ${employeeId}, 'draft_kiosk', ${subtotal}, ${tax}, ${total},
-        'unpaid', 'customer_kiosk', ${loyaltyCustomerId}, ${fulfillmentType}
+        'unpaid', 'customer_kiosk', ${loyaltyCustomerId}, ${callName}, ${fulfillmentType}
       )
       RETURNING id, order_number, subtotal, tax, total, status, order_fulfillment_type
     `;
@@ -668,6 +681,278 @@ router.post('/orders/hold', verifyKioskToken, async (req, res) => {
   } catch (err) {
     console.error('[kiosk/orders/hold] error', err);
     res.status(500).json({ error: 'Failed to hold kiosk order' });
+  }
+});
+
+// POST /api/kiosk/orders/:id/append-items — customer-initiated "Agregar a mi
+// orden" path. The order must belong to this tenant, originate from the kiosk
+// (source='customer_kiosk'), still be active (not completed/cancelled), and
+// match the requesting customer (loyalty_customer_id OR case-insensitive
+// customer_call_name). This last check is the ownership boundary — without it
+// anyone who knew an order number could amend someone else's tab.
+router.post('/orders/:id/append-items', verifyKioskToken, async (req, res) => {
+  const tenantId = req.kioskTenantId;
+  const orderId = Number(req.params.id);
+  try {
+    const { items, customer_token, customer_call_name } = req.body || {};
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Cart is empty' });
+    }
+    if (!Number.isInteger(orderId) || orderId <= 0) {
+      return res.status(400).json({ error: 'Invalid order id' });
+    }
+
+    const loyaltyCustomerId = verifyCustomerToken(customer_token, tenantId);
+    const claimedName = typeof customer_call_name === 'string'
+      ? customer_call_name.trim().slice(0, 40)
+      : '';
+
+    const [order] = await adminSql`
+      SELECT id, status, payment_status, source,
+             loyalty_customer_id, customer_call_name
+      FROM orders
+      WHERE tenant_id = ${tenantId} AND id = ${orderId}
+    `;
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.source !== 'customer_kiosk') {
+      return res.status(403).json({ error: 'Order was not placed at the kiosk' });
+    }
+    if (order.status === 'completed' || order.status === 'cancelled') {
+      return res.status(400).json({ error: `Cannot edit ${order.status} order` });
+    }
+
+    // Ownership check: prefer loyalty match, fall back to name match.
+    const matchesLoyalty = !!loyaltyCustomerId && order.loyalty_customer_id === loyaltyCustomerId;
+    const matchesName = !loyaltyCustomerId
+      && order.loyalty_customer_id == null
+      && !!claimedName
+      && String(order.customer_call_name || '').toLowerCase() === claimedName.toLowerCase();
+    if (!matchesLoyalty && !matchesName) {
+      return res.status(403).json({ error: 'This order does not match your name or account' });
+    }
+
+    let orderItems;
+    try {
+      ({ orderItems } = await buildKioskOrderItems(tenantId, items));
+    } catch (err) {
+      return res.status(err.status || 500).json({ error: err.message });
+    }
+
+    // Insert each new line with added_at=NOW() so the KDS and cashier panel
+    // render the NUEVO badge on the kitchen ticket.
+    const insertedIds = [];
+    for (const item of orderItems) {
+      const [row] = await adminSql`
+        INSERT INTO order_items (
+          tenant_id, order_id, menu_item_id, item_name, quantity, unit_price, notes, added_at
+        )
+        VALUES (
+          ${tenantId}, ${orderId}, ${item.menu_item_id}, ${item.item_name},
+          ${item.quantity}, ${item.unit_price}, ${null}, NOW()
+        )
+        RETURNING id
+      `;
+      insertedIds.push(row.id);
+      for (const mod of item.modifiers) {
+        await adminSql`
+          INSERT INTO order_item_modifiers (tenant_id, order_item_id, modifier_id, modifier_name, price_adjustment)
+          VALUES (${tenantId}, ${row.id}, ${mod.id}, ${mod.name}, ${mod.price_adjustment})
+        `;
+      }
+    }
+
+    // Recompute order totals from live (non-voided) items, mirroring the
+    // IVA-inclusive math used at order creation.
+    const liveItems = await adminSql`
+      SELECT quantity, unit_price, COALESCE(discount_amount, 0) AS discount_amount
+      FROM order_items
+      WHERE tenant_id = ${tenantId} AND order_id = ${orderId} AND voided_at IS NULL
+    `;
+    let itemsTotal = 0;
+    for (const it of liveItems) {
+      itemsTotal += Number(it.unit_price) * it.quantity - Number(it.discount_amount);
+    }
+    const [orderHead] = await adminSql`
+      SELECT COALESCE(discount_amount, 0) AS order_discount
+      FROM orders WHERE tenant_id = ${tenantId} AND id = ${orderId}
+    `;
+    const total = Math.max(0, Math.round((itemsTotal - Number(orderHead.order_discount)) * 100) / 100);
+    const tax = Math.round((total - total / (1 + TAX_RATE)) * 100) / 100;
+    const subtotal = Math.round((total - tax) * 100) / 100;
+    await adminSql`
+      UPDATE orders SET subtotal = ${subtotal}, tax = ${tax}, total = ${total}
+      WHERE tenant_id = ${tenantId} AND id = ${orderId}
+    `;
+
+    res.json({
+      success: true,
+      order_id: orderId,
+      inserted_item_ids: insertedIds,
+      subtotal,
+      tax,
+      total,
+    });
+  } catch (err) {
+    console.error('[kiosk/orders/append-items] error', err);
+    res.status(500).json({ error: 'Failed to append items' });
+  }
+});
+
+// POST /api/kiosk/orders/send-to-kitchen — fire a Para Comer Aquí order straight
+// to the kitchen (status='confirmed', payment_status='unpaid'). Customer eats
+// first, comes back to pay later via the Pagar mi cuenta flow. Unlike /hold,
+// this does NOT supersede prior orders — the same customer could legitimately
+// have a paid order from earlier and a new pending order in the same visit
+// (e.g., a second round of micheladas).
+router.post('/orders/send-to-kitchen', verifyKioskToken, async (req, res) => {
+  const tenantId = req.kioskTenantId;
+  try {
+    const { items, customer_token, customer_call_name, fulfillment_type } = req.body || {};
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Cart is empty' });
+    }
+
+    const loyaltyCustomerId = verifyCustomerToken(customer_token, tenantId);
+    const callName = loyaltyCustomerId
+      ? null
+      : (typeof customer_call_name === 'string' ? customer_call_name.trim().slice(0, 40) || null : null);
+
+    // Dine-in must be identifiable — the name is the bridge customers use to
+    // come back and pay or add items later.
+    if (!loyaltyCustomerId && !callName) {
+      return res.status(400).json({ error: 'Customer identification or call name required' });
+    }
+
+    const employeeId = await resolveKioskEmployee(tenantId, req.kiosk);
+    if (!employeeId) {
+      return res.status(400).json({ error: 'No active employee available for kiosk orders' });
+    }
+
+    let orderItems, total;
+    try {
+      ({ orderItems, total } = await buildKioskOrderItems(tenantId, items));
+    } catch (err) {
+      return res.status(err.status || 500).json({ error: err.message });
+    }
+
+    const tax = Math.round((total - total / (1 + TAX_RATE)) * 100) / 100;
+    const subtotal = Math.round((total - tax) * 100) / 100;
+    const orderNumber = await nextOrderNumber(tenantId);
+    const fulfillmentType = normalizeKioskFulfillmentType(fulfillment_type);
+
+    const [order] = await adminSql`
+      INSERT INTO orders (
+        tenant_id, order_number, employee_id, status, subtotal, tax, total,
+        payment_status, source, loyalty_customer_id, customer_call_name, order_fulfillment_type
+      )
+      VALUES (
+        ${tenantId}, ${orderNumber}, ${employeeId}, 'confirmed', ${subtotal}, ${tax}, ${total},
+        'unpaid', 'customer_kiosk', ${loyaltyCustomerId}, ${callName}, ${fulfillmentType}
+      )
+      RETURNING id, order_number, subtotal, tax, total, status, payment_status, customer_call_name, order_fulfillment_type
+    `;
+
+    await insertKioskOrderItems(tenantId, order.id, orderItems);
+
+    res.status(201).json({ ...order, items: orderItems });
+  } catch (err) {
+    console.error('[kiosk/orders/send-to-kitchen] error', err);
+    res.status(500).json({ error: 'Failed to send order to kitchen' });
+  }
+});
+
+// GET /api/kiosk/orders/open?name=Juan  OR  ?customer_token=...
+// Returns open dine-in unpaid orders matching this customer/name. Used by:
+//   - Welcome banner (with customer_token from prior session)
+//   - Pagar mi cuenta flow (with name) → fetches order to charge
+//   - Agregar a mi orden flow (with name) → appends more items
+// 6-hour rolling window prevents day-old name collisions ("Juan from yesterday").
+router.get('/orders/open', verifyKioskToken, async (req, res) => {
+  const tenantId = req.kioskTenantId;
+  try {
+    const rawName = typeof req.query.name === 'string' ? req.query.name.trim() : '';
+    const customerToken = typeof req.query.customer_token === 'string' ? req.query.customer_token : null;
+    const loyaltyCustomerId = verifyCustomerToken(customerToken, tenantId);
+
+    if (!loyaltyCustomerId && !rawName) {
+      return res.status(400).json({ error: 'name or customer_token required' });
+    }
+
+    const matchFilter = loyaltyCustomerId
+      ? adminSql`o.loyalty_customer_id = ${loyaltyCustomerId}`
+      : adminSql`o.loyalty_customer_id IS NULL
+                   AND LOWER(o.customer_call_name) = LOWER(${rawName.slice(0, 40)})`;
+
+    const orders = await adminSql`
+      SELECT o.id, o.order_number, o.total, o.subtotal, o.tax,
+             o.status, o.payment_status, o.customer_call_name,
+             o.order_fulfillment_type, o.created_at
+      FROM orders o
+      WHERE o.tenant_id = ${tenantId}
+        AND o.source = 'customer_kiosk'
+        AND o.payment_status IN ('unpaid', 'partial', 'pending_terminal')
+        AND o.status IN ('confirmed', 'preparing', 'ready')
+        AND o.created_at > NOW() - INTERVAL '6 hours'
+        AND ${matchFilter}
+      ORDER BY o.created_at DESC
+      LIMIT 5
+    `;
+
+    if (orders.length === 0) {
+      return res.json({ orders: [] });
+    }
+
+    const orderIds = orders.map((o) => Number(o.id));
+    const items = await adminSql.unsafe(`
+      SELECT
+        oi.order_id,
+        oi.id AS order_item_id,
+        oi.menu_item_id,
+        oi.item_name,
+        oi.quantity,
+        oi.unit_price,
+        COALESCE(
+          (SELECT json_agg(json_build_object(
+            'id', m.modifier_id,
+            'name', m.modifier_name,
+            'price_adjustment', m.price_adjustment
+          ) ORDER BY m.id)
+           FROM order_item_modifiers m
+           WHERE m.tenant_id = $1 AND m.order_item_id = oi.id),
+          '[]'::json
+        ) AS modifiers
+      FROM order_items oi
+      WHERE oi.tenant_id = $1
+        AND oi.order_id = ANY($2::int[])
+        AND oi.voided_at IS NULL
+      ORDER BY oi.id
+    `, [tenantId, orderIds]);
+
+    const byOrderId = new Map();
+    for (const it of items) {
+      const list = byOrderId.get(it.order_id) || [];
+      list.push(it);
+      byOrderId.set(it.order_id, list);
+    }
+
+    res.json({
+      orders: orders.map((o) => ({
+        id: Number(o.id),
+        order_number: o.order_number,
+        total: Number(o.total),
+        subtotal: Number(o.subtotal),
+        tax: Number(o.tax),
+        status: o.status,
+        payment_status: o.payment_status,
+        customer_call_name: o.customer_call_name,
+        order_fulfillment_type: o.order_fulfillment_type,
+        created_at: o.created_at,
+        items: byOrderId.get(o.id) || [],
+      })),
+    });
+  } catch (err) {
+    console.error('[kiosk/orders/open] error', err);
+    res.status(500).json({ error: 'Failed to fetch open orders' });
   }
 });
 

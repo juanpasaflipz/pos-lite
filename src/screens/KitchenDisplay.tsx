@@ -563,29 +563,56 @@ function ItemDisplay({ item, isTvMode = false }: ItemDisplayProps) {
   const hasModifiers = item.modifiers && item.modifiers.length > 0;
   const qty = item.quantity > 1 ? `${item.quantity}× ` : '';
 
+  // Edit-state derivations (migration 0063). `added_at` is null on the original
+  // ticket items, so its presence alone marks an append. Same for qty change.
+  const isVoided = !!item.voided_at;
+  const isAdded = !!item.added_at && !isVoided;
+  const isQtyChanged =
+    item.original_quantity != null &&
+    item.original_quantity !== item.quantity &&
+    !isVoided;
+  const qtyDelta = isQtyChanged ? item.quantity - (item.original_quantity || 0) : 0;
+
   if (isTvMode) {
-    // TV: item name is the protagonist. Quantity is a leading "2× " prefix
-    // (no badge), modifiers are bold secondary lines with "+", notes are
-    // italic. No backgrounds — typography alone carries the hierarchy.
     return (
-      <div className="leading-tight">
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-2xl font-black text-white tracking-tight">
+      <div className={`leading-tight ${isVoided ? 'opacity-60' : ''}`}>
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <span className={`text-2xl font-black tracking-tight ${isVoided ? 'line-through text-cockpit-red' : 'text-white'}`}>
             <span className="text-cockpit-yellow">{qty}</span>{item.item_name}
           </span>
+          {isAdded && (
+            <span className="text-xs font-black uppercase tracking-wider bg-cockpit-yellow text-neutral-900 px-1.5 py-0.5 rounded">
+              NUEVO
+            </span>
+          )}
+          {isVoided && (
+            <span className="text-xs font-black uppercase tracking-wider bg-cockpit-red text-white px-1.5 py-0.5 rounded">
+              VOID
+            </span>
+          )}
+          {isQtyChanged && (
+            <span className="text-xs font-black uppercase bg-cockpit-blue text-white px-1.5 py-0.5 rounded">
+              {qtyDelta > 0 ? `+${qtyDelta}` : qtyDelta}
+            </span>
+          )}
         </div>
         {hasModifiers && (
           <div className="mt-0.5 pl-1">
             {item.modifiers!.map((mod, i) => (
-              <div key={i} className="text-brand-300 font-semibold text-base">
+              <div key={i} className={`font-semibold text-base ${isVoided ? 'line-through text-brand-300/60' : 'text-brand-300'}`}>
                 + {mod.modifier_name}
               </div>
             ))}
           </div>
         )}
         {hasNotes && (
-          <div className="mt-0.5 pl-1 text-brand-200 italic text-sm">
+          <div className={`mt-0.5 pl-1 italic text-sm ${isVoided ? 'text-brand-200/60' : 'text-brand-200'}`}>
             "{item.notes}"
+          </div>
+        )}
+        {isVoided && item.void_reason && (
+          <div className="mt-0.5 pl-1 text-xs text-cockpit-red font-semibold">
+            ↳ {item.void_reason}
           </div>
         )}
       </div>
@@ -593,9 +620,15 @@ function ItemDisplay({ item, isTvMode = false }: ItemDisplayProps) {
   }
 
   return (
-    <div className="bg-neutral-800/50 rounded-lg p-3 border border-neutral-700">
+    <div className={`rounded-lg p-3 border ${
+      isVoided
+        ? 'bg-cockpit-red/10 border-cockpit-red/40'
+        : isAdded
+          ? 'bg-cockpit-yellow/10 border-cockpit-yellow/40'
+          : 'bg-neutral-800/50 border-neutral-700'
+    }`}>
       <div className="flex items-start justify-between gap-3 mb-1">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
           {item.brand_color && (
             <span
               className="w-3 h-3 rounded-full flex-shrink-0"
@@ -603,10 +636,27 @@ function ItemDisplay({ item, isTvMode = false }: ItemDisplayProps) {
               title={item.brand_name || ''}
             />
           )}
-          <span className="text-lg font-semibold text-white">{item.item_name}</span>
+          <span className={`text-lg font-semibold ${isVoided ? 'line-through text-neutral-400' : 'text-white'}`}>
+            {item.item_name}
+          </span>
+          {isAdded && (
+            <span className="text-[10px] font-black uppercase tracking-wider bg-cockpit-yellow text-neutral-900 px-1.5 py-0.5 rounded">
+              NUEVO
+            </span>
+          )}
+          {isVoided && (
+            <span className="text-[10px] font-black uppercase tracking-wider bg-cockpit-red text-white px-1.5 py-0.5 rounded">
+              VOID
+            </span>
+          )}
         </div>
         <span className="bg-neutral-700 text-neutral-200 px-3 py-1 rounded-full font-bold text-base min-w-fit">
           x{item.quantity}
+          {isQtyChanged && (
+            <span className="ml-1 text-xs text-cockpit-blue">
+              (was {item.original_quantity})
+            </span>
+          )}
         </span>
       </div>
       {item.brand_name && (
@@ -618,7 +668,7 @@ function ItemDisplay({ item, isTvMode = false }: ItemDisplayProps) {
       {hasModifiers && (
         <div className="mt-1 space-y-0.5">
           {item.modifiers!.map((mod, i) => (
-            <p key={i} className="text-brand-400 font-semibold text-sm bg-brand-900/20 px-2 py-0.5 rounded">
+            <p key={i} className={`font-semibold text-sm bg-brand-900/20 px-2 py-0.5 rounded ${isVoided ? 'line-through text-brand-400/60' : 'text-brand-400'}`}>
               + {mod.modifier_name}
             </p>
           ))}
@@ -626,8 +676,14 @@ function ItemDisplay({ item, isTvMode = false }: ItemDisplayProps) {
       )}
 
       {hasNotes && (
-        <p className="text-brand-300 italic text-base bg-brand-900/20 px-2 py-1 rounded mt-2 border-l-2 border-brand-500">
+        <p className={`italic text-base bg-brand-900/20 px-2 py-1 rounded mt-2 border-l-2 ${isVoided ? 'border-cockpit-red text-brand-300/60' : 'border-brand-500 text-brand-300'}`}>
           {item.notes}
+        </p>
+      )}
+
+      {isVoided && item.void_reason && (
+        <p className="text-xs text-cockpit-red font-semibold mt-2 border-t border-cockpit-red/30 pt-1">
+          Motivo de void: {item.void_reason}
         </p>
       )}
     </div>

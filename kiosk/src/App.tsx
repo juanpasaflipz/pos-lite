@@ -8,11 +8,13 @@ import AttractScreen from './screens/AttractScreen';
 import BindDeviceScreen from './screens/BindDeviceScreen';
 import AdminBindScreen from './screens/AdminBindScreen';
 import KioskWelcomeScreen from './screens/KioskWelcomeScreen';
+import KioskHomeScreen from './screens/KioskHomeScreen';
+import KioskIdentifyScreen from './screens/KioskIdentifyScreen';
 import KioskFulfillmentScreen from './screens/KioskFulfillmentScreen';
+import KioskLookupScreen from './screens/KioskLookupScreen';
 import KioskMenuScreen from './screens/KioskMenuScreen';
 import KioskCartScreen from './screens/KioskCartScreen';
-import KioskPaymentScreen from './screens/KioskPaymentScreen';
-import KioskDoneScreen from './screens/KioskDoneScreen';
+import KioskPayExistingScreen from './screens/KioskPayExistingScreen';
 import KioskHoldConfirmationScreen from './screens/KioskHoldConfirmationScreen';
 
 const Routed: React.FC = () => {
@@ -31,12 +33,15 @@ const Routed: React.FC = () => {
   return (
     <Routes>
       <Route path="/" element={<AttractScreen />} />
+      <Route path="/home" element={<KioskHomeScreen />} />
       <Route path="/fulfillment" element={<KioskFulfillmentScreen />} />
       <Route path="/welcome" element={<KioskWelcomeScreen />} />
+      <Route path="/identify" element={<KioskIdentifyScreen />} />
       <Route path="/menu" element={<KioskMenuScreen />} />
       <Route path="/cart" element={<KioskCartScreen />} />
-      <Route path="/pay" element={<KioskPaymentScreen />} />
-      <Route path="/done" element={<KioskDoneScreen />} />
+      <Route path="/pagar" element={<KioskLookupScreen mode="pay" />} />
+      <Route path="/agregar" element={<KioskLookupScreen mode="agregar" />} />
+      <Route path="/pay-existing" element={<KioskPayExistingScreen />} />
       <Route path="/hold-confirmed" element={<KioskHoldConfirmationScreen />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

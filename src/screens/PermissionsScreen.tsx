@@ -20,7 +20,7 @@ export default function PermissionsScreen() {
     'manage_menu', 'manage_inventory', 'manage_employees', 'manage_printers',
     'manage_delivery', 'manage_modifiers', 'manage_ai', 'process_refunds',
     'void_orders', 'apply_discounts', 'view_dashboard', 'manage_permissions',
-    'manage_purchase_orders',
+    'manage_purchase_orders', 'manage_cash_paid_outs',
   ];
 
   useEffect(() => {

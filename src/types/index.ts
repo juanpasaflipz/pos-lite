@@ -82,6 +82,13 @@ export interface OrderItem {
   discount_type?: DiscountType | null;
   discount_reason?: string | null;
   discount_authorized_by?: number | null;
+  // Edit tracking (migration 0063) — populated on items appended/changed
+  // after the original ticket was sent to the kitchen.
+  added_at?: string | null;
+  voided_at?: string | null;
+  void_reason?: string | null;
+  qty_changed_at?: string | null;
+  original_quantity?: number | null;
 }
 
 export interface CartItem extends OrderItem {

@@ -531,6 +531,7 @@
     "paid": "PAGADO",
     "unpaid": "SIN PAGAR",
     "charge": "Cobrar",
+    "edit": "Editar",
     "start": "Iniciar",
     "markReady": "Marcar Listo",
     "complete": "Completar"

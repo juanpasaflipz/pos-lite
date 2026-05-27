@@ -615,6 +615,51 @@ export async function deleteOrder(id: number): Promise<{ success: boolean; delet
   return apiRequest(`/orders/${id}`, { method: 'DELETE' });
 }
 
+export type OrderEditTotals = {
+  subtotal: number;
+  tax: number;
+  total: number;
+  payment_status: string;
+};
+
+export async function appendOrderItems(
+  orderId: number,
+  items: CreateOrderData['items'],
+  opts?: { authorized_by_employee_id?: number }
+): Promise<OrderEditTotals & { success: true; order_id: number; inserted_item_ids: number[] }> {
+  return apiRequest(`/orders/${orderId}/items`, {
+    method: 'POST',
+    body: JSON.stringify({ items, authorized_by_employee_id: opts?.authorized_by_employee_id }),
+  });
+}
+
+export async function updateOrderItemQuantity(
+  orderId: number,
+  itemId: number,
+  quantity: number,
+  opts?: { authorized_by_employee_id?: number }
+): Promise<OrderEditTotals & { success: true; item_id: number; quantity: number }> {
+  return apiRequest(`/orders/${orderId}/items/${itemId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ quantity, authorized_by_employee_id: opts?.authorized_by_employee_id }),
+  });
+}
+
+export async function voidOrderItem(
+  orderId: number,
+  itemId: number,
+  voidReason: string,
+  opts?: { authorized_by_employee_id?: number }
+): Promise<OrderEditTotals & { success: true; item_id: number; voided: true }> {
+  return apiRequest(`/orders/${orderId}/items/${itemId}`, {
+    method: 'DELETE',
+    body: JSON.stringify({
+      void_reason: voidReason,
+      authorized_by_employee_id: opts?.authorized_by_employee_id,
+    }),
+  });
+}
+
 export async function purgeUnpaidOrders(): Promise<{ success: boolean; deleted_count: number }> {
   return apiRequest('/orders/purge-unpaid', { method: 'POST' });
 }
