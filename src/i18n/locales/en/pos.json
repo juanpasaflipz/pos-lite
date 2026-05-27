@@ -566,7 +566,8 @@
     "start": "Start",
     "markReady": "Ready",
     "complete": "Hand off",
-    "charge": "Charge"
+    "charge": "Charge",
+    "edit": "Edit"
   },
   "mobileOrders": {
     "title": "Orders",

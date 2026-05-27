@@ -11,10 +11,12 @@ import {
   ShoppingBag,
   User,
   ChevronRight,
+  Pencil,
 } from 'lucide-react';
 import { getKitchenOrders, updateOrderStatus } from '../../api';
 import { Order } from '../../types';
 import { getTimeTier, isPaid, type TimeTier } from '../../lib/orderUrgency';
+import OrderEditModal from './OrderEditModal';
 
 interface LiveOrdersStripProps {
   /** Opens the full slide-over with all details + history. */
@@ -103,6 +105,7 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, refreshKey }: Liv
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchOrders = useCallback(async () => {
@@ -321,8 +324,17 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, refreshKey }: Liv
                   )}
                 </div>
 
-                {/* Actions */}
+                {/* Actions — Editar is icon-only to keep Cobrar / advance prominent on the
+                    w-72 card. Opens the same OrderEditModal the secondary panel uses. */}
                 <div className="px-3 pb-2.5 flex items-center gap-2">
+                  <button
+                    onClick={() => setEditingOrder(order)}
+                    className="px-2 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-md transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center"
+                    aria-label={t('liveStrip.edit', 'Editar')}
+                    title={t('liveStrip.edit', 'Editar')}
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
                   {!paid && (
                     <button
                       onClick={() => onCharge(order)}
@@ -350,6 +362,13 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, refreshKey }: Liv
           })}
         </div>
       </div>
+
+      <OrderEditModal
+        isOpen={editingOrder !== null}
+        order={editingOrder}
+        onClose={() => setEditingOrder(null)}
+        onChanged={fetchOrders}
+      />
     </div>
   );
 }

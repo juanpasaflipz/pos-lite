@@ -59,7 +59,6 @@ import { offlineDb, ParkedCart } from '../lib/offlineDb';
 import CategoryBar from '../components/CategoryBar';
 import CartDrawer from '../components/CartDrawer';
 import MiniCartButton from '../components/MiniCartButton';
-import PaymentConfirmationModal from '../components/PaymentConfirmationModal';
 
 // Sub-components
 import CategorySidebar from '../components/pos/CategorySidebar';
@@ -145,8 +144,9 @@ const POSScreen: React.FC = () => {
   const [unpaidOrders, setUnpaidOrders] = useState<Order[]>([]);
   const [todayOrderCount, setTodayOrderCount] = useState<number>(0);
   const [showUnpaidOrders, setShowUnpaidOrders] = useState(false);
-  const [paymentOrder, setPaymentOrder] = useState<Order | null>(null);
-  const [showPaymentConfirmation, setShowPaymentConfirmation] = useState(false);
+  // When set, the existing PaymentModal is repurposed to charge this order
+  // (kiosk / QR / unpaid orders), bypassing the cart-creation path.
+  const [chargingOrder, setChargingOrder] = useState<Order | null>(null);
 
   // Cashier live-orders board (slide-over)
   const [showOrdersPanel, setShowOrdersPanel] = useState(false);
@@ -761,6 +761,28 @@ const POSScreen: React.FC = () => {
   };
 
   const handleCashPayment = async (tip: number, amountReceived: number) => {
+    // Paying an existing order (kiosk/QR/unpaid drawer) — no cart, no create.
+    if (chargingOrder) {
+      setIsProcessingPayment(true);
+      try {
+        const result = await cashPayment({ order_id: chargingOrder.id, tip, amount_received: amountReceived });
+        const paidOrder = await getOrder(chargingOrder.id);
+        await handleLoyaltyStamp(paidOrder);
+        setCompletedOrder(paidOrder);
+        setUnpaidOrders((prev) => prev.filter((o) => o.id !== chargingOrder.id));
+        setShowPaymentModal(false);
+        setChargingOrder(null);
+        setPreCreatedOrderId(null);
+        setShowReceiptModal(true);
+        bumpOrders();
+        addToast(t('toast.cashDone', { change: formatPrice(result.change_due) }), 'success');
+      } catch (error) {
+        addToast(error instanceof Error ? error.message : t('toast.cashFailed'), 'error');
+      } finally {
+        setIsProcessingPayment(false);
+      }
+      return;
+    }
     if (cart.length === 0) { addToast(t('toast.cartEmpty'), 'error'); return; }
     setIsProcessingPayment(true);
     try {
@@ -805,7 +827,12 @@ const POSScreen: React.FC = () => {
       });
       setShowPaymentModal(false);
       setPreCreatedOrderId(null);
-      clearCart();
+      if (chargingOrder) {
+        setUnpaidOrders((prev) => prev.filter((o) => o.id !== chargingOrder.id));
+        setChargingOrder(null);
+      } else {
+        clearCart();
+      }
       bumpOrders();
       addToast(t('toast.oxxoGenerated'), 'success');
     } catch (error) {
@@ -829,7 +856,12 @@ const POSScreen: React.FC = () => {
       });
       setShowPaymentModal(false);
       setPreCreatedOrderId(null);
-      clearCart();
+      if (chargingOrder) {
+        setUnpaidOrders((prev) => prev.filter((o) => o.id !== chargingOrder.id));
+        setChargingOrder(null);
+      } else {
+        clearCart();
+      }
       bumpOrders();
       addToast(t('toast.speiGenerated'), 'success');
     } catch (error) {
@@ -921,25 +953,18 @@ const POSScreen: React.FC = () => {
     navigate('/');
   };
 
+  // Cobrar from the live-orders strip / unpaid drawer. Routes to the full
+  // PaymentModal (MP terminal, Clip, cash w/ change, OXXO, SPEI) — same surface
+  // the cart Cobrar uses — instead of the legacy mark-as-paid picker.
   const handleCobrar = async (order: Order) => {
     try {
       const fullOrder = await getOrder(order.id);
-      setPaymentOrder(fullOrder);
-      setShowPaymentConfirmation(true);
+      setChargingOrder(fullOrder);
+      setPreCreatedOrderId(fullOrder.id);
+      setShowPaymentModal(true);
     } catch {
       addToast(t('toast.errorLoadingOrder'), 'error');
     }
-  };
-
-  const handlePaymentConfirmed = (method: 'cash' | 'card' | 'transfer') => {
-    if (paymentOrder) {
-      setUnpaidOrders((prev) => prev.filter((o) => o.id !== paymentOrder.id));
-      const methodLabels: Record<string, string> = { cash: '\uD83D\uDCB5', card: '\uD83D\uDCB3', transfer: '\uD83D\uDCF2' };
-      addToast(t('toast.orderPaid', { number: paymentOrder.order_number }), 'success');
-    }
-    setPaymentOrder(null);
-    setShowPaymentConfirmation(false);
-    bumpOrders();
   };
 
   // ==================== Render ====================
@@ -1241,7 +1266,7 @@ const POSScreen: React.FC = () => {
 
       {showPaymentModal && (
         <PaymentModal
-          orderTotal={total}
+          orderTotal={chargingOrder ? Number(chargingOrder.total) : total}
           orderId={preCreatedOrderId ?? undefined}
           onCashPayment={handleCashPayment}
           onOxxoPayment={handleOxxoPayment}
@@ -1256,13 +1281,22 @@ const POSScreen: React.FC = () => {
             } catch {
               // Payment succeeded; receipt fetch is non-blocking.
             }
-            clearCart();
+            if (chargingOrder) {
+              setUnpaidOrders((prev) => prev.filter((o) => o.id !== orderId));
+              setChargingOrder(null);
+            } else {
+              clearCart();
+            }
             setShowPaymentModal(false);
             setPreCreatedOrderId(null);
             bumpOrders();
             addToast(t('toast.mpConfirmed'), 'success');
           }}
-          onCancel={() => { setShowPaymentModal(false); setPreCreatedOrderId(null); }}
+          onCancel={() => {
+            setShowPaymentModal(false);
+            setPreCreatedOrderId(null);
+            setChargingOrder(null);
+          }}
           isProcessing={isProcessingPayment}
           isOnline={isOnline}
           conektaConfigured={isConektaConfigured}
@@ -1308,15 +1342,6 @@ const POSScreen: React.FC = () => {
             setRefundOrderId(null);
             addToast(t('toast.refundDone'), 'success');
           }}
-        />
-      )}
-
-      {paymentOrder && (
-        <PaymentConfirmationModal
-          isOpen={showPaymentConfirmation}
-          onClose={() => { setShowPaymentConfirmation(false); setPaymentOrder(null); }}
-          order={paymentOrder}
-          onPaymentConfirmed={handlePaymentConfirmed}
         />
       )}
 

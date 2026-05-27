@@ -566,7 +566,8 @@
     "start": "Iniciar",
     "markReady": "Listo",
     "complete": "Entregar",
-    "charge": "Cobrar"
+    "charge": "Cobrar",
+    "edit": "Editar"
   },
   "mobileOrders": {
     "title": "Órdenes",
