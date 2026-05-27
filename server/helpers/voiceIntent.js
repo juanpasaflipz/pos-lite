@@ -157,8 +157,9 @@ export function buildConfirmationMessage(parsed) {
     return `📦 Registrar compra:\n${purchaseLines}${vendor}${total}\n\nResponde SI para guardar, NO para cancelar.`;
   }
   if (parsed.intent === 'count_inventory') {
-    // Surface SKUs the photo showed but inventory doesn't have, so the owner
-    // knows what got skipped (no auto-create on counts — by design).
+    // Surface SKUs the photo showed but inventory doesn't have so the owner
+    // can decide: SI = count only the matched ones; AGREGAR = create the
+    // unknowns at their counted qty AND save the count in one round-trip.
     const unmatched = items.filter((it) => it._unmatched && it.raw_name).map((it) => it.raw_name);
     const skipped = unmatched.length
       ? `\n(no en inventario: ${unmatched.slice(0, 6).join(', ')}${unmatched.length > 6 ? '…' : ''})`
@@ -174,10 +175,16 @@ export function buildConfirmationMessage(parsed) {
         return `• ${qstr} ${unit} ${name}`.replace(/\s+/g, ' ').trim();
       })
       .join('\n');
-    if (!matchedLines) {
-      return `No reconocí ningún artículo en tu inventario.${skipped}\n\nAgrega los SKUs primero y vuelve a mandar la foto.`;
+    if (!matchedLines && !unmatched.length) {
+      return 'No reconocí ningún artículo. Manda otra foto o agrega los SKUs primero.';
     }
-    return `📋 Conteo físico:\n${matchedLines}${skipped}\n\nResponde SI para guardar, NO para cancelar.`;
+    if (!matchedLines) {
+      return `📋 Conteo físico (nada hace match):${skipped}\n\nResponde AGREGAR para crear esos SKUs y contarlos, o NO para cancelar.`;
+    }
+    const verbs = unmatched.length
+      ? 'Responde SI para guardar el conteo, AGREGAR para crear esos SKUs y contarlos también, o NO para cancelar.'
+      : 'Responde SI para guardar, NO para cancelar.';
+    return `📋 Conteo físico:\n${matchedLines}${skipped}\n\n${verbs}`;
   }
   if (parsed.intent === 'toggle_menu_item') {
     // Mixed: some on, some off. Show an explicit marker per item so the
@@ -200,16 +207,25 @@ const CANCEL_TOKENS = new Set([
   'no', 'n', 'cancel', 'cancelar', 'cancela', 'stop', 'alto',
   '0', '❌', '👎',
 ]);
+// "AGREGAR" on a count = create the unmatched SKUs at their counted qty and
+// save the count. On a purchase it's an alias for SI (auto-create already
+// happens via _will_create on SI). On other intents the webhook treats it
+// as SI too.
+const ADD_TOKENS = new Set([
+  'agregar', 'agrega', 'agg', 'add', 'crear', 'crea', 'create', '+',
+]);
 
 export function parseConfirmReply(text) {
   const t = String(text || '').trim().toLowerCase().replace(/[.!?,]+$/g, '');
   if (!t) return 'unclear';
   if (CONFIRM_TOKENS.has(t)) return 'confirm';
   if (CANCEL_TOKENS.has(t)) return 'cancel';
-  // Allow first-word match for replies like "si guarda" / "no cancela"
+  if (ADD_TOKENS.has(t)) return 'add';
+  // Allow first-word match for replies like "si guarda" / "agregar todo"
   const first = t.split(/\s+/)[0];
   if (CONFIRM_TOKENS.has(first)) return 'confirm';
   if (CANCEL_TOKENS.has(first)) return 'cancel';
+  if (ADD_TOKENS.has(first)) return 'add';
   return 'unclear';
 }
 
@@ -440,6 +456,30 @@ async function executePurchase(parsed, employeeId) {
 
 async function executeCount(parsed, employeeId) {
   const tid = getTenantId();
+
+  // AGREGAR on a count: convert _will_create items into real inventory_items
+  // rows at their counted qty. We seed quantity = counted so the subsequent
+  // count loop produces variance=0 (no false shrinkage alert), and the SKU's
+  // existence + opening state are written in the same tenant transaction.
+  const newlyCreated = [];
+  for (const it of parsed.items || []) {
+    if (it.inventory_item_id) continue;
+    if (!it._will_create) continue;
+    if (!it.raw_name || typeof it.raw_name !== 'string') continue;
+    const startQty = Number(it.quantity) > 0 ? Number(it.quantity) : 0;
+    const unit = it.unit || 'pcs';
+    const row = await get(
+      `INSERT INTO inventory_items (name, quantity, unit, cost_price)
+       VALUES ($1, $2, $3, 0)
+       RETURNING id`,
+      [it.raw_name.trim(), startQty, unit]
+    );
+    if (row?.id) {
+      it.inventory_item_id = row.id;
+      newlyCreated.push({ id: row.id, name: it.raw_name.trim(), qty: startQty });
+    }
+  }
+
   const created = [];
   for (const it of parsed.items || []) {
     if (!it.inventory_item_id || it.quantity == null || it.quantity < 0) continue;
@@ -470,8 +510,13 @@ async function executeCount(parsed, employeeId) {
     }
     created.push({ resource_id: result.lastInsertRowid, item_name: item.name, variance });
   }
-  if (!created.length) throw new Error('No items matched inventory');
-  return { resource_type: 'inventory_count', resource_ids: created.map((c) => c.resource_id), summary: created };
+  if (!created.length && !newlyCreated.length) throw new Error('No items matched inventory');
+  return {
+    resource_type: 'inventory_count',
+    resource_ids: created.map((c) => c.resource_id),
+    summary: created,
+    created_skus: newlyCreated,
+  };
 }
 
 async function executeToggleMenuItem(parsed, _employeeId) {
@@ -521,7 +566,12 @@ export function buildSuccessMessage(intent, result) {
   }
   if (intent === 'count_inventory') {
     const items = (result.summary || []).map((s) => `${s.item_name} (${s.variance >= 0 ? '+' : ''}${Number(s.variance).toFixed(2)})`).join(', ');
-    return `✅ Conteo guardado: ${items}`;
+    const created = result.created_skus || [];
+    const createdLine = created.length
+      ? `\n+ ${created.length} SKU${created.length === 1 ? '' : 's'} creado${created.length === 1 ? '' : 's'}: ${created.map((c) => c.name).join(', ')}`
+      : '';
+    if (!items) return `✅ ${created.length} SKU${created.length === 1 ? '' : 's'} creado${created.length === 1 ? '' : 's'}: ${created.map((c) => c.name).join(', ')}`;
+    return `✅ Conteo guardado: ${items}${createdLine}`;
   }
   if (intent === 'toggle_menu_item') {
     const off = (result.summary || []).filter((s) => !s.active && !s.noop).map((s) => s.item_name);

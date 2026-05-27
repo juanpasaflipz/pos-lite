@@ -216,13 +216,24 @@ router.post('/inbound', async (req, res) => {
     const replyKind = parseConfirmReply(body);
     const pending = await findPendingIntent(employee.tenant_id, employee.id);
     if (pending) {
-      if (replyKind === 'confirm') {
+      if (replyKind === 'confirm' || replyKind === 'add') {
         try {
           // parsed_json is a JSONB column but porsager/postgres + unsafe()
           // round-trips it as a JSON-encoded string instead of a JS object.
           // Parse defensively so historical and current rows both work.
           let parsed = pending.parsed_json;
           if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+          // AGREGAR on a count = promote unmatched items to _will_create so
+          // executeCount inserts them at counted qty. On other intents
+          // AGREGAR behaves like SI (purchases already auto-create via SI).
+          if (replyKind === 'add' && parsed.intent === 'count_inventory') {
+            for (const it of parsed.items || []) {
+              if (it._unmatched && it.raw_name) {
+                it._will_create = true;
+                delete it._unmatched;
+              }
+            }
+          }
           const result = await withTenant(employee.tenant_id, async () => {
             const out = await executeIntent(parsed, employee.id);
             await run(

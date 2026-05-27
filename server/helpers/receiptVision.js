@@ -79,7 +79,7 @@ Rules:
 - If there is a CAPTION from the owner, use it as a hint (e.g. "conteo" → prefer count_inventory; vendor name → prefer record_purchase).`;
 
 function buildUserContent(inventory, caption) {
-  const lines = inventory.slice(0, 150).map(
+  const lines = inventory.map(
     (i) => `- id=${i.id} name="${i.name}" unit=${i.unit || ''}`
   );
   const captionLine = caption ? `\n\nCAPTION FROM OWNER: "${caption}"` : '';
@@ -90,8 +90,13 @@ export async function parseReceiptImage(imageBuffer, mediaType, caption) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured');
 
+  // Active items first (anything with stock on hand), then alphabetical.
+  // 500 covers the vast majority of restaurants; beyond that we'd need a
+  // category-aware bucketing step pre-call.
   const inventory = await all(
-    'SELECT id, name, unit FROM inventory_items ORDER BY name ASC LIMIT 150'
+    `SELECT id, name, unit FROM inventory_items
+     ORDER BY (quantity > 0) DESC, name ASC
+     LIMIT 500`
   );
 
   const mt = ALLOWED_MEDIA.includes(mediaType) ? mediaType : 'image/jpeg';
