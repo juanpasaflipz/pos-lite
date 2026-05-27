@@ -1588,6 +1588,126 @@ router.delete('/:id/items/:itemId', requireAuth('pos_access'), async (req, res) 
   }
 });
 
+// POST /api/orders/:id/discount — apply (or clear) an order-level discount on
+// an existing order. Cashier action with the same authorize-or-manager-PIN
+// gate as cart-creation discounts. Paid orders are rejected — refund instead.
+//
+// Body: {
+//   discount: { type: 'percent'|'amount'|'comp', value: number, reason: string } | null,
+//   authorized_by_employee_id?: number
+// }
+// Sending `discount: null` clears any existing order-level discount.
+router.post('/:id/discount', requireAuth('pos_access'), async (req, res) => {
+  const { id } = req.params;
+  const { discount, authorized_by_employee_id } = req.body || {};
+  const conn = getConn();
+  try {
+    const orderRow = await get(
+      `SELECT id, payment_status FROM orders WHERE id = $1`,
+      [id]
+    );
+    if (!orderRow) return res.status(404).json({ error: 'Order not found' });
+    if (orderRow.payment_status === 'paid') {
+      return res.status(409).json({
+        error: 'Order is already paid — use refund instead of applying a retroactive discount',
+      });
+    }
+
+    // Clear-path: discount === null wipes order-level discount, no auth needed
+    // beyond pos_access (matches how voiding the last item is gated).
+    if (discount === null || discount === undefined) {
+      await conn.unsafe(
+        `UPDATE orders SET discount_amount = 0, discount_type = NULL, discount_reason = NULL, discount_authorized_by = NULL WHERE id = $1`,
+        [id]
+      );
+      const totals = await recomputeOrderTotals(conn, id);
+      audit({
+        tenantId: req.tenant?.id || 'default',
+        actorType: 'employee',
+        actorId: String(req.employee.id),
+        action: 'update',
+        resource: 'order',
+        resourceId: String(id),
+        details: { edit: 'discount_cleared', new_total: totals.total },
+        ip: req.ip,
+      });
+      return res.json({ success: true, order_id: Number(id), discount: null, ...totals });
+    }
+
+    if (!discount.type || !['percent', 'amount', 'comp'].includes(discount.type)) {
+      return res.status(400).json({ error: 'discount.type must be percent, amount, or comp' });
+    }
+    if (typeof discount.reason !== 'string' || discount.reason.trim().length === 0) {
+      return res.status(400).json({ error: 'discount.reason is required' });
+    }
+
+    let authorizedBy;
+    try {
+      authorizedBy = await authorizeDiscount({
+        actorEmployee: req.employee,
+        authorizedByEmployeeId: authorized_by_employee_id,
+      });
+    } catch (err) {
+      return res.status(err.status || 403).json({ error: err.message });
+    }
+
+    // Resolve discount against the pre-discount line total (live items only).
+    const items = await all(
+      `SELECT unit_price, quantity, COALESCE(discount_amount, 0) AS discount_amount
+       FROM order_items WHERE order_id = $1 AND voided_at IS NULL`,
+      [id]
+    );
+    let lineTotal = 0;
+    for (const it of items) {
+      lineTotal += Number(it.unit_price) * Number(it.quantity) - Number(it.discount_amount);
+    }
+    const discountAmount = resolveDiscountAmount(discount, lineTotal);
+
+    await conn.unsafe(
+      `UPDATE orders
+       SET discount_amount = $1, discount_type = $2, discount_reason = $3, discount_authorized_by = $4
+       WHERE id = $5`,
+      [discountAmount, discount.type, discount.reason.trim().slice(0, 200), authorizedBy, id]
+    );
+    const totals = await recomputeOrderTotals(conn, id);
+
+    audit({
+      tenantId: req.tenant?.id || 'default',
+      actorType: 'employee',
+      actorId: String(req.employee.id),
+      action: 'update',
+      resource: 'order',
+      resourceId: String(id),
+      details: {
+        edit: 'discount_applied',
+        discount_type: discount.type,
+        discount_value: discount.value,
+        discount_amount: discountAmount,
+        reason: discount.reason.trim(),
+        authorized_by: authorizedBy,
+        new_total: totals.total,
+      },
+      ip: req.ip,
+    });
+
+    res.json({
+      success: true,
+      order_id: Number(id),
+      discount: {
+        type: discount.type,
+        value: discount.value,
+        reason: discount.reason.trim(),
+        amount: discountAmount,
+        authorized_by: authorizedBy,
+      },
+      ...totals,
+    });
+  } catch (error) {
+    console.error('Error applying order discount:', error);
+    res.status(500).json({ error: 'Failed to apply discount' });
+  }
+});
+
 // DELETE /api/orders/:id — delete one order and all its child rows (test cleanup)
 router.delete('/:id', requireAuth('void_orders'), async (req, res) => {
   const { id } = req.params;

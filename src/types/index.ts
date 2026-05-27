@@ -135,6 +135,11 @@ export interface Order {
   getnet_payment_id?: string;
   getnet_authorization_code?: string;
   items?: OrderItem[];
+  // Order-level discount (separate from per-line OrderItem discount).
+  discount_amount?: number;
+  discount_type?: DiscountType | null;
+  discount_reason?: string | null;
+  discount_authorized_by?: number | null;
 }
 
 /* Getnet Types */

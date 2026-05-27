@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { Check, Loader2, Minus, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Check, Loader2, Minus, Pencil, Plus, Tag, Trash2, X } from 'lucide-react';
 import {
   appendOrderItems,
+  applyOrderDiscount,
   deleteOrder,
   getOrder,
   updateOrderItemQuantity,
   voidOrderItem,
 } from '../../api';
-import type { Order, OrderItem } from '../../types';
+import type { Discount, Order, OrderItem } from '../../types';
 import { formatPrice } from '../../utils/currency';
+import DiscountModal from './DiscountModal';
 import ManagerApprovalModal, { type ManagerApprovalResult } from './ManagerApprovalModal';
 import OrderEditMenuPicker, { type PickerLine } from './OrderEditMenuPicker';
 import VoidReasonModal from './VoidReasonModal';
@@ -39,6 +41,9 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
   const [showPicker, setShowPicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showDiscount, setShowDiscount] = useState(false);
+  const [currentDiscount, setCurrentDiscount] = useState<Discount | null>(null);
+  const [currentDiscountAmount, setCurrentDiscountAmount] = useState(0);
 
   // Re-fetch the order whenever it opens, so we render the freshest items
   // (the parent panel's snapshot can be up to 8s stale).
@@ -52,6 +57,20 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
         const fresh = await getOrder(order.id);
         if (!mounted) return;
         setItems(fresh.items || []);
+        if (fresh.discount_type && fresh.discount_amount && Number(fresh.discount_amount) > 0) {
+          setCurrentDiscount({
+            type: fresh.discount_type,
+            // For percent/amount we store the resolved $ in discount_amount.
+            // We don't have the original % value, so display value = amount.
+            value: Number(fresh.discount_amount),
+            reason: fresh.discount_reason || '',
+            authorized_by_employee_id: fresh.discount_authorized_by || undefined,
+          });
+          setCurrentDiscountAmount(Number(fresh.discount_amount));
+        } else {
+          setCurrentDiscount(null);
+          setCurrentDiscountAmount(0);
+        }
       } catch (err) {
         if (mounted) setError(err instanceof Error ? err.message : 'No se pudo cargar la orden');
       } finally {
@@ -67,6 +86,18 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
     try {
       const fresh = await getOrder(order.id);
       setItems(fresh.items || []);
+      if (fresh.discount_type && fresh.discount_amount && Number(fresh.discount_amount) > 0) {
+        setCurrentDiscount({
+          type: fresh.discount_type,
+          value: Number(fresh.discount_amount),
+          reason: fresh.discount_reason || '',
+          authorized_by_employee_id: fresh.discount_authorized_by || undefined,
+        });
+        setCurrentDiscountAmount(Number(fresh.discount_amount));
+      } else {
+        setCurrentDiscount(null);
+        setCurrentDiscountAmount(0);
+      }
     } catch {
       // Non-blocking — the parent panel poll will reconcile.
     }
@@ -171,6 +202,21 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
     } finally {
       setDeleting(false);
     }
+  };
+
+  const handleDiscountSave = async (next: Discount | null) => {
+    setShowDiscount(false);
+    setError(null);
+    // DiscountModal returns the manager-approval result baked into the
+    // Discount payload itself — the server's 403 path is rare, but
+    // callWithMaybeApproval handles it just like the qty/void edits.
+    await callWithMaybeApproval((approverId) =>
+      applyOrderDiscount(order.id, next, {
+        authorized_by_employee_id:
+          approverId ?? next?.authorized_by_employee_id,
+      })
+    );
+    await refreshItems();
   };
 
   const liveItems = items.filter((it) => !it.voided_at);
@@ -349,14 +395,43 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
                 </>
               )}
             </button>
+            {/* Discount line — visible whenever an order-level discount is active. */}
+            {currentDiscount && currentDiscountAmount > 0 && (
+              <div className="flex items-center justify-between mb-1 text-cockpit-in-text">
+                <span className="text-xs font-bold inline-flex items-center gap-1">
+                  <Tag className="w-3 h-3" />
+                  {currentDiscount.type === 'comp'
+                    ? 'Cortesía'
+                    : currentDiscount.type === 'percent'
+                      ? 'Descuento %'
+                      : 'Descuento'}
+                  {currentDiscount.reason ? ` · ${currentDiscount.reason}` : ''}
+                </span>
+                <span className="text-sm font-black">−{formatPrice(currentDiscountAmount)}</span>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <span className="text-sm text-neutral-400 font-bold">Total</span>
-              <span className="text-2xl font-black text-brand-300">{formatPrice(total)}</span>
+              <span className="text-2xl font-black text-brand-300">
+                {formatPrice(Math.max(0, total - currentDiscountAmount))}
+              </span>
             </div>
             {liveItems.length > 0 && (
               <p className="text-[11px] text-neutral-500 font-bold mt-1">
                 Recalculado en vivo · IVA incluido
               </p>
+            )}
+            {/* Discount surface — unpaid orders only. Paid orders must
+                go through refund instead. */}
+            {order.payment_status !== 'paid' && (
+              <button
+                onClick={() => setShowDiscount(true)}
+                disabled={loading || liveItems.length === 0}
+                className="w-full h-11 mt-3 rounded-lg bg-cockpit-yellow/15 hover:bg-cockpit-yellow/25 disabled:opacity-40 text-cockpit-attention-text font-bold transition-colors inline-flex items-center justify-center gap-1.5 border border-cockpit-yellow/40"
+              >
+                <Tag className="w-4 h-4" />
+                {currentDiscount ? 'Editar descuento' : 'Aplicar descuento / cortesía'}
+              </button>
             )}
             <button
               onClick={onClose}
@@ -403,6 +478,16 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
           message="Edita una orden pagada — pin de manager"
           onApproved={onManagerApproved}
           onClose={() => setPendingRetry(null)}
+        />
+      )}
+
+      {showDiscount && (
+        <DiscountModal
+          base={total}
+          scope="cart"
+          initialDiscount={currentDiscount}
+          onSave={handleDiscountSave}
+          onClose={() => setShowDiscount(false)}
         />
       )}
 

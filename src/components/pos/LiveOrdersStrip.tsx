@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { getKitchenOrders, updateOrderStatus } from '../../api';
 import { Order } from '../../types';
-import { getTimeTier, isPaid, type TimeTier } from '../../lib/orderUrgency';
+import { getTimeTier, isPaid, isProbableNoShow, type TimeTier } from '../../lib/orderUrgency';
 import OrderEditModal from './OrderEditModal';
 
 interface LiveOrdersStripProps {
@@ -242,6 +242,7 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, refreshKey }: Liv
             const elapsed = Math.max(0, Math.floor((now - new Date(order.created_at).getTime()) / 1000));
             const tier = getTimeTier(elapsed);
             const paid = isPaid(order);
+            const noShow = isProbableNoShow(order, elapsed);
             const step = nextStatus(order.status);
             const busy = actionId === order.id;
             const channel = describeChannel(order, t);
@@ -256,7 +257,7 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, refreshKey }: Liv
                 key={order.id}
                 className={`flex-shrink-0 w-72 bg-neutral-900 rounded-lg border border-neutral-800 border-l-4 ${TIER_ACCENT[tier]} ${
                   tier === 'critical' ? 'ring-1 ring-cockpit-red/40' : ''
-                } flex flex-col`}
+                } ${noShow ? 'ring-1 ring-cockpit-attention/60' : ''} flex flex-col`}
               >
                 {/* Header: order # · customer/channel · elapsed */}
                 <div className="px-3 pt-2.5 pb-2 border-b border-neutral-800/70">
@@ -296,6 +297,17 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, refreshKey }: Liv
                     {!paid && (
                       <span className="bg-cockpit-yellow text-neutral-900 px-1.5 py-0.5 rounded-full text-[10px] font-black uppercase">
                         {t('liveStrip.unpaid')}
+                      </span>
+                    )}
+                    {/* Probable no-show — dine-in/kiosk orders >90min unpaid.
+                        Cashier still has to act (Editar → Cancelar orden), this
+                        is a visual sweep cue, not an auto-delete. */}
+                    {noShow && (
+                      <span
+                        className="bg-cockpit-red/20 text-cockpit-out-text border border-cockpit-red/40 px-1.5 py-0.5 rounded-full text-[10px] font-black uppercase inline-flex items-center gap-1"
+                        title={t('liveStrip.noShowHint', '90+ min sin pago')}
+                      >
+                        {t('liveStrip.noShowBadge', 'No-show?')}
                       </span>
                     )}
                   </div>

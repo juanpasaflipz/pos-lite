@@ -568,7 +568,9 @@
     "markReady": "Listo",
     "complete": "Entregar",
     "charge": "Cobrar",
-    "edit": "Editar"
+    "edit": "Editar",
+    "noShowBadge": "Posible no-show",
+    "noShowHint": "Más de 90 min sin pagar — revisa si el cliente se fue"
   },
   "mobileOrders": {
     "title": "Órdenes",

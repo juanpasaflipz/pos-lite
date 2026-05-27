@@ -89,6 +89,8 @@ import {
   MerchantBankAccount,
   MerchantAdvance,
   MCARepayment,
+  Discount,
+  DiscountType,
 } from '../types';
 import type { DisplayAsset, DisplayMenuSettings, MenuBoardDataResponse } from '../types/menu-board';
 
@@ -662,6 +664,28 @@ export async function voidOrderItem(
 
 export async function purgeUnpaidOrders(): Promise<{ success: boolean; deleted_count: number }> {
   return apiRequest('/orders/purge-unpaid', { method: 'POST' });
+}
+
+// Apply (or clear with discount=null) an order-level discount on an existing order.
+// 403 → manager approval required; caller should re-call with authorized_by_employee_id.
+export async function applyOrderDiscount(
+  orderId: number,
+  discount: Discount | null,
+  opts?: { authorized_by_employee_id?: number }
+): Promise<OrderEditTotals & {
+  success: true;
+  order_id: number;
+  discount: null | { type: DiscountType; value: number; reason: string; amount: number; authorized_by: number };
+}> {
+  return apiRequest(`/orders/${orderId}/discount`, {
+    method: 'POST',
+    body: JSON.stringify({
+      discount: discount
+        ? { type: discount.type, value: discount.value, reason: discount.reason }
+        : null,
+      authorized_by_employee_id: opts?.authorized_by_employee_id,
+    }),
+  });
 }
 
 export async function getKitchenOrders(opts?: { includeReady?: boolean }): Promise<Order[]> {

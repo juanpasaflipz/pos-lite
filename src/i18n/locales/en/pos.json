@@ -568,7 +568,9 @@
     "markReady": "Ready",
     "complete": "Hand off",
     "charge": "Charge",
-    "edit": "Edit"
+    "edit": "Edit",
+    "noShowBadge": "No-show?",
+    "noShowHint": "90+ min unpaid — check if customer left"
   },
   "mobileOrders": {
     "title": "Orders",
