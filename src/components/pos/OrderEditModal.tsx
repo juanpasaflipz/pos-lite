@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Check, Loader2, Minus, Pencil, Plus, Trash2, X } from 'lucide-react';
 import {
   appendOrderItems,
+  deleteOrder,
   getOrder,
   updateOrderItemQuantity,
   voidOrderItem,
@@ -36,6 +37,8 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
   const [pendingRetry, setPendingRetry] = useState<RetryFn | null>(null);
   const [voidingPick, setVoidingPick] = useState<VoidPick | null>(null);
   const [showPicker, setShowPicker] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Re-fetch the order whenever it opens, so we render the freshest items
   // (the parent panel's snapshot can be up to 8s stale).
@@ -152,6 +155,22 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
 
   const onManagerApproved = (result: ManagerApprovalResult) => {
     if (pendingRetry) pendingRetry(result.employee_id);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!order || deleting) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteOrder(order.id);
+      setShowDeleteConfirm(false);
+      onChanged();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo cancelar la orden');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const liveItems = items.filter((it) => !it.voided_at);
@@ -346,6 +365,18 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
               <Check className="w-4 h-4" />
               Listo
             </button>
+            {/* Cancel-entire-order — only for unpaid orders. Paid orders must
+                go through refund instead, to keep an audit trail. */}
+            {order.payment_status !== 'paid' && (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={deleting || loading}
+                className="w-full h-11 mt-2 rounded-lg bg-cockpit-red/20 hover:bg-cockpit-red/30 disabled:opacity-40 text-cockpit-out-text font-bold transition-colors inline-flex items-center justify-center gap-1.5 border border-cockpit-red/40"
+              >
+                <Trash2 className="w-4 h-4" />
+                Cancelar orden completa
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -373,6 +404,39 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
           onApproved={onManagerApproved}
           onClose={() => setPendingRetry(null)}
         />
+      )}
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
+          <div className="bg-neutral-950 rounded-2xl shadow-2xl w-full max-w-sm border border-cockpit-red/60 p-5">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-10 w-10 rounded-full bg-cockpit-red/20 flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-cockpit-out-text" />
+              </div>
+              <h3 className="text-lg font-black text-white">¿Cancelar orden #{order.order_number}?</h3>
+            </div>
+            <p className="text-sm text-neutral-400 mb-5">
+              Se eliminarán todos los productos. La cocina dejará de verla. Esta acción no se puede deshacer.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+                className="flex-1 h-12 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white font-bold"
+              >
+                No, regresar
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={deleting}
+                className="flex-1 h-12 rounded-lg bg-cockpit-red hover:brightness-110 disabled:opacity-50 text-white font-black inline-flex items-center justify-center gap-1.5"
+              >
+                {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                {deleting ? 'Cancelando…' : 'Sí, cancelar'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
