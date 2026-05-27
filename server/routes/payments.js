@@ -1023,7 +1023,7 @@ async function markTerminalOrderPaid(orderId, tenantId = 'default', { mpOrder = 
  * the processor fee + raw response. Owners read this back in FeesTab to see
  * what MP is actually charging them — cashiers never see it.
  */
-async function recordMpTerminalPayment(orderId, tenantId, mpOrder, mpAccessToken) {
+export async function recordMpTerminalPayment(orderId, tenantId, mpOrder, mpAccessToken) {
   const existing = await get(
     `SELECT id FROM order_payments WHERE order_id = $1 AND payment_method = 'mp_terminal'`,
     [orderId]

@@ -29,6 +29,7 @@ import {
   getPointOrder,
   mapPointOrderStatus,
 } from '../services/mercadopago.js';
+import { recordMpTerminalPayment } from './payments.js';
 
 const router = Router();
 const TAX_RATE = 0.16;
@@ -834,6 +835,14 @@ router.get('/orders/:id/status', verifyKioskToken, async (req, res) => {
         const mpOrder = await getPointOrder(accessToken, order.mp_order_id, tenant.mp_default_terminal_id);
         const mapped = mapPointOrderStatus(mpOrder);
         if (mapped === 'paid') {
+          // Reconcile any tip the customer added on the MP terminal screen
+          // and record the order_payments row (with processor fees) before
+          // flipping order.payment_status to 'paid'. Mirrors the POS flow.
+          try {
+            await recordMpTerminalPayment(order.id, tenantId, mpOrder, accessToken);
+          } catch (err) {
+            console.error('[kiosk/status] mp terminal reconcile failed', err);
+          }
           invoiceToken = await markKioskOrderPaid(order.id, tenantId);
           paymentStatus = 'paid';
         } else if (mapped === 'failed') {
