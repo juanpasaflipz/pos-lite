@@ -60,6 +60,10 @@ export default function KitchenDisplay() {
   // order beeps exactly once — instead of using a count comparison that
   // misses concurrent transitions and false-fires on initial load.
   const chimedOrderIdsRef = useRef<Set<number>>(new Set());
+  // Same idea for cashier-initiated voids: fire once per voided item id, and
+  // only when the parent order is already in flight (status = preparing) so
+  // the kitchen actually needs to stop cooking.
+  const chimedVoidIdsRef = useRef<Set<number>>(new Set());
   const isFirstFetchRef = useRef<boolean>(true);
 
   // Load category roles for filtering
@@ -99,6 +103,33 @@ export default function KitchenDisplay() {
     }
   }, []);
 
+  // Distinct from the new-order chime: two lower-frequency square-wave beeps
+  // so the kitchen can tell "STOP cooking that" apart from "new ticket".
+  const playVoidAlert = useCallback(() => {
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = audioContextRef.current;
+      const beep = (offset: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 440;
+        osc.type = 'square';
+        gain.gain.setValueAtTime(0.25, ctx.currentTime + offset);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + offset + 0.18);
+        osc.start(ctx.currentTime + offset);
+        osc.stop(ctx.currentTime + offset + 0.18);
+      };
+      beep(0);
+      beep(0.24);
+    } catch (err) {
+      console.error('Failed to play void alert:', err);
+    }
+  }, []);
+
   const fetchOrders = useCallback(async () => {
     try {
       const data = await getKitchenOrders();
@@ -127,8 +158,21 @@ export default function KitchenDisplay() {
       // Chime per genuinely new pending order id. Seed the set on the first
       // fetch so existing tickets at mount don't beep.
       const pendingIds = sortedOrders.filter((o) => o.status === 'pending').map((o) => o.id);
+      // Mid-prep voids — items voided on an order that's already cooking.
+      // We only want to alarm the kitchen for these; voids before they
+      // started prep don't need a panic signal.
+      const midPrepVoidIds: number[] = [];
+      for (const order of sortedOrders) {
+        if (order.status !== 'preparing' && order.status !== 'pending') continue;
+        for (const item of order.items || []) {
+          if (item.voided_at && item.id != null) {
+            midPrepVoidIds.push(item.id);
+          }
+        }
+      }
       if (isFirstFetchRef.current) {
         chimedOrderIdsRef.current = new Set(pendingIds);
+        chimedVoidIdsRef.current = new Set(midPrepVoidIds);
         isFirstFetchRef.current = false;
       } else {
         let newCount = 0;
@@ -139,6 +183,15 @@ export default function KitchenDisplay() {
           }
         }
         if (newCount > 0) playAudioAlert();
+
+        let newVoidCount = 0;
+        for (const id of midPrepVoidIds) {
+          if (!chimedVoidIdsRef.current.has(id)) {
+            chimedVoidIdsRef.current.add(id);
+            newVoidCount++;
+          }
+        }
+        if (newVoidCount > 0) playVoidAlert();
       }
 
       setLastSuccessAt(Date.now());
@@ -149,7 +202,7 @@ export default function KitchenDisplay() {
     } finally {
       setLoading(false);
     }
-  }, [calculateElapsedSeconds, playAudioAlert, t]);
+  }, [calculateElapsedSeconds, playAudioAlert, playVoidAlert, t]);
 
   useEffect(() => {
     fetchOrders();
@@ -396,6 +449,10 @@ interface OrderCardProps {
   isTvMode?: boolean;
 }
 
+// How long the "ITEM CANCELADO" banner stays loud after the void timestamp.
+// Matches the 90s strikethrough window on the items themselves.
+const FRESH_VOID_WINDOW_SECONDS = 90;
+
 function OrderCard({
   order,
   onReady,
@@ -406,6 +463,17 @@ function OrderCard({
   const [isLoading, setIsLoading] = useState(false);
   const tier = getTimeTier(order.elapsedSeconds);
   const paid = isPaid(order);
+
+  // A void counts as "fresh" if it happened in the last 90s AND the order is
+  // already being cooked. We don't shout for voids before prep starts — the
+  // kitchen hadn't touched it yet, so there's nothing to stop.
+  const freshVoidItems = (order.items || []).filter((it) => {
+    if (!it.voided_at) return false;
+    if (order.status !== 'preparing' && order.status !== 'pending') return false;
+    const voidedSecondsAgo = (Date.now() - new Date(it.voided_at).getTime()) / 1000;
+    return voidedSecondsAgo >= 0 && voidedSecondsAgo <= FRESH_VOID_WINDOW_SECONDS;
+  });
+  const hasFreshVoid = freshVoidItems.length > 0;
 
   const handleReady = async () => {
     setIsLoading(true);
@@ -426,6 +494,22 @@ function OrderCard({
           aria-hidden
           className="pointer-events-none absolute inset-0 rounded-lg ring-4 ring-inset ring-cockpit-red/80 animate-pulse"
         />
+      )}
+
+      {/* Mid-prep void banner — chef needs to STOP cooking the voided item.
+          Lives for 90s after the most recent void, then drops away. */}
+      {hasFreshVoid && (
+        <div
+          className={`relative -m-0 mb-2 rounded-md bg-cockpit-red text-white font-black uppercase tracking-wider text-center animate-pulse ${isTvMode ? 'py-2 text-base' : 'py-3 text-xl'}`}
+        >
+          {t('orders.midPrepVoidBanner', '⚠ Item cancelado — dejar de cocinar')}
+          {freshVoidItems[0]?.void_reason && (
+            <div className="mt-0.5 text-[11px] font-bold tracking-normal normal-case opacity-90">
+              ↳ {freshVoidItems[0].void_reason}
+              {freshVoidItems.length > 1 && ` +${freshVoidItems.length - 1}`}
+            </div>
+          )}
+        </div>
       )}
 
       {isTvMode ? (

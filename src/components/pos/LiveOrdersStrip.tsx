@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { getKitchenOrders, updateOrderStatus } from '../../api';
 import { Order } from '../../types';
+import { formatPrice } from '../../utils/currency';
 import { getTimeTier, isPaid, isProbableNoShow, type TimeTier } from '../../lib/orderUrgency';
 import OrderEditModal from './OrderEditModal';
 
@@ -334,6 +335,18 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, refreshKey }: Liv
                       {t('liveStrip.itemCount', { count: itemCount })}
                     </span>
                   )}
+                </div>
+
+                {/* Order total — primary disambiguator for same-name customers
+                    (two "Juan" orders almost never have the same dollar total)
+                    and a sanity-check before the cashier hits Cobrar. */}
+                <div className="px-3 pb-1 flex items-baseline justify-between gap-2">
+                  <span className="text-[10px] uppercase tracking-wider text-neutral-500 font-bold">
+                    {t('liveStrip.total', 'Total')}
+                  </span>
+                  <span className={`text-base font-black tabular-nums ${paid ? 'text-cockpit-in-text' : 'text-brand-300'}`}>
+                    {formatPrice(Number(order.total))}
+                  </span>
                 </div>
 
                 {/* Actions — Editar is icon-only to keep Cobrar / advance prominent on the

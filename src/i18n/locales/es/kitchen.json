@@ -15,7 +15,8 @@
     "orderId": "ID de Orden: {{id}}",
     "combo": "Combo",
     "forHere": "PARA AQUÍ",
-    "toGo": "PARA LLEVAR"
+    "toGo": "PARA LLEVAR",
+    "midPrepVoidBanner": "⚠ Item cancelado — dejar de cocinar"
   },
   "status": {
     "pending": "PENDIENTE",

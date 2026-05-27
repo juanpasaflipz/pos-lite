@@ -570,7 +570,8 @@
     "charge": "Cobrar",
     "edit": "Editar",
     "noShowBadge": "Posible no-show",
-    "noShowHint": "Más de 90 min sin pagar — revisa si el cliente se fue"
+    "noShowHint": "Más de 90 min sin pagar — revisa si el cliente se fue",
+    "total": "Total"
   },
   "mobileOrders": {
     "title": "Órdenes",

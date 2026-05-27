@@ -15,7 +15,8 @@
     "orderId": "Order ID: {{id}}",
     "combo": "Combo",
     "forHere": "FOR HERE",
-    "toGo": "TO GO"
+    "toGo": "TO GO",
+    "midPrepVoidBanner": "⚠ Item canceled — stop cooking"
   },
   "status": {
     "pending": "PENDING",

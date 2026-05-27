@@ -570,7 +570,8 @@
     "charge": "Charge",
     "edit": "Edit",
     "noShowBadge": "No-show?",
-    "noShowHint": "90+ min unpaid — check if customer left"
+    "noShowHint": "90+ min unpaid — check if customer left",
+    "total": "Total"
   },
   "mobileOrders": {
     "title": "Orders",
