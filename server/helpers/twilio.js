@@ -390,11 +390,13 @@ export async function sendReceiptMessage(phone, orderNumber, totalFormatted, url
 }
 
 export async function sendOrderReadyMessage(phone, name, orderNumber, customerId, restaurantName = 'us', countryCode = 'MX') {
-  const greeting = name ? `Hola ${String(name).split(/\s+/)[0]}! ` : '';
+  const firstName = name ? String(name).split(/\s+/)[0] : '';
   const body = firstSingleSegment([
-    `${greeting}${restaurantName}: tu orden #${orderNumber} esta lista para recoger.`,
-    `Orden #${orderNumber} lista para recoger en ${restaurantName}.`,
-    `Orden #${orderNumber} lista para recoger.`,
+    firstName
+      ? `Hola ${firstName}, tu orden de ${restaurantName} esta lista.`
+      : `Tu orden #${orderNumber} de ${restaurantName} esta lista.`,
+    `Tu orden #${orderNumber} de ${restaurantName} esta lista.`,
+    `Orden #${orderNumber} lista.`,
   ]);
   return sendSMS(phone, body, customerId, 'order_ready', countryCode);
 }
