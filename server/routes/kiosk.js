@@ -708,10 +708,12 @@ router.post('/orders/:id/append-items', verifyKioskToken, async (req, res) => {
       : '';
 
     const [order] = await adminSql`
-      SELECT id, status, payment_status, source,
-             loyalty_customer_id, customer_call_name
-      FROM orders
-      WHERE tenant_id = ${tenantId} AND id = ${orderId}
+      SELECT o.id, o.status, o.payment_status, o.source,
+             o.loyalty_customer_id, o.customer_call_name,
+             lc.name AS loyalty_name
+      FROM orders o
+      LEFT JOIN loyalty_customers lc ON lc.id = o.loyalty_customer_id
+      WHERE o.tenant_id = ${tenantId} AND o.id = ${orderId}
     `;
     if (!order) return res.status(404).json({ error: 'Order not found' });
     if (order.source !== 'customer_kiosk') {
@@ -721,13 +723,28 @@ router.post('/orders/:id/append-items', verifyKioskToken, async (req, res) => {
       return res.status(400).json({ error: `Cannot edit ${order.status} order` });
     }
 
-    // Ownership check: prefer loyalty match, fall back to name match.
-    const matchesLoyalty = !!loyaltyCustomerId && order.loyalty_customer_id === loyaltyCustomerId;
-    const matchesName = !loyaltyCustomerId
+    // Ownership: any of these constitutes proof of ownership.
+    //  (a) Same loyalty session token as the order was placed under.
+    //  (b) Anonymous match — order has no loyalty profile and typed name
+    //      matches the persisted customer_call_name.
+    //  (c) Loyalty-name match — order has a loyalty profile but customer is
+    //      coming back without their phone; typed name matches the profile's
+    //      first token or full name (same rule as the open-orders lookup).
+    const lowClaimed = claimedName.toLowerCase();
+    const loyaltyFirst = String(order.loyalty_name || '').trim().split(/\s+/)[0] || '';
+    const matchesLoyaltyId = !!loyaltyCustomerId && order.loyalty_customer_id === loyaltyCustomerId;
+    const matchesAnonName = !loyaltyCustomerId
       && order.loyalty_customer_id == null
       && !!claimedName
-      && String(order.customer_call_name || '').toLowerCase() === claimedName.toLowerCase();
-    if (!matchesLoyalty && !matchesName) {
+      && String(order.customer_call_name || '').toLowerCase() === lowClaimed;
+    const matchesLoyaltyName = !loyaltyCustomerId
+      && order.loyalty_customer_id != null
+      && !!claimedName
+      && (
+        loyaltyFirst.toLowerCase() === lowClaimed
+        || String(order.loyalty_name || '').toLowerCase() === lowClaimed
+      );
+    if (!matchesLoyaltyId && !matchesAnonName && !matchesLoyaltyName) {
       return res.status(403).json({ error: 'This order does not match your name or account' });
     }
 
@@ -878,16 +895,37 @@ router.get('/orders/open', verifyKioskToken, async (req, res) => {
       return res.status(400).json({ error: 'name or customer_token required' });
     }
 
+    // Name-based lookup must match BOTH paths:
+    //   - anonymous: customer typed only their name when ordering → matches
+    //     orders.customer_call_name
+    //   - loyalty:   customer ordered via phone path → customer_call_name is
+    //     null on the order, but the loyalty profile's name is what they'll
+    //     type when coming back to pay. Match on loyalty_customers.name's
+    //     first token OR the full name.
+    // Token-based lookup (returning loyalty session on Welcome) is the simple
+    // case — direct match on loyalty_customer_id.
+    const lowName = rawName.slice(0, 40).toLowerCase();
     const matchFilter = loyaltyCustomerId
       ? adminSql`o.loyalty_customer_id = ${loyaltyCustomerId}`
-      : adminSql`o.loyalty_customer_id IS NULL
-                   AND LOWER(o.customer_call_name) = LOWER(${rawName.slice(0, 40)})`;
+      : adminSql`(
+          (o.loyalty_customer_id IS NULL
+             AND LOWER(o.customer_call_name) = ${lowName})
+          OR
+          (o.loyalty_customer_id IS NOT NULL
+             AND lc.id IS NOT NULL
+             AND (
+               LOWER(SPLIT_PART(lc.name, ' ', 1)) = ${lowName}
+               OR LOWER(lc.name) = ${lowName}
+             ))
+        )`;
 
     const orders = await adminSql`
       SELECT o.id, o.order_number, o.total, o.subtotal, o.tax,
-             o.status, o.payment_status, o.customer_call_name,
+             o.status, o.payment_status,
+             COALESCE(o.customer_call_name, lc.name) AS customer_call_name,
              o.order_fulfillment_type, o.created_at
       FROM orders o
+      LEFT JOIN loyalty_customers lc ON lc.id = o.loyalty_customer_id
       WHERE o.tenant_id = ${tenantId}
         AND o.source = 'customer_kiosk'
         AND o.payment_status IN ('unpaid', 'partial', 'pending_terminal')
