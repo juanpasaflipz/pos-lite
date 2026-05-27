@@ -70,6 +70,7 @@ Return ONLY valid JSON, no prose:
 }
 
 Rules:
+- raw_name MUST be the clean brand or product label only (e.g. "Bohemia", "Bohemia Vienna", "XX Ámbar", "Tecate Original", "Vaso S113"). Do NOT add shelf positions, visibility caveats, observations, or any "(...)" annotations to raw_name — those go in the top-level "note" field. If you see the SAME brand on two shelves, emit ONE item line with the combined count; never emit two lines for the same product with positional labels.
 - If image is neither a receipt nor a count-able shelf/fridge (a person, raw food, prep area, screenshot, etc.), set intent="unknown" and put a Spanish clarifying_question like "Esa foto no parece recibo ni inventario. ¿Qué quieres registrar?".
 - A payment terminal slip with only a total is STILL intent="record_purchase" — leave items=[] and populate total_amount + payment_method.
 - For count_inventory: set vendor=null, total_amount=null, payment_method=null. Each item's unit_price and amount must be null. Use "pcs" or "btl"/"can" as appropriate.

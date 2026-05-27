@@ -229,15 +229,48 @@ export function parseConfirmReply(text) {
   return 'unclear';
 }
 
+// Strong modifiers that distinguish otherwise-similar SKUs. If one name has
+// the token and the other doesn't, refuse the fuzzy match — e.g. "Bohemia
+// Vienna" should NOT collapse into "Bohemia Clara". Better to surface as
+// _unmatched than to silently merge two different products.
+const STRONG_MODIFIERS = [
+  'vienna', 'ámbar', 'ambar', 'clara', 'oscura', 'obscura', 'negra', 'roja',
+  'ultra', 'light', 'lite', 'zero', 'cero', 'sin alcohol',
+  'lager', 'pilsner', 'stout', 'ipa', 'porter', 'wheat', 'trigo',
+  'especial', 'original', 'premium', 'familiar',
+];
+
+function hasToken(haystack, token) {
+  // word-boundary-ish: token surrounded by non-letter chars (or start/end)
+  const re = new RegExp(`(^|[^\\p{L}])${token.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}([^\\p{L}]|$)`, 'iu');
+  return re.test(haystack);
+}
+
+function modifierConflict(a, b) {
+  if (!a || !b) return false;
+  for (const m of STRONG_MODIFIERS) {
+    const inA = hasToken(a, m);
+    const inB = hasToken(b, m);
+    if (inA !== inB) return true;
+  }
+  return false;
+}
+
 // Pre-confirmation enrichment for record_purchase and count_inventory intents.
-// Runs server-side fuzzy match against existing inventory (pg_trgm) for any
-// line the parser couldn't bind to an id. For purchase intents, true misses
-// are flagged _will_create so buildConfirmationMessage shows "(NUEVO)" and
-// executePurchase inserts a new inventory_items row on SI. For count intents,
-// misses stay unbound — executeCount drops them, and buildConfirmationMessage
-// surfaces them as "(no en inventario: ...)" so the operator knows what got
-// skipped. Auto-creating SKUs from a count is disabled by design (no per-line
-// price anchor, too easy to spawn duplicates from spelling drift).
+// Three responsibilities:
+//   1. Derive unit_price for purchase lines that only have amount + quantity.
+//   2. Fuzzy-match unbound items against existing inventory (pg_trgm @ 0.55),
+//      rejecting matches that disagree on a strong modifier (Vienna/Clara,
+//      Ultra/Light, etc.) so different products don't silently collapse.
+//   3. Dedup-and-sum: when Claude returns multiple lines binding to the same
+//      inventory_item_id (e.g. "Bohemia shelf superior" + "Bohemia shelf
+//      inferior"), merge into one line — otherwise executeCount overwrites
+//      qty on the second iteration and the first count is lost.
+//
+// For purchase intents, true misses are flagged _will_create so
+// buildConfirmationMessage shows "(NUEVO)" and executePurchase inserts a
+// new inventory_items row on SI. For count intents, misses stay unbound —
+// the AGREGAR token converts them on demand.
 // Must be called inside withTenant().
 export async function enrichItemBindings(parsed) {
   if (!parsed) return parsed;
@@ -255,13 +288,13 @@ export async function enrichItemBindings(parsed) {
     if (!it.raw_name || typeof it.raw_name !== 'string') continue;
     try {
       const match = await get(
-        `SELECT id FROM inventory_items
-         WHERE similarity(name, $1) > 0.4
+        `SELECT id, name FROM inventory_items
+         WHERE similarity(name, $1) > 0.55
          ORDER BY similarity(name, $1) DESC
          LIMIT 1`,
         [it.raw_name.trim()]
       );
-      if (match?.id) {
+      if (match?.id && !modifierConflict(it.raw_name, match.name || '')) {
         it.inventory_item_id = match.id;
         it._fuzzy_matched = true;
       } else if (allowCreate) {
@@ -276,6 +309,32 @@ export async function enrichItemBindings(parsed) {
       else it._unmatched = true;
     }
   }
+
+  // Dedup-and-sum: when two lines bind to the same inventory_item_id (e.g.
+  // Claude returned "Bohemia shelf superior" + "Bohemia shelf inferior"),
+  // merge into one line so executeCount/executePurchase don't run twice on
+  // the same id (count: last write overwrites; purchase: two restock rows).
+  const byId = new Map();
+  const out = [];
+  for (const it of items) {
+    if (!it.inventory_item_id) { out.push(it); continue; }
+    const prior = byId.get(it.inventory_item_id);
+    if (prior) {
+      prior.quantity = Number(prior.quantity || 0) + Number(it.quantity || 0);
+      // If a numeric amount is present on both, sum it too (purchase-relevant).
+      if (Number(it.amount) > 0) prior.amount = Number(prior.amount || 0) + Number(it.amount);
+      // Keep the shorter raw_name — Claude tends to put shelf/position context
+      // in the longer one, and we want the clean brand label.
+      if ((it.raw_name?.length || 0) < (prior.raw_name?.length || 0)) {
+        prior.raw_name = it.raw_name;
+      }
+      continue;
+    }
+    byId.set(it.inventory_item_id, it);
+    out.push(it);
+  }
+  parsed.items = out;
+
   return parsed;
 }
 
