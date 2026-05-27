@@ -374,10 +374,17 @@ router.post('/inbound', async (req, res) => {
   // executable on a valid total alone; executePurchase handles empty items[].
   const hasMatchedItems = Array.isArray(parsed.items)
     && parsed.items.some((it) => it.inventory_item_id || it.menu_item_id || it._will_create);
+  // For counts, _unmatched items become actionable via AGREGAR (which promotes
+  // them to _will_create on the confirm reply). The confirmation message
+  // already advertises that path, so the row must be pending_confirm to be
+  // findable when the owner taps AGREGAR.
+  const hasUnmatchedForCount = parsed.intent === 'count_inventory'
+    && Array.isArray(parsed.items)
+    && parsed.items.some((it) => it._unmatched && it.raw_name);
   const hasValidPurchaseTotal = parsed.intent === 'record_purchase'
     && Number(parsed.total_amount) > 0;
   const isExecutable = ['log_waste', 'record_purchase', 'count_inventory', 'toggle_menu_item'].includes(parsed.intent)
-    && (hasMatchedItems || hasValidPurchaseTotal);
+    && (hasMatchedItems || hasUnmatchedForCount || hasValidPurchaseTotal);
 
   await withTenant(employee.tenant_id, async () => {
     await run(
