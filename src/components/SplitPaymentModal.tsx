@@ -117,6 +117,33 @@ export default function SplitPaymentModal({
     setDrafts((prev) => prev.map((s, i) => ({ ...s, amount: Math.round(newAmounts[i] * 100) / 100 })));
   };
 
+  // Resize the by_item people list. Items assigned to a removed person fall
+  // back to Person 1 so no item is left orphaned.
+  const setByItemPeople = (count: number) => {
+    const clamped = Math.max(2, Math.min(10, count));
+    if (clamped === drafts.length) return;
+    let nextAssignments = itemAssignments;
+    if (clamped < drafts.length) {
+      nextAssignments = Object.fromEntries(
+        Object.entries(itemAssignments).map(([k, v]) => [k, v >= clamped ? 0 : v]),
+      );
+      setItemAssignments(nextAssignments);
+    }
+    const sums = Array.from({ length: clamped }, () => 0);
+    items.forEach((item) => {
+      const idx = nextAssignments[item.cart_id] ?? 0;
+      sums[idx] += item.unit_price * item.quantity;
+    });
+    setDrafts((prev) => {
+      const base: DraftSplit[] = Array.from({ length: clamped }, (_, i) => ({
+        amount: Math.round(sums[i] * 100) / 100,
+        method: prev[i]?.method ?? 'card',
+        tip: prev[i]?.tip ?? 0,
+      }));
+      return base;
+    });
+  };
+
   const totalAssigned = drafts.reduce((sum, s) => sum + s.amount, 0);
   const isBalanced = Math.abs(totalAssigned - orderTotal) < 0.02;
   const hasCardSplits = drafts.some((d) => d.method === 'card');
@@ -456,7 +483,30 @@ export default function SplitPaymentModal({
     // by_item
     return (
       <div className="space-y-4">
-        <p className="text-white font-semibold">{t('splitPayment.assignItems')}</p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-white font-semibold">{t('splitPayment.assignItems')}</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setByItemPeople(drafts.length - 1)}
+              disabled={drafts.length <= 2}
+              className="w-10 h-10 bg-neutral-700 text-white font-bold rounded-lg disabled:opacity-40"
+              aria-label={t('splitPayment.remove')}
+            >
+              −
+            </button>
+            <span className="min-w-[2.5rem] text-center font-bold text-white text-xl tabular-nums">
+              {drafts.length}
+            </span>
+            <button
+              onClick={() => setByItemPeople(drafts.length + 1)}
+              disabled={drafts.length >= 10}
+              className="w-10 h-10 bg-neutral-700 text-white font-bold rounded-lg disabled:opacity-40"
+              aria-label={t('splitPayment.addSplit')}
+            >
+              +
+            </button>
+          </div>
+        </div>
         {items.map((item) => (
           <div key={item.cart_id} className="bg-neutral-800 rounded-lg p-3 border border-neutral-700">
             <div className="flex items-center justify-between mb-2">
@@ -466,12 +516,12 @@ export default function SplitPaymentModal({
               </div>
               <p className="font-bold text-white">{formatPrice(item.unit_price * item.quantity)}</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               {drafts.map((_, i) => (
                 <button
                   key={i}
                   onClick={() => assignItemToSplit(item.cart_id, i)}
-                  className={`flex-1 py-1 rounded text-sm font-bold ${
+                  className={`flex-1 min-w-[80px] py-1.5 rounded text-sm font-bold min-h-[40px] ${
                     (itemAssignments[item.cart_id] ?? 0) === i
                       ? 'bg-brand-600 text-white'
                       : 'bg-neutral-700 text-neutral-400'
