@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { UserPlus, Search, X, Gift, Phone } from 'lucide-react';
+import { UserPlus, Search, X, Gift, Phone, User } from 'lucide-react';
 import type { LoyaltyCustomer } from '../types';
-import { lookupLoyaltyCustomer, createLoyaltyCustomer } from '../api';
+import { lookupLoyaltyCustomer, createLoyaltyCustomer, searchLoyaltyCustomersByName } from '../api';
 import { formatPhone } from '../utils/phone';
 
 interface Props {
@@ -11,7 +11,8 @@ interface Props {
 }
 
 type Mode = 'existing' | 'new';
-type Phase = 'search' | 'found' | 'register';
+type Phase = 'search' | 'found' | 'register' | 'name-results';
+type SearchBy = 'phone' | 'name';
 type Country = 'MX' | 'US';
 
 const COUNTRIES: Array<{ code: Country; label: string; dial: string }> = [
@@ -23,24 +24,38 @@ export default function CustomerLookupModal({ onCustomerLinked, onClose }: Props
   const { t } = useTranslation('pos');
   const [mode, setMode] = useState<Mode>('existing');
   const [phase, setPhase] = useState<Phase>('search');
+  const [searchBy, setSearchBy] = useState<SearchBy>('phone');
   const [country, setCountry] = useState<Country>('MX');
   const [phone, setPhone] = useState('');
+  const [nameQuery, setNameQuery] = useState('');
   const [name, setName] = useState('');
   const [referralCode, setReferralCode] = useState('');
   const [smsOptIn, setSmsOptIn] = useState(true);
   const [foundCustomer, setFoundCustomer] = useState<LoyaltyCustomer | null>(null);
+  const [nameResults, setNameResults] = useState<LoyaltyCustomer[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const digits = phone.replace(/\D/g, '');
   const phoneValid = digits.length >= 10;
+  const nameValid = nameQuery.trim().length >= 2;
 
   const switchMode = (next: Mode) => {
     if (next === mode) return;
     setMode(next);
     setError(null);
     setFoundCustomer(null);
+    setNameResults([]);
     setPhase(next === 'new' ? 'register' : 'search');
+  };
+
+  const switchSearchBy = (next: SearchBy) => {
+    if (next === searchBy) return;
+    setSearchBy(next);
+    setError(null);
+    setFoundCustomer(null);
+    setNameResults([]);
+    setPhase('search');
   };
 
   const handleSearch = async () => {
@@ -66,6 +81,40 @@ export default function CustomerLookupModal({ onCustomerLinked, onClose }: Props
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleNameSearch = async () => {
+    if (!nameValid || busy) {
+      if (!nameValid) setError(t('customerLookup.nameTooShort'));
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const results = await searchLoyaltyCustomersByName(nameQuery.trim());
+      if (results.length === 0) {
+        setNameResults([]);
+        setError(t('customerLookup.noNameMatch'));
+        return;
+      }
+      if (results.length === 1) {
+        // Single match — same UX as phone hit: jump straight to the found card.
+        setFoundCustomer(results[0]);
+        setPhase('found');
+        return;
+      }
+      setNameResults(results);
+      setPhase('name-results');
+    } catch (err: any) {
+      setError(err?.message || t('customerLookup.registrationFailed'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const pickFromNameResults = (customer: LoyaltyCustomer) => {
+    setFoundCustomer(customer);
+    setPhase('found');
   };
 
   const handleRegister = async () => {
@@ -140,55 +189,114 @@ export default function CustomerLookupModal({ onCustomerLinked, onClose }: Props
             </button>
           </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-neutral-300 mb-2">
-              {t('customerLookup.phoneNumber')}
-            </label>
-            <div className="flex gap-2">
-              {/* Country selector */}
-              <div className="relative">
-                <select
-                  value={country}
-                  onChange={(e) => setCountry(e.target.value as Country)}
-                  disabled={busy}
-                  className="appearance-none h-full pl-3 pr-7 py-3 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm font-mono focus:outline-none focus:border-brand-500 min-h-[44px]"
-                  aria-label="Country code"
-                >
-                  {COUNTRIES.map((c) => (
-                    <option key={c.code} value={c.code}>{c.label} {c.dial}</option>
-                  ))}
-                </select>
+          {/* Phone vs Name search toggle — only shown for Existing lookup;
+              New-customer flow always collects phone since that's the loyalty
+              key on the backend. */}
+          {mode === 'existing' && (
+            <div className="grid grid-cols-2 gap-1 p-1 bg-neutral-800 rounded-lg">
+              <button
+                onClick={() => switchSearchBy('phone')}
+                className={`py-2 text-xs font-bold rounded-md transition-colors min-h-[36px] inline-flex items-center justify-center gap-1.5 ${
+                  searchBy === 'phone' ? 'bg-neutral-700 text-white' : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                <Phone size={14} />
+                {t('customerLookup.byPhone')}
+              </button>
+              <button
+                onClick={() => switchSearchBy('name')}
+                className={`py-2 text-xs font-bold rounded-md transition-colors min-h-[36px] inline-flex items-center justify-center gap-1.5 ${
+                  searchBy === 'name' ? 'bg-neutral-700 text-white' : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                <User size={14} />
+                {t('customerLookup.byName')}
+              </button>
+            </div>
+          )}
+
+          {(mode === 'new' || searchBy === 'phone') && (
+            <div>
+              <label className="block text-sm font-semibold text-neutral-300 mb-2">
+                {t('customerLookup.phoneNumber')}
+              </label>
+              <div className="flex gap-2">
+                {/* Country selector */}
+                <div className="relative">
+                  <select
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value as Country)}
+                    disabled={busy}
+                    className="appearance-none h-full pl-3 pr-7 py-3 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-sm font-mono focus:outline-none focus:border-brand-500 min-h-[44px]"
+                    aria-label="Country code"
+                  >
+                    {COUNTRIES.map((c) => (
+                      <option key={c.code} value={c.code}>{c.label} {c.dial}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="relative flex-1">
+                  <Phone size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    autoFocus
+                    value={phone}
+                    onChange={(e) => {
+                      setPhone(e.target.value);
+                      setError(null);
+                      if (mode === 'existing' && phase !== 'search') {
+                        setPhase('search');
+                        setFoundCustomer(null);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter') return;
+                      if (mode === 'existing' && phase === 'search') handleSearch();
+                      else if (mode === 'new' && name.trim()) handleRegister();
+                    }}
+                    placeholder={t('customerLookup.enterPhone')}
+                    className="w-full pl-10 pr-3 py-3 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-brand-500 min-h-[44px]"
+                    disabled={busy}
+                  />
+                </div>
               </div>
-              <div className="relative flex-1">
-                <Phone size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+              <p className="text-xs text-neutral-500 mt-1 font-mono">{activeCountry.dial}</p>
+            </div>
+          )}
+
+          {mode === 'existing' && searchBy === 'name' && (
+            <div>
+              <label className="block text-sm font-semibold text-neutral-300 mb-2">
+                {t('customerLookup.customerName')}
+              </label>
+              <div className="relative">
+                <User size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
                 <input
-                  type="tel"
-                  inputMode="tel"
+                  type="text"
                   autoFocus
-                  value={phone}
+                  value={nameQuery}
                   onChange={(e) => {
-                    setPhone(e.target.value);
+                    setNameQuery(e.target.value);
                     setError(null);
-                    if (mode === 'existing' && phase !== 'search') {
+                    if (phase !== 'search') {
                       setPhase('search');
-                      setFoundCustomer(null);
+                      setNameResults([]);
                     }
                   }}
                   onKeyDown={(e) => {
-                    if (e.key !== 'Enter') return;
-                    if (mode === 'existing' && phase === 'search') handleSearch();
-                    else if (mode === 'new' && name.trim()) handleRegister();
+                    if (e.key === 'Enter') handleNameSearch();
                   }}
-                  placeholder={t('customerLookup.enterPhone')}
+                  placeholder={t('customerLookup.namePlaceholder')}
+                  maxLength={40}
                   className="w-full pl-10 pr-3 py-3 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-brand-500 min-h-[44px]"
                   disabled={busy}
                 />
               </div>
             </div>
-            <p className="text-xs text-neutral-500 mt-1 font-mono">{activeCountry.dial}</p>
-          </div>
+          )}
 
-          {mode === 'existing' && phase === 'search' && (
+          {mode === 'existing' && phase === 'search' && searchBy === 'phone' && (
             <button
               onClick={handleSearch}
               disabled={!phoneValid || busy}
@@ -197,6 +305,56 @@ export default function CustomerLookupModal({ onCustomerLinked, onClose }: Props
               <Search size={18} />
               {busy ? t('customerLookup.searching') : t('customerLookup.searchCustomer')}
             </button>
+          )}
+
+          {mode === 'existing' && phase === 'search' && searchBy === 'name' && (
+            <button
+              onClick={handleNameSearch}
+              disabled={!nameValid || busy}
+              className="w-full flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 disabled:bg-neutral-700 disabled:text-neutral-500 text-white font-bold py-3 rounded-lg min-h-[44px] transition-colors"
+            >
+              <Search size={18} />
+              {busy ? t('customerLookup.searching') : t('customerLookup.searchCustomer')}
+            </button>
+          )}
+
+          {mode === 'existing' && phase === 'name-results' && (
+            <div className="space-y-2">
+              <p className="text-xs text-neutral-400 font-semibold">
+                {t('customerLookup.nameResultsCount', { count: nameResults.length })}
+              </p>
+              <div className="space-y-2 max-h-[280px] overflow-y-auto">
+                {nameResults.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => pickFromNameResults(c)}
+                    className="w-full text-left bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 hover:border-brand-500 rounded-lg p-3 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-white font-bold truncate">{c.name}</p>
+                        <p className="text-xs text-neutral-400 font-mono mt-0.5">
+                          {formatPhone(c.phone, c.country_code)}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs text-neutral-500">{t('customerLookup.orders')}</p>
+                        <p className="text-sm text-white font-bold">{c.orders_count}</p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => {
+                  setPhase('search');
+                  setNameResults([]);
+                }}
+                className="w-full text-sm text-neutral-400 hover:text-white py-2"
+              >
+                {t('customerLookup.searchAgain')}
+              </button>
+            </div>
           )}
 
           {mode === 'existing' && phase === 'found' && foundCustomer && (

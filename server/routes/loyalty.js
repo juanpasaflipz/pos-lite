@@ -70,6 +70,44 @@ router.get('/customers/:id', requireAuth('manage_loyalty'), async (req, res) => 
   }
 });
 
+// GET /customers/search?name=X — Name-based lookup for the POS checkout modal.
+// Pos_access scope (cashier-friendly), capped at 10 results. Case-insensitive
+// prefix + contains match. Mirrors the kiosk's name-lookup pattern so a
+// customer who placed a dine-in order via phone can also be found at the
+// register by their first name when the cashier is taking a new order.
+router.get('/customers/search', requireAuth('pos_access'), async (req, res) => {
+  try {
+    const raw = typeof req.query.name === 'string' ? req.query.name.trim() : '';
+    if (raw.length < 2) {
+      return res.status(400).json({ error: 'Name must be at least 2 characters' });
+    }
+    const needle = raw.slice(0, 40);
+    const escaped = needle.replace(/[%_\\]/g, '\\$&');
+
+    // Prefix match ranks higher than contains — typing "Jua" should surface
+    // Juan/Juana before "Pedro de la Juancita".
+    const customers = await all(
+      `SELECT *,
+              CASE WHEN LOWER(name) LIKE LOWER($1) ESCAPE '\\' THEN 0 ELSE 1 END AS rank
+       FROM loyalty_customers
+       WHERE LOWER(name) LIKE LOWER($2) ESCAPE '\\'
+       ORDER BY rank, (last_visit IS NULL), last_visit DESC, id DESC
+       LIMIT 10`,
+      [`${escaped}%`, `%${escaped}%`]
+    );
+
+    const enriched = [];
+    for (const c of customers) {
+      const activeCard = await getActiveStampCard(c.id);
+      enriched.push({ ...c, activeCard });
+    }
+    res.json({ customers: enriched });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /customers/phone/:phone — Lookup by phone (POS checkout)
 // Optional ?country_code=MX|US — when omitted, search across all countries for
 // the same local digits and prefer the most-recently-active match.

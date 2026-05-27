@@ -312,7 +312,14 @@
     "nameRequired": "Name is required",
     "registrationFailed": "Registration failed",
     "modeExisting": "Existing",
-    "modeNew": "New Customer"
+    "modeNew": "New Customer",
+    "byPhone": "Phone",
+    "byName": "Name",
+    "namePlaceholder": "First or full name",
+    "nameTooShort": "Type at least 2 letters",
+    "noNameMatch": "No customer found with that name",
+    "nameResultsCount": "{{count}} matches — pick one",
+    "searchAgain": "Search again"
   },
   "refund": {
     "title": "Refund Order",

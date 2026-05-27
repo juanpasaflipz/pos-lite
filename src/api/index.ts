@@ -1898,6 +1898,16 @@ export async function lookupLoyaltyCustomer(phone: string, countryCode?: string)
   return apiRequest<LoyaltyCustomer>(`/loyalty/customers/phone/${encodeURIComponent(phone)}${qs}`);
 }
 
+// Name-based search for the POS lookup modal — cashier types a name, backend
+// returns up to 10 matches (prefix-ranked over contains). Each carries its
+// active stamp card so the modal can render the same card UI as phone lookup.
+export async function searchLoyaltyCustomersByName(name: string): Promise<LoyaltyCustomer[]> {
+  const body = await apiRequest<{ customers: LoyaltyCustomer[] }>(
+    `/loyalty/customers/search?name=${encodeURIComponent(name)}`
+  );
+  return body.customers || [];
+}
+
 export async function createLoyaltyCustomer(data: {
   phone: string;
   name: string;

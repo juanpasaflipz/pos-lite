@@ -312,7 +312,14 @@
     "nameRequired": "El nombre es obligatorio",
     "registrationFailed": "Error al registrar",
     "modeExisting": "Existente",
-    "modeNew": "Nuevo Cliente"
+    "modeNew": "Nuevo Cliente",
+    "byPhone": "Teléfono",
+    "byName": "Nombre",
+    "namePlaceholder": "Nombre o nombre completo",
+    "nameTooShort": "Escribe al menos 2 letras",
+    "noNameMatch": "Sin clientes con ese nombre",
+    "nameResultsCount": "{{count}} resultados — elige uno",
+    "searchAgain": "Buscar otra vez"
   },
   "refund": {
     "title": "Reembolso",
