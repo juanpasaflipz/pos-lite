@@ -522,6 +522,11 @@ export async function getOrder(id: number): Promise<Order> {
   return apiRequest<Order>(`/orders/${id}`);
 }
 
+export async function getTodayOrderCount(): Promise<number> {
+  const res = await apiRequest<{ count: number }>('/orders/today-count');
+  return res.count ?? 0;
+}
+
 export interface KioskHeldOrder {
   id: number;
   order_number: string | number;

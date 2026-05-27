@@ -11,6 +11,7 @@ import {
   createOrderTemplate,
   getOrders,
   getOrder,
+  getTodayOrderCount,
   deleteOrder,
   conektaOxxoPayment,
   conektaSpeiPayment,
@@ -142,6 +143,7 @@ const POSScreen: React.FC = () => {
 
   // Unpaid orders (for Cobrar flow)
   const [unpaidOrders, setUnpaidOrders] = useState<Order[]>([]);
+  const [todayOrderCount, setTodayOrderCount] = useState<number>(0);
   const [showUnpaidOrders, setShowUnpaidOrders] = useState(false);
   const [paymentOrder, setPaymentOrder] = useState<Order | null>(null);
   const [showPaymentConfirmation, setShowPaymentConfirmation] = useState(false);
@@ -204,6 +206,24 @@ const POSScreen: React.FC = () => {
     const timer = setInterval(fetchUnpaid, 30000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchCount = async () => {
+      try {
+        const count = await getTodayOrderCount();
+        if (!cancelled) setTodayOrderCount(count);
+      } catch {
+        // non-blocking
+      }
+    };
+    fetchCount();
+    const timer = setInterval(fetchCount, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [ordersRefreshKey]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -436,7 +456,6 @@ const POSScreen: React.FC = () => {
   const totalDiscount = parseFloat(
     (cart.reduce((sum, item) => sum + lineDiscountAmount(item), 0) + cartDiscountAmount).toFixed(2)
   );
-  const todayOrderCount = 1;
 
   // ==================== Cart Operations ====================
 

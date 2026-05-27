@@ -395,6 +395,24 @@ router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
   }
 });
 
+// GET /api/orders/today-count - cheap aggregate for the POS header strip.
+// Counts orders created today for the current tenant, excluding cancelled.
+// RLS scopes by tenant automatically.
+router.get('/today-count', async (req, res) => {
+  try {
+    const row = await get(
+      `SELECT COUNT(*)::int AS count
+       FROM orders
+       WHERE created_at >= CURRENT_DATE
+         AND status <> 'cancelled'`
+    );
+    res.json({ count: row?.count ?? 0 });
+  } catch (error) {
+    console.error('Error fetching today order count:', error);
+    res.status(500).json({ error: 'Failed to fetch today order count' });
+  }
+});
+
 // GET /api/orders/:id - single order with items
 router.get('/:id', async (req, res) => {
   try {
