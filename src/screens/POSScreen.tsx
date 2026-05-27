@@ -894,14 +894,21 @@ const POSScreen: React.FC = () => {
   const handleSplitStart = async (
     splits: Array<{ payment_method: 'card' | 'cash'; amount: number; tip: number }>,
   ) => {
-    if (cart.length === 0) {
-      throw new Error(t('toast.cartEmpty'));
+    // Splitting an existing order (kiosk/QR/unpaid) reuses its id; the cart
+    // path still pre-creates an order from the in-progress cart.
+    let order: Order;
+    if (chargingOrder) {
+      order = chargingOrder;
+    } else {
+      if (cart.length === 0) {
+        throw new Error(t('toast.cartEmpty'));
+      }
+      order = await createOrder({
+        employee_id: currentEmployee!.id,
+        items: buildOrderItems(),
+        discount: buildCartDiscountPayload(),
+      });
     }
-    const order = await createOrder({
-      employee_id: currentEmployee!.id,
-      items: buildOrderItems(),
-      discount: buildCartDiscountPayload(),
-    });
     splitOrderRef.current = order;
     const result = await splitStart({
       order_id: order.id,
@@ -912,11 +919,13 @@ const POSScreen: React.FC = () => {
 
   const handleSplitComplete = async (_orderId: number, totalTip: number) => {
     const order = splitOrderRef.current;
+    const wasExisting = !!chargingOrder;
     splitOrderRef.current = null;
     if (!order) {
       // Defensive: modal finished but we lost the ref. Just close and refresh.
       setShowSplitPayment(false);
-      clearCart();
+      if (!wasExisting) clearCart();
+      setChargingOrder(null);
       addToast(t('toast.splitDone'), 'success');
       return;
     }
@@ -938,7 +947,12 @@ const POSScreen: React.FC = () => {
     setCompletedOrder(finalOrder);
     setShowSplitPayment(false);
     setShowReceiptModal(true);
-    clearCart();
+    if (wasExisting) {
+      setUnpaidOrders((prev) => prev.filter((o) => o.id !== order.id));
+      setChargingOrder(null);
+    } else {
+      clearCart();
+    }
     bumpOrders();
     addToast(t('toast.splitDone'), 'success');
   };
@@ -946,6 +960,7 @@ const POSScreen: React.FC = () => {
   const handleSplitClose = () => {
     splitOrderRef.current = null;
     setShowSplitPayment(false);
+    setChargingOrder(null);
   };
 
   const handleLogout = () => {
@@ -1255,8 +1270,17 @@ const POSScreen: React.FC = () => {
 
       {showSplitPayment && (
         <SplitPaymentModal
-          orderTotal={total}
-          items={cart}
+          orderTotal={chargingOrder ? Number(chargingOrder.total) : total}
+          items={
+            chargingOrder
+              ? (chargingOrder.items || [])
+                  .filter((it) => !it.voided_at)
+                  .map((it) => ({
+                    ...it,
+                    cart_id: String(it.id ?? `oi-${it.item_name}-${it.quantity}`),
+                  }))
+              : cart
+          }
           isMpConnected={isMpConnected}
           onStart={handleSplitStart}
           onComplete={handleSplitComplete}
@@ -1292,6 +1316,15 @@ const POSScreen: React.FC = () => {
             bumpOrders();
             addToast(t('toast.mpConfirmed'), 'success');
           }}
+          onSplitPayment={
+            chargingOrder
+              ? () => {
+                  setShowPaymentModal(false);
+                  setPreCreatedOrderId(null);
+                  setShowSplitPayment(true);
+                }
+              : undefined
+          }
           onCancel={() => {
             setShowPaymentModal(false);
             setPreCreatedOrderId(null);

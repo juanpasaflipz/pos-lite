@@ -104,7 +104,8 @@
     "sendToClipTerminal": "Enviar a Terminal Clip",
     "payWithGetnet": "Pagar con Getnet (~1.8%)",
     "payAtOxxo": "Pagar en OXXO",
-    "speiTransfer": "Transferencia SPEI"
+    "speiTransfer": "Transferencia SPEI",
+    "splitBill": "Dividir cuenta"
   },
   "receipt": {
     "orderNumber": "Orden #{{number}}",

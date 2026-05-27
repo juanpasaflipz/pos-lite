@@ -14,6 +14,8 @@ export interface PaymentModalProps {
   onSpeiPayment?: (tip: number) => void;
   onGetnetPayment?: (tip: number) => void;
   onTerminalPaymentSuccess?: (orderId: number) => void;
+  /** When provided, renders a "Dividir cuenta" entry that hands off to the split flow. */
+  onSplitPayment?: () => void;
   onCancel: () => void;
   isProcessing: boolean;
   isOnline: boolean;
@@ -29,6 +31,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   onSpeiPayment,
   onGetnetPayment,
   onTerminalPaymentSuccess,
+  onSplitPayment,
   onCancel,
   isProcessing,
   isOnline,
@@ -363,6 +366,16 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                   className="w-full py-4 bg-cockpit-blue text-white text-xl font-bold rounded-lg hover:bg-cockpit-blue/90 disabled:bg-neutral-700 disabled:text-neutral-400 transition-all touch-manipulation"
                 >
                   {isProcessing ? t('payment.processing') : t('payment.speiTransfer')}
+                </button>
+              )}
+              {/* Split-the-bill — only when the caller wires it (existing-order Cobrar). */}
+              {onSplitPayment && (
+                <button
+                  onClick={onSplitPayment}
+                  disabled={isProcessing}
+                  className="w-full py-4 bg-neutral-700 text-white text-xl font-bold rounded-lg hover:bg-neutral-600 disabled:bg-neutral-800 transition-all touch-manipulation border border-neutral-600"
+                >
+                  {t('payment.splitBill', 'Dividir cuenta')}
                 </button>
               )}
               <button
