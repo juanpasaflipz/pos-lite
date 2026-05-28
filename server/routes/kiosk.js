@@ -929,7 +929,7 @@ router.get('/orders/open', verifyKioskToken, async (req, res) => {
       WHERE o.tenant_id = ${tenantId}
         AND o.source = 'customer_kiosk'
         AND o.payment_status IN ('unpaid', 'partial', 'pending_terminal')
-        AND o.status IN ('confirmed', 'preparing', 'ready')
+        AND o.status NOT IN ('cancelled', 'voided', 'draft_kiosk')
         AND o.created_at > NOW() - INTERVAL '6 hours'
         AND ${matchFilter}
       ORDER BY o.created_at DESC
