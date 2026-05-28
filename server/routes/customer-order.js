@@ -1,6 +1,7 @@
 // Customer QR ordering API — public endpoints
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
+import crypto from 'crypto';
 import { all, get, run, getConn, getTenantId } from '../db/index.js';
 import { insertOrderWithNumber, estimatePrepTime } from './orders.js';
 import { audit } from '../lib/auditLog.js';
@@ -272,10 +273,13 @@ router.post('/', customerOrderLimiter, async (req, res) => {
       tenantId,
     });
 
-    // Set source and table_number
+    // Per-order secret — required on the public status/payment-intent/confirm-payment endpoints
+    const customerSecret = crypto.randomBytes(16).toString('base64url');
+
+    // Set source, table_number, and customer_secret
     await conn.unsafe(
-      `UPDATE orders SET source = 'qr_order', table_number = $1 WHERE id = $2`,
-      [sanitizedTable, orderId]
+      `UPDATE orders SET source = 'qr_order', table_number = $1, customer_secret = $2 WHERE id = $3`,
+      [sanitizedTable, customerSecret, orderId]
     );
 
     // Calculate estimated prep time
@@ -346,6 +350,7 @@ router.post('/', customerOrderLimiter, async (req, res) => {
     res.status(201).json({
       order_id: orderId,
       order_number: orderNumber,
+      order_secret: customerSecret,
       estimated_ready_minutes: prepEstimate.estimate,
       estimated_ready_range: { low: prepEstimate.low, high: prepEstimate.high },
     });
@@ -355,17 +360,26 @@ router.post('/', customerOrderLimiter, async (req, res) => {
   }
 });
 
-// GET /api/customer-order/:orderId/status — public, rate-limited
+// Extract the per-order secret from query (GET) or body (POST). Returns null
+// when missing/wrong-typed so the route can 404 uniformly without leaking shape.
+function extractSecret(req) {
+  const raw = req.method === 'GET' ? req.query.secret : req.body?.secret;
+  return typeof raw === 'string' && raw.length > 0 ? raw : null;
+}
+
+// GET /api/customer-order/:orderId/status — public, rate-limited, secret-gated
 router.get('/:orderId/status', statusLimiter, async (req, res) => {
   try {
     const { orderId } = req.params;
+    const secret = extractSecret(req);
+    if (!secret) return res.status(404).json({ error: 'Order not found' });
 
     const order = await get(`
       SELECT id, order_number, status, table_number, estimated_ready_minutes,
              created_at, ready_at, total
       FROM orders
-      WHERE id = $1 AND source = 'qr_order'
-    `, [orderId]);
+      WHERE id = $1 AND source = 'qr_order' AND customer_secret = $2
+    `, [orderId, secret]);
 
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
@@ -391,12 +405,14 @@ router.get('/:orderId/status', statusLimiter, async (req, res) => {
 router.post('/:orderId/payment-intent', statusLimiter, async (req, res) => {
   try {
     const { orderId } = req.params;
+    const secret = extractSecret(req);
+    if (!secret) return res.status(404).json({ error: 'Order not found' });
 
     const order = await get(`
       SELECT id, total, payment_status, source
       FROM orders
-      WHERE id = $1 AND source = 'qr_order'
-    `, [orderId]);
+      WHERE id = $1 AND source = 'qr_order' AND customer_secret = $2
+    `, [orderId, secret]);
 
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
@@ -429,12 +445,14 @@ router.post('/:orderId/payment-intent', statusLimiter, async (req, res) => {
 router.post('/:orderId/confirm-payment', statusLimiter, async (req, res) => {
   try {
     const { orderId } = req.params;
+    const secret = extractSecret(req);
+    if (!secret) return res.status(404).json({ error: 'Order not found' });
 
     const order = await get(`
       SELECT id, payment_intent_id, payment_status, source, status
       FROM orders
-      WHERE id = $1 AND source = 'qr_order'
-    `, [orderId]);
+      WHERE id = $1 AND source = 'qr_order' AND customer_secret = $2
+    `, [orderId, secret]);
 
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });

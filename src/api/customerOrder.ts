@@ -30,6 +30,7 @@ export interface CustomerOrderItem {
 export interface CustomerOrderResult {
   order_id: number;
   order_number: number;
+  order_secret: string;
   estimated_ready_minutes: number;
   estimated_ready_range: { low: number; high: number };
 }
@@ -70,8 +71,8 @@ export async function placeCustomerOrder(
   return res.json();
 }
 
-export async function getCustomerOrderStatus(orderId: number): Promise<CustomerOrderStatus> {
-  const res = await fetch(`${API_BASE}/${orderId}/status`);
+export async function getCustomerOrderStatus(orderId: number, secret: string): Promise<CustomerOrderStatus> {
+  const res = await fetch(`${API_BASE}/${orderId}/status?secret=${encodeURIComponent(secret)}`);
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error || `Failed to fetch status: ${res.status}`);
@@ -79,10 +80,11 @@ export async function getCustomerOrderStatus(orderId: number): Promise<CustomerO
   return res.json();
 }
 
-export async function createCustomerPaymentIntent(orderId: number): Promise<{ clientSecret: string }> {
+export async function createCustomerPaymentIntent(orderId: number, secret: string): Promise<{ clientSecret: string }> {
   const res = await fetch(`${API_BASE}/${orderId}/payment-intent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ secret }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -91,10 +93,11 @@ export async function createCustomerPaymentIntent(orderId: number): Promise<{ cl
   return res.json();
 }
 
-export async function confirmCustomerPayment(orderId: number): Promise<{ success: boolean }> {
+export async function confirmCustomerPayment(orderId: number, secret: string): Promise<{ success: boolean }> {
   const res = await fetch(`${API_BASE}/${orderId}/confirm-payment`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ secret }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));

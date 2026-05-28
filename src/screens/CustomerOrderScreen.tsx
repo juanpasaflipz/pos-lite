@@ -72,23 +72,23 @@ interface CartItem {
 
 const ACTIVE_ORDER_KEY = 'qr_active_order';
 
-function saveActiveOrder(orderId: number) {
+function saveActiveOrder(orderId: number, secret: string) {
   try {
-    localStorage.setItem(ACTIVE_ORDER_KEY, JSON.stringify({ orderId, ts: Date.now() }));
+    localStorage.setItem(ACTIVE_ORDER_KEY, JSON.stringify({ orderId, secret, ts: Date.now() }));
   } catch { /* ignore */ }
 }
 
-function loadActiveOrder(): number | null {
+function loadActiveOrder(): { orderId: number; secret: string } | null {
   try {
     const raw = localStorage.getItem(ACTIVE_ORDER_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw);
-    // Expire after 4 hours
-    if (Date.now() - data.ts > 4 * 60 * 60 * 1000) {
+    // Expire after 4 hours, or drop if a pre-secret entry is still around
+    if (Date.now() - data.ts > 4 * 60 * 60 * 1000 || !data.secret) {
       localStorage.removeItem(ACTIVE_ORDER_KEY);
       return null;
     }
-    return data.orderId;
+    return { orderId: data.orderId, secret: data.secret };
   } catch {
     return null;
   }
@@ -125,8 +125,9 @@ function cartReducer(state: CartItem[], action: CartAction): CartItem[] {
 
 /* ==================== Payment Form (Stripe Elements) ==================== */
 
-function PaymentForm({ orderId, onSuccess, onError }: {
+function PaymentForm({ orderId, orderSecret, onSuccess, onError }: {
   orderId: number;
+  orderSecret: string;
   onSuccess: () => void;
   onError: (msg: string) => void;
 }) {
@@ -152,7 +153,7 @@ function PaymentForm({ orderId, onSuccess, onError }: {
       }
 
       // Confirm on our backend
-      await confirmCustomerPayment(orderId);
+      await confirmCustomerPayment(orderId, orderSecret);
       onSuccess();
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Payment failed');
@@ -195,8 +196,9 @@ function getStepIndex(status: string): number {
   return 0; // pending
 }
 
-function OrderStatusTracker({ orderId, onNewOrder }: {
+function OrderStatusTracker({ orderId, orderSecret, onNewOrder }: {
   orderId: number;
+  orderSecret: string;
   onNewOrder: () => void;
 }) {
   const [status, setStatus] = useState<CustomerOrderStatus | null>(null);
@@ -205,7 +207,7 @@ function OrderStatusTracker({ orderId, onNewOrder }: {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const data = await getCustomerOrderStatus(orderId);
+      const data = await getCustomerOrderStatus(orderId, orderSecret);
       setStatus(data);
       setError(null);
 
@@ -221,7 +223,7 @@ function OrderStatusTracker({ orderId, onNewOrder }: {
     } catch (err) {
       setError('Unable to check status');
     }
-  }, [orderId]);
+  }, [orderId, orderSecret]);
 
   useEffect(() => {
     fetchStatus();
@@ -346,6 +348,7 @@ export default function CustomerOrderScreen() {
   // Stage + order state
   const [stage, setStage] = useState<Stage>('menu');
   const [orderId, setOrderId] = useState<number | null>(null);
+  const [orderSecret, setOrderSecret] = useState<string | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
 
   // UI state
@@ -370,9 +373,10 @@ export default function CustomerOrderScreen() {
 
   // Check for existing active order on mount
   useEffect(() => {
-    const existingOrderId = loadActiveOrder();
-    if (existingOrderId) {
-      setOrderId(existingOrderId);
+    const existing = loadActiveOrder();
+    if (existing) {
+      setOrderId(existing.orderId);
+      setOrderSecret(existing.secret);
       setStage('tracking');
     }
   }, []);
@@ -543,14 +547,15 @@ export default function CustomerOrderScreen() {
 
       const result = await placeCustomerOrder(items, tableNumber);
       setOrderId(result.order_id);
-      saveActiveOrder(result.order_id);
+      setOrderSecret(result.order_secret);
+      saveActiveOrder(result.order_id, result.order_secret);
       dispatch({ type: 'CLEAR' });
       setCartOpen(false);
 
       if (requirePayment && stripePromise) {
         // Create payment intent
         try {
-          const { clientSecret: secret } = await createCustomerPaymentIntent(result.order_id);
+          const { clientSecret: secret } = await createCustomerPaymentIntent(result.order_id, result.order_secret);
           setClientSecret(secret);
           setStage('payment');
         } catch {
@@ -597,7 +602,7 @@ export default function CustomerOrderScreen() {
   } : undefined, [clientSecret]);
 
   /* ==================== Payment Stage ==================== */
-  if (stage === 'payment' && clientSecret && orderId && stripePromise) {
+  if (stage === 'payment' && clientSecret && orderId && orderSecret && stripePromise) {
     return (
       <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center p-6">
         <div className="bg-neutral-900 rounded-2xl p-6 max-w-sm w-full border border-neutral-800">
@@ -618,6 +623,7 @@ export default function CustomerOrderScreen() {
           >
             <PaymentForm
               orderId={orderId}
+              orderSecret={orderSecret}
               onSuccess={() => setStage('tracking')}
               onError={(msg) => setError(msg)}
             />
@@ -635,12 +641,14 @@ export default function CustomerOrderScreen() {
   }
 
   /* ==================== Tracking Stage ==================== */
-  if (stage === 'tracking' && orderId) {
+  if (stage === 'tracking' && orderId && orderSecret) {
     return (
       <OrderStatusTracker
         orderId={orderId}
+        orderSecret={orderSecret}
         onNewOrder={() => {
           setOrderId(null);
+          setOrderSecret(null);
           setClientSecret(null);
           setStage('menu');
           setLoading(true);
