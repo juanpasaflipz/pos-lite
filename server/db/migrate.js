@@ -64,16 +64,15 @@ export async function runMigrations(label = 'db') {
     )
   `;
 
-  const result = await adminSql`
-    SELECT COALESCE(MAX(version), 0) AS v FROM schema_version
-  `;
-  const currentVersion = result[0].v;
+  const appliedRows = await adminSql`SELECT version FROM schema_version`;
+  const appliedVersions = new Set(appliedRows.map(r => r.version));
 
-  const pending = migrationCache.filter(m => m.version > currentVersion);
+  const pending = migrationCache.filter(m => !appliedVersions.has(m.version));
 
   if (pending.length === 0) return;
 
-  console.log(`[Migrate] ${label}: ${pending.length} pending migration(s) from v${currentVersion}`);
+  const highestApplied = appliedVersions.size > 0 ? Math.max(...appliedVersions) : 0;
+  console.log(`[Migrate] ${label}: ${pending.length} pending migration(s) (highest applied: v${highestApplied})`);
 
   for (const migration of pending) {
     try {

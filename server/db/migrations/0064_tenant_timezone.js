@@ -1,4 +1,4 @@
-export const version = 41;
+export const version = 64;
 export const name = 'tenant_timezone';
 
 export async function up(sql) {
