@@ -353,7 +353,7 @@ router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
     if (!Number.isInteger(orderId)) {
       return res.status(400).json({ error: 'Invalid order id' });
     }
-    const employeeId = req.user?.id;
+    const employeeId = req.employee?.id;
     if (!employeeId) {
       return res.status(401).json({ error: 'Authenticated employee required' });
     }
