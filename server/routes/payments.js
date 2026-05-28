@@ -335,6 +335,9 @@ router.post('/split/charge-card', paymentLimiter, requireAuth('pos_access'), req
     const termId = terminal_id || tenant.mp_default_terminal_id;
     if (!termId) return res.status(400).json({ error: 'No terminal selected' });
 
+    const lock = await findActiveTerminalLock(req.tenant.id, { excludeOrderId: split.order_id });
+    if (lock) return res.status(409).json(terminalBusyResponse(lock));
+
     const chargeAmount = Number(split.amount) + (Number(split.tip) || 0);
     const externalRef = `${req.tenant.id}-${split.order_id}-sp${split.id}`;
 
@@ -1019,6 +1022,68 @@ async function markTerminalOrderPaid(orderId, tenantId = 'default', { mpOrder = 
 }
 
 /**
+ * Returns the order currently holding the MP terminal for this tenant, or null
+ * if free. Cross-device coordination: prevents two kiosks (or kiosk + POS) from
+ * racing each other to the single shared terminal. The 3-minute window matches
+ * the stranded-terminal threshold in /api/orders/kiosk-held — anything older
+ * is presumed dead and rescuable, so we don't lock the terminal forever.
+ *
+ * Checks both order-level (`orders.payment_status`) and split-level
+ * (`order_payments.status`) pending_terminal rows.
+ */
+export async function findActiveTerminalLock(tenantId, { excludeOrderId = null } = {}) {
+  const orderRows = excludeOrderId
+    ? await adminSql`
+        SELECT order_number, source, id
+        FROM orders
+        WHERE tenant_id = ${tenantId}
+          AND payment_status = 'pending_terminal'
+          AND created_at > NOW() - INTERVAL '3 minutes'
+          AND id != ${excludeOrderId}
+        ORDER BY created_at DESC LIMIT 1
+      `
+    : await adminSql`
+        SELECT order_number, source, id
+        FROM orders
+        WHERE tenant_id = ${tenantId}
+          AND payment_status = 'pending_terminal'
+          AND created_at > NOW() - INTERVAL '3 minutes'
+        ORDER BY created_at DESC LIMIT 1
+      `;
+  if (orderRows[0]) return orderRows[0];
+
+  const splitRows = excludeOrderId
+    ? await adminSql`
+        SELECT o.order_number, o.source, op.order_id AS id
+        FROM order_payments op
+        JOIN orders o ON o.id = op.order_id
+        WHERE o.tenant_id = ${tenantId}
+          AND op.status = 'pending_terminal'
+          AND op.created_at > NOW() - INTERVAL '3 minutes'
+          AND op.order_id != ${excludeOrderId}
+        ORDER BY op.created_at DESC LIMIT 1
+      `
+    : await adminSql`
+        SELECT o.order_number, o.source, op.order_id AS id
+        FROM order_payments op
+        JOIN orders o ON o.id = op.order_id
+        WHERE o.tenant_id = ${tenantId}
+          AND op.status = 'pending_terminal'
+          AND op.created_at > NOW() - INTERVAL '3 minutes'
+        ORDER BY op.created_at DESC LIMIT 1
+      `;
+  return splitRows[0] || null;
+}
+
+function terminalBusyResponse(lock) {
+  return {
+    error: `Terminal en uso — orden #${lock.order_number} en proceso. Inténtalo en unos segundos.`,
+    code: 'terminal_busy',
+    current_order_number: String(lock.order_number),
+  };
+}
+
+/**
  * Idempotently insert an order_payments row for an MP Point payment, capturing
  * the processor fee + raw response. Owners read this back in FeesTab to see
  * what MP is actually charging them — cashiers never see it.
@@ -1130,6 +1195,9 @@ router.post('/mp/charge', requireAuth('pos_access'), requirePro, async (req, res
     const accessToken = await ensureFreshToken(tenant, adminSql);
     const termId = terminal_id || tenant.mp_default_terminal_id;
     if (!termId) return res.status(400).json({ error: 'No terminal selected' });
+
+    const lock = await findActiveTerminalLock(req.tenant.id, { excludeOrderId: order.id });
+    if (lock) return res.status(409).json(terminalBusyResponse(lock));
 
     const tipAmount = typeof tip === 'number' ? tip : 0;
     const totalAmount = Number(order.total) + tipAmount;

@@ -29,7 +29,7 @@ import {
   getPointOrder,
   mapPointOrderStatus,
 } from '../services/mercadopago.js';
-import { recordMpTerminalPayment } from './payments.js';
+import { recordMpTerminalPayment, findActiveTerminalLock } from './payments.js';
 
 const router = Router();
 const TAX_RATE = 0.16;
@@ -1115,6 +1115,15 @@ router.post('/orders/:id/mp-charge', verifyKioskToken, async (req, res) => {
     if (tenant?.plan !== 'pro') return res.status(403).json({ error: 'Mercado Pago Point requires Pro' });
     if (!tenant?.mp_access_token) return res.status(400).json({ error: 'Mercado Pago not connected' });
     if (!tenant?.mp_default_terminal_id) return res.status(400).json({ error: 'No default terminal selected' });
+
+    const lock = await findActiveTerminalLock(tenantId, { excludeOrderId: order.id });
+    if (lock) {
+      return res.status(409).json({
+        error: `Terminal en uso — orden #${lock.order_number} en proceso. Inténtalo en unos segundos.`,
+        code: 'terminal_busy',
+        current_order_number: String(lock.order_number),
+      });
+    }
 
     const accessToken = await ensureFreshToken(tenant, adminSql);
     const mpOrder = await createPointOrder(accessToken, {
