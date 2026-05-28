@@ -32,7 +32,7 @@ const KioskCallNameModal: React.FC<Props> = ({ onSkip, onConfirm, required = fal
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-end justify-center sm:items-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/70 flex items-start justify-center z-50 p-4 pt-8 sm:pt-20">
       <div className="bg-neutral-900 rounded-xl border border-neutral-800 shadow-2xl w-full max-w-[560px] p-6 sm:p-8 space-y-6">
         <div className="flex items-start justify-between gap-4">
           <div>

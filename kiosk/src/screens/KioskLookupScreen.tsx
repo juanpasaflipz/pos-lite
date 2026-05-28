@@ -333,7 +333,7 @@ const KioskLookupScreen: React.FC<Props> = ({ mode }) => {
         <div className="w-[120px]" />
       </header>
 
-      <main className="flex-1 flex flex-col items-center justify-center">
+      <main className="flex-1 flex flex-col items-center justify-start pt-8 md:pt-16">
         <h1 className="text-4xl xl:text-5xl font-black leading-tight text-center mb-3">
           ¿Cómo te llamas?
         </h1>

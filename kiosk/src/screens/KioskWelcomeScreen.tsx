@@ -276,7 +276,7 @@ const KioskWelcomeScreen: React.FC = () => {
   }
 
   return (
-    <div className="h-full w-full bg-neutral-950 text-white flex flex-col items-center justify-center px-10 py-8">
+    <div className="h-full w-full bg-neutral-950 text-white flex flex-col items-center justify-start px-10 pt-12 pb-8 sm:pt-20">
       <div className="text-center mb-6">
         <h1 className="text-4xl font-black leading-tight">¡Bienvenido! 👋</h1>
         <p className="text-xl text-neutral-400 font-bold mt-2 max-w-xl">
