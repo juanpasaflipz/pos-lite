@@ -63,7 +63,12 @@ export default function MenuGrid({
             >
               {/* Image or placeholder */}
               <div className="h-28 lg:h-32 w-full bg-neutral-800 flex items-center justify-center overflow-hidden flex-shrink-0">
-                <MenuItemImage src={item.image_url} alt={item.name} />
+                <MenuItemImage
+                  src={item.image_url}
+                  alt={item.name}
+                  seed={item.id}
+                  category={item.name}
+                />
               </div>
 
               {/* Sold out overlay */}
