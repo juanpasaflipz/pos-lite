@@ -1,15 +1,17 @@
 import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CartItem, LoyaltyCustomer, ComboDefinition, Discount } from '../types';
+import { CartItem, LoyaltyCustomer, ComboDefinition, Discount, Order } from '../types';
 import { formatPrice, TAX_LABEL } from '../utils/currency';
 import { formatTime } from '../utils/dateFormat';
-import { ClipboardList, PauseCircle, Percent, X } from 'lucide-react';
+import { ClipboardList, PauseCircle, Percent, Smartphone, Trash2, User, X } from 'lucide-react';
 
 interface CartDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   cart: CartItem[];
   linkedCustomer: LoyaltyCustomer | null;
+  unpaidOrders: Order[];
+  showUnpaidOrders: boolean;
   parkedCount: number;
   onUnlinkCustomer: () => void;
   onRemoveFromCart: (cartId: string) => void;
@@ -23,6 +25,9 @@ interface CartDrawerProps {
   onShowSplitPayment: () => void;
   onClearCart: () => void;
   onLogout: () => void;
+  onCobrar: (order: Order) => void;
+  onToggleUnpaidOrders: () => void;
+  onDeleteUnpaidOrder?: (order: Order) => void;
   comboSuggestion: { combo: ComboDefinition; matchedItems: CartItem[]; savings: number } | null;
   onConvertToCombo: () => void;
   total: number;
@@ -39,6 +44,8 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
   onClose,
   cart,
   linkedCustomer,
+  unpaidOrders,
+  showUnpaidOrders,
   parkedCount,
   onUnlinkCustomer,
   onRemoveFromCart,
@@ -52,6 +59,9 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
   onShowSplitPayment,
   onClearCart,
   onLogout,
+  onCobrar,
+  onToggleUnpaidOrders,
+  onDeleteUnpaidOrder,
   comboSuggestion,
   onConvertToCombo,
   total,
@@ -63,6 +73,9 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
   onApplyLineDiscount,
 }) => {
   const { t } = useTranslation('pos');
+
+  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const pendingTotal = unpaidOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
 
   // Lock body scroll when drawer open
   useEffect(() => {
@@ -92,12 +105,31 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
       >
         {/* Header */}
         <div className="bg-brand-600 text-white p-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-lg font-bold">{t('cart.orderNumber', { number: '1001' })}</p>
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-lg font-bold">
+                {cart.length === 0
+                  ? t('cart.newOrder')
+                  : t('cart.itemCount', { count: cartCount })}
+              </p>
               <p className="text-xs text-brand-200">{formatTime(new Date())}</p>
             </div>
-            <button onClick={onClose} className="text-brand-200 hover:text-white p-1">
+            {unpaidOrders.length > 0 && (
+              <button
+                onClick={onToggleUnpaidOrders}
+                className="flex flex-col items-end bg-brand-700/60 hover:bg-brand-700 rounded-lg px-2 py-1 transition-all"
+              >
+                <span className="flex items-center gap-1 text-xs font-bold">
+                  <span className="bg-white text-brand-700 rounded-full px-1.5 min-w-5 text-center text-[10px]">
+                    {unpaidOrders.length}
+                  </span>
+                  {t('cart.pendingLabel')}
+                  <span className="text-brand-200 text-[10px]">{showUnpaidOrders ? '▲' : '▼'}</span>
+                </span>
+                <span className="text-[10px] text-brand-200 mt-0.5">{formatPrice(pendingTotal)}</span>
+              </button>
+            )}
+            <button onClick={onClose} className="text-brand-200 hover:text-white p-1 shrink-0">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -117,6 +149,67 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
             </div>
           )}
         </div>
+
+        {/* Unpaid orders list — toggled from the header pending pill */}
+        {unpaidOrders.length > 0 && showUnpaidOrders && (
+          <div className="border-b border-neutral-800 bg-cockpit-yellow/10">
+            <div className="flex items-center justify-between px-3 pt-2 pb-1">
+              <span className="text-cockpit-attention-text font-bold text-xs">{t('cart.unpaidOrders')}</span>
+            </div>
+            <div className="px-3 pb-2 space-y-1.5 max-h-48 overflow-y-auto">
+              {unpaidOrders.map((order) => (
+                <div
+                  key={order.id}
+                  className="flex items-center justify-between bg-neutral-800 rounded-lg px-2.5 py-1.5 border border-neutral-700"
+                >
+                  <div className="min-w-0 flex-1 mr-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="text-white font-bold text-xs">#{order.order_number}</p>
+                      {order.source === 'customer_kiosk' && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full bg-brand-600/20 border border-brand-600/40 text-brand-200 text-[9px] font-black uppercase px-1.5 py-0.5 tracking-wide"
+                          title={t('cart.fromKiosk')}
+                        >
+                          <Smartphone className="h-3 w-3" />
+                          Kiosko
+                        </span>
+                      )}
+                      {order.order_fulfillment_type && (
+                        <span className="inline-flex items-center rounded-full bg-cockpit-yellow text-neutral-950 text-[9px] font-black uppercase px-1.5 py-0.5 tracking-wide whitespace-nowrap">
+                          {order.order_fulfillment_type === 'for_here' ? t('cart.forHere') : t('cart.toGo')}
+                        </span>
+                      )}
+                    </div>
+                    {order.customer_name && (
+                      <p className="text-neutral-300 text-[11px] truncate inline-flex items-center gap-1">
+                        <User className="h-3 w-3 text-neutral-500 shrink-0" />
+                        {order.customer_name}
+                      </p>
+                    )}
+                    <p className="text-neutral-400 text-[11px]">{formatPrice(order.total)}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => onCobrar(order)}
+                      className="px-2.5 py-1.5 bg-brand-600 text-white text-[11px] font-bold rounded-lg hover:bg-brand-700 transition-all min-h-[40px]"
+                    >
+                      {t('cart.charge')}
+                    </button>
+                    {onDeleteUnpaidOrder && (
+                      <button
+                        onClick={() => onDeleteUnpaidOrder(order)}
+                        title="Delete order"
+                        className="p-1.5 text-neutral-400 hover:text-cockpit-out-text/90 hover:bg-neutral-700 rounded-lg transition-all min-h-[40px] min-w-[40px] flex items-center justify-center"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Cart items */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
@@ -214,20 +307,24 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
                       </button>
                     </div>
                   )}
-                  {!isComboItem && !item.selectedModifierIds?.length && (
+                  {!isComboItem && (
                     <div className="flex gap-1.5">
-                      <button
-                        onClick={() => onSetNotesItem(item)}
-                        className="flex-1 py-1.5 text-xs bg-neutral-700 text-neutral-300 rounded hover:bg-neutral-600 transition-all font-semibold"
-                      >
-                        {t('cart.addNotes')}
-                      </button>
+                      {!item.selectedModifierIds?.length && (
+                        <button
+                          onClick={() => onSetNotesItem(item)}
+                          className="flex-1 py-1.5 text-xs bg-neutral-700 text-neutral-300 rounded hover:bg-neutral-600 transition-all font-semibold"
+                        >
+                          {t('cart.addNotes')}
+                        </button>
+                      )}
                       {!item.discount && (
                         <button
                           onClick={() => onApplyLineDiscount(item)}
-                          className="px-2 py-1.5 text-xs bg-neutral-700 text-cockpit-attention-text rounded hover:bg-neutral-600 transition-all"
+                          title={t('discount.applyToLine')}
+                          className={`${item.selectedModifierIds?.length ? 'flex-1' : 'px-2'} py-1.5 text-xs bg-neutral-700 text-cockpit-attention-text rounded hover:bg-neutral-600 transition-all flex items-center justify-center gap-1`}
                         >
                           <Percent className="w-3.5 h-3.5" />
+                          {item.selectedModifierIds?.length ? <span className="font-semibold">{t('discount.applyToLine')}</span> : null}
                         </button>
                       )}
                     </div>

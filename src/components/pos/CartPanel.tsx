@@ -292,21 +292,24 @@ export default function CartPanel({
                   </div>
                 )}
 
-                {!isComboItem && !item.selectedModifierIds?.length && (
+                {!isComboItem && (
                   <div className="flex gap-2">
-                    <button
-                      onClick={() => onSetNotesItem(item)}
-                      className="flex-1 py-2 text-sm bg-neutral-700 text-neutral-300 rounded hover:bg-neutral-600 transition-all font-semibold"
-                    >
-                      {t('cart.addNotes')}
-                    </button>
+                    {!item.selectedModifierIds?.length && (
+                      <button
+                        onClick={() => onSetNotesItem(item)}
+                        className="flex-1 py-2 text-sm bg-neutral-700 text-neutral-300 rounded hover:bg-neutral-600 transition-all font-semibold"
+                      >
+                        {t('cart.addNotes')}
+                      </button>
+                    )}
                     {!item.discount && (
                       <button
                         onClick={() => onApplyLineDiscount(item)}
                         title={t('discount.applyToLine')}
-                        className="px-3 py-2 text-sm bg-neutral-700 text-cockpit-attention-text rounded hover:bg-neutral-600 transition-all font-semibold"
+                        className={`${item.selectedModifierIds?.length ? 'flex-1' : 'px-3'} py-2 text-sm bg-neutral-700 text-cockpit-attention-text rounded hover:bg-neutral-600 transition-all font-semibold flex items-center justify-center gap-1`}
                       >
                         <Percent className="w-4 h-4" />
+                        {item.selectedModifierIds?.length ? <span>{t('discount.applyToLine')}</span> : null}
                       </button>
                     )}
                   </div>

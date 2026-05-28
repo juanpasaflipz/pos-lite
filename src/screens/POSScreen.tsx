@@ -1126,6 +1126,8 @@ const POSScreen: React.FC = () => {
             onClose={() => setIsCartOpen(false)}
             cart={cart}
             linkedCustomer={linkedCustomer}
+            unpaidOrders={unpaidOrders}
+            showUnpaidOrders={showUnpaidOrders}
             parkedCount={parkedCarts.length}
             onUnlinkCustomer={() => setLinkedCustomer(null)}
             onRemoveFromCart={removeFromCart}
@@ -1139,6 +1141,17 @@ const POSScreen: React.FC = () => {
             onShowSplitPayment={() => setShowSplitPayment(true)}
             onClearCart={clearCart}
             onLogout={handleLogout}
+            onCobrar={handleCobrar}
+            onToggleUnpaidOrders={() => setShowUnpaidOrders(!showUnpaidOrders)}
+            onDeleteUnpaidOrder={async (order) => {
+              if (!window.confirm(`Delete order #${order.order_number}? This cannot be undone.`)) return;
+              try {
+                await deleteOrder(order.id);
+                setUnpaidOrders((prev) => prev.filter((o) => o.id !== order.id));
+              } catch (err) {
+                window.alert(err instanceof Error ? err.message : 'Failed to delete order');
+              }
+            }}
             comboSuggestion={comboSuggestion}
             onConvertToCombo={convertToCombo}
             total={total}
