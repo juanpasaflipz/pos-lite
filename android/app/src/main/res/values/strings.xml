@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Desktop Kitchen Kiosk</string>
+    <string name="title_activity_main">Desktop Kitchen Kiosk</string>
+    <string name="package_name">kitchen.desktop.kiosk</string>
+    <string name="custom_url_scheme">kitchen.desktop.kiosk</string>
+</resources>

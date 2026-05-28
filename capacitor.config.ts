@@ -1,20 +1,23 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'kitchen.desktop.app',
-  appName: 'Desktop Kitchen POS',
-  webDir: 'dist',
-  // No server.url — app loads from local dist/ for offline support.
-  // API calls go to pos.desktop.kitchen via src/api/index.ts base URL detection.
-  ios: {
-    contentInset: 'always',
-    allowsLinkPreview: false,
-    scrollEnabled: false,
-    preferredContentMode: 'mobile',
-  },
+  appId: 'kitchen.desktop.kiosk',
+  appName: 'Desktop Kitchen Kiosk',
+  webDir: 'dist-kiosk',
   android: {
     overScrollMode: 'never',
     backgroundColor: '#ffffff',
+    allowMixedContent: false,
+    webContentsDebuggingEnabled: false,
+  },
+  plugins: {
+    SplashScreen: {
+      launchShowDuration: 1200,
+      backgroundColor: '#ffffff',
+      androidSplashResourceName: 'splash',
+      splashFullScreen: true,
+      splashImmersive: true,
+    },
   },
 };
 
