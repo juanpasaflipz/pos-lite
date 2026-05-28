@@ -58,23 +58,13 @@ router.get('/customers', requireAuth('manage_loyalty'), async (req, res) => {
   }
 });
 
-// GET /customers/:id — Detail + stamp cards + events
-router.get('/customers/:id', requireAuth('manage_loyalty'), async (req, res) => {
-  try {
-    const data = await getCustomerWithCard(parseInt(req.params.id));
-    if (!data) return res.status(404).json({ error: 'Customer not found' });
-    res.json(data);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
 // GET /customers/search?name=X — Name-based lookup for the POS checkout modal.
 // Pos_access scope (cashier-friendly), capped at 10 results. Case-insensitive
 // prefix + contains match. Mirrors the kiosk's name-lookup pattern so a
 // customer who placed a dine-in order via phone can also be found at the
 // register by their first name when the cashier is taking a new order.
+// NOTE: must be registered BEFORE /customers/:id so Express doesn't match
+// "search" as an :id param.
 router.get('/customers/search', requireAuth('pos_access'), async (req, res) => {
   try {
     const raw = typeof req.query.name === 'string' ? req.query.name.trim() : '';
@@ -130,6 +120,22 @@ router.get('/customers/phone/:phone', requireAuth('pos_access'), async (req, res
 
     const activeCard = await getActiveStampCard(customer.id);
     res.json({ ...customer, activeCard });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /customers/:id — Detail + stamp cards + events
+// Registered after /customers/search and /customers/phone/:phone so the
+// literal segments win over the :id param.
+router.get('/customers/:id', requireAuth('manage_loyalty'), async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid customer id' });
+    const data = await getCustomerWithCard(id);
+    if (!data) return res.status(404).json({ error: 'Customer not found' });
+    res.json(data);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
