@@ -3,6 +3,8 @@
     "operator": "Operator",
     "time": "Time",
     "ordersToday": "Orders Today",
+    "cashDrawer": "Drawer",
+    "cashDrawerHint": "Expected cash in drawer (opening + cash sales this shift)",
     "searchItems": "Search items...",
     "categories": "Categories",
     "allItems": "All Items"

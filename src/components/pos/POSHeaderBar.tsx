@@ -1,10 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { WifiOff, Wifi, Menu, Search, X } from 'lucide-react';
+import { WifiOff, Wifi, Menu, Search, X, Wallet } from 'lucide-react';
 import LanguageSwitcher from '../LanguageSwitcher';
 import { VirtualBrand } from '../../types';
 import { formatTime } from '../../utils/dateFormat';
+import { formatPrice } from '../../utils/currency';
 
 interface POSHeaderBarProps {
   currentEmployee: { name: string } | null;
@@ -20,6 +21,8 @@ interface POSHeaderBarProps {
   showDrawerCart: boolean;
   showNavMenu: boolean;
   todayOrderCount: number;
+  /** Expected cash in the drawer right now (opening + cash sales this shift). Null hides the pill. */
+  cashDrawerExpected?: number | null;
   filteredItemsCount: number;
   onSearchChange: (value: string) => void;
   onSelectBrand: (id: number | 'all') => void;
@@ -43,6 +46,7 @@ export default function POSHeaderBar({
   showDrawerCart,
   showNavMenu,
   todayOrderCount,
+  cashDrawerExpected,
   filteredItemsCount,
   onSearchChange,
   onSelectBrand,
@@ -69,6 +73,18 @@ export default function POSHeaderBar({
           <p className="text-base lg:text-lg font-bold text-white">{formatTime(currentTime)}</p>
         </div>
         <div className="text-right flex-1 flex items-center justify-end gap-2 lg:gap-3">
+          {typeof cashDrawerExpected === 'number' && (
+            <div
+              className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-neutral-800 border border-neutral-700 rounded-lg"
+              title={t('header.cashDrawerHint')}
+            >
+              <Wallet className="w-4 h-4 text-cockpit-in-text" />
+              <div className="text-left leading-tight">
+                <p className="text-[10px] text-neutral-500 uppercase tracking-wide">{t('header.cashDrawer')}</p>
+                <p className="text-sm font-bold text-white tabular-nums">{formatPrice(cashDrawerExpected)}</p>
+              </div>
+            </div>
+          )}
           <div className="hidden lg:block">
             <p className="text-xs text-neutral-500">{t('header.ordersToday')}</p>
             <p className="text-lg font-bold text-white">{todayOrderCount}</p>

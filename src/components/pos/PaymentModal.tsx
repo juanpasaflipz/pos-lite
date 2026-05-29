@@ -60,6 +60,12 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     setShowCustomInput(false);
   };
 
+  /** Fixed peso amount tip — common in MX where customers leave round bills. */
+  const handleFixedTipSelect = (amount: number) => {
+    setTip(amount);
+    setShowCustomInput(false);
+  };
+
   const handleCustomTip = () => {
     const customAmount = parseFloat(customTip) || 0;
     setTip(customAmount);
@@ -212,6 +218,22 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
               >
                 {t('payment.customTip')}
               </button>
+            </div>
+            {/* Fixed peso tip amounts — common in MX (round bills) */}
+            <div className="grid grid-cols-4 gap-2 mt-2">
+              {[10, 20, 50, 100].map((amt) => (
+                <button
+                  key={amt}
+                  onClick={() => handleFixedTipSelect(amt)}
+                  className={`py-3 px-2 text-lg font-bold rounded-lg transition-all ${
+                    tip === amt && !showCustomInput
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+                  }`}
+                >
+                  ${amt}
+                </button>
+              ))}
             </div>
           </div>
 

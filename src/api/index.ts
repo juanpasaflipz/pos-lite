@@ -1133,6 +1133,19 @@ export async function getActiveShifts(): Promise<ActiveShift[]> {
   return apiRequest<ActiveShift[]>('/shifts/active');
 }
 
+export interface CashSummaryResponse {
+  has_open_shift: boolean;
+  shift_id?: number;
+  opening_total?: number;
+  cash_sales_total?: number;
+  expected_cash_total?: number;
+}
+
+/** Live cash-drawer total for the authenticated employee's open shift. */
+export async function getMyCashSummary(): Promise<CashSummaryResponse> {
+  return apiRequest<CashSummaryResponse>('/shifts/me/cash-summary');
+}
+
 export async function adminClockInEmployee(employee_id: number): Promise<ClockInResponse> {
   return apiRequest<ClockInResponse>('/shifts/admin/clock-in', {
     method: 'POST',

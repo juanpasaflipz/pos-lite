@@ -12,6 +12,7 @@ import {
   getOrders,
   getOrder,
   getTodayOrderCount,
+  getMyCashSummary,
   deleteOrder,
   conektaOxxoPayment,
   conektaSpeiPayment,
@@ -143,6 +144,8 @@ const POSScreen: React.FC = () => {
   // Unpaid orders (for Cobrar flow)
   const [unpaidOrders, setUnpaidOrders] = useState<Order[]>([]);
   const [todayOrderCount, setTodayOrderCount] = useState<number>(0);
+  // Live cash-drawer total for header pill. null = no open shift / not yet loaded.
+  const [cashDrawerExpected, setCashDrawerExpected] = useState<number | null>(null);
   const [showUnpaidOrders, setShowUnpaidOrders] = useState(false);
   // When set, the existing PaymentModal is repurposed to charge this order
   // (kiosk / QR / unpaid orders), bypassing the cart-creation path.
@@ -219,6 +222,32 @@ const POSScreen: React.FC = () => {
     };
     fetchCount();
     const timer = setInterval(fetchCount, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [ordersRefreshKey]);
+
+  // Live cash drawer total — refetched on every order pipeline change (cash
+  // payment, refund, void) plus a 60s heartbeat in case admin clocked the
+  // employee in/out from another device.
+  useEffect(() => {
+    let cancelled = false;
+    const fetchDrawer = async () => {
+      try {
+        const summary = await getMyCashSummary();
+        if (cancelled) return;
+        setCashDrawerExpected(
+          summary.has_open_shift && typeof summary.expected_cash_total === 'number'
+            ? summary.expected_cash_total
+            : null
+        );
+      } catch {
+        // non-blocking
+      }
+    };
+    fetchDrawer();
+    const timer = setInterval(fetchDrawer, 60000);
     return () => {
       cancelled = true;
       clearInterval(timer);
@@ -1028,6 +1057,7 @@ const POSScreen: React.FC = () => {
           showDrawerCart={showDrawerCart}
           showNavMenu={showNavMenu}
           todayOrderCount={todayOrderCount}
+          cashDrawerExpected={cashDrawerExpected}
           filteredItemsCount={filteredItems.length}
           onSearchChange={setSearchQuery}
           onSelectBrand={setSelectedBrand}

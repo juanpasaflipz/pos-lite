@@ -221,6 +221,45 @@ async function attachCashDrawers(conn, shifts) {
 }
 
 /**
+ * GET /api/shifts/me/cash-summary
+ * Returns the running cash-drawer total for the authenticated employee's open
+ * shift. Cashiers use this to see the expected drawer cash live during a shift
+ * instead of waiting until close-out. Returns `has_open_shift: false` when
+ * the employee is not currently clocked in.
+ */
+router.get('/me/cash-summary', requireAuth(), async (req, res) => {
+  try {
+    const conn = getConn();
+    const openShift = await one(conn,
+      `SELECT id, employee_id, clock_in_at, clock_out_at
+         FROM shifts
+        WHERE employee_id = $1 AND clock_out_at IS NULL
+        ORDER BY clock_in_at DESC
+        LIMIT 1`,
+      [req.employee.id]
+    );
+
+    if (!openShift) {
+      return res.json({ has_open_shift: false });
+    }
+
+    const cashDrawer = await getCashDrawerSession(conn, openShift.id);
+    const summary = await getShiftCashSummary(conn, { ...openShift, cash_drawer: cashDrawer });
+
+    res.json({
+      has_open_shift: true,
+      shift_id: openShift.id,
+      opening_total: summary.opening_total,
+      cash_sales_total: summary.cash_sales_total,
+      expected_cash_total: summary.expected_cash_total,
+    });
+  } catch (error) {
+    console.error('Cash summary error:', error);
+    res.status(500).json({ error: 'Failed to load cash summary' });
+  }
+});
+
+/**
  * POST /api/shifts/status — body: { pin }
  * Returns { employee, openShift|null } so the UI can decide whether to show
  * "Clock In" or "Clock Out" before the user commits.

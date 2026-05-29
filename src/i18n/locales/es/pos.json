@@ -3,6 +3,8 @@
     "operator": "Operador",
     "time": "Hora",
     "ordersToday": "Órdenes Hoy",
+    "cashDrawer": "Cajón",
+    "cashDrawerHint": "Efectivo esperado en cajón (apertura + ventas en efectivo del turno)",
     "searchItems": "Buscar productos...",
     "categories": "Categorías",
     "allItems": "Todos"
