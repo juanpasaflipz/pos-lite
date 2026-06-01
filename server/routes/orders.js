@@ -77,10 +77,10 @@ async function estimatePrepTime(conn, itemMenuIds, tenantId) {
   // 2. Count active orders in queue (today only, to ignore stale test data)
   const queueQuery = tenantId
     ? `SELECT COUNT(*) AS queue_size FROM orders
-       WHERE status IN ('pending', 'confirmed', 'preparing')
+       WHERE status IN ('pending', 'confirmed', 'preparing', 'active')
          AND created_at >= CURRENT_DATE AND tenant_id = $1`
     : `SELECT COUNT(*) AS queue_size FROM orders
-       WHERE status IN ('pending', 'confirmed', 'preparing')
+       WHERE status IN ('pending', 'confirmed', 'preparing', 'active')
          AND created_at >= CURRENT_DATE`;
   const queueRows = await conn.unsafe(queueQuery, tenantId ? [tenantId] : []);
   const queueSize = Math.max(0, (parseInt(queueRows[0]?.queue_size) || 0) - 1); // exclude this order
@@ -175,7 +175,7 @@ async function insertOrderWithNumber(conn, {
       payment_status, offline_temp_id,
       discount_amount, discount_type, discount_reason, discount_authorized_by
     )
-    VALUES ($1, $2, $3, 'pending', $4, $5, $6, 'unpaid', $7, $8, $9, $10, $11)
+    VALUES ($1, $2, $3, 'active', $4, $5, $6, 'unpaid', $7, $8, $9, $10, $11)
     RETURNING id, order_number
   `, [
     tid, orderNumber, employee_id, subtotal, tax, total, offline_temp_id || null,
@@ -328,7 +328,7 @@ router.get('/kiosk-held', requireAuth('pos_access'), async (req, res) => {
         AND (
           o.status = 'draft_kiosk'
           OR (
-            o.status = 'pending'
+            o.status IN ('pending', 'active')
             AND o.payment_status = 'pending_terminal'
             AND o.created_at < NOW() - INTERVAL '3 minutes'
           )
@@ -375,7 +375,7 @@ router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
 
     if (isHeld) {
       await run(
-        `UPDATE orders SET status = 'pending', employee_id = $1 WHERE id = $2`,
+        `UPDATE orders SET status = 'active', employee_id = $1 WHERE id = $2`,
         [employeeId, orderId],
       );
       audit(req, 'order.claimed_from_kiosk', { order_id: orderId });
@@ -388,7 +388,7 @@ router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
       );
       audit(req, 'order.rescued_from_terminal', { order_id: orderId });
     }
-    res.json({ id: orderId, status: 'pending' });
+    res.json({ id: orderId, status: 'active' });
   } catch (error) {
     console.error('Error claiming kiosk order:', error);
     res.status(500).json({ error: 'Failed to claim order' });
@@ -831,7 +831,7 @@ router.post('/sync', orderCreateLimiter, requireAuth('pos_access'), async (req, 
     await conn.unsafe(`
       UPDATE orders
       SET payment_status = 'paid',
-          status = 'preparing',
+          status = 'active',
           payment_method = 'cash',
           tip = $1,
           paid_at = NOW()
@@ -858,7 +858,7 @@ router.put('/:id/status', async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
-    const validStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled'];
+    const validStatuses = ['pending', 'confirmed', 'preparing', 'active', 'ready', 'completed', 'cancelled'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ error: 'Invalid status' });
     }
@@ -868,14 +868,14 @@ router.put('/:id/status', async (req, res) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    // Enforce valid status transitions. pending/confirmed/preparing are
-    // functionally one bucket ("in flight") — anything in flight can be
-    // marked ready directly. This removes a double-PUT the KDS used to do
-    // (pending → preparing → ready) just to walk around the table.
+    // 'active' is the canonical in-flight status. pending/confirmed/preparing
+    // are accepted as input from older deployed clients and treated as
+    // equivalent to 'active'. All four can transition straight to ready.
     const validTransitions = {
-      pending:    ['confirmed', 'preparing', 'ready', 'cancelled'],
-      confirmed:  ['preparing', 'ready', 'cancelled'],
-      preparing:  ['ready', 'cancelled'],
+      active:     ['ready', 'cancelled'],
+      pending:    ['confirmed', 'preparing', 'active', 'ready', 'cancelled'],
+      confirmed:  ['preparing', 'active', 'ready', 'cancelled'],
+      preparing:  ['active', 'ready', 'cancelled'],
       ready:      ['completed', 'cancelled'],
       completed:  [],
       cancelled:  [],
@@ -927,14 +927,16 @@ router.get('/kitchen/active', async (req, res) => {
     await run(`
       UPDATE orders
       SET first_kds_seen_at = NOW()
-      WHERE status IN ('pending', 'confirmed', 'preparing')
+      WHERE status IN ('pending', 'confirmed', 'preparing', 'active')
         AND first_kds_seen_at IS NULL
     `);
 
     const includeReady = req.query.include_ready === '1' || req.query.include_ready === 'true';
+    // 'active' is the canonical in-flight status post-collapse; the others are
+    // included so unmigrated rows or older clients still surface on the KDS.
     const statuses = includeReady
-      ? ['pending', 'confirmed', 'preparing', 'ready']
-      : ['pending', 'confirmed', 'preparing'];
+      ? ['pending', 'confirmed', 'preparing', 'active', 'ready']
+      : ['pending', 'confirmed', 'preparing', 'active'];
 
     // Single query: fetch orders + items + modifiers in one round trip.
     // Customer name resolution order: loyalty customer → kiosk/QR call-name →

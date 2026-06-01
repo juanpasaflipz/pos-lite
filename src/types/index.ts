@@ -105,7 +105,7 @@ export interface Order {
   order_number: string;
   employee_id: number;
   employee_name?: string;
-  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'preparing' | 'active' | 'ready' | 'completed' | 'cancelled';
   subtotal: number;
   tax: number;
   tip: number;

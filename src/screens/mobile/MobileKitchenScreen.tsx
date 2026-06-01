@@ -59,15 +59,20 @@ const MobileKitchenScreen: React.FC = () => {
         .filter((o) => o.status !== 'completed' && o.status !== 'cancelled')
         .map((o) => ({ ...o, elapsedSeconds: calcElapsed(o.created_at) }))
         .sort((a, b) => {
-          // pending/confirmed/preparing all rank as "in flight" — sort by age.
-          const rank = { pending: 0, confirmed: 0, preparing: 0 } as Record<string, number>;
+          // 'active' is canonical post-collapse; pending/confirmed/preparing
+          // all rank as in-flight too for tolerance during rollout.
+          const rank = { pending: 0, confirmed: 0, preparing: 0, active: 0 } as Record<string, number>;
           const diff = (rank[a.status] ?? 2) - (rank[b.status] ?? 2);
           return diff !== 0 ? diff : new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
         });
 
       setOrders(active);
       const pendingCount = active.filter(
-        (o) => o.status === 'pending' || o.status === 'confirmed' || o.status === 'preparing',
+        (o) =>
+          o.status === 'pending' ||
+          o.status === 'confirmed' ||
+          o.status === 'preparing' ||
+          o.status === 'active',
       ).length;
       if (pendingCount > lastCountRef.current) playAlert();
       lastCountRef.current = pendingCount;
@@ -166,7 +171,9 @@ const MobileKitchenScreen: React.FC = () => {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-2xl font-black text-white">#{order.order_number}</span>
                   <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                    order.status === 'pending'
+                    order.status === 'pending' ||
+                    order.status === 'confirmed' ||
+                    order.status === 'active'
                       ? 'bg-cockpit-blue text-white'
                       : 'bg-cockpit-yellow text-neutral-900'
                   }`}>
@@ -223,12 +230,14 @@ const MobileKitchenScreen: React.FC = () => {
                 </div>
               )}
 
-              {/* Action buttons. pending/confirmed/preparing are all "in flight"
-                  to the kitchen — show Start for pending/confirmed (first touch)
-                  and Ready once it's preparing. Without confirmed in the start
-                  branch, kiosk-sent orders had no advance button at all. */}
+              {/* Action buttons. Mobile KDS keeps the two-step Start → Ready
+                  workflow as a kitchen acknowledgement signal. 'active' and
+                  'confirmed' are accepted alongside 'pending' for the Start
+                  button so kiosk-sent and Stripe-paid orders aren't stranded. */}
               <div className="p-4 pt-0">
-                {(order.status === 'pending' || order.status === 'confirmed') && (
+                {(order.status === 'pending' ||
+                  order.status === 'confirmed' ||
+                  order.status === 'active') && (
                   <button
                     onClick={() => handleStart(order.id)}
                     disabled={actionLoading === order.id}

@@ -29,9 +29,12 @@ interface LiveOrdersStripProps {
 }
 
 const STATUS_RANK: Record<string, number> = {
+  // 'active' is canonical post-collapse; pending/confirmed/preparing all
+  // rank as in-flight (same bucket) for tolerance during rollout.
+  active: 0,
   pending: 0,
-  confirmed: 1,
-  preparing: 2,
+  confirmed: 0,
+  preparing: 0,
   ready: 3,
 };
 
@@ -56,9 +59,13 @@ function formatElapsed(seconds: number): string {
 
 function nextStatus(status: string): { next: string; labelKey: string } | null {
   switch (status) {
+    // Pre-collapse the cashier strip had a Start step (pending → preparing).
+    // Post-collapse there's only one in-flight bucket, so 'active' jumps
+    // straight to ready. Legacy values kept for tolerance.
     case 'pending':
     case 'confirmed':
-      return { next: 'preparing', labelKey: 'liveStrip.start' };
+    case 'active':
+      return { next: 'ready', labelKey: 'liveStrip.markReady' };
     case 'preparing':
       return { next: 'ready', labelKey: 'liveStrip.markReady' };
     case 'ready':
@@ -153,7 +160,12 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, refreshKey }: Liv
     let ready = 0;
     let unpaid = 0;
     for (const o of orders) {
-      if (o.status === 'pending' || o.status === 'confirmed' || o.status === 'preparing') preparing += 1;
+      if (
+        o.status === 'pending' ||
+        o.status === 'confirmed' ||
+        o.status === 'preparing' ||
+        o.status === 'active'
+      ) preparing += 1;
       if (o.status === 'ready') ready += 1;
       if (!isPaid(o)) unpaid += 1;
     }

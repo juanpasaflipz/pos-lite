@@ -472,15 +472,16 @@ router.post('/:orderId/confirm-payment', statusLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Payment has not been completed' });
     }
 
-    // Update order: mark paid, advance status to preparing
+    // Mark paid. Post-collapse, status stays 'active' through payment —
+    // payment_status is the independent axis. (Pre-collapse this also flipped
+    // pending → confirmed, but that distinction no longer exists.)
     const conn = getConn();
     const now = new Date().toISOString();
     await conn.unsafe(`
       UPDATE orders
       SET payment_status = 'paid',
           payment_method = 'card',
-          paid_at = $1,
-          status = CASE WHEN status = 'pending' THEN 'confirmed' ELSE status END
+          paid_at = $1
       WHERE id = $2
     `, [now, orderId]);
 

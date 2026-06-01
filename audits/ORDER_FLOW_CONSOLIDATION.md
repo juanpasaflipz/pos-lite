@@ -68,7 +68,16 @@ Plus a `CHECK` constraint update. No data loss; the metadata that mattered (`sou
 **Phase 0 split into two PRs:**
 
 - **PR 0a (drafted 2026-05-31, no behavior change for the data model):** transition table now allows `pending`/`confirmed`/`preparing → ready` directly; KDS double-PUT removed; KDS chime + sort + pendingCount + void-window now include `confirmed`; MobileKitchenScreen "Start" button now shows for `confirmed` (was stranding kiosk orders with no action). Files touched: `server/routes/orders.js`, `src/screens/KitchenDisplay.tsx`, `src/screens/mobile/MobileKitchenScreen.tsx`. Net +38/-24 LOC, no schema change, no migration.
-- **PR 0b (not started):** introduce canonical `active` status, migration to backfill existing rows, alias layer at the API edge to translate old names from older deployed kiosks, frontend sweep of remaining `=== 'pending'` proxy comparisons across the ~10 other surfaces. Higher blast radius — ship after 0a soaks for a few days.
+- **PR 0b (drafted 2026-05-31):** introduces canonical `active` status end-to-end.
+  - Migration `0066_status_collapse.js` backfills existing `pending`/`confirmed`/`preparing` → `active` and changes the `orders.status` default. Idempotent.
+  - All server write sites now emit `'active'`: order INSERT, kiosk send-to-kitchen, cash/card/split/Stripe/MP/Getnet/kiosk payment handlers, claim, delivery accept. The `customer-order` confirm-payment drops the `pending → confirmed` CASE entirely — payment no longer moves status, only payment_status.
+  - Transition table treats `active` as canonical (`active → ready`); old names (`pending`/`confirmed`/`preparing`) still accepted as input from older deployed clients (Android kiosk APK) and treated as equivalent to `active` so we don't 400 anyone.
+  - KDS query includes `'active'` alongside the legacy values for un-migrated rows / older clients.
+  - Frontend tolerance: `'active'` added to OrderStatus type, StatusPill style map (blue, same as pending), KDS sort/chime/count/void-window predicates, MobileKDS sort/count/Start-button/status-pill, LiveOrdersStrip sort/preparing-count/nextStatus, CashierOrdersPanel nextStatus, CustomerOrderScreen step-index mapping.
+  - StatusPill yellow-for-`'preparing'` left as vestigial — the KDS already renders a separate paid/unpaid pill next to it, so the "cash-paid" signal is independently conveyed. No-op.
+  - LiveOrdersStrip + CashierOrdersPanel `nextStatus()` dropped the old Start step (pending → preparing) entirely — `active` jumps straight to ready on the cashier panel, matching what the KDS already does. Mobile KDS keeps the two-button Start/Ready as a kitchen acknowledgement signal (handleStart still writes 'preparing', which is tolerant input).
+  - Files touched: 1 migration + 6 backend routes + 8 frontend files. No new test added (no existing test harness for this flow).
+- **PR 0c (future cleanup, after soak):** delete the legacy name branches from server transition table and frontend tolerance checks once we're confident no in-flight order or older client is still writing them. Pure dead-code removal.
 
 ---
 

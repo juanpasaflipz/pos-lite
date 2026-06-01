@@ -48,12 +48,14 @@ function formatElapsed(seconds: number): string {
   return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
-// What the cashier's "advance" button does for each status.
+// What the cashier's "advance" button does for each status. Post-collapse
+// 'active' is the canonical in-flight name; legacy values accepted too.
 function nextStatus(status: string): { next: string; labelKey: string } | null {
   switch (status) {
     case 'pending':
     case 'confirmed':
-      return { next: 'preparing', labelKey: 'ordersPanel.start' };
+    case 'active':
+      return { next: 'ready', labelKey: 'ordersPanel.markReady' };
     case 'preparing':
       return { next: 'ready', labelKey: 'ordersPanel.markReady' };
     case 'ready':

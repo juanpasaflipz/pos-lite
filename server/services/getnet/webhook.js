@@ -50,7 +50,7 @@ export async function processGetnetWebhook(event) {
     await adminSql`
       UPDATE orders
       SET payment_status = 'paid',
-          status = 'preparing',
+          status = 'active',
           payment_method = 'getnet_card',
           getnet_authorization_code = ${authorization_code || null},
           paid_at = NOW()

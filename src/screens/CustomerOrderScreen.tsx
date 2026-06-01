@@ -191,8 +191,11 @@ const STATUS_STEPS = [
 ] as const;
 
 function getStepIndex(status: string): number {
+  // Post-collapse, in-flight orders all sit at status='active' through the
+  // entire kitchen window — map that to step 1 (Preparing) so the customer
+  // doesn't skip the milestone. Legacy names handled the same way.
   if (status === 'ready' || status === 'completed') return 2;
-  if (status === 'preparing' || status === 'confirmed') return 1;
+  if (status === 'preparing' || status === 'confirmed' || status === 'active') return 1;
   return 0; // pending
 }
 

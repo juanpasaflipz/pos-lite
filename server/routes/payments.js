@@ -129,7 +129,7 @@ router.post('/confirm', paymentLimiter, requireAuth('pos_access'), async (req, r
     if (paymentIntent.status === 'succeeded') {
       await run(`
         UPDATE orders
-        SET payment_status = 'paid', status = 'preparing', payment_method = 'card'
+        SET payment_status = 'paid', status = 'active', payment_method = 'card'
         WHERE id = $1
       `, [order_id]);
 
@@ -201,7 +201,7 @@ router.post('/cash', paymentLimiter, requireAuth('pos_access'), async (req, res)
     // Mark order as paid with cash
     await run(`
       UPDATE orders
-      SET payment_status = 'paid', status = 'preparing', payment_method = 'cash', tip = $1
+      SET payment_status = 'paid', status = 'active', payment_method = 'cash', tip = $1
       WHERE id = $2
     `, [tipAmount, order_id]);
 
@@ -533,7 +533,7 @@ router.post('/split/finalize', requireAuth('pos_access'), async (req, res) => {
 
     await run(
       `UPDATE orders
-          SET payment_status = 'paid', status = 'preparing',
+          SET payment_status = 'paid', status = 'active',
               payment_method = 'split', tip = $1, paid_at = NOW()
         WHERE id = $2`,
       [totalTip, order_id]
@@ -1474,11 +1474,11 @@ router.get('/:order_id', async (req, res) => {
       order.payment_status === 'paid' &&
       order.mp_order_id &&
       req.tenant?.id &&
-      (order.payment_method !== 'card' || !['preparing', 'ready', 'completed'].includes(order.status))
+      (order.payment_method !== 'card' || !['active', 'preparing', 'ready', 'completed'].includes(order.status))
     ) {
       await markTerminalOrderPaid(order.id, req.tenant.id);
       order.payment_method = 'card';
-      order.status = order.status === 'ready' || order.status === 'completed' ? order.status : 'preparing';
+      order.status = order.status === 'ready' || order.status === 'completed' ? order.status : 'active';
     }
 
     if (!order.payment_intent_id) {
@@ -1736,7 +1736,7 @@ export async function conektaWebhook(req, res) {
 
       await adminSql`
         UPDATE orders
-        SET payment_status = 'paid', status = 'preparing', paid_at = NOW()
+        SET payment_status = 'paid', status = 'active', paid_at = NOW()
         WHERE id = ${ord.id}
       `;
 

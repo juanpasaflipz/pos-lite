@@ -211,7 +211,7 @@ router.post('/orders/:id/accept', requireAuth('manage_delivery'), async (req, re
     }
 
     await run('UPDATE delivery_orders SET platform_status = $1 WHERE id = $2', ['accepted', id]);
-    await run('UPDATE orders SET status = $1 WHERE id = $2', ['confirmed', deliveryOrder.order_id]);
+    await run('UPDATE orders SET status = $1 WHERE id = $2', ['active', deliveryOrder.order_id]);
 
     res.json({ id, status: 'accepted', success: true });
   } catch (error) {

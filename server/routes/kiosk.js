@@ -457,7 +457,7 @@ async function markKioskOrderPaid(orderId, tenantId) {
   await adminSql`
     UPDATE orders
     SET payment_status = 'paid',
-        status = 'preparing',
+        status = 'active',
         payment_method = 'card',
         paid_at = NOW()
     WHERE id = ${orderId} AND tenant_id = ${tenantId}
@@ -863,7 +863,7 @@ router.post('/orders/send-to-kitchen', verifyKioskToken, async (req, res) => {
         payment_status, source, loyalty_customer_id, customer_call_name, order_fulfillment_type
       )
       VALUES (
-        ${tenantId}, ${orderNumber}, ${employeeId}, 'confirmed', ${subtotal}, ${tax}, ${total},
+        ${tenantId}, ${orderNumber}, ${employeeId}, 'active', ${subtotal}, ${tax}, ${total},
         'unpaid', 'customer_kiosk', ${loyaltyCustomerId}, ${callName}, ${fulfillmentType}
       )
       RETURNING id, order_number, subtotal, tax, total, status, payment_status, customer_call_name, order_fulfillment_type
