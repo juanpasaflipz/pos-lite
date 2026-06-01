@@ -812,7 +812,7 @@ const POSScreen: React.FC = () => {
       }
       return;
     }
-    if (cart.length === 0) { addToast(t('toast.cartEmpty'), 'error'); return; }
+    if (cart.length === 0 && !preCreatedOrderId) { addToast(t('toast.cartEmpty'), 'error'); return; }
     setIsProcessingPayment(true);
     try {
       if (!isOnline) {
@@ -824,12 +824,19 @@ const POSScreen: React.FC = () => {
         clearCart();
         addToast(t('offline.orderSaved', { number: offlineOrder.offlineOrderNumber }), 'success');
       } else {
-        const order = await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload() });
+        // Reuse the order openPaymentModal pre-created for the MP/Conekta
+        // terminal flow — otherwise Cobrar → Cash on a terminal-enabled
+        // tenant orphans the pre-created order and creates a duplicate.
+        // Matches the pattern in handleOxxoPayment / handleSpeiPayment.
+        const order = preCreatedOrderId
+          ? await getOrder(preCreatedOrderId)
+          : await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload() });
         const result = await cashPayment({ order_id: order.id, tip, amount_received: amountReceived });
-        const finalOrder: Order = { ...order, tip, total: order.total + tip, payment_method: 'cash', employee_name: currentEmployee?.name, estimated_ready_minutes: order.estimated_ready_minutes, estimated_ready_range: order.estimated_ready_range };
+        const finalOrder: Order = { ...order, tip, total: Number(order.total) + tip, payment_method: 'cash', employee_name: currentEmployee?.name, estimated_ready_minutes: order.estimated_ready_minutes, estimated_ready_range: order.estimated_ready_range };
         await handleLoyaltyStamp(order);
         setCompletedOrder(finalOrder);
         setShowPaymentModal(false);
+        setPreCreatedOrderId(null);
         setShowReceiptModal(true);
         clearCart();
         bumpOrders();
