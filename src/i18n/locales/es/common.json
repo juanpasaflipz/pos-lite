@@ -64,7 +64,7 @@
   },
   "login": {
     "employeeLogin": "Inicio de Sesión",
-    "tapPin": "Ingresa tu PIN de 6 dígitos",
+    "tapPin": "Ingresa tu PIN de 4 dígitos",
     "loggingIn": "Iniciando sesión...",
     "kitchenDisplay": "Pantalla de Cocina",
     "timeClock": "Reloj Checador",

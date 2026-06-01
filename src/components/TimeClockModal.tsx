@@ -11,7 +11,7 @@ interface TimeClockModalProps {
 
 type Phase = 'pin' | 'confirm' | 'success';
 
-const PIN_LENGTH = 6;
+const PIN_LENGTH = 4;
 const SUCCESS_AUTOCLOSE_MS = 3500;
 
 function formatTime(iso: string): string {

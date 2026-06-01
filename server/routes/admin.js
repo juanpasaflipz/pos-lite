@@ -461,8 +461,8 @@ router.post('/tenants', async (req, res) => {
       branding_json: branding_json ? JSON.stringify(branding_json) : null,
     });
 
-    // Generate random 6-digit PIN for the admin employee
-    const pin = String(Math.floor(100000 + Math.random() * 900000));
+    // Generate random 4-digit PIN for the admin employee
+    const pin = String(Math.floor(1000 + Math.random() * 9000));
     const hashedPin = await bcrypt.hash(pin, BCRYPT_ROUNDS);
 
     await adminSql`
@@ -1031,8 +1031,8 @@ router.patch('/tenants/:id/employees/:empId/pin', async (req, res) => {
     if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
 
     const { pin } = req.body;
-    if (!pin || !/^\d{4,6}$/.test(pin)) {
-      return res.status(400).json({ error: 'PIN must be 4-6 digits' });
+    if (!pin || !/^\d{4}$/.test(pin)) {
+      return res.status(400).json({ error: 'PIN must be 4 digits' });
     }
 
     // Verify employee belongs to this tenant

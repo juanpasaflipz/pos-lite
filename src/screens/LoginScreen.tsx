@@ -36,7 +36,7 @@ const LoginScreen: React.FC = () => {
     setPin(newPin);
     setLocalError('');
 
-    if (newPin.length === 6) {
+    if (newPin.length === 4) {
       try {
         await login(newPin);
         navigate('/pos');
@@ -89,7 +89,7 @@ const LoginScreen: React.FC = () => {
         }`}
       >
         <div className="flex gap-3 justify-center mb-6">
-          {[0, 1, 2, 3, 4, 5].map((index) => (
+          {[0, 1, 2, 3].map((index) => (
             <div
               key={index}
               className="w-12 h-12 bg-neutral-900 rounded-full flex items-center justify-center border-2 border-neutral-700"
@@ -117,7 +117,7 @@ const LoginScreen: React.FC = () => {
             <button
               key={digit}
               onClick={() => handlePinInput(digit)}
-              disabled={isLoading || pin.length === 6}
+              disabled={isLoading || pin.length === 4}
               className="w-20 h-20 bg-neutral-900 text-2xl font-bold text-white rounded-xl hover:bg-neutral-800 active:bg-neutral-700 transition-all duration-75 disabled:opacity-50 disabled:cursor-not-allowed border border-neutral-700 touch-manipulation"
             >
               {digit}

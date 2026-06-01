@@ -59,7 +59,7 @@ export default function RosterPanel() {
     const errors: Partial<FormData> = {};
     if (!formData.name.trim()) errors.name = t('employees.nameRequired');
     if (!formData.pin) errors.pin = t('employees.pinRequired');
-    else if (!/^\d{4,6}$/.test(formData.pin)) errors.pin = t('employees.pinFormat');
+    else if (!/^\d{4}$/.test(formData.pin)) errors.pin = t('employees.pinFormat');
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -295,11 +295,11 @@ export default function RosterPanel() {
                   type="text"
                   value={formData.pin}
                   onChange={(e) => {
-                    const v = e.target.value.replace(/\D/g, '').slice(0, 6);
+                    const v = e.target.value.replace(/\D/g, '').slice(0, 4);
                     setFormData({ ...formData, pin: v });
                   }}
                   placeholder={t('employees.pinPlaceholder')}
-                  maxLength={6}
+                  maxLength={4}
                   className="w-full px-4 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-brand-600 tracking-widest text-center text-lg"
                 />
                 {formErrors.pin && <p className="text-brand-400 text-sm mt-1">{formErrors.pin}</p>}

@@ -128,8 +128,8 @@ router.post('/register', registerLimiter, async (req, res) => {
       await updateTenant(slug, { signup_promo_code: promo_code.trim().toUpperCase() });
     }
 
-    // Generate random 6-digit PIN for the admin employee
-    const pin = String(Math.floor(100000 + Math.random() * 900000));
+    // Generate random 4-digit PIN for the admin employee
+    const pin = String(Math.floor(1000 + Math.random() * 9000));
     const hashedPin = await bcrypt.hash(pin, BCRYPT_ROUNDS);
 
     // Create a default admin employee in the tenant DB (use adminSql with tenant_id)
