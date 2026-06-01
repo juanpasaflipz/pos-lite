@@ -70,10 +70,15 @@ function fail(msg) {
   if (poll.status !== 200) fail(`kitchen/active returned ${poll.status}`);
   const found = Array.isArray(poll.body) ? poll.body.find((o) => o.id === orderId) : null;
   if (!found) fail(`order ${orderId} not in kitchen/active response`);
-  if (found.status !== 'pending') fail(`expected status=pending, got ${found.status}`);
+  // Pre-0b new orders defaulted to 'pending'; post-0b they default to 'active'.
+  // Accept either so the script works on both sides of the rollout.
+  const inFlight = ['pending', 'confirmed', 'preparing', 'active'];
+  if (!inFlight.includes(found.status)) {
+    fail(`expected an in-flight status, got '${found.status}'`);
+  }
   console.log(`  found status=${found.status}`);
 
-  console.log('Step 3: pending → ready DIRECTLY (was rejected pre-fix)');
+  console.log('Step 3: in-flight → ready DIRECTLY (was rejected pre-0a)');
   const transition = await call('PUT', `/api/orders/${orderId}/status`, { status: 'ready' });
   if (transition.status !== 200) {
     fail(`pending → ready returned ${transition.status}: ${JSON.stringify(transition.body)} — collapse fix not live?`);
