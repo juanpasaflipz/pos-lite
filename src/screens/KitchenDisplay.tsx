@@ -4,11 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { getKitchenOrders, updateOrderStatus, getCategoryRoles } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { Order, OrderItem, CategoryRole } from '../types';
-import { getTimeTier, isPaid, type TimeTier } from '../lib/orderUrgency';
+import { getTimeTier, type TimeTier } from '../lib/orderUrgency';
 import { formatTime, formatDate } from '../utils/dateFormat';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import BrandLogo from '../components/BrandLogo';
-import StatusPill from '../components/ui/StatusPill';
 import {
   Clock,
   ArrowLeft,
@@ -17,7 +16,6 @@ import {
   Wine,
   ChefHat,
   WifiOff,
-  Check,
 } from 'lucide-react';
 
 interface OrderWithElapsed extends Order {
@@ -472,7 +470,6 @@ function OrderCard({
   const { t } = useTranslation('kitchen');
   const [isLoading, setIsLoading] = useState(false);
   const tier = getTimeTier(order.elapsedSeconds);
-  const paid = isPaid(order);
 
   // A void counts as "fresh" if it happened in the last 90s AND the order is
   // already being cooked. We don't shout for voids before prep starts — the
@@ -528,10 +525,12 @@ function OrderCard({
       )}
 
       {isTvMode ? (
-        // TV layout: tiny order # in the corner, time prominent, items the
-        // protagonist. Cooks read top → bottom: how urgent → what to cook.
+        // TV layout: read across the room. Time + urgency + customer name on
+        // the left; fulfillment pill on the right is the single load-bearing
+        // routing signal (delivery / for here / to go). Payment is not kitchen
+        // concern; status is implicit by which Ready action is shown.
         <div className="flex items-baseline justify-between gap-2 mb-2">
-          <div className={`flex items-center gap-1.5 text-2xl font-black ${TIER_TIME_TEXT_CLASS[tier]}`}>
+          <div className={`flex items-center gap-1.5 text-2xl font-black ${TIER_TIME_TEXT_CLASS[tier]} min-w-0`}>
             <Clock size={22} />
             <span>{formatTime(order.elapsedSeconds)}</span>
             {tier === 'critical' && (
@@ -545,77 +544,77 @@ function OrderCard({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1.5 text-neutral-500">
-            {order.table_number && (
-              <span className="text-xs font-bold">T{order.table_number}</span>
-            )}
-            {!paid && (
-              <span className="bg-cockpit-yellow text-neutral-900 px-1.5 py-0.5 rounded text-[10px] font-black uppercase">
-                {t('status.unpaid')}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {order.delivery_platform ? (
+              <span className="bg-cockpit-out text-white px-2 py-0.5 rounded-full font-black text-[10px] whitespace-nowrap uppercase tracking-wide">
+                {order.delivery_platform}
+              </span>
+            ) : order.order_fulfillment_type === 'for_here' ? (
+              <span className="bg-cockpit-system text-white px-2 py-0.5 rounded-full font-black text-[10px] whitespace-nowrap uppercase tracking-wide">
+                {t('orders.forHere')}
+              </span>
+            ) : (
+              <span className="bg-cockpit-attention text-neutral-950 px-2 py-0.5 rounded-full font-black text-[10px] whitespace-nowrap uppercase tracking-wide">
+                {t('orders.toGo')}
               </span>
             )}
-            <span className="text-[10px] font-mono tracking-tight">#{order.order_number}</span>
+            {order.table_number && (
+              <span className="text-xs font-bold text-neutral-400">T{order.table_number}</span>
+            )}
+            <span className="text-[10px] font-mono tracking-tight text-neutral-500">#{order.order_number}</span>
           </div>
         </div>
       ) : (
         // Full-chrome layout for signed-in staff (POS/tablet).
+        // Kitchen needs to know — in this order — WHO it's for, WHERE it goes,
+        // and WHAT to cook. Payment status, status pill, and channel badges
+        // (QR/KIOSK) don't help the line and were eating real estate.
         <>
-          <div className="flex items-start justify-between mb-4 border-b border-neutral-800 pb-4">
-            <div className="min-w-0">
-              <h2 className="text-5xl font-black tracking-tighter text-white mb-1">#{order.order_number}</h2>
-              {/* Customer name is the callout handle when an order is ready.
-                  Bigger and brighter than the internal id slice it replaced
-                  so it's readable across the kitchen even when busy. */}
+          <div className="flex items-start justify-between mb-4 border-b border-neutral-800 pb-4 gap-3">
+            <div className="min-w-0 flex-1">
+              {/* Customer name = the callout handle. Bigger than the order #
+                  because the cook shouts a name, not a number. */}
               {order.customer_name ? (
-                <p className="text-xl font-black text-white uppercase tracking-tight truncate max-w-[20ch]">
+                <h2 className="text-4xl font-black text-white uppercase tracking-tight truncate mb-1">
                   {order.customer_name}
-                </p>
+                </h2>
               ) : (
-                <p className="text-sm text-neutral-500">{t('orders.orderId', { id: String(order.id).slice(0, 8) })}</p>
+                <h2 className="text-4xl font-black text-neutral-400 tracking-tight mb-1">
+                  #{order.order_number}
+                </h2>
+              )}
+              {/* Order # kept small as a cashier-coordination handle, only
+                  shown when name was used as the protagonist above. */}
+              {order.customer_name && (
+                <p className="text-xs font-mono text-neutral-500 tracking-tight">#{order.order_number}</p>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              {/* Fulfillment is the single most-important signal for the line —
-                  always show it, with delivery superseding for_here/to_go when
-                  the order came from Uber/Rappi/DiDi. Distinct color per bucket
-                  so the kitchen can read it from across the room:
+            <div className="flex flex-col items-end gap-1.5 shrink-0">
+              {/* Fulfillment is the single load-bearing signal for the line.
+                  Delivery supersedes for_here/to_go when the order came from
+                  Uber/Rappi/DiDi. Distinct colour per bucket — readable across
+                  the kitchen:
                     DELIVERY  = burnt orange (heat/pressure, time-critical)
                     PARA AQUÍ = enamel blue (sit-down, plate it nicely)
                     PARA LLEVAR = mustard yellow (wrap to-go) */}
               {order.delivery_platform ? (
-                <span className="bg-cockpit-out text-white px-2.5 py-1.5 rounded-full font-black text-xs whitespace-nowrap uppercase tracking-wide">
+                <span className="bg-cockpit-out text-white px-3 py-1.5 rounded-full font-black text-sm whitespace-nowrap uppercase tracking-wide">
                   {order.delivery_platform}
                 </span>
               ) : order.order_fulfillment_type === 'for_here' ? (
-                <span className="bg-cockpit-system text-white px-2.5 py-1.5 rounded-full font-black text-xs whitespace-nowrap uppercase tracking-wide">
+                <span className="bg-cockpit-system text-white px-3 py-1.5 rounded-full font-black text-sm whitespace-nowrap uppercase tracking-wide">
                   {t('orders.forHere')}
                 </span>
               ) : (
-                <span className="bg-cockpit-attention text-neutral-950 px-2.5 py-1.5 rounded-full font-black text-xs whitespace-nowrap uppercase tracking-wide">
+                <span className="bg-cockpit-attention text-neutral-950 px-3 py-1.5 rounded-full font-black text-sm whitespace-nowrap uppercase tracking-wide">
                   {t('orders.toGo')}
                 </span>
               )}
-              {order.source === 'qr_order' && (
-                <span className="bg-neutral-700 text-neutral-200 px-2 py-1 rounded-full font-bold text-[10px] whitespace-nowrap">QR</span>
-              )}
-              {order.source === 'customer_kiosk' && (
-                <span className="bg-neutral-700 text-neutral-200 px-2 py-1 rounded-full font-bold text-[10px] whitespace-nowrap">KIOSK</span>
-              )}
               {order.table_number && (
-                <span className="bg-cockpit-blue text-white px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
+                <span className="bg-cockpit-blue text-white px-2.5 py-1 rounded-full font-bold text-xs whitespace-nowrap">
                   Table {order.table_number}
                 </span>
               )}
-              {paid ? (
-                <span className="bg-cockpit-green text-neutral-900 px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap flex items-center gap-1">
-                  <Check size={14} strokeWidth={3} /> {t('status.paid')}
-                </span>
-              ) : (
-                <span className="bg-cockpit-yellow text-neutral-900 px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
-                  {t('status.unpaid')}
-                </span>
-              )}
-              <StatusPill status={order.status} size="lg" />
             </div>
           </div>
 
