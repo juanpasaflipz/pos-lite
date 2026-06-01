@@ -5,7 +5,7 @@ import { useKioskBinding } from '../context/KioskBindingContext';
 import { useKioskCart } from '../context/KioskCartContext';
 import { useKioskCustomer } from '../context/KioskCustomerContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
-import { appendItemsToKioskOrder, holdKioskOrder, sendKioskOrderToKitchen } from '../lib/kioskApi';
+import { appendItemsToKioskOrder, sendKioskOrderToKitchen } from '../lib/kioskApi';
 import CartUpsellStrip from '../components/CartUpsellStrip';
 import KioskCallNameModal from '../components/KioskCallNameModal';
 
@@ -24,9 +24,10 @@ const KioskCartScreen: React.FC = () => {
   // Three submit modes:
   //   - Append:  customer entered via "Agregar a mi orden", appendToOrderId set.
   //              We POST items into the existing dine-in order.
-  //   - Dine-in: Para Aquí, no append. New order, status=confirmed, unpaid,
-  //              fires to the kitchen. Customer pays later via "Pagar mi cuenta".
-  //   - Hold:    Para Llevar. Creates a draft the cashier claims at the counter.
+  //   - Otherwise: Para Aquí AND Para Llevar both fire to the kitchen
+  //                immediately (status='active', payment_status='unpaid'),
+  //                so the line can start cooking before the customer reaches
+  //                the register. Customer pays later via "Pagar mi cuenta".
   const isAppend = appendToOrderId != null;
   const isDineIn = fulfillmentType === 'for_here';
 
@@ -70,13 +71,14 @@ const KioskCartScreen: React.FC = () => {
         customerCallName: resolvedCallName,
         fulfillmentType,
       };
-      const order = isDineIn
-        ? await sendKioskOrderToKitchen({ tenantId, kioskToken }, apiItems, opts)
-        : await holdKioskOrder({ tenantId, kioskToken }, apiItems, opts);
+      // Both Para Aquí and Para Llevar fire to the kitchen now — to-go
+      // used to park as draft_kiosk for the cashier to claim, but that
+      // left the kitchen idle while the customer walked to the register.
+      const order = await sendKioskOrderToKitchen({ tenantId, kioskToken }, apiItems, opts);
       navigate('/hold-confirmed', {
         replace: true,
         state: {
-          mode: isDineIn ? 'kitchen' : 'hold',
+          mode: 'kitchen',
           orderId: order.id,
           orderNumber: order.order_number,
           total: order.total,
@@ -89,9 +91,7 @@ const KioskCartScreen: React.FC = () => {
           ? err.message
           : isAppend
             ? 'No se pudo agregar a tu cuenta'
-            : isDineIn
-              ? 'No se pudo enviar a la cocina'
-              : 'No se pudo enviar a la caja'
+            : 'No se pudo enviar a la cocina'
       );
       setHolding(false);
     }
@@ -203,10 +203,10 @@ const KioskCartScreen: React.FC = () => {
           className="w-full min-h-20 bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-500 rounded-lg py-4 px-6 text-3xl font-black touch-manipulation flex items-center justify-between gap-4"
         >
           <span className="inline-flex items-center gap-3">
-            {isAppend || isDineIn ? <Utensils className="h-7 w-7" /> : <Store className="h-7 w-7" />}
+            {isAppend ? <Utensils className="h-7 w-7" /> : isDineIn ? <Utensils className="h-7 w-7" /> : <Store className="h-7 w-7" />}
             {holding
-              ? (isAppend ? 'Agregando…' : isDineIn ? 'Enviando a la cocina…' : 'Enviando…')
-              : (isAppend ? 'Agregar a mi cuenta' : isDineIn ? 'Enviar a la cocina' : 'Llamar a la caja')}
+              ? (isAppend ? 'Agregando…' : 'Enviando a la cocina…')
+              : (isAppend ? 'Agregar a mi cuenta' : 'Enviar a la cocina')}
           </span>
           <span>{money.format(total)}</span>
         </button>
@@ -215,7 +215,7 @@ const KioskCartScreen: React.FC = () => {
             ? 'Lo sumamos a tu cuenta abierta y a tu próximo cobro.'
             : isDineIn
               ? 'Te llamamos por tu nombre cuando esté lista. Pagas al final.'
-              : 'Un cajero llevará la terminal a tu mesa.'}
+              : 'Te llamamos por tu nombre cuando esté lista. Pagas al recogerla.'}
         </p>
       </footer>
 
@@ -226,7 +226,7 @@ const KioskCartScreen: React.FC = () => {
           subtitle={
             isDineIn
               ? 'Usamos tu nombre para llamarte cuando esté lista y para encontrar tu cuenta al pagar.'
-              : 'El cajero te buscará por tu nombre para llevarte la terminal.'
+              : 'Usamos tu nombre para llamarte cuando esté lista para recoger.'
           }
           onSkip={() => setAskingName(false)}
           onConfirm={(name) => {
