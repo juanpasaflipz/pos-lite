@@ -868,10 +868,13 @@ router.put('/:id/status', async (req, res) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    // Enforce valid status transitions
+    // Enforce valid status transitions. pending/confirmed/preparing are
+    // functionally one bucket ("in flight") — anything in flight can be
+    // marked ready directly. This removes a double-PUT the KDS used to do
+    // (pending → preparing → ready) just to walk around the table.
     const validTransitions = {
-      pending:    ['confirmed', 'preparing', 'cancelled'],
-      confirmed:  ['preparing', 'cancelled'],
+      pending:    ['confirmed', 'preparing', 'ready', 'cancelled'],
+      confirmed:  ['preparing', 'ready', 'cancelled'],
       preparing:  ['ready', 'cancelled'],
       ready:      ['completed', 'cancelled'],
       completed:  [],

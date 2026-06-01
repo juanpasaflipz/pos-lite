@@ -142,7 +142,9 @@ export default function KitchenDisplay() {
         }));
 
       const sortedOrders = activeOrders.sort((a, b) => {
-        const statusOrder = { pending: 0, preparing: 1 };
+        // All three pre-ready statuses are equivalent from the kitchen's
+        // POV — sort them together by created_at, then ready last.
+        const statusOrder = { pending: 0, confirmed: 0, preparing: 0 };
         const aStatusRank = statusOrder[a.status as keyof typeof statusOrder] ?? 2;
         const bStatusRank = statusOrder[b.status as keyof typeof statusOrder] ?? 2;
 
@@ -155,15 +157,18 @@ export default function KitchenDisplay() {
 
       setOrders(sortedOrders);
 
-      // Chime per genuinely new pending order id. Seed the set on the first
-      // fetch so existing tickets at mount don't beep.
-      const pendingIds = sortedOrders.filter((o) => o.status === 'pending').map((o) => o.id);
-      // Mid-prep voids — items voided on an order that's already cooking.
+      // Chime per genuinely new in-flight order id. Seed the set on the first
+      // fetch so existing tickets at mount don't beep. Includes 'confirmed'
+      // so kiosk-sent and Stripe-paid orders chime — they were silent before.
+      const pendingIds = sortedOrders
+        .filter((o) => o.status === 'pending' || o.status === 'confirmed' || o.status === 'preparing')
+        .map((o) => o.id);
+      // Mid-prep voids — items voided on an order that's already in flight.
       // We only want to alarm the kitchen for these; voids before they
       // started prep don't need a panic signal.
       const midPrepVoidIds: number[] = [];
       for (const order of sortedOrders) {
-        if (order.status !== 'preparing' && order.status !== 'pending') continue;
+        if (order.status !== 'preparing' && order.status !== 'pending' && order.status !== 'confirmed') continue;
         for (const item of order.items || []) {
           if (item.voided_at && item.id != null) {
             midPrepVoidIds.push(item.id);
@@ -240,14 +245,10 @@ export default function KitchenDisplay() {
     return () => clearInterval(updateElapsed);
   }, [calculateElapsedSeconds]);
 
-  // Single-tap "Ready" — auto-transitions pending → preparing → ready
-  // so the KDS doesn't need a separate Start button. (Backend rejects
-  // pending → ready directly, so we walk it through preparing first.)
-  const handleReadyOrder = async (orderId: number, currentStatus: string) => {
+  // Single-tap "Ready". Backend now allows pending/confirmed/preparing →
+  // ready directly, so this is one PUT regardless of starting state.
+  const handleReadyOrder = async (orderId: number) => {
     try {
-      if (currentStatus === 'pending') {
-        await updateOrderStatus(orderId, 'preparing');
-      }
       await updateOrderStatus(orderId, 'ready');
       fetchOrders();
     } catch (err) {
@@ -282,7 +283,11 @@ export default function KitchenDisplay() {
     return t('time.hoursMinutesAgo', { hours, minutes: minutes % 60 });
   };
 
-  const pendingCount = orders.filter((o) => o.status === 'pending').length;
+  // Count anything in flight, not just 'pending'. Kiosk-sent (confirmed) and
+  // cash-paid (preparing) orders are also waiting on the kitchen.
+  const pendingCount = orders.filter(
+    (o) => o.status === 'pending' || o.status === 'confirmed' || o.status === 'preparing',
+  ).length;
   // Re-evaluated each tick of currentTime (1s interval) so the banner
   // appears within ~1s of crossing the staleness threshold.
   const staleSinceMs = lastSuccessAt ? currentTime.getTime() - lastSuccessAt : 0;
@@ -444,7 +449,7 @@ export default function KitchenDisplay() {
 
 interface OrderCardProps {
   order: OrderWithElapsed;
-  onReady: (orderId: number, currentStatus: string) => void;
+  onReady: (orderId: number) => void;
   formatTime: (seconds: number) => string;
   isTvMode?: boolean;
 }
@@ -469,7 +474,7 @@ function OrderCard({
   // kitchen hadn't touched it yet, so there's nothing to stop.
   const freshVoidItems = (order.items || []).filter((it) => {
     if (!it.voided_at) return false;
-    if (order.status !== 'preparing' && order.status !== 'pending') return false;
+    if (order.status !== 'preparing' && order.status !== 'pending' && order.status !== 'confirmed') return false;
     const voidedSecondsAgo = (Date.now() - new Date(it.voided_at).getTime()) / 1000;
     return voidedSecondsAgo >= 0 && voidedSecondsAgo <= FRESH_VOID_WINDOW_SECONDS;
   });
@@ -478,7 +483,7 @@ function OrderCard({
   const handleReady = async () => {
     setIsLoading(true);
     try {
-      await onReady(order.id, order.status);
+      await onReady(order.id);
     } finally {
       setIsLoading(false);
     }

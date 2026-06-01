@@ -59,13 +59,16 @@ const MobileKitchenScreen: React.FC = () => {
         .filter((o) => o.status !== 'completed' && o.status !== 'cancelled')
         .map((o) => ({ ...o, elapsedSeconds: calcElapsed(o.created_at) }))
         .sort((a, b) => {
-          const rank = { pending: 0, preparing: 1 } as Record<string, number>;
+          // pending/confirmed/preparing all rank as "in flight" — sort by age.
+          const rank = { pending: 0, confirmed: 0, preparing: 0 } as Record<string, number>;
           const diff = (rank[a.status] ?? 2) - (rank[b.status] ?? 2);
           return diff !== 0 ? diff : new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
         });
 
       setOrders(active);
-      const pendingCount = active.filter((o) => o.status === 'pending').length;
+      const pendingCount = active.filter(
+        (o) => o.status === 'pending' || o.status === 'confirmed' || o.status === 'preparing',
+      ).length;
       if (pendingCount > lastCountRef.current) playAlert();
       lastCountRef.current = pendingCount;
     } catch { /* silent */ } finally {
@@ -220,9 +223,12 @@ const MobileKitchenScreen: React.FC = () => {
                 </div>
               )}
 
-              {/* Action buttons */}
+              {/* Action buttons. pending/confirmed/preparing are all "in flight"
+                  to the kitchen — show Start for pending/confirmed (first touch)
+                  and Ready once it's preparing. Without confirmed in the start
+                  branch, kiosk-sent orders had no advance button at all. */}
               <div className="p-4 pt-0">
-                {order.status === 'pending' && (
+                {(order.status === 'pending' || order.status === 'confirmed') && (
                   <button
                     onClick={() => handleStart(order.id)}
                     disabled={actionLoading === order.id}
