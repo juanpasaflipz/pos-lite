@@ -774,6 +774,29 @@ const POSScreen: React.FC = () => {
       }
     : null;
 
+  // Send-to-kitchen — for dine-in tabs the customer hasn't paid yet but the
+  // kitchen should start cooking. Mirrors the kiosk dine-in flow. The order
+  // lands on the KDS as status='active', payment_status='unpaid' and the
+  // cashier charges it later via the LiveOrdersStrip Cobrar button.
+  const handleSendToKitchen = async () => {
+    if (cart.length === 0) { addToast(t('toast.cartEmpty'), 'error'); return; }
+    setIsProcessingPayment(true);
+    try {
+      const order = await createOrder({
+        employee_id: currentEmployee!.id,
+        items: buildOrderItems(),
+        discount: buildCartDiscountPayload(),
+      });
+      clearCart();
+      bumpOrders();
+      addToast(t('toast.sentToKitchen', { number: order.order_number }), 'success');
+    } catch (error) {
+      addToast(error instanceof Error ? error.message : t('toast.sendToKitchenFailed'), 'error');
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
   const openPaymentModal = async () => {
     if ((isMpConnected || isConektaConfigured) && cart.length > 0) {
       try {
@@ -1130,6 +1153,7 @@ const POSScreen: React.FC = () => {
         onUpdateQuantity={updateQuantity}
         onSetNotesItem={setNotesItem}
         onShowPaymentModal={openPaymentModal}
+        onSendToKitchen={handleSendToKitchen}
         onShowCustomerLookup={() => setShowCustomerLookup(true)}
         onShowTemplates={() => setShowTemplates(true)}
         onShowParkedCarts={() => setShowParkedCarts(true)}
@@ -1171,6 +1195,7 @@ const POSScreen: React.FC = () => {
             onUpdateQuantity={updateQuantity}
             onSetNotesItem={setNotesItem}
             onShowPaymentModal={openPaymentModal}
+            onSendToKitchen={handleSendToKitchen}
             onShowCustomerLookup={() => setShowCustomerLookup(true)}
             onShowTemplates={() => setShowTemplates(true)}
             onShowParkedCarts={() => setShowParkedCarts(true)}

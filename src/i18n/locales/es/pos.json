@@ -33,6 +33,8 @@
     "subtotalBeforeTax": "Subtotal (sin IVA):",
     "taxIncluded": "{{label}} incluido:",
     "charge": "Cobrar {{amount}}",
+    "sendToKitchen": "Enviar a cocina",
+    "sendToKitchenHint": "La orden empieza a prepararse. Cóbrala después desde la barra de órdenes.",
     "clearOrder": "Limpiar Orden",
     "discount": "Descuento:"
   },
@@ -139,6 +141,8 @@
     "cashFailed": "Error en pago en efectivo",
     "splitDone": "¡Pago dividido completado!",
     "splitFailed": "Error en pago dividido",
+    "sentToKitchen": "Orden #{{number}} enviada a cocina",
+    "sendToKitchenFailed": "Error al enviar a cocina",
     "orderCreateFailed": "Error al crear la orden",
     "comboAdded": "Combo agregado a la orden",
     "itemAdded": "{{name}} agregado",

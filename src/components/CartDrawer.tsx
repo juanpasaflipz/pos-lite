@@ -18,6 +18,7 @@ interface CartDrawerProps {
   onUpdateQuantity: (cartId: string, quantity: number) => void;
   onSetNotesItem: (item: CartItem) => void;
   onShowPaymentModal: () => void;
+  onSendToKitchen: () => void;
   onShowCustomerLookup: () => void;
   onShowTemplates: () => void;
   onShowParkedCarts: () => void;
@@ -52,6 +53,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
   onUpdateQuantity,
   onSetNotesItem,
   onShowPaymentModal,
+  onSendToKitchen,
   onShowCustomerLookup,
   onShowTemplates,
   onShowParkedCarts,
@@ -381,6 +383,15 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
             className="w-full py-3 bg-brand-600 text-white text-base font-bold rounded-lg hover:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-600 disabled:cursor-not-allowed transition-all touch-manipulation"
           >
             {t('totals.charge', { amount: formatPrice(total) })}
+          </button>
+          <button
+            onClick={onSendToKitchen}
+            disabled={cart.length === 0}
+            title={t('totals.sendToKitchenHint')}
+            className="w-full py-2.5 bg-cockpit-attention text-neutral-900 text-sm font-bold rounded-lg hover:bg-cockpit-attention/90 disabled:bg-neutral-800 disabled:text-neutral-600 disabled:cursor-not-allowed transition-all touch-manipulation flex items-center justify-center gap-2"
+          >
+            <ClipboardList className="w-4 h-4" />
+            {t('totals.sendToKitchen')}
           </button>
           <button
             onClick={onShowCustomerLookup}

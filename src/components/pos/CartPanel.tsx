@@ -27,6 +27,7 @@ interface CartPanelProps {
   onUpdateQuantity: (cartId: string, quantity: number) => void;
   onSetNotesItem: (item: CartItem) => void;
   onShowPaymentModal: () => void;
+  onSendToKitchen: () => void;
   onShowCustomerLookup: () => void;
   onShowTemplates: () => void;
   onShowParkedCarts: () => void;
@@ -59,6 +60,7 @@ export default function CartPanel({
   onUpdateQuantity,
   onSetNotesItem,
   onShowPaymentModal,
+  onSendToKitchen,
   onShowCustomerLookup,
   onShowTemplates,
   onShowParkedCarts,
@@ -386,6 +388,17 @@ export default function CartPanel({
           className="w-full py-4 bg-brand-600 text-white text-lg font-bold rounded-lg hover:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-600 disabled:cursor-not-allowed transition-all touch-manipulation"
         >
           {t('totals.charge', { amount: formatPrice(total) })}
+        </button>
+        {/* Send-to-kitchen — for dine-in tabs the customer hasn't paid yet but
+            the kitchen should start cooking. Mirrors the kiosk dine-in flow. */}
+        <button
+          onClick={onSendToKitchen}
+          disabled={cart.length === 0}
+          title={t('totals.sendToKitchenHint')}
+          className="w-full py-3 bg-cockpit-attention text-neutral-900 text-sm font-bold rounded-lg hover:bg-cockpit-attention/90 disabled:bg-neutral-800 disabled:text-neutral-600 disabled:cursor-not-allowed transition-all touch-manipulation flex items-center justify-center gap-2"
+        >
+          <ClipboardList className="w-4 h-4" />
+          {t('totals.sendToKitchen')}
         </button>
         <button
           onClick={onShowCustomerLookup}

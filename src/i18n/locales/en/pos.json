@@ -33,6 +33,8 @@
     "subtotalBeforeTax": "Subtotal (before tax):",
     "taxIncluded": "{{label}} included:",
     "charge": "Charge {{amount}}",
+    "sendToKitchen": "Send to kitchen",
+    "sendToKitchenHint": "Order starts cooking. Charge it later from the orders strip.",
     "clearOrder": "Clear Order",
     "discount": "Discount:"
   },
@@ -139,6 +141,8 @@
     "cashFailed": "Cash payment failed",
     "splitDone": "Split payment completed!",
     "splitFailed": "Split payment failed",
+    "sentToKitchen": "Order #{{number}} sent to kitchen",
+    "sendToKitchenFailed": "Failed to send to kitchen",
     "orderCreateFailed": "Failed to create order",
     "comboAdded": "Combo added to order",
     "itemAdded": "Added {{name}}",
