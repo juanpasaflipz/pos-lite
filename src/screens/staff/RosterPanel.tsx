@@ -105,7 +105,7 @@ export default function RosterPanel() {
   };
 
   const handleResetPin = async (employee: Employee) => {
-    const newPin = String(Math.floor(100000 + Math.random() * 900000));
+    const newPin = String(Math.floor(1000 + Math.random() * 9000));
     try {
       setError(null);
       await updateEmployee(employee.id, { pin: newPin });
