@@ -75,6 +75,12 @@ export const useTenant = () => React.useContext(TenantContext);
 
 /* ==================== Protected Route ==================== */
 
+// Per-role landing route. Kitchen/bar staff go to KDS; everyone else POS.
+// Used both for post-login navigation and role-mismatch redirects, so a
+// kitchen employee hitting /pos doesn't get bounced back to /pos (loop).
+const landingForRole = (role: string): string =>
+  role === 'kitchen' || role === 'bar' ? '/kitchen' : '/pos';
+
 interface ProtectedRouteProps {
   element: React.ReactNode;
   requiredRole?: string[];
@@ -94,7 +100,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   const { currentEmployee } = useAuth();
   if (allowDeviceToken && getDeviceToken()) return <>{element}</>;
   if (!currentEmployee) return <Navigate to={unauthRedirect} replace />;
-  if (requiredRole && !requiredRole.includes(currentEmployee.role)) return <Navigate to="/pos" replace />;
+  if (requiredRole && !requiredRole.includes(currentEmployee.role)) return <Navigate to={landingForRole(currentEmployee.role)} replace />;
   return <>{element}</>;
 };
 
@@ -191,7 +197,7 @@ const TenantRoutes: React.FC = () => {
       <Route path="/r/:token" element={<PublicReceiptScreen />} />
 
       {/* Fallback */}
-      <Route path="*" element={<Navigate to={currentEmployee ? '/pos' : '/'} replace />} />
+      <Route path="*" element={<Navigate to={currentEmployee ? landingForRole(currentEmployee.role) : '/'} replace />} />
     </Routes>
   );
 };

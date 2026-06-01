@@ -38,8 +38,8 @@ const LoginScreen: React.FC = () => {
 
     if (newPin.length === 4) {
       try {
-        await login(newPin);
-        navigate('/pos');
+        const emp = await login(newPin);
+        navigate(emp.role === 'kitchen' || emp.role === 'bar' ? '/kitchen' : '/pos');
       } catch {
         // Error handling is done in useEffect
       }

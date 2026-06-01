@@ -8,7 +8,7 @@ interface AuthContextType {
   permissions: string[];
   isLoading: boolean;
   error: string | null;
-  login: (pin: string) => Promise<void>;
+  login: (pin: string) => Promise<Employee>;
   logout: () => void;
   hasPermission: (permission: string) => boolean;
 }
@@ -103,6 +103,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setCurrentEmployeeToken(employee.token || null);
       // Cache for future offline use
       await cacheEmployee(employee, pin);
+      return employee;
     } catch (err) {
       // Only fall back to offline cache when the fetch itself failed (no response).
       // If the server returned a status (e.g. 401 invalid PIN, 429 lockout), the cache
@@ -117,7 +118,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setPermissions(offlineEmployee.permissions || []);
           setCurrentEmployeeId(offlineEmployee.id);
           setCurrentEmployeeToken(offlineEmployee.token || null);
-          return; // success via offline
+          return offlineEmployee; // success via offline
         }
       }
       const errorMessage = err instanceof Error ? err.message : 'Login failed';
