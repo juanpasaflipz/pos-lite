@@ -539,6 +539,11 @@ function OrderCard({
                 {t('status.urgent')}
               </span>
             )}
+            {order.customer_name && (
+              <span className="ml-1 text-base font-black text-white uppercase tracking-tight truncate max-w-[14ch]">
+                {order.customer_name}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1.5 text-neutral-500">
             {order.table_number && (
@@ -556,9 +561,18 @@ function OrderCard({
         // Full-chrome layout for signed-in staff (POS/tablet).
         <>
           <div className="flex items-start justify-between mb-4 border-b border-neutral-800 pb-4">
-            <div>
+            <div className="min-w-0">
               <h2 className="text-5xl font-black tracking-tighter text-white mb-1">#{order.order_number}</h2>
-              <p className="text-sm text-neutral-500">{t('orders.orderId', { id: String(order.id).slice(0, 8) })}</p>
+              {/* Customer name is the callout handle when an order is ready.
+                  Bigger and brighter than the internal id slice it replaced
+                  so it's readable across the kitchen even when busy. */}
+              {order.customer_name ? (
+                <p className="text-xl font-black text-white uppercase tracking-tight truncate max-w-[20ch]">
+                  {order.customer_name}
+                </p>
+              ) : (
+                <p className="text-sm text-neutral-500">{t('orders.orderId', { id: String(order.id).slice(0, 8) })}</p>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {/* Fulfillment is the single most-important signal for the line —
