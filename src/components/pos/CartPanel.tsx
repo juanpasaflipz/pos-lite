@@ -28,6 +28,8 @@ interface CartPanelProps {
   onSetNotesItem: (item: CartItem) => void;
   onShowPaymentModal: () => void;
   onSendToKitchen: () => void;
+  fulfillment: 'for_here' | 'to_go';
+  onFulfillmentChange: (next: 'for_here' | 'to_go') => void;
   onShowCustomerLookup: () => void;
   onShowTemplates: () => void;
   onShowParkedCarts: () => void;
@@ -61,6 +63,8 @@ export default function CartPanel({
   onSetNotesItem,
   onShowPaymentModal,
   onSendToKitchen,
+  fulfillment,
+  onFulfillmentChange,
   onShowCustomerLookup,
   onShowTemplates,
   onShowParkedCarts,
@@ -382,6 +386,34 @@ export default function CartPanel({
       </div>
 
       <div className="border-t border-neutral-800 p-4 space-y-3">
+        {/* Fulfillment selector — kitchen needs to know if it's for here or
+            to go. Mirrors the kiosk selector; defaults to take-away. */}
+        <div className="grid grid-cols-2 gap-2" role="group" aria-label={t('cart.fulfillmentLabel')}>
+          <button
+            type="button"
+            onClick={() => onFulfillmentChange('to_go')}
+            aria-pressed={fulfillment === 'to_go'}
+            className={`py-2.5 text-sm font-bold rounded-lg transition-all touch-manipulation ${
+              fulfillment === 'to_go'
+                ? 'bg-cockpit-attention text-neutral-900'
+                : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
+            }`}
+          >
+            {t('cart.toGo')}
+          </button>
+          <button
+            type="button"
+            onClick={() => onFulfillmentChange('for_here')}
+            aria-pressed={fulfillment === 'for_here'}
+            className={`py-2.5 text-sm font-bold rounded-lg transition-all touch-manipulation ${
+              fulfillment === 'for_here'
+                ? 'bg-cockpit-attention text-neutral-900'
+                : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
+            }`}
+          >
+            {t('cart.forHere')}
+          </button>
+        </div>
         <button
           onClick={onShowPaymentModal}
           disabled={cart.length === 0}

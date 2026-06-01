@@ -26,7 +26,8 @@
     "charge": "Cobrar",
     "fromKiosk": "Vino del kiosko",
     "forHere": "Para aquí",
-    "toGo": "Para llevar"
+    "toGo": "Para llevar",
+    "fulfillmentLabel": "¿Dónde se come?"
   },
   "totals": {
     "total": "Total:",

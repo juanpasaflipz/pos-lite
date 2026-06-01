@@ -561,16 +561,31 @@ function OrderCard({
               <p className="text-sm text-neutral-500">{t('orders.orderId', { id: String(order.id).slice(0, 8) })}</p>
             </div>
             <div className="flex items-center gap-2">
+              {/* Fulfillment is the single most-important signal for the line —
+                  always show it, with delivery superseding for_here/to_go when
+                  the order came from Uber/Rappi/DiDi. Distinct color per bucket
+                  so the kitchen can read it from across the room:
+                    DELIVERY  = burnt orange (heat/pressure, time-critical)
+                    PARA AQUÍ = enamel blue (sit-down, plate it nicely)
+                    PARA LLEVAR = mustard yellow (wrap to-go) */}
+              {order.delivery_platform ? (
+                <span className="bg-cockpit-out text-white px-2.5 py-1.5 rounded-full font-black text-xs whitespace-nowrap uppercase tracking-wide">
+                  {order.delivery_platform}
+                </span>
+              ) : order.order_fulfillment_type === 'for_here' ? (
+                <span className="bg-cockpit-system text-white px-2.5 py-1.5 rounded-full font-black text-xs whitespace-nowrap uppercase tracking-wide">
+                  {t('orders.forHere')}
+                </span>
+              ) : (
+                <span className="bg-cockpit-attention text-neutral-950 px-2.5 py-1.5 rounded-full font-black text-xs whitespace-nowrap uppercase tracking-wide">
+                  {t('orders.toGo')}
+                </span>
+              )}
               {order.source === 'qr_order' && (
-                <span className="bg-cockpit-blue text-white px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">QR</span>
+                <span className="bg-neutral-700 text-neutral-200 px-2 py-1 rounded-full font-bold text-[10px] whitespace-nowrap">QR</span>
               )}
               {order.source === 'customer_kiosk' && (
-                <span className="bg-cockpit-blue text-white px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">KIOSK</span>
-              )}
-              {order.source === 'customer_kiosk' && order.order_fulfillment_type && (
-                <span className="bg-cockpit-yellow text-neutral-950 px-2.5 py-1.5 rounded-full font-black text-xs whitespace-nowrap">
-                  {order.order_fulfillment_type === 'for_here' ? t('orders.forHere') : t('orders.toGo')}
-                </span>
+                <span className="bg-neutral-700 text-neutral-200 px-2 py-1 rounded-full font-bold text-[10px] whitespace-nowrap">KIOSK</span>
               )}
               {order.table_number && (
                 <span className="bg-cockpit-blue text-white px-2.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">

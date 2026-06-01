@@ -26,7 +26,8 @@
     "charge": "Charge",
     "fromKiosk": "From the kiosk",
     "forHere": "For here",
-    "toGo": "To go"
+    "toGo": "To go",
+    "fulfillmentLabel": "Where will they eat?"
   },
   "totals": {
     "total": "Total:",

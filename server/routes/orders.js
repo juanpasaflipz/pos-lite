@@ -152,6 +152,7 @@ async function ensureCounterTable() {
 async function insertOrderWithNumber(conn, {
   employee_id, subtotal, tax, total, offline_temp_id, tenantId,
   discount_amount = 0, discount_type = null, discount_reason = null, discount_authorized_by = null,
+  order_fulfillment_type = 'to_go',
 }) {
   await ensureCounterTable();
 
@@ -169,17 +170,23 @@ async function insertOrderWithNumber(conn, {
 
   const orderNumber = datePrefix + counter.last_seq;
 
+  // Validate fulfillment type — kiosk uses this same enum, and unknown
+  // values should fall back to 'to_go' rather than corrupt the row.
+  const fulfillment = order_fulfillment_type === 'for_here' ? 'for_here' : 'to_go';
+
   const [inserted] = await conn.unsafe(`
     INSERT INTO orders (
       tenant_id, order_number, employee_id, status, subtotal, tax, total,
       payment_status, offline_temp_id,
-      discount_amount, discount_type, discount_reason, discount_authorized_by
+      discount_amount, discount_type, discount_reason, discount_authorized_by,
+      order_fulfillment_type
     )
-    VALUES ($1, $2, $3, 'active', $4, $5, $6, 'unpaid', $7, $8, $9, $10, $11)
+    VALUES ($1, $2, $3, 'active', $4, $5, $6, 'unpaid', $7, $8, $9, $10, $11, $12)
     RETURNING id, order_number
   `, [
     tid, orderNumber, employee_id, subtotal, tax, total, offline_temp_id || null,
     discount_amount, discount_type, discount_reason, discount_authorized_by,
+    fulfillment,
   ]);
 
   return { orderId: inserted.id, orderNumber: inserted.order_number };
@@ -497,7 +504,7 @@ async function fetchExistingByOfflineTempId(offline_temp_id) {
  * { status: 'duplicate', body } when offline_temp_id already exists.
  */
 async function buildOrderFromRequest(req) {
-  const { employee_id, items, offline_temp_id, discount: orderDiscount } = req.body;
+  const { employee_id, items, offline_temp_id, discount: orderDiscount, order_fulfillment_type } = req.body;
 
   if (!employee_id || !items || items.length === 0) {
     const err = new Error('Missing required fields');
@@ -675,6 +682,7 @@ async function buildOrderFromRequest(req) {
       discount_type: orderDiscountAmount > 0 ? (orderDiscount?.type || null) : null,
       discount_reason: orderDiscountAmount > 0 ? (orderDiscount?.reason || null) : null,
       discount_authorized_by: orderAuthorizedBy,
+      order_fulfillment_type,
     }));
     await conn.unsafe('RELEASE SAVEPOINT order_insert');
   } catch (err) {

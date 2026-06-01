@@ -130,6 +130,9 @@ const POSScreen: React.FC = () => {
   const [showParkedCarts, setShowParkedCarts] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [cartDiscount, setCartDiscount] = useState<Discount | null>(null);
+  // Counter-service in MX defaults to take-away; cashier flips to "Aquí"
+  // when the customer is going to eat in. Resets to to_go when cart clears.
+  const [cartFulfillment, setCartFulfillment] = useState<'for_here' | 'to_go'>('to_go');
   const [discountTarget, setDiscountTarget] = useState<{ scope: 'cart' } | { scope: 'item'; cartId: string } | null>(null);
   const [showNavMenu, setShowNavMenu] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -602,6 +605,7 @@ const POSScreen: React.FC = () => {
     setCart([]);
     setLinkedCustomer(null);
     setCartDiscount(null);
+    setCartFulfillment('to_go');
   };
 
   const handleClaimKioskOrder = (order: KioskHeldOrder) => {
@@ -800,7 +804,7 @@ const POSScreen: React.FC = () => {
   const openPaymentModal = async () => {
     if ((isMpConnected || isConektaConfigured) && cart.length > 0) {
       try {
-        const order = await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload() });
+        const order = await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload(), order_fulfillment_type: cartFulfillment });
         setPreCreatedOrderId(order.id);
       } catch (err) {
         addToast(err instanceof Error ? err.message : 'Error creating order', 'error');
@@ -853,7 +857,7 @@ const POSScreen: React.FC = () => {
         // Matches the pattern in handleOxxoPayment / handleSpeiPayment.
         const order = preCreatedOrderId
           ? await getOrder(preCreatedOrderId)
-          : await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload() });
+          : await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload(), order_fulfillment_type: cartFulfillment });
         const result = await cashPayment({ order_id: order.id, tip, amount_received: amountReceived });
         const finalOrder: Order = { ...order, tip, total: Number(order.total) + tip, payment_method: 'cash', employee_name: currentEmployee?.name, estimated_ready_minutes: order.estimated_ready_minutes, estimated_ready_range: order.estimated_ready_range };
         await handleLoyaltyStamp(order);
@@ -876,7 +880,7 @@ const POSScreen: React.FC = () => {
     if (cart.length === 0 && !preCreatedOrderId) { addToast(t('toast.cartEmpty'), 'error'); return; }
     setIsProcessingPayment(true);
     try {
-      const orderId = preCreatedOrderId || (await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload() })).id;
+      const orderId = preCreatedOrderId || (await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload(), order_fulfillment_type: cartFulfillment })).id;
       const result = await conektaOxxoPayment({ order_id: orderId, tip });
       setOxxoResult({
         reference: result.reference,
@@ -905,7 +909,7 @@ const POSScreen: React.FC = () => {
     if (cart.length === 0 && !preCreatedOrderId) { addToast(t('toast.cartEmpty'), 'error'); return; }
     setIsProcessingPayment(true);
     try {
-      const orderId = preCreatedOrderId || (await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload() })).id;
+      const orderId = preCreatedOrderId || (await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload(), order_fulfillment_type: cartFulfillment })).id;
       const result = await conektaSpeiPayment({ order_id: orderId, tip });
       setSpeiResult({
         clabe: result.clabe,
@@ -934,7 +938,7 @@ const POSScreen: React.FC = () => {
     if (cart.length === 0 && !preCreatedOrderId) { addToast(t('toast.cartEmpty'), 'error'); return; }
     setIsProcessingPayment(true);
     try {
-      const orderId = preCreatedOrderId || (await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload() })).id;
+      const orderId = preCreatedOrderId || (await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload(), order_fulfillment_type: cartFulfillment })).id;
       // For Getnet card payments, the card tokenization happens on the server side
       // In a full implementation, the card form would collect and tokenize first
       // For now, this creates the order and marks it for Getnet processing
@@ -1154,6 +1158,8 @@ const POSScreen: React.FC = () => {
         onSetNotesItem={setNotesItem}
         onShowPaymentModal={openPaymentModal}
         onSendToKitchen={handleSendToKitchen}
+        fulfillment={cartFulfillment}
+        onFulfillmentChange={setCartFulfillment}
         onShowCustomerLookup={() => setShowCustomerLookup(true)}
         onShowTemplates={() => setShowTemplates(true)}
         onShowParkedCarts={() => setShowParkedCarts(true)}
@@ -1196,6 +1202,8 @@ const POSScreen: React.FC = () => {
             onSetNotesItem={setNotesItem}
             onShowPaymentModal={openPaymentModal}
             onSendToKitchen={handleSendToKitchen}
+            fulfillment={cartFulfillment}
+            onFulfillmentChange={setCartFulfillment}
             onShowCustomerLookup={() => setShowCustomerLookup(true)}
             onShowTemplates={() => setShowTemplates(true)}
             onShowParkedCarts={() => setShowParkedCarts(true)}

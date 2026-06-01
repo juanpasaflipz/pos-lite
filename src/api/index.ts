@@ -575,6 +575,7 @@ interface CreateOrderData {
     discount?: DiscountPayload | null;
   }[];
   discount?: DiscountPayload | null;
+  order_fulfillment_type?: 'for_here' | 'to_go';
 }
 
 export async function createOrder(data: CreateOrderData): Promise<Order> {
