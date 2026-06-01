@@ -424,13 +424,15 @@ export default function KitchenDisplay() {
             </div>
           </div>
         ) : (
-          // Auto-fill: density scales with screen width. ~340px min card
-          // → ~3 cols on 1080p, ~5 on 4K, collapses on tablets/phones.
+          // Auto-fill: density scales with screen width.
+          // TV mode now favours readability over density — cards are wider so
+          // customer names are legible across the kitchen. Cooks toggle the
+          // Todo / Cocina / Bar filters to see different subsets.
           <div
             className="grid gap-3 auto-rows-max"
             style={{
               gridTemplateColumns: isTvMode
-                ? 'repeat(auto-fill, minmax(260px, 1fr))'
+                ? 'repeat(auto-fill, minmax(420px, 1fr))'
                 : 'repeat(auto-fill, minmax(340px, 1fr))',
             }}
           >
@@ -525,43 +527,57 @@ function OrderCard({
       )}
 
       {isTvMode ? (
-        // TV layout: read across the room. Time + urgency + customer name on
-        // the left; fulfillment pill on the right is the single load-bearing
-        // routing signal (delivery / for here / to go). Payment is not kitchen
-        // concern; status is implicit by which Ready action is shown.
-        <div className="flex items-baseline justify-between gap-2 mb-2">
-          <div className={`flex items-center gap-1.5 text-2xl font-black ${TIER_TIME_TEXT_CLASS[tier]} min-w-0`}>
-            <Clock size={22} />
-            <span>{formatTime(order.elapsedSeconds)}</span>
-            {tier === 'critical' && (
-              <span className="ml-1 bg-cockpit-red text-white px-1.5 py-0.5 rounded text-xs font-black uppercase tracking-wide animate-pulse">
-                {t('status.urgent')}
-              </span>
-            )}
-            {order.customer_name && (
-              <span className="ml-1 text-base font-black text-white uppercase tracking-tight truncate max-w-[14ch]">
-                {order.customer_name}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
+        // TV layout: read across the room. Customer name is the protagonist
+        // (callout handle), fulfillment pill the routing signal, time the
+        // urgency cue. Order # and table tucked small for coordination only.
+        <div className="mb-2 space-y-1">
+          <div className="flex items-start justify-between gap-2">
+            {/* Customer name big. Falls back to order number when unnamed. */}
+            <div className="min-w-0 flex-1">
+              {order.customer_name ? (
+                <h3 className="text-3xl font-black text-white uppercase tracking-tight truncate">
+                  {order.customer_name}
+                </h3>
+              ) : (
+                <h3 className="text-3xl font-black text-neutral-400 tracking-tight truncate">
+                  #{order.order_number}
+                </h3>
+              )}
+            </div>
+            {/* Fulfillment pill — load-bearing routing signal. */}
             {order.delivery_platform ? (
-              <span className="bg-cockpit-out text-white px-2 py-0.5 rounded-full font-black text-[10px] whitespace-nowrap uppercase tracking-wide">
+              <span className="bg-cockpit-out text-white px-2.5 py-1 rounded-full font-black text-sm whitespace-nowrap uppercase tracking-wide shrink-0">
                 {order.delivery_platform}
               </span>
             ) : order.order_fulfillment_type === 'for_here' ? (
-              <span className="bg-cockpit-system text-white px-2 py-0.5 rounded-full font-black text-[10px] whitespace-nowrap uppercase tracking-wide">
+              <span className="bg-cockpit-system text-white px-2.5 py-1 rounded-full font-black text-sm whitespace-nowrap uppercase tracking-wide shrink-0">
                 {t('orders.forHere')}
               </span>
             ) : (
-              <span className="bg-cockpit-attention text-neutral-950 px-2 py-0.5 rounded-full font-black text-[10px] whitespace-nowrap uppercase tracking-wide">
+              <span className="bg-cockpit-attention text-neutral-950 px-2.5 py-1 rounded-full font-black text-sm whitespace-nowrap uppercase tracking-wide shrink-0">
                 {t('orders.toGo')}
               </span>
             )}
-            {order.table_number && (
-              <span className="text-xs font-bold text-neutral-400">T{order.table_number}</span>
-            )}
-            <span className="text-[10px] font-mono tracking-tight text-neutral-500">#{order.order_number}</span>
+          </div>
+          {/* Time + small handles row. */}
+          <div className="flex items-center justify-between gap-2">
+            <div className={`flex items-center gap-1.5 text-xl font-black ${TIER_TIME_TEXT_CLASS[tier]}`}>
+              <Clock size={18} />
+              <span>{formatTime(order.elapsedSeconds)}</span>
+              {tier === 'critical' && (
+                <span className="ml-1 bg-cockpit-red text-white px-1.5 py-0.5 rounded text-xs font-black uppercase tracking-wide animate-pulse">
+                  {t('status.urgent')}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 text-neutral-500">
+              {order.table_number && (
+                <span className="text-xs font-bold text-neutral-400">T{order.table_number}</span>
+              )}
+              {order.customer_name && (
+                <span className="text-[10px] font-mono tracking-tight">#{order.order_number}</span>
+              )}
+            </div>
           </div>
         </div>
       ) : (
