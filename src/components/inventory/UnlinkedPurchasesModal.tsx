@@ -65,6 +65,70 @@ export default function UnlinkedPurchasesModal({ expenses, open, onClose, onLink
       ? exp.parsed_items.map((it) => newRow(it))
       : [newRow()];
     setRowsByExpense((prev) => ({ ...prev, [exp.id]: seedRows }));
+    // Kick off auto-search per seeded row so the user doesn't have to click
+    // through every dropdown — if Claude already named the line item with
+    // something close to an inventory_items.name, we bind it automatically.
+    if (exp.parsed_items && exp.parsed_items.length > 0) {
+      seedRows.forEach((row) => {
+        if (row.searchQuery.trim().length >= 2) {
+          autoBindRow(exp.id, row);
+        }
+      });
+    }
+  };
+
+  // Score how confident we are that `candidate` matches the seeded `query`.
+  // 1.0 = exact (case-insensitive trim), 0.85 = one contains the other, lower
+  // for token overlap. We only auto-bind on >= 0.75.
+  const matchScore = (query: string, candidate: string): number => {
+    const a = query.trim().toLowerCase();
+    const b = candidate.trim().toLowerCase();
+    if (!a || !b) return 0;
+    if (a === b) return 1;
+    if (a.includes(b) || b.includes(a)) return 0.9;
+    const tokensA = new Set(a.split(/\s+/).filter((t) => t.length > 2));
+    const tokensB = new Set(b.split(/\s+/).filter((t) => t.length > 2));
+    if (tokensA.size === 0 || tokensB.size === 0) return 0;
+    let shared = 0;
+    tokensA.forEach((t) => { if (tokensB.has(t)) shared++; });
+    return shared / Math.max(tokensA.size, tokensB.size);
+  };
+
+  const autoBindRow = async (expenseId: number, row: LineRow) => {
+    try {
+      const results = await searchInventory(row.searchQuery.trim());
+      if (results.length === 0) {
+        setRowsByExpense((prev) => ({
+          ...prev,
+          [expenseId]: (prev[expenseId] || []).map((r) =>
+            r.key === row.key ? { ...r, searchResults: results, searching: false } : r
+          ),
+        }));
+        return;
+      }
+      const top = results[0];
+      const score = matchScore(row.searchQuery, top.name);
+      setRowsByExpense((prev) => ({
+        ...prev,
+        [expenseId]: (prev[expenseId] || []).map((r) => {
+          if (r.key !== row.key) return r;
+          if (score >= 0.75) {
+            return {
+              ...r,
+              selectedItem: top,
+              searchQuery: top.name,
+              searchResults: results,
+              showResults: false,
+              searching: false,
+              unitCost: r.unitCost || (top.cost_price ? String(top.cost_price) : ''),
+            };
+          }
+          return { ...r, searchResults: results, searching: false, showResults: true };
+        }),
+      }));
+    } catch {
+      // Silent — user can still search manually
+    }
   };
 
   const toggleExpand = (exp: UnlinkedExpense) => {
@@ -214,28 +278,48 @@ export default function UnlinkedPurchasesModal({ expenses, open, onClose, onLink
 
                   {isExpanded && (
                     <div className="px-4 pb-4 pt-1 border-t border-neutral-800 bg-neutral-900/30">
-                      {exp.parsed_items.length > 0 && rows.length === exp.parsed_items.length && (
-                        <p className="text-xs text-cockpit-in-text mb-3">{t('unlinked.parsedSeedHint')}</p>
-                      )}
+                      {(() => {
+                        const linkedCount = rows.filter((r) => r.selectedItem).length;
+                        const unlinkedCount = rows.length - linkedCount;
+                        return (
+                          <div className="flex items-center justify-between text-xs mt-2 mb-3">
+                            {exp.parsed_items.length > 0 && rows.length === exp.parsed_items.length && (
+                              <p className="text-cockpit-in-text">{t('unlinked.parsedSeedHint')}</p>
+                            )}
+                            <div className="ml-auto flex items-center gap-3">
+                              <span className={linkedCount === rows.length ? 'text-cockpit-in-text' : 'text-cockpit-attention-text'}>
+                                {t('unlinked.linkedProgress', { linked: linkedCount, total: rows.length })}
+                              </span>
+                              {unlinkedCount > 0 && (
+                                <span className="text-neutral-500">{t('unlinked.tapToBindHint')}</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
                       <div className="space-y-3">
                         {rows.map((row) => (
                           <div key={row.key} className="grid grid-cols-12 gap-2 items-start">
                             <div className="col-span-12 md:col-span-5 relative">
                               <div className="relative">
-                                <Search className="absolute left-3 top-2.5 text-neutral-500" size={16} />
+                                <Search className={`absolute left-3 top-2.5 ${row.selectedItem ? 'text-cockpit-in-text' : 'text-cockpit-attention-text'}`} size={16} />
                                 <input
                                   type="text"
                                   value={row.searchQuery}
                                   onChange={(e) => handleSearchChange(exp.id, row, e.target.value)}
                                   onFocus={() => updateRow(exp.id, row.key, { showResults: true })}
                                   placeholder={t('unlinked.searchPlaceholder')}
-                                  className={`w-full pl-9 pr-3 py-2 bg-neutral-800 border rounded text-sm text-white focus:outline-none ${
-                                    row.selectedItem ? 'border-cockpit-green focus:border-cockpit-green' : 'border-neutral-700 focus:border-brand-600'
+                                  className={`w-full pl-9 pr-9 py-2 bg-neutral-800 border-2 rounded text-sm text-white focus:outline-none ${
+                                    row.selectedItem
+                                      ? 'border-cockpit-green focus:border-cockpit-green'
+                                      : 'border-cockpit-yellow/60 focus:border-brand-600'
                                   }`}
                                 />
-                                {row.searching && (
+                                {row.searching ? (
                                   <Loader2 className="absolute right-3 top-2.5 text-neutral-500 animate-spin" size={16} />
-                                )}
+                                ) : row.selectedItem ? (
+                                  <Check className="absolute right-3 top-2.5 text-cockpit-in-text" size={16} />
+                                ) : null}
                               </div>
                               {row.showResults && row.searchResults.length > 0 && !row.selectedItem && (
                                 <div className="absolute z-10 left-0 right-0 mt-1 bg-neutral-800 border border-neutral-700 rounded-md shadow-lg max-h-60 overflow-y-auto">

@@ -692,6 +692,8 @@
     "allClear": "¡Todo enlazado! No hay compras pendientes.",
     "parsedSeedHint": "Líneas pre-llenadas desde el escaneo del recibo — confirma o ajusta antes de enlazar.",
     "footerHint": "Los enlaces actualizan el stock al instante con la fecha de la compra original.",
-    "close": "Cerrar"
+    "close": "Cerrar",
+    "linkedProgress": "{{linked}} de {{total}} enlazados",
+    "tapToBindHint": "Toca un resultado para enlazar"
   }
 }

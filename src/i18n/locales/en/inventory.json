@@ -692,6 +692,8 @@
     "allClear": "All clear! No purchases pending.",
     "parsedSeedHint": "Lines pre-filled from receipt scan — confirm or adjust before linking.",
     "footerHint": "Links update stock immediately using the original purchase date.",
-    "close": "Close"
+    "close": "Close",
+    "linkedProgress": "{{linked}} of {{total}} linked",
+    "tapToBindHint": "Tap a result to link"
   }
 }
