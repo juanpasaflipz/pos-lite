@@ -561,3 +561,10 @@ is the single truth for deferred work.
   cover Phase 1.
 - **Disaster recovery plan** — Neon has point-in-time recovery; documented backup
   policy is Phase 2 work.
+- **Voice-ops auto-nudge for pending SI/NO confirmations** — cron job (every 5 min)
+  DMs owners with stale `voice_intents.status='pending_confirm'` rows: "Aún no
+  me has confirmado la compra de {vendor} (${amount}). Responde SI o NO." Send
+  once per intent (track via `nudged_at` column), then let the 60-min TTL expire.
+  Why: today a parsed receipt that's forgotten just expires silently — the owner
+  has no signal until they notice the missing expense days later. Trigger:
+  Juanberto's pilot reports a second forgotten confirmation.
