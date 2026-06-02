@@ -549,7 +549,12 @@
     "edit": "Edit",
     "start": "Start",
     "markReady": "Mark Ready",
-    "complete": "Complete"
+    "complete": "Complete",
+    "tabActive": "Active",
+    "tabHistory": "History",
+    "historyEmpty": "No past orders match",
+    "historySearchPlaceholder": "Order # or customer",
+    "clearDate": "Clear"
   },
   "liveStrip": {
     "preparing": "In kitchen",

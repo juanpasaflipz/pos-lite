@@ -549,7 +549,12 @@
     "edit": "Editar",
     "start": "Iniciar",
     "markReady": "Marcar Listo",
-    "complete": "Completar"
+    "complete": "Completar",
+    "tabActive": "Activas",
+    "tabHistory": "Historial",
+    "historyEmpty": "Sin órdenes pasadas",
+    "historySearchPlaceholder": "# de orden o cliente",
+    "clearDate": "Quitar"
   },
   "liveStrip": {
     "preparing": "En cocina",

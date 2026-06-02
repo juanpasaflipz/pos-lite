@@ -1,17 +1,21 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, RefreshCw, Clock, Check, Pencil } from 'lucide-react';
-import { getKitchenOrders, updateOrderStatus } from '../../api';
+import { X, RefreshCw, Clock, Check, Pencil, Search, Receipt } from 'lucide-react';
+import { getKitchenOrders, getOrders, getOrder, updateOrderStatus } from '../../api';
 import { Order } from '../../types';
 import { formatPrice } from '../../utils/currency';
+import { formatTime } from '../../utils/dateFormat';
 import { getTimeTier, isPaid, type TimeTier } from '../../lib/orderUrgency';
 import OrderEditModal from './OrderEditModal';
+import ReceiptModal from './ReceiptModal';
 
 interface CashierOrdersPanelProps {
   isOpen: boolean;
   onClose: () => void;
   /** Opens the existing payment (Cobrar) flow for an unpaid order. */
   onCharge: (order: Order) => void;
+  /** Opens the refund modal for a paid order. */
+  onRefund?: (orderId: number) => void;
 }
 
 // Pipeline ordering: oldest, earliest-stage orders surface first.
@@ -65,8 +69,9 @@ function nextStatus(status: string): { next: string; labelKey: string } | null {
   }
 }
 
-export default function CashierOrdersPanel({ isOpen, onClose, onCharge }: CashierOrdersPanelProps) {
+export default function CashierOrdersPanel({ isOpen, onClose, onCharge, onRefund }: CashierOrdersPanelProps) {
   const { t } = useTranslation('pos');
+  const [mode, setMode] = useState<'active' | 'history'>('active');
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -74,6 +79,14 @@ export default function CashierOrdersPanel({ isOpen, onClose, onCharge }: Cashie
   const [now, setNow] = useState(() => Date.now());
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // History tab state. Paid orders don't move, so we don't poll — just refresh.
+  const [historyOrders, setHistoryOrders] = useState<Order[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyDate, setHistoryDate] = useState<string>('');
+  const [historySearch, setHistorySearch] = useState('');
+  const [receiptOrder, setReceiptOrder] = useState<Order | null>(null);
+  const [openingReceiptId, setOpeningReceiptId] = useState<number | null>(null);
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -93,27 +106,72 @@ export default function CashierOrdersPanel({ isOpen, onClose, onCharge }: Cashie
     }
   }, []);
 
-  // Poll only while the panel is open.
+  // Poll active orders only while the panel is open and showing the Active tab.
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || mode !== 'active') return;
     setLoading(true);
     fetchOrders();
     pollRef.current = setInterval(fetchOrders, 8_000);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [isOpen, fetchOrders]);
+  }, [isOpen, mode, fetchOrders]);
 
-  // Live elapsed-time tick while open.
+  // Live elapsed-time tick while open on the Active tab.
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || mode !== 'active') return;
     const tick = setInterval(() => setNow(Date.now()), 1_000);
     return () => clearInterval(tick);
-  }, [isOpen]);
+  }, [isOpen, mode]);
+
+  const fetchHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const filters: { payment_status: string; date?: string } = { payment_status: 'paid' };
+      if (historyDate) filters.date = historyDate;
+      const data = await getOrders(filters);
+      setHistoryOrders(data);
+    } catch {
+      // non-blocking — refresh button will retry
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [historyDate]);
+
+  useEffect(() => {
+    if (!isOpen || mode !== 'history') return;
+    fetchHistory();
+  }, [isOpen, mode, fetchHistory]);
+
+  const filteredHistory = useMemo(() => {
+    const q = historySearch.trim().toLowerCase();
+    if (!q) return historyOrders;
+    return historyOrders.filter((o) => {
+      const orderNum = String(o.order_number ?? '').toLowerCase();
+      const name = (o.customer_name || '').toLowerCase();
+      return orderNum.includes(q) || name.includes(q);
+    });
+  }, [historyOrders, historySearch]);
 
   const handleRefresh = () => {
+    if (mode === 'history') {
+      fetchHistory();
+      return;
+    }
     setRefreshing(true);
     fetchOrders();
+  };
+
+  const handleOpenReceipt = async (id: number) => {
+    setOpeningReceiptId(id);
+    try {
+      const full = await getOrder(id);
+      setReceiptOrder(full);
+    } catch {
+      // silent — user can retap
+    } finally {
+      setOpeningReceiptId(null);
+    }
   };
 
   const handleAdvance = async (order: Order) => {
@@ -146,21 +204,28 @@ export default function CashierOrdersPanel({ isOpen, onClose, onCharge }: Cashie
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-800 bg-neutral-900">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-black text-white tracking-tight">{t('ordersPanel.title')}</h2>
-            {orders.length > 0 && (
+            <h2 className="text-lg font-black text-white tracking-tight">
+              {mode === 'active' ? t('ordersPanel.title') : t('ordersPanel.tabHistory')}
+            </h2>
+            {mode === 'active' && orders.length > 0 && (
               <span className="bg-brand-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
                 {orders.length}
+              </span>
+            )}
+            {mode === 'history' && filteredHistory.length > 0 && (
+              <span className="bg-brand-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                {filteredHistory.length}
               </span>
             )}
           </div>
           <div className="flex items-center gap-1">
             <button
               onClick={handleRefresh}
-              disabled={refreshing}
+              disabled={refreshing || historyLoading}
               className="p-2 text-neutral-400 hover:text-white transition-colors"
               title={t('ordersPanel.title')}
             >
-              <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-5 h-5 ${refreshing || historyLoading ? 'animate-spin' : ''}`} />
             </button>
             <button
               onClick={onClose}
@@ -171,7 +236,64 @@ export default function CashierOrdersPanel({ isOpen, onClose, onCharge }: Cashie
           </div>
         </div>
 
+        {/* Tabs */}
+        <div className="flex border-b border-neutral-800 bg-neutral-900">
+          <button
+            onClick={() => setMode('active')}
+            className={`flex-1 py-3 text-sm font-bold transition-colors min-h-[40px] ${
+              mode === 'active'
+                ? 'text-white border-b-2 border-brand-500'
+                : 'text-neutral-400 hover:text-neutral-200 border-b-2 border-transparent'
+            }`}
+          >
+            {t('ordersPanel.tabActive')}
+          </button>
+          <button
+            onClick={() => setMode('history')}
+            className={`flex-1 py-3 text-sm font-bold transition-colors min-h-[40px] ${
+              mode === 'history'
+                ? 'text-white border-b-2 border-brand-500'
+                : 'text-neutral-400 hover:text-neutral-200 border-b-2 border-transparent'
+            }`}
+          >
+            {t('ordersPanel.tabHistory')}
+          </button>
+        </div>
+
+        {/* History filters */}
+        {mode === 'history' && (
+          <div className="px-3 pt-3 pb-2 border-b border-neutral-800 bg-neutral-900/50 space-y-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+              <input
+                type="text"
+                value={historySearch}
+                onChange={(e) => setHistorySearch(e.target.value)}
+                placeholder={t('ordersPanel.historySearchPlaceholder')}
+                className="w-full pl-8 pr-2 py-2 bg-neutral-800 border border-neutral-700 text-white text-sm rounded-lg focus:outline-none focus:border-brand-500 min-h-[40px]"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={historyDate}
+                onChange={(e) => setHistoryDate(e.target.value)}
+                className="flex-1 px-2 py-1.5 bg-neutral-800 border border-neutral-700 text-white text-sm rounded-lg focus:outline-none focus:border-brand-500 min-h-[40px]"
+              />
+              {historyDate && (
+                <button
+                  onClick={() => setHistoryDate('')}
+                  className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-bold rounded-lg min-h-[40px]"
+                >
+                  {t('ordersPanel.clearDate')}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* List */}
+        {mode === 'active' && (
         <div className="flex-1 overflow-y-auto p-3 space-y-3">
           {loading && orders.length === 0 ? (
             <div className="flex items-center justify-center py-20">
@@ -322,6 +444,55 @@ export default function CashierOrdersPanel({ isOpen, onClose, onCharge }: Cashie
             })
           )}
         </div>
+        )}
+
+        {/* History list */}
+        {mode === 'history' && (
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            {historyLoading && historyOrders.length === 0 ? (
+              <div className="flex items-center justify-center py-20">
+                <Clock className="w-7 h-7 text-brand-500 animate-spin" />
+              </div>
+            ) : filteredHistory.length === 0 ? (
+              <div className="text-center py-20">
+                <p className="text-neutral-500">{t('ordersPanel.historyEmpty')}</p>
+              </div>
+            ) : (
+              filteredHistory.map((o) => {
+                const opening = openingReceiptId === o.id;
+                return (
+                  <button
+                    key={o.id}
+                    onClick={() => handleOpenReceipt(o.id)}
+                    disabled={opening}
+                    className="w-full text-left bg-neutral-900 rounded-lg border border-neutral-800 hover:border-neutral-600 hover:bg-neutral-800/60 transition-colors p-3 min-h-[40px] disabled:opacity-60"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                        <span className="text-base font-black text-white">#{o.order_number}</span>
+                        {o.customer_name && (
+                          <span className="text-xs text-neutral-400 truncate">{o.customer_name}</span>
+                        )}
+                      </div>
+                      <span className="text-sm font-bold text-brand-500 whitespace-nowrap">
+                        {formatPrice(Number(o.total))}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 mt-1">
+                      <span className="text-xs text-neutral-500">
+                        {formatTime(new Date(o.created_at))}
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[10px] uppercase text-neutral-400 font-bold tracking-wide">
+                        <Receipt size={12} />
+                        {o.payment_method || t('ordersPanel.paid')}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        )}
       </div>
 
       <OrderEditModal
@@ -329,7 +500,16 @@ export default function CashierOrdersPanel({ isOpen, onClose, onCharge }: Cashie
         order={editingOrder}
         onClose={() => setEditingOrder(null)}
         onChanged={fetchOrders}
+        onRefund={onRefund}
       />
+
+      {receiptOrder && (
+        <ReceiptModal
+          order={receiptOrder}
+          onClose={() => setReceiptOrder(null)}
+          onPrint={() => { window.print(); }}
+        />
+      )}
     </div>
   );
 }
