@@ -45,7 +45,7 @@ router.use(express.urlencoded({ extended: false }));
 
 const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-const PENDING_TTL_MIN = 10;
+const PENDING_TTL_MIN = 60;
 
 function stripWaPrefix(addr) {
   return String(addr || '').replace(/^whatsapp:/, '').trim();
