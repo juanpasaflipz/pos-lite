@@ -175,11 +175,16 @@ export default function ReportsScreen() {
       csv += row.map((cell) => `"${cell}"`).join(',') + '\n';
     });
 
+    const { start, end } = getPeriodRange(period);
+    const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const rangeSlug = iso(start) === iso(end) ? iso(start) : `${iso(start)}_${iso(end)}`;
+    const filename = `sales-report-${period}-${rangeSlug}.csv`;
+
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `sales-report-${period}-${todayInTz(tenantTz)}.csv`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);
