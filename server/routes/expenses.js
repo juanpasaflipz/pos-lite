@@ -46,6 +46,140 @@ const router = Router();
 const VALID_CATEGORIES = ['food_cost', 'supplies', 'utilities', 'rent', 'marketing', 'other'];
 const VALID_PAYMENT_METHODS = ['cash', 'card', 'transfer'];
 
+// Apply inventory_matches[] to an expense — updates inventory_items.quantity
+// with weighted moving average cost, stamps last_restocked_at using the
+// expense's actual purchase date, appends to inventory_cost_history, writes
+// expense_items audit rows, and remembers the vendor↔item mapping. Shared
+// between POST / (create flow) and POST /:id/link-inventory (retroactive).
+async function applyInventoryMatches({ tenantId, expenseId, expenseDate, vendorId, matches }) {
+  const overpayAlerts = [];
+  if (!Array.isArray(matches)) return { overpayAlerts };
+
+  for (const match of matches) {
+    if (!match.inventory_item_id || !match.quantity || match.quantity <= 0) continue;
+
+    try {
+      const item = await get('SELECT id, quantity, cost_price FROM inventory_items WHERE id = $1', [match.inventory_item_id]);
+      if (!item) continue;
+
+      const quantityBefore = Number(item.quantity) || 0;
+      const prevCostPrice = item.cost_price == null ? null : Number(item.cost_price);
+      const addedQty = Number(match.quantity);
+      const newQuantity = quantityBefore + addedQty;
+      const incomingUnitCost = (match.cost_price !== undefined && match.cost_price !== null)
+        ? Number(match.cost_price)
+        : null;
+
+      let newCostPrice = prevCostPrice;
+      if (incomingUnitCost != null && incomingUnitCost > 0) {
+        if (quantityBefore <= 0 || prevCostPrice == null || prevCostPrice === 0) {
+          newCostPrice = incomingUnitCost;
+        } else {
+          newCostPrice = (quantityBefore * prevCostPrice + addedQty * incomingUnitCost) / newQuantity;
+          newCostPrice = Math.round(newCostPrice * 10000) / 10000;
+        }
+      }
+
+      const restockTimestamp = expenseDate ? `${expenseDate}T00:00:00Z` : new Date().toISOString();
+      try {
+        if (newCostPrice != null && newCostPrice !== prevCostPrice) {
+          await run(
+            `UPDATE inventory_items
+             SET quantity = $1,
+                 cost_price = $2,
+                 last_restocked_at = GREATEST(COALESCE(last_restocked_at, '1970-01-01'::timestamptz), $3::timestamptz)
+             WHERE id = $4`,
+            [newQuantity, newCostPrice, restockTimestamp, match.inventory_item_id]
+          );
+        } else {
+          await run(
+            `UPDATE inventory_items
+             SET quantity = $1,
+                 last_restocked_at = GREATEST(COALESCE(last_restocked_at, '1970-01-01'::timestamptz), $2::timestamptz)
+             WHERE id = $3`,
+            [newQuantity, restockTimestamp, match.inventory_item_id]
+          );
+        }
+      } catch (colErr) {
+        if (newCostPrice != null && newCostPrice !== prevCostPrice) {
+          await run('UPDATE inventory_items SET quantity = $1, cost_price = $2 WHERE id = $3',
+            [newQuantity, newCostPrice, match.inventory_item_id]);
+        } else {
+          await run('UPDATE inventory_items SET quantity = $1 WHERE id = $2',
+            [newQuantity, match.inventory_item_id]);
+        }
+      }
+
+      if (incomingUnitCost != null && incomingUnitCost > 0) {
+        const overpay = await detectOverpay(match.inventory_item_id, incomingUnitCost);
+        if (overpay) {
+          overpayAlerts.push({
+            inventory_item_id: match.inventory_item_id,
+            inventory_item_name: match.inventory_item_name || null,
+            unit_cost: incomingUnitCost,
+            median_cost: overpay.median,
+            deviation_pct: overpay.deviation_pct,
+            history_count: overpay.history_count,
+          });
+        }
+      }
+
+      if (incomingUnitCost != null && incomingUnitCost > 0) {
+        try {
+          await run(
+            `INSERT INTO inventory_cost_history
+               (tenant_id, inventory_item_id, vendor_id, expense_id, quantity_added, unit_cost, prev_cost_price, new_cost_price)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [tenantId, match.inventory_item_id, vendorId || null, expenseId, addedQty, incomingUnitCost, prevCostPrice, newCostPrice]
+          );
+        } catch (histErr) {
+          console.warn('[Expenses] cost history insert skipped:', histErr.message);
+        }
+      }
+
+      try {
+        await run(
+          `INSERT INTO expense_items
+             (tenant_id, expense_id, inventory_item_id, quantity, unit_cost, line_total, raw_description)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            tenantId,
+            expenseId,
+            match.inventory_item_id,
+            addedQty,
+            incomingUnitCost ?? 0,
+            incomingUnitCost != null ? (addedQty * incomingUnitCost).toFixed(2) : 0,
+            match.raw_description || null,
+          ]
+        );
+      } catch (itemErr) {
+        console.warn('[Expenses] expense_items insert skipped:', itemErr.message);
+      }
+
+      if (vendorId && match.raw_description) {
+        try {
+          await run(
+            `INSERT INTO vendor_items (tenant_id, vendor_id, inventory_item_id, vendor_sku, unit_cost, last_seen_description, last_used_at)
+             VALUES ($1, $2, $3, NULL, $4, $5, NOW())
+             ON CONFLICT (vendor_id, inventory_item_id) DO UPDATE
+               SET unit_cost = COALESCE(EXCLUDED.unit_cost, vendor_items.unit_cost),
+                   last_seen_description = EXCLUDED.last_seen_description,
+                   last_used_at = NOW()`,
+            [tenantId, vendorId, match.inventory_item_id, incomingUnitCost ?? 0, match.raw_description]
+          );
+        } catch (mapErr) {
+          console.warn('[Expenses] vendor_items upsert skipped:', mapErr.message);
+        }
+      }
+
+      setImmediate(() => logRestockEvent(match.inventory_item_id, quantityBefore, addedQty));
+    } catch (restockErr) {
+      console.error(`[Expenses] Restock error for item ${match.inventory_item_id}:`, restockErr.message);
+    }
+  }
+  return { overpayAlerts };
+}
+
 // GET /api/expenses/suppliers — list active suppliers for expense entry
 router.get('/suppliers', requireAuth('view_reports'), async (_req, res) => {
   try {
@@ -406,6 +540,54 @@ router.get('/', requireAuth('view_reports'), async (req, res) => {
   }
 });
 
+// GET /api/expenses/unlinked — expenses in food_cost / supplies categories
+// from the last N days that have no expense_items rows. These are purchases
+// that were logged but never closed the loop with inventory_items.quantity.
+// One-click retroactive linking happens via POST /:id/link-inventory.
+router.get('/unlinked', requireAuth('view_reports'), async (req, res) => {
+  try {
+    const days = Math.max(1, Math.min(180, parseInt(req.query.days, 10) || 30));
+    const rows = await all(
+      `SELECT e.id, e.category, e.vendor, e.vendor_id, e.description,
+              e.amount, e.expense_date, e.payment_method, e.notes,
+              e.receipt_data, e.created_at
+       FROM expenses e
+       LEFT JOIN expense_items ei ON ei.expense_id = e.id
+       WHERE e.category IN ('food_cost', 'supplies')
+         AND e.expense_date >= (NOW() - ($1 || ' days')::interval)::date
+       GROUP BY e.id
+       HAVING COUNT(ei.id) = 0
+       ORDER BY e.expense_date DESC, e.created_at DESC`,
+      [String(days)]
+    );
+
+    // Surface AI-parsed line items from receipt_data if present (receipt scans
+    // store them there before the user matches). The frontend uses these as
+    // pre-fill suggestions when the user opens the link modal.
+    const payload = rows.map(r => {
+      let parsedItems = [];
+      if (r.receipt_data) {
+        try {
+          const data = typeof r.receipt_data === 'string' ? JSON.parse(r.receipt_data) : r.receipt_data;
+          if (Array.isArray(data?.items)) {
+            parsedItems = data.items.map(it => ({
+              description: it.description || it.name || '',
+              quantity: Number(it.quantity) || 1,
+              unit_price: Number(it.unit_price ?? it.price ?? 0) || 0,
+            }));
+          }
+        } catch { /* opaque receipt_data — ignore */ }
+      }
+      return { ...r, parsed_items: parsedItems };
+    });
+
+    res.json(payload);
+  } catch (err) {
+    console.error('[Expenses] unlinked fetch error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch unlinked expenses' });
+  }
+});
+
 // POST /api/expenses — create expense
 router.post('/', requireAuth('manage_inventory'), async (req, res) => {
   try {
@@ -493,149 +675,13 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
     // Process inventory restocks from matches.
     // `quantity` is the amount to add in inventory's base unit (frontend computes parsed_qty * pack_size).
     // `cost_price` here is the per-unit cost (frontend computes amount / quantity).
-    const overpayAlerts = [];
-    if (inventory_matches && Array.isArray(inventory_matches)) {
-      for (const match of inventory_matches) {
-        if (!match.inventory_item_id || !match.quantity || match.quantity <= 0) continue;
-
-        try {
-          const item = await get('SELECT id, quantity, cost_price FROM inventory_items WHERE id = $1', [match.inventory_item_id]);
-          if (!item) continue;
-
-          const quantityBefore = Number(item.quantity) || 0;
-          const prevCostPrice = item.cost_price == null ? null : Number(item.cost_price);
-          const addedQty = Number(match.quantity);
-          const newQuantity = quantityBefore + addedQty;
-          const incomingUnitCost = (match.cost_price !== undefined && match.cost_price !== null)
-            ? Number(match.cost_price)
-            : null;
-
-          // Weighted moving average: only update cost when we have a positive incoming
-          // unit_cost. If there's no prior stock or no prior cost, the new purchase
-          // defines the cost outright.
-          let newCostPrice = prevCostPrice;
-          if (incomingUnitCost != null && incomingUnitCost > 0) {
-            if (quantityBefore <= 0 || prevCostPrice == null || prevCostPrice === 0) {
-              newCostPrice = incomingUnitCost;
-            } else {
-              newCostPrice = (quantityBefore * prevCostPrice + addedQty * incomingUnitCost) / newQuantity;
-              // Round to 4dp to avoid drift accumulation across many purchases.
-              newCostPrice = Math.round(newCostPrice * 10000) / 10000;
-            }
-          }
-
-          // Stamp last_restocked_at using the expense_date (the actual purchase
-          // date the user entered), not NOW(). Backdated entries — bought weeks
-          // ago, logged today — would otherwise reset the stale clock to today
-          // and never flag. GREATEST() guards against an old backdated entry
-          // pushing the clock backwards past a more recent restock.
-          const restockTimestamp = expense_date ? `${expense_date}T00:00:00Z` : new Date().toISOString();
-          try {
-            if (newCostPrice != null && newCostPrice !== prevCostPrice) {
-              await run(
-                `UPDATE inventory_items
-                 SET quantity = $1,
-                     cost_price = $2,
-                     last_restocked_at = GREATEST(COALESCE(last_restocked_at, '1970-01-01'::timestamptz), $3::timestamptz)
-                 WHERE id = $4`,
-                [newQuantity, newCostPrice, restockTimestamp, match.inventory_item_id]
-              );
-            } else {
-              await run(
-                `UPDATE inventory_items
-                 SET quantity = $1,
-                     last_restocked_at = GREATEST(COALESCE(last_restocked_at, '1970-01-01'::timestamptz), $2::timestamptz)
-                 WHERE id = $3`,
-                [newQuantity, restockTimestamp, match.inventory_item_id]
-              );
-            }
-          } catch (colErr) {
-            // last_restocked_at column missing (pre-migration). Retry without it.
-            if (newCostPrice != null && newCostPrice !== prevCostPrice) {
-              await run('UPDATE inventory_items SET quantity = $1, cost_price = $2 WHERE id = $3',
-                [newQuantity, newCostPrice, match.inventory_item_id]);
-            } else {
-              await run('UPDATE inventory_items SET quantity = $1 WHERE id = $2',
-                [newQuantity, match.inventory_item_id]);
-            }
-          }
-
-          // Overpay detection BEFORE writing new history row so the median
-          // reflects prior purchases only.
-          if (incomingUnitCost != null && incomingUnitCost > 0) {
-            const overpay = await detectOverpay(match.inventory_item_id, incomingUnitCost);
-            if (overpay) {
-              overpayAlerts.push({
-                inventory_item_id: match.inventory_item_id,
-                inventory_item_name: match.inventory_item_name || null,
-                unit_cost: incomingUnitCost,
-                median_cost: overpay.median,
-                deviation_pct: overpay.deviation_pct,
-                history_count: overpay.history_count,
-              });
-            }
-          }
-
-          // Append to cost history ledger (Phase 2 overpay detection reads from this).
-          if (incomingUnitCost != null && incomingUnitCost > 0) {
-            try {
-              await run(
-                `INSERT INTO inventory_cost_history
-                   (tenant_id, inventory_item_id, vendor_id, expense_id, quantity_added, unit_cost, prev_cost_price, new_cost_price)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-                [tenantId, match.inventory_item_id, vendor_id || null, result.id, addedQty, incomingUnitCost, prevCostPrice, newCostPrice]
-              );
-            } catch (histErr) {
-              // Table may not exist yet on a stale schema; non-fatal.
-              console.warn('[Expenses] cost history insert skipped:', histErr.message);
-            }
-          }
-
-          // Normalized expense_items row (audit trail + recipe cost queries).
-          try {
-            await run(
-              `INSERT INTO expense_items
-                 (tenant_id, expense_id, inventory_item_id, quantity, unit_cost, line_total, raw_description)
-               VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-              [
-                tenantId,
-                result.id,
-                match.inventory_item_id,
-                addedQty,
-                incomingUnitCost ?? 0,
-                incomingUnitCost != null ? (addedQty * incomingUnitCost).toFixed(2) : 0,
-                match.raw_description || null,
-              ]
-            );
-          } catch (itemErr) {
-            console.warn('[Expenses] expense_items insert skipped:', itemErr.message);
-          }
-
-          // Remember this vendor↔item mapping so next receipt auto-suggests
-          if (vendor_id && match.raw_description) {
-            try {
-              await run(
-                `INSERT INTO vendor_items (tenant_id, vendor_id, inventory_item_id, vendor_sku, unit_cost, last_seen_description, last_used_at)
-                 VALUES ($1, $2, $3, NULL, $4, $5, NOW())
-                 ON CONFLICT (vendor_id, inventory_item_id) DO UPDATE
-                   SET unit_cost = COALESCE(EXCLUDED.unit_cost, vendor_items.unit_cost),
-                       last_seen_description = EXCLUDED.last_seen_description,
-                       last_used_at = NOW()`,
-                [tenantId, vendor_id, match.inventory_item_id, incomingUnitCost ?? 0, match.raw_description]
-              );
-            } catch (mapErr) {
-              // last_seen_description / last_used_at may not yet exist on older schema
-              console.warn('[Expenses] vendor_items upsert skipped:', mapErr.message);
-            }
-          }
-
-          // Fire-and-forget: log restock for AI
-          setImmediate(() => logRestockEvent(match.inventory_item_id, quantityBefore, addedQty));
-        } catch (restockErr) {
-          console.error(`[Expenses] Restock error for item ${match.inventory_item_id}:`, restockErr.message);
-        }
-      }
-    }
+    const { overpayAlerts } = await applyInventoryMatches({
+      tenantId,
+      expenseId: result.id,
+      expenseDate: expense_date,
+      vendorId: vendor_id || null,
+      matches: inventory_matches,
+    });
 
     res.json({
       ...result,
@@ -645,6 +691,63 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
   } catch (err) {
     console.error('[Expenses] Create error:', err.message);
     res.status(500).json({ error: 'Failed to create expense' });
+  }
+});
+
+// POST /api/expenses/:id/link-inventory — retroactively link inventory_matches
+// to an existing expense. Used by the "Unlinked Purchases" surface to close
+// the loop on expenses logged via the manual form without a match step.
+// Idempotent guard: rejects if expense_items already exist for this expense.
+router.post('/:id/link-inventory', requireAuth('manage_inventory'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { inventory_matches } = req.body || {};
+
+    if (!Array.isArray(inventory_matches) || inventory_matches.length === 0) {
+      return res.status(400).json({ error: 'inventory_matches array is required' });
+    }
+
+    const expense = await get(
+      `SELECT id, expense_date, vendor_id, receipt_data FROM expenses WHERE id = $1`,
+      [id]
+    );
+    if (!expense) return res.status(404).json({ error: 'Expense not found' });
+
+    const existing = await get(`SELECT COUNT(*)::int AS n FROM expense_items WHERE expense_id = $1`, [id]);
+    if (existing && existing.n > 0) {
+      return res.status(409).json({ error: 'Expense already linked to inventory' });
+    }
+
+    const tenantId = getTenantId();
+    const { overpayAlerts } = await applyInventoryMatches({
+      tenantId,
+      expenseId: Number(id),
+      expenseDate: expense.expense_date,
+      vendorId: expense.vendor_id || null,
+      matches: inventory_matches,
+    });
+
+    // Stamp inventory_matches into receipt_data for audit-trail parity with
+    // the create flow.
+    try {
+      let receiptData = null;
+      if (expense.receipt_data) {
+        receiptData = typeof expense.receipt_data === 'string'
+          ? JSON.parse(expense.receipt_data)
+          : { ...expense.receipt_data };
+      }
+      receiptData = receiptData || {};
+      receiptData.inventory_matches = inventory_matches;
+      receiptData.linked_retroactively_at = new Date().toISOString();
+      await run(`UPDATE expenses SET receipt_data = $1 WHERE id = $2`, [JSON.stringify(receiptData), id]);
+    } catch (auditErr) {
+      console.warn('[Expenses] receipt_data audit stamp skipped:', auditErr.message);
+    }
+
+    res.json({ success: true, linked_count: inventory_matches.length, overpay_alerts: overpayAlerts });
+  } catch (err) {
+    console.error('[Expenses] link-inventory error:', err.message);
+    res.status(500).json({ error: 'Failed to link inventory' });
   }
 });
 

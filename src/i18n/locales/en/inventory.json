@@ -671,5 +671,27 @@
     "collapseAll": "Collapse All",
     "filterActive": "Filtering by: {{bucket}}",
     "clearFilter": "Clear filter"
+  },
+  "unlinked": {
+    "bannerTitle": "{{count}} purchases not linked to inventory",
+    "bannerSubtitle": "${{amount}} spent in the last 30 days that didn't update your stock. Link them to close the loop.",
+    "review": "Review",
+    "modalTitle": "Unlinked purchases",
+    "modalSubtitle": "These are purchases (food_cost and supplies) recorded as expenses but that didn't update inventory quantities. Assign them to close the loop.",
+    "noVendor": "No vendor",
+    "searchPlaceholder": "Search inventory item...",
+    "qty": "Qty",
+    "unitCost": "Cost/Unit",
+    "addRow": "Add another line",
+    "removeRow": "Remove line",
+    "expenseTotal": "Expense total",
+    "linkAndApply": "Link & apply",
+    "linking": "Linking...",
+    "linkFailed": "Failed to link purchase",
+    "noRowsError": "Select at least one inventory item to link",
+    "allClear": "All clear! No purchases pending.",
+    "parsedSeedHint": "Lines pre-filled from receipt scan — confirm or adjust before linking.",
+    "footerHint": "Links update stock immediately using the original purchase date.",
+    "close": "Close"
   }
 }

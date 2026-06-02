@@ -798,6 +798,25 @@ export async function refundPayment(data: RefundPaymentData): Promise<any> {
   });
 }
 
+interface CashTipAdjustResult {
+  success: boolean;
+  order_id: number;
+  order_number: number;
+  tip_total: number;
+  tip_added: number;
+}
+
+export async function addCashTip(
+  orderId: number,
+  amount: number,
+  note?: string
+): Promise<CashTipAdjustResult> {
+  return apiRequest<CashTipAdjustResult>('/payments/cash-tip-adjust', {
+    method: 'POST',
+    body: JSON.stringify({ order_id: orderId, amount, note }),
+  });
+}
+
 export async function getOrderRefunds(orderId: number): Promise<Refund[]> {
   return apiRequest<Refund[]>(`/payments/refunds/${orderId}`);
 }
@@ -3551,6 +3570,35 @@ export async function updateExpense(id: number, data: Partial<Expense>): Promise
 
 export async function deleteExpense(id: number): Promise<{ success: boolean }> {
   return apiRequest(`/expenses/${id}`, { method: 'DELETE' });
+}
+
+export interface UnlinkedExpense {
+  id: number;
+  category: string;
+  vendor: string | null;
+  vendor_id: number | null;
+  description: string | null;
+  amount: number;
+  expense_date: string;
+  payment_method: string | null;
+  notes: string | null;
+  receipt_data: any;
+  created_at: string;
+  parsed_items: Array<{ description: string; quantity: number; unit_price: number }>;
+}
+
+export async function getUnlinkedExpenses(days = 30): Promise<UnlinkedExpense[]> {
+  return apiRequest<UnlinkedExpense[]>(`/expenses/unlinked?days=${days}`);
+}
+
+export async function linkExpenseToInventory(
+  expenseId: number,
+  inventory_matches: InventoryMatch[]
+): Promise<{ success: boolean; linked_count: number; overpay_alerts: any[] }> {
+  return apiRequest(`/expenses/${expenseId}/link-inventory`, {
+    method: 'POST',
+    body: JSON.stringify({ inventory_matches }),
+  });
 }
 
 export async function uploadReceipt(file: File): Promise<{ image_url: string }> {

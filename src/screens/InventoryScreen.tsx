@@ -33,7 +33,9 @@ import {
   getInventoryInsights,
   getStaleStock,
   getDormantStock,
+  getUnlinkedExpenses,
 } from '../api';
+import type { UnlinkedExpense } from '../api';
 import {
   InventoryItem,
   InventoryForecast,
@@ -50,6 +52,8 @@ import BrandLogo from '../components/BrandLogo';
 import { usePlan } from '../context/PlanContext';
 import StockTab from '../components/inventory/StockTab';
 import InventoryPulseGrid, { PulseBucket } from '../components/inventory/InventoryPulseGrid';
+import UnlinkedPurchasesBanner from '../components/inventory/UnlinkedPurchasesBanner';
+import UnlinkedPurchasesModal from '../components/inventory/UnlinkedPurchasesModal';
 import ScanTab from '../components/inventory/ScanTab';
 import WasteTab from '../components/inventory/WasteTab';
 import CountTab from '../components/inventory/CountTab';
@@ -116,6 +120,9 @@ export default function InventoryScreen() {
   const [dormantIds, setDormantIds] = useState<Set<number>>(new Set());
   const [pulseLoading, setPulseLoading] = useState(false);
   const [activeBucket, setActiveBucket] = useState<PulseBucket | null>(null);
+  const [unlinkedExpenses, setUnlinkedExpenses] = useState<UnlinkedExpense[]>([]);
+  const [unlinkedLoading, setUnlinkedLoading] = useState(false);
+  const [unlinkedModalOpen, setUnlinkedModalOpen] = useState(false);
 
   // COGS widget state
   const [cogsSummary, setCogsSummary] = useState<COGSSummary | null>(null);
@@ -170,7 +177,26 @@ export default function InventoryScreen() {
       .then(setForecasts)
       .catch(() => {});
     loadPulseBuckets();
+    loadUnlinked();
   }, []);
+
+  const loadUnlinked = async () => {
+    try {
+      setUnlinkedLoading(true);
+      const data = await getUnlinkedExpenses(30);
+      setUnlinkedExpenses(data);
+    } catch {
+      // Quiet failure — banner just won't show
+    } finally {
+      setUnlinkedLoading(false);
+    }
+  };
+
+  const handleUnlinkedLinked = async () => {
+    // After a link saves, refresh everything: unlinked list (current expense
+    // should disappear), inventory items (quantity bumped), pulse buckets.
+    await Promise.all([loadUnlinked(), fetchItems(), loadPulseBuckets()]);
+  };
 
   const loadPulseBuckets = async () => {
     try {
@@ -777,6 +803,17 @@ export default function InventoryScreen() {
 
         {activeTab === 'stock' && (
           <>
+            <UnlinkedPurchasesBanner
+              expenses={unlinkedExpenses}
+              loading={unlinkedLoading}
+              onOpen={() => setUnlinkedModalOpen(true)}
+            />
+            <UnlinkedPurchasesModal
+              expenses={unlinkedExpenses}
+              open={unlinkedModalOpen}
+              onClose={() => setUnlinkedModalOpen(false)}
+              onLinked={handleUnlinkedLinked}
+            />
             <InventoryPulseGrid
               counts={pulseCounts}
               loading={loading || pulseLoading}

@@ -671,5 +671,27 @@
     "collapseAll": "Colapsar Todo",
     "filterActive": "Filtrando por: {{bucket}}",
     "clearFilter": "Quitar filtro"
+  },
+  "unlinked": {
+    "bannerTitle": "{{count}} compras sin enlazar al inventario",
+    "bannerSubtitle": "${{amount}} gastado en los últimos 30 días que no actualizó tu stock. Enlázalas para cerrar el ciclo.",
+    "review": "Revisar",
+    "modalTitle": "Compras sin enlazar",
+    "modalSubtitle": "Estas son compras (food_cost y supplies) registradas como gasto, pero que no actualizaron las cantidades del inventario. Asígnalas para cerrar el ciclo.",
+    "noVendor": "Sin proveedor",
+    "searchPlaceholder": "Buscar producto en inventario...",
+    "qty": "Cant.",
+    "unitCost": "Costo/Unidad",
+    "addRow": "Agregar otra línea",
+    "removeRow": "Quitar línea",
+    "expenseTotal": "Total del gasto",
+    "linkAndApply": "Enlazar y aplicar",
+    "linking": "Enlazando...",
+    "linkFailed": "Error al enlazar compra",
+    "noRowsError": "Selecciona al menos un producto del inventario para enlazar",
+    "allClear": "¡Todo enlazado! No hay compras pendientes.",
+    "parsedSeedHint": "Líneas pre-llenadas desde el escaneo del recibo — confirma o ajusta antes de enlazar.",
+    "footerHint": "Los enlaces actualizan el stock al instante con la fecha de la compra original.",
+    "close": "Cerrar"
   }
 }
