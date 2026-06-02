@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Check, Loader2, Minus, Pencil, Plus, Tag, Trash2, X } from 'lucide-react';
+import { Check, Loader2, Minus, Pencil, Plus, RotateCcw, Tag, Trash2, X } from 'lucide-react';
 import {
   appendOrderItems,
   applyOrderDiscount,
@@ -21,6 +21,8 @@ interface OrderEditModalProps {
   onClose: () => void;
   /** Called after any successful mutation so the parent panel re-fetches. */
   onChanged: () => void;
+  /** Paid orders only. Opens the refund modal owned by the POS screen. */
+  onRefund?: (orderId: number) => void;
 }
 
 type RetryFn = (approverId: number) => Promise<void>;
@@ -30,7 +32,7 @@ interface VoidPick {
   itemName: string;
 }
 
-const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose, onChanged }) => {
+const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose, onChanged, onRefund }) => {
   const [items, setItems] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyItemId, setBusyItemId] = useState<number | null>(null);
@@ -450,6 +452,16 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
               >
                 <Trash2 className="w-4 h-4" />
                 Cancelar orden completa
+              </button>
+            )}
+            {(order.payment_status === 'paid' || order.payment_status === 'completed') && onRefund && (
+              <button
+                onClick={() => { onRefund(order.id); onClose(); }}
+                disabled={loading}
+                className="w-full h-11 mt-2 rounded-lg bg-cockpit-red/20 hover:bg-cockpit-red/30 disabled:opacity-40 text-cockpit-out-text font-bold transition-colors inline-flex items-center justify-center gap-1.5 border border-cockpit-red/40"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Reembolsar
               </button>
             )}
           </div>

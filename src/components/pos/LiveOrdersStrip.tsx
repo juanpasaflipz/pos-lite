@@ -24,6 +24,8 @@ interface LiveOrdersStripProps {
   onViewAll: () => void;
   /** Opens the existing Cobrar flow for an unpaid order. */
   onCharge: (order: Order) => void;
+  /** Opens the refund modal for a paid order. */
+  onRefund?: (orderId: number) => void;
   /** External signal to refetch (e.g. after a new order is rung up). */
   refreshKey?: number;
 }
@@ -107,7 +109,7 @@ function describeChannel(order: Order, t: (k: string, opts?: any) => string) {
   return { Icon: ShoppingBag, label: t('liveStrip.toGoShort'), accent: 'text-neutral-300' };
 }
 
-export default function LiveOrdersStrip({ onViewAll, onCharge, refreshKey }: LiveOrdersStripProps) {
+export default function LiveOrdersStrip({ onViewAll, onCharge, onRefund, refreshKey }: LiveOrdersStripProps) {
   const { t } = useTranslation('pos');
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -405,6 +407,7 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, refreshKey }: Liv
         order={editingOrder}
         onClose={() => setEditingOrder(null)}
         onChanged={fetchOrders}
+        onRefund={onRefund}
       />
     </div>
   );

@@ -1124,6 +1124,10 @@ const POSScreen: React.FC = () => {
         <LiveOrdersStrip
           onViewAll={() => setShowOrdersPanel(true)}
           onCharge={handleCobrar}
+          onRefund={(orderId) => {
+            setRefundOrderId(orderId);
+            setShowRefundModal(true);
+          }}
           refreshKey={ordersRefreshKey}
         />
 
@@ -1456,6 +1460,7 @@ const POSScreen: React.FC = () => {
           onRefunded={() => {
             setShowRefundModal(false);
             setRefundOrderId(null);
+            bumpOrders();
             addToast(t('toast.refundDone'), 'success');
           }}
         />
@@ -1467,6 +1472,11 @@ const POSScreen: React.FC = () => {
         onCharge={(order) => {
           setShowOrdersPanel(false);
           handleCobrar(order);
+        }}
+        onRefund={(orderId) => {
+          setShowOrdersPanel(false);
+          setRefundOrderId(orderId);
+          setShowRefundModal(true);
         }}
       />
 
