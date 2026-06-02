@@ -122,15 +122,17 @@ async function computeSnapshot({ period_start, period_end, tz }) {
   `, [periodStartTs, periodEndTs, tz]);
 
   // Period sales + tip pool (paid orders only).
-  // COALESCE(completed_at, created_at) matches the reports.js convention.
+  // Use COALESCE(paid_at, created_at) to match reports.js — attributes a
+  // sale to the day money changed hands, not when an employee later
+  // clicked "complete" (which can land on a different business day).
   const salesRow = await get(`
     SELECT
       COALESCE(SUM(subtotal), 0) AS sales_subtotal,
       COALESCE(SUM(tip), 0) AS tip_total
     FROM orders
     WHERE payment_status = 'paid'
-      AND (COALESCE(completed_at, created_at) AT TIME ZONE $3)::date >= $1::date
-      AND (COALESCE(completed_at, created_at) AT TIME ZONE $3)::date <  $2::date
+      AND (COALESCE(paid_at, created_at) AT TIME ZONE $3)::date >= $1::date
+      AND (COALESCE(paid_at, created_at) AT TIME ZONE $3)::date <  $2::date
   `, [period_start, period_end, tz]);
   const salesCents = toCents(salesRow.sales_subtotal);
   const tipPoolCents = toCents(salesRow.tip_total);
@@ -142,8 +144,8 @@ async function computeSnapshot({ period_start, period_end, tz }) {
       SELECT employee_id, COALESCE(SUM(tip), 0) AS tip_total
       FROM orders
       WHERE payment_status = 'paid'
-        AND (COALESCE(completed_at, created_at) AT TIME ZONE $3)::date >= $1::date
-        AND (COALESCE(completed_at, created_at) AT TIME ZONE $3)::date <  $2::date
+        AND (COALESCE(paid_at, created_at) AT TIME ZONE $3)::date >= $1::date
+        AND (COALESCE(paid_at, created_at) AT TIME ZONE $3)::date <  $2::date
       GROUP BY employee_id
     `, [period_start, period_end, tz]);
     for (const r of rows) perTakerTips.set(r.employee_id, toCents(r.tip_total));
