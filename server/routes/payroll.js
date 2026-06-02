@@ -109,7 +109,7 @@ async function computeSnapshot({ period_start, period_end, tz }) {
           LEAST(COALESCE(s.clock_out_at, NOW()), ($2::timestamp AT TIME ZONE $3))
           - GREATEST(s.clock_in_at, ($1::timestamp AT TIME ZONE $3))
         )) / 3600.0
-      ), 0)::numeric(8,2) AS hours_worked,
+      ) FILTER (WHERE s.id IS NOT NULL), 0)::numeric(8,2) AS hours_worked,
       BOOL_OR(s.clock_out_at IS NULL) FILTER (WHERE s.id IS NOT NULL) AS has_open_shift
     FROM employees e
     LEFT JOIN shifts s
@@ -272,7 +272,7 @@ router.get('/forecast', requireAuth('manage_payroll'), async (req, res) => {
           EXTRACT(EPOCH FROM (
             LEAST(ss.ends_at, $2::timestamptz) - GREATEST(ss.starts_at, $1::timestamptz)
           )) / 3600.0
-        ), 0)::numeric(8,2) AS hours_scheduled
+        ) FILTER (WHERE ss.id IS NOT NULL), 0)::numeric(8,2) AS hours_scheduled
       FROM employees e
       LEFT JOIN scheduled_shifts ss
         ON ss.employee_id = e.id
@@ -284,7 +284,7 @@ router.get('/forecast', requireAuth('manage_payroll'), async (req, res) => {
         EXTRACT(EPOCH FROM (
           LEAST(ss.ends_at, $2::timestamptz) - GREATEST(ss.starts_at, $1::timestamptz)
         )) / 3600.0
-      ), 0) > 0
+      ) FILTER (WHERE ss.id IS NOT NULL), 0) > 0
       ORDER BY e.name ASC
     `, [from.toISOString(), to.toISOString()]);
 
