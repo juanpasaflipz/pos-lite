@@ -4,8 +4,11 @@
     "exportCsv": "Exportar CSV",
     "periods": {
       "today": "Hoy",
+      "yesterday": "Ayer",
       "week": "Esta Semana",
-      "month": "Este Mes"
+      "lastWeek": "Semana Pasada",
+      "month": "Este Mes",
+      "lastMonth": "Mes Pasado"
     },
     "tabs": {
       "overview": "Resumen",

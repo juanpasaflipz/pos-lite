@@ -15,31 +15,62 @@ function tzToday(tz) {
 }
 
 /**
- * Compute the start-of-period date string (YYYY-MM-DD) anchored to the
- * tenant's local timezone. SQL must compare with
- * `(COALESCE(paid_at, created_at) AT TIME ZONE $tz)::date >= startDate`.
+ * Compute the start/end date strings (YYYY-MM-DD inclusive) for a named
+ * period anchored to the tenant's local timezone. All SQL must filter with
+ *   (COALESCE(paid_at, created_at) AT TIME ZONE $tz)::date BETWEEN $start AND $end
+ * so the optional "previous period" buttons (yesterday, last_week, last_month)
+ * also have an upper bound — without it they'd run from start-of-last-period
+ * to today and over-count.
  */
-function getDateRange(period, tz = 'UTC') {
+function getPeriodRange(period, tz = 'UTC') {
   const todayStr = tzToday(tz);
   const [y, m, d] = todayStr.split('-').map(Number);
   const today = new Date(Date.UTC(y, m - 1, d));
+  const fmt = (dt) => dt.toISOString().slice(0, 10);
 
   switch (period) {
     case 'daily':
     case 'today':
-      return todayStr;
+      return { start: todayStr, end: todayStr };
+    case 'yesterday': {
+      const y1 = new Date(today);
+      y1.setUTCDate(today.getUTCDate() - 1);
+      const s = fmt(y1);
+      return { start: s, end: s };
+    }
     case 'weekly':
     case 'week': {
       const start = new Date(today);
       start.setUTCDate(today.getUTCDate() - today.getUTCDay());
-      return start.toISOString().slice(0, 10);
+      return { start: fmt(start), end: todayStr };
+    }
+    case 'last_week': {
+      const thisWeekStart = new Date(today);
+      thisWeekStart.setUTCDate(today.getUTCDate() - today.getUTCDay());
+      const lastEnd = new Date(thisWeekStart);
+      lastEnd.setUTCDate(thisWeekStart.getUTCDate() - 1);
+      const lastStart = new Date(lastEnd);
+      lastStart.setUTCDate(lastEnd.getUTCDate() - 6);
+      return { start: fmt(lastStart), end: fmt(lastEnd) };
     }
     case 'monthly':
     case 'month':
-      return `${todayStr.slice(0, 8)}01`;
+      return { start: `${todayStr.slice(0, 8)}01`, end: todayStr };
+    case 'last_month': {
+      const firstOfThisMonth = new Date(Date.UTC(y, m - 1, 1));
+      const lastEnd = new Date(firstOfThisMonth);
+      lastEnd.setUTCDate(firstOfThisMonth.getUTCDate() - 1);
+      const lastStart = new Date(Date.UTC(lastEnd.getUTCFullYear(), lastEnd.getUTCMonth(), 1));
+      return { start: fmt(lastStart), end: fmt(lastEnd) };
+    }
     default:
-      return todayStr;
+      return { start: todayStr, end: todayStr };
   }
+}
+
+/** Back-compat: start-only string. */
+function getDateRange(period, tz = 'UTC') {
+  return getPeriodRange(period, tz).start;
 }
 
 function paymentSourceSql(alias = '') {
@@ -82,7 +113,7 @@ router.get('/sales', async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const startDate = getDateRange(period, tz);
+    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
 
     const stats = await get(`
       SELECT
@@ -94,13 +125,14 @@ router.get('/sales', async (req, res) => {
         ROUND(SUM(COALESCE(discount_amount, 0)), 2) as discount_total,
         COUNT(*) FILTER (WHERE COALESCE(discount_amount, 0) > 0) as discounted_order_count
       FROM orders
-      WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $2)::date >= $1
+      WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2
         AND payment_status = 'paid'
-    `, [startDate, tz]);
+    `, [startDate, endDate, tz]);
 
     res.json({
       period,
       startDate,
+      endDate,
       ...stats,
     });
   } catch (error) {
@@ -114,7 +146,7 @@ router.get('/top-items', async (req, res) => {
   try {
     const { period = 'daily', limit = 10 } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const startDate = getDateRange(period, tz);
+    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
     const limitNum = Math.min(parseInt(limit) || 10, 100);
 
     const items = await all(`
@@ -124,12 +156,12 @@ router.get('/top-items', async (req, res) => {
         ROUND(SUM(oi.quantity * oi.unit_price), 2) as revenue
       FROM order_items oi
       JOIN orders o ON oi.order_id = o.id
-      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date >= $1
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $4)::date BETWEEN $1 AND $2
         AND o.payment_status = 'paid'
       GROUP BY oi.item_name
       ORDER BY quantity_sold DESC
-      LIMIT $2
-    `, [startDate, limitNum, tz]);
+      LIMIT $3
+    `, [startDate, endDate, limitNum, tz]);
 
     res.json(items);
   } catch (error) {
@@ -149,19 +181,13 @@ router.get('/item-sales', async (req, res) => {
       related_item_id,
     } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const startDate = getDateRange(period, tz);
-    const today = tzToday(tz);
+    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
 
     const where = [
-      `(COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date >= $1`,
+      `(COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2`,
       `o.payment_status = 'paid'`,
     ];
-    const params = [startDate, tz];
-
-    if (period === 'daily' || period === 'today') {
-      where.push(`(COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date <= $3`);
-      params.push(today);
-    }
+    const params = [startDate, endDate, tz];
 
     if (customer_id && customer_id !== 'all') {
       params.push(Number(customer_id));
@@ -170,7 +196,7 @@ router.get('/item-sales', async (req, res) => {
 
     if (hour !== undefined && hour !== null && hour !== '' && hour !== 'all') {
       params.push(Number(hour));
-      where.push(`EXTRACT(HOUR FROM COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::int = $${params.length}`);
+      where.push(`EXTRACT(HOUR FROM COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::int = $${params.length}`);
     }
 
     if (related_item_id && related_item_id !== 'all') {
@@ -256,11 +282,11 @@ router.get('/item-sales', async (req, res) => {
         lc.phone
       FROM orders o
       JOIN loyalty_customers lc ON lc.id = o.loyalty_customer_id
-      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date >= $1
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2
         AND o.payment_status = 'paid'
       ORDER BY lc.name ASC
       LIMIT 200
-    `, [startDate, tz]);
+    `, [startDate, endDate, tz]);
 
     const itemOptions = await all(`
       SELECT
@@ -270,17 +296,18 @@ router.get('/item-sales', async (req, res) => {
       FROM order_items oi
       JOIN orders o ON oi.order_id = o.id
       LEFT JOIN menu_items mi ON oi.menu_item_id = mi.id
-      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date >= $1
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2
         AND o.payment_status = 'paid'
         AND oi.menu_item_id IS NOT NULL
       GROUP BY COALESCE(mi.id, oi.menu_item_id, 0), oi.item_name
       ORDER BY quantity_sold DESC, oi.item_name ASC
       LIMIT 200
-    `, [startDate, tz]);
+    `, [startDate, endDate, tz]);
 
     res.json({
       period,
       startDate,
+      endDate,
       filters: {
         customer_id: customer_id || 'all',
         hour: hour || 'all',
@@ -312,7 +339,7 @@ router.get('/employee-performance', async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const startDate = getDateRange(period, tz);
+    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
 
     const employees = await all(`
       SELECT
@@ -323,10 +350,10 @@ router.get('/employee-performance', async (req, res) => {
         ROUND(AVG(o.total), 2) as avg_ticket,
         ROUND(SUM(o.tip), 2) as tips_received
       FROM employees e
-      LEFT JOIN orders o ON e.id = o.employee_id AND (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date >= $1 AND o.payment_status = 'paid'
+      LEFT JOIN orders o ON e.id = o.employee_id AND (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2 AND o.payment_status = 'paid'
       GROUP BY e.id, e.name
       ORDER BY total_sales DESC
-    `, [startDate, tz]);
+    `, [startDate, endDate, tz]);
 
     res.json(employees);
   } catch (error) {
@@ -383,7 +410,7 @@ router.get('/cash-card-breakdown', async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const startDate = getDateRange(period, tz);
+    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
 
     const breakdown = await all(`
       SELECT
@@ -393,12 +420,12 @@ router.get('/cash-card-breakdown', async (req, res) => {
         ROUND(SUM(subtotal + tip), 2) as total,
         ROUND(SUM(tip), 2) as tips
       FROM orders
-      WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $2)::date >= $1
+      WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2
         AND payment_status = 'paid'
         AND payment_method IS NOT NULL
       GROUP BY 1
       ORDER BY total DESC
-    `, [startDate, tz]);
+    `, [startDate, endDate, tz]);
 
     // Coerce Postgres numeric/bigint strings to JS numbers
     for (const b of breakdown) {
@@ -503,7 +530,7 @@ router.get('/cogs', async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const startDate = getDateRange(period, tz);
+    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
 
     // Get revenue per menu item
     const items = await all(`
@@ -514,11 +541,11 @@ router.get('/cogs', async (req, res) => {
         ROUND(SUM(oi.quantity * oi.unit_price), 2) as revenue
       FROM order_items oi
       JOIN orders o ON oi.order_id = o.id
-      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date >= $1
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2
         AND o.payment_status = 'paid'
       GROUP BY oi.menu_item_id, oi.item_name
       ORDER BY revenue DESC
-    `, [startDate, tz]);
+    `, [startDate, endDate, tz]);
 
     // Calculate COGS per item via menu_item_ingredients JOIN inventory_items.cost_price
     const result = [];
@@ -569,7 +596,7 @@ router.get('/category-margins', async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const startDate = getDateRange(period, tz);
+    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
 
     const categories = await all(`
       SELECT
@@ -581,11 +608,11 @@ router.get('/category-margins', async (req, res) => {
       JOIN orders o ON oi.order_id = o.id
       JOIN menu_items mi ON oi.menu_item_id = mi.id
       JOIN menu_categories mc ON mi.category_id = mc.id
-      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date >= $1
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2
         AND o.payment_status = 'paid'
       GROUP BY mc.id, mc.name
       ORDER BY revenue DESC
-    `, [startDate, tz]);
+    `, [startDate, endDate, tz]);
 
     const result = [];
     for (const cat of categories) {
@@ -596,9 +623,9 @@ router.get('/category-margins', async (req, res) => {
         JOIN orders o ON oi.order_id = o.id
         JOIN menu_items mi ON oi.menu_item_id = mi.id
         WHERE mi.category_id = $1
-          AND (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date >= $2
+          AND (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $4)::date BETWEEN $2 AND $3
           AND o.payment_status = 'paid'
-      `, [cat.category_id, startDate, tz]);
+      `, [cat.category_id, startDate, endDate, tz]);
 
       let totalCogs = 0;
       for (const item of catItems) {
@@ -607,9 +634,9 @@ router.get('/category-margins', async (req, res) => {
           FROM order_items oi
           JOIN orders o ON oi.order_id = o.id
           WHERE oi.menu_item_id = $1
-            AND (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date >= $2
+            AND (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $4)::date BETWEEN $2 AND $3
             AND o.payment_status = 'paid'
-        `, [item.menu_item_id, startDate, tz]);
+        `, [item.menu_item_id, startDate, endDate, tz]);
 
         const ingredients = await all(`
           SELECT mii.quantity_used, ii.cost_price
@@ -646,20 +673,20 @@ router.get('/contribution-margin', async (req, res) => {
   try {
     const { period = 'weekly', group_by = 'day' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const startDate = getDateRange(period, tz);
+    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
 
     const dailyRevenue = await all(`
       SELECT
-        (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date as date,
+        (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date as date,
         ROUND(SUM(oi.quantity * oi.unit_price), 2) as revenue,
         COUNT(DISTINCT o.id) as orders
       FROM order_items oi
       JOIN orders o ON oi.order_id = o.id
-      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date >= $1
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2
         AND o.payment_status = 'paid'
-      GROUP BY (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date
+      GROUP BY (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date
       ORDER BY date ASC
-    `, [startDate, tz]);
+    `, [startDate, endDate, tz]);
 
     const result = [];
     for (const day of dailyRevenue) {
@@ -808,7 +835,7 @@ router.get('/delivery-margins', async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const startDate = getDateRange(period, tz);
+    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
 
     const platforms = await all(`
       SELECT
@@ -822,10 +849,10 @@ router.get('/delivery-margins', async (req, res) => {
       FROM delivery_platforms dp
       LEFT JOIN delivery_orders dor ON dp.id = dor.platform_id
       LEFT JOIN orders o ON dor.order_id = o.id
-        AND (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date >= $1
+        AND (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2
         AND o.payment_status = 'paid'
       GROUP BY dp.id, dp.display_name, dp.commission_percent
-    `, [startDate, tz]);
+    `, [startDate, endDate, tz]);
 
     const result = platforms.map(p => {
       const netRevenue = (p.revenue || 0) - (p.total_commission || 0);
@@ -848,7 +875,7 @@ router.get('/channel-comparison', async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const startDate = getDateRange(period, tz);
+    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
 
     const channels = await all(`
       SELECT
@@ -857,11 +884,11 @@ router.get('/channel-comparison', async (req, res) => {
         ROUND(SUM(o.subtotal), 2) as revenue,
         ROUND(AVG(o.total), 2) as avg_ticket
       FROM orders o
-      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date >= $1
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2
         AND o.payment_status = 'paid'
       GROUP BY o.source
       ORDER BY revenue DESC
-    `, [startDate, tz]);
+    `, [startDate, endDate, tz]);
 
     res.json({ period, startDate, channels });
   } catch (error) {
@@ -929,7 +956,7 @@ router.get('/payment-fees', requireAuth('view_reports'), async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const startDate = getDateRange(period, tz);
+    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
 
     const daily = {};
     const byProcessor = {};
@@ -960,12 +987,12 @@ router.get('/payment-fees', requireAuth('view_reports'), async (req, res) => {
     const stripeOrders = await all(`
       SELECT id, payment_intent_id, created_at
       FROM orders
-      WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $2)::date >= $1
+      WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2
         AND payment_method = 'card'
         AND payment_intent_id IS NOT NULL
         AND payment_status = 'paid'
       ORDER BY created_at ASC
-    `, [startDate, tz]);
+    `, [startDate, endDate, tz]);
 
     for (const order of stripeOrders) {
       const dateKey = order.created_at.split(' ')[0] || order.created_at.split('T')[0];
@@ -986,11 +1013,11 @@ router.get('/payment-fees', requireAuth('view_reports'), async (req, res) => {
              COALESCE(processor_net, COALESCE(amount, 0) - COALESCE(processor_fee, 0)) AS processor_net,
              created_at
       FROM order_payments
-      WHERE (created_at AT TIME ZONE $2)::date >= $1
+      WHERE (created_at AT TIME ZONE $3)::date BETWEEN $1 AND $2
         AND status = 'paid'
         AND payment_method = 'mp_terminal'
       ORDER BY created_at ASC
-    `, [startDate, tz]);
+    `, [startDate, endDate, tz]);
 
     for (const p of localPayments) {
       const ts = typeof p.created_at === 'string' ? p.created_at : p.created_at.toISOString();
@@ -1040,7 +1067,7 @@ router.get('/refund-summary', requireAuth('view_reports'), async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const startDate = getDateRange(period, tz);
+    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
 
     const summary = await get(`
       SELECT
@@ -1048,8 +1075,8 @@ router.get('/refund-summary', requireAuth('view_reports'), async (req, res) => {
         ROUND(SUM(amount), 2) as total_refunded,
         ROUND(AVG(amount), 2) as avg_refund
       FROM refunds
-      WHERE (created_at AT TIME ZONE $2)::date >= $1
-    `, [startDate, tz]);
+      WHERE (created_at AT TIME ZONE $3)::date BETWEEN $1 AND $2
+    `, [startDate, endDate, tz]);
 
     const byReason = await all(`
       SELECT
@@ -1057,10 +1084,10 @@ router.get('/refund-summary', requireAuth('view_reports'), async (req, res) => {
         COUNT(*) as count,
         ROUND(SUM(amount), 2) as total
       FROM refunds
-      WHERE (created_at AT TIME ZONE $2)::date >= $1
+      WHERE (created_at AT TIME ZONE $3)::date BETWEEN $1 AND $2
       GROUP BY reason
       ORDER BY count DESC
-    `, [startDate, tz]);
+    `, [startDate, endDate, tz]);
 
     const byEmployee = await all(`
       SELECT
@@ -1069,21 +1096,21 @@ router.get('/refund-summary', requireAuth('view_reports'), async (req, res) => {
         ROUND(SUM(r.amount), 2) as total_refunded
       FROM refunds r
       LEFT JOIN employees e ON r.refunded_by = e.id
-      WHERE (r.created_at AT TIME ZONE $2)::date >= $1
+      WHERE (r.created_at AT TIME ZONE $3)::date BETWEEN $1 AND $2
       GROUP BY r.refunded_by, e.name
       ORDER BY refund_count DESC
-    `, [startDate, tz]);
+    `, [startDate, endDate, tz]);
 
     const daily = await all(`
       SELECT
-        (created_at AT TIME ZONE $2)::date as date,
+        (created_at AT TIME ZONE $3)::date as date,
         COUNT(*) as count,
         ROUND(SUM(amount), 2) as total
       FROM refunds
-      WHERE (created_at AT TIME ZONE $2)::date >= $1
-      GROUP BY (created_at AT TIME ZONE $2)::date
+      WHERE (created_at AT TIME ZONE $3)::date BETWEEN $1 AND $2
+      GROUP BY (created_at AT TIME ZONE $3)::date
       ORDER BY date ASC
-    `, [startDate, tz]);
+    `, [startDate, endDate, tz]);
 
     res.json({
       period,
@@ -1336,7 +1363,7 @@ router.get('/menu-engineering', async (req, res) => {
   try {
     const { period = 'monthly' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const startDate = getDateRange(period, tz);
+    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
 
     // Get all sold items with quantities and revenue
     const items = await all(`
@@ -1351,12 +1378,12 @@ router.get('/menu-engineering', async (req, res) => {
       JOIN orders o ON oi.order_id = o.id
       LEFT JOIN menu_items mi ON oi.menu_item_id = mi.id
       LEFT JOIN menu_categories mc ON mi.category_id = mc.id
-      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date >= $1
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2
         AND o.payment_status = 'paid'
         AND oi.menu_item_id IS NOT NULL
       GROUP BY oi.menu_item_id, oi.item_name, mc.name, mi.price
       ORDER BY quantity_sold DESC
-    `, [startDate, tz]);
+    `, [startDate, endDate, tz]);
 
     if (items.length === 0) {
       return res.json({

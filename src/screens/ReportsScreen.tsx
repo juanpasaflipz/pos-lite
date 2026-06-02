@@ -49,7 +49,7 @@ import FinancialsTab from '../components/reports/FinancialsTab';
 import MenuEngineeringTab from '../components/reports/MenuEngineeringTab';
 import PayrollTab from '../components/reports/PayrollTab';
 
-type Period = 'today' | 'week' | 'month';
+type Period = 'today' | 'week' | 'month' | 'yesterday' | 'last_week' | 'last_month';
 type Tab = 'overview' | 'cashcard' | 'cogs' | 'categories' | 'margin' | 'delivery' | 'fees' | 'refunds' | 'financials' | 'engineering' | 'payroll';
 
 const VALID_TABS: Tab[] = ['overview', 'cashcard', 'cogs', 'categories', 'margin', 'delivery', 'fees', 'refunds', 'financials', 'engineering', 'payroll'];
@@ -191,32 +191,61 @@ export default function ReportsScreen() {
       case 'today': return t('sales.periods.today');
       case 'week': return t('sales.periods.week');
       case 'month': return t('sales.periods.month');
+      case 'yesterday': return t('sales.periods.yesterday');
+      case 'last_week': return t('sales.periods.lastWeek');
+      case 'last_month': return t('sales.periods.lastMonth');
     }
   };
 
-  const getPeriodStart = (p: Period): Date => {
+  // Returns { start, end } as local-midnight Dates for label rendering.
+  // Mirrors the backend getPeriodRange so the label matches the data.
+  const getPeriodRange = (p: Period): { start: Date; end: Date } => {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
-    if (p === 'week') {
-      start.setDate(start.getDate() - start.getDay());
-    } else if (p === 'month') {
-      start.setDate(1);
+    const end = new Date(start);
+    switch (p) {
+      case 'today':
+        return { start, end };
+      case 'yesterday': {
+        start.setDate(start.getDate() - 1);
+        end.setDate(end.getDate() - 1);
+        return { start, end };
+      }
+      case 'week':
+        start.setDate(start.getDate() - start.getDay());
+        return { start, end };
+      case 'last_week': {
+        const thisWeekStart = new Date(end);
+        thisWeekStart.setDate(end.getDate() - end.getDay());
+        const lastEnd = new Date(thisWeekStart);
+        lastEnd.setDate(thisWeekStart.getDate() - 1);
+        const lastStart = new Date(lastEnd);
+        lastStart.setDate(lastEnd.getDate() - 6);
+        return { start: lastStart, end: lastEnd };
+      }
+      case 'month':
+        start.setDate(1);
+        return { start, end };
+      case 'last_month': {
+        const lastEnd = new Date(end.getFullYear(), end.getMonth(), 0);
+        const lastStart = new Date(lastEnd.getFullYear(), lastEnd.getMonth(), 1);
+        return { start: lastStart, end: lastEnd };
+      }
     }
-    return start;
   };
 
+  const getPeriodStart = (p: Period): Date => getPeriodRange(p).start;
+
   const getDateRangeLabel = (p: Period): string => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (p === 'today') {
-      return formatDate(today, { year: 'numeric', month: 'short', day: 'numeric' });
+    const { start, end } = getPeriodRange(p);
+    if (p === 'today' || p === 'yesterday') {
+      return formatDate(start, { year: 'numeric', month: 'short', day: 'numeric' });
     }
-    const start = getPeriodStart(p);
-    const sameYear = start.getFullYear() === today.getFullYear();
+    const sameYear = start.getFullYear() === end.getFullYear();
     const startStr = formatDate(start, sameYear
       ? { month: 'short', day: 'numeric' }
       : { year: 'numeric', month: 'short', day: 'numeric' });
-    const endStr = formatDate(today, { year: 'numeric', month: 'short', day: 'numeric' });
+    const endStr = formatDate(end, { year: 'numeric', month: 'short', day: 'numeric' });
     return `${startStr} – ${endStr}`;
   };
 
@@ -273,12 +302,12 @@ export default function ReportsScreen() {
         )}
 
         {/* Period Selector */}
-        <div className="flex gap-3 mb-2">
-          {(['today', 'week', 'month'] as const).map((p) => (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {(['today', 'yesterday', 'week', 'last_week', 'month', 'last_month'] as const).map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}
-              className={`px-6 py-3 rounded-lg font-medium transition-colors min-h-[44px] ${
+              className={`px-5 py-3 rounded-lg font-medium transition-colors min-h-[44px] ${
                 period === p
                   ? 'bg-brand-600 text-white'
                   : 'bg-neutral-900 text-neutral-300 border border-neutral-800 hover:bg-neutral-800'
