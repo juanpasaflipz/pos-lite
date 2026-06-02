@@ -31,6 +31,8 @@ import {
   getWasteReport,
   getCOGSSummary,
   getInventoryInsights,
+  getStaleStock,
+  getDormantStock,
 } from '../api';
 import {
   InventoryItem,
@@ -47,6 +49,7 @@ import {
 import BrandLogo from '../components/BrandLogo';
 import { usePlan } from '../context/PlanContext';
 import StockTab from '../components/inventory/StockTab';
+import InventoryPulseGrid, { PulseBucket } from '../components/inventory/InventoryPulseGrid';
 import ScanTab from '../components/inventory/ScanTab';
 import WasteTab from '../components/inventory/WasteTab';
 import CountTab from '../components/inventory/CountTab';
@@ -96,7 +99,6 @@ export default function InventoryScreen() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<SortField>('name');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [restockingId, setRestockingId] = useState<number | null>(null);
   const [restockAmount, setRestockAmount] = useState<string>('');
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -110,6 +112,10 @@ export default function InventoryScreen() {
   const [actionLoading, setActionLoading] = useState(false);
   const [forecasts, setForecasts] = useState<InventoryForecast[]>([]);
   const [showForecasts, setShowForecasts] = useState(false);
+  const [staleIds, setStaleIds] = useState<Set<number>>(new Set());
+  const [dormantIds, setDormantIds] = useState<Set<number>>(new Set());
+  const [pulseLoading, setPulseLoading] = useState(false);
+  const [activeBucket, setActiveBucket] = useState<PulseBucket | null>(null);
 
   // COGS widget state
   const [cogsSummary, setCogsSummary] = useState<COGSSummary | null>(null);
@@ -163,11 +169,77 @@ export default function InventoryScreen() {
     getInventoryForecast()
       .then(setForecasts)
       .catch(() => {});
+    loadPulseBuckets();
   }, []);
+
+  const loadPulseBuckets = async () => {
+    try {
+      setPulseLoading(true);
+      const [stale, dormant] = await Promise.all([
+        getStaleStock(true).catch(() => []),
+        getDormantStock(30).catch(() => []),
+      ]);
+      setStaleIds(new Set(stale.map((s) => s.id)));
+      setDormantIds(new Set(dormant.map((d) => d.id)));
+    } finally {
+      setPulseLoading(false);
+    }
+  };
+
+  // Items restocked today (calculated client-side from last_restocked_at)
+  const addedTodayIds = React.useMemo(() => {
+    const today = new Date();
+    const isSameLocalDay = (iso: string | null | undefined) => {
+      if (!iso) return false;
+      const d = new Date(iso);
+      return (
+        d.getFullYear() === today.getFullYear() &&
+        d.getMonth() === today.getMonth() &&
+        d.getDate() === today.getDate()
+      );
+    };
+    const ids = new Set<number>();
+    for (const it of items) {
+      if (isSameLocalDay(it.last_restocked_at)) ids.add(it.id);
+    }
+    return ids;
+  }, [items]);
+
+  const pulseCounts = React.useMemo(() => {
+    let added_today = 0;
+    let low = 0;
+    let stale = 0;
+    let dormant = 0;
+    let healthy = 0;
+    for (const it of items) {
+      const isOut = it.quantity === 0;
+      const isLow = !isOut && it.quantity <= it.low_stock_threshold;
+      const isStale = staleIds.has(it.id);
+      const isAdded = addedTodayIds.has(it.id);
+      const isDormant = dormantIds.has(it.id);
+      // Mutually exclusive classification (matches StockTab.classifyItem)
+      if (isOut || isLow) {
+        low++;
+      } else if (isStale) {
+        stale++;
+      } else if (isAdded) {
+        added_today++;
+      } else if (isDormant) {
+        dormant++;
+      } else {
+        healthy++;
+      }
+    }
+    return { added_today, low, stale, dormant, healthy, total: items.length };
+  }, [items, staleIds, dormantIds, addedTodayIds]);
+
+  const handleBucketToggle = (bucket: PulseBucket) => {
+    setActiveBucket((prev) => (prev === bucket ? null : bucket));
+  };
 
   useEffect(() => {
     filterAndSortItems();
-  }, [items, searchTerm, sortBy, selectedCategory]);
+  }, [items, searchTerm, sortBy]);
 
   useEffect(() => {
     if (activeTab === 'stock') {
@@ -220,10 +292,6 @@ export default function InventoryScreen() {
       );
     }
 
-    if (selectedCategory !== 'all') {
-      filtered = filtered.filter((item) => item.category === selectedCategory);
-    }
-
     filtered.sort((a, b) => {
       if (sortBy === 'name') {
         return a.name.localeCompare(b.name);
@@ -252,7 +320,7 @@ export default function InventoryScreen() {
         return;
       }
       await restockItem(restockingId, amount);
-      await fetchItems();
+      await Promise.all([fetchItems(), loadPulseBuckets()]);
       setRestockingId(null);
       setRestockAmount('');
       setError(null);
@@ -639,8 +707,6 @@ export default function InventoryScreen() {
 
   // ==================== Derived Data ====================
 
-  const categories = ['all', ...Array.from(new Set(items.map((item) => item.category)))];
-
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: 'stock', label: t('inventory.tabs.stock'), icon: <ClipboardList size={18} /> },
     { key: 'scan', label: t('inventory.tabs.scan'), icon: <ScanLine size={18} /> },
@@ -710,47 +776,56 @@ export default function InventoryScreen() {
         </div>
 
         {activeTab === 'stock' && (
-          <StockTab
-            items={items}
-            filteredItems={filteredItems}
-            loading={loading}
-            searchTerm={searchTerm}
-            selectedCategory={selectedCategory}
-            sortBy={sortBy}
-            restockingId={restockingId}
-            restockAmount={restockAmount}
-            editingId={editingId}
-            editThreshold={editThreshold}
-            editingQuantityId={editingQuantityId}
-            editQuantity={editQuantity}
-            itemFormOpen={itemFormOpen}
-            itemFormMode={itemFormMode}
-            itemForm={itemForm}
-            actionLoading={actionLoading}
-            cogsSummary={cogsSummary}
-            forecasts={forecasts}
-            showForecasts={showForecasts}
-            categories={categories}
-            onSearchChange={setSearchTerm}
-            onCategoryChange={setSelectedCategory}
-            onSortChange={setSortBy}
-            onRestock={handleRestock}
-            onEditThreshold={handleEditThreshold}
-            onEditQuantity={handleEditQuantity}
-            onRestockingIdChange={setRestockingId}
-            onRestockAmountChange={setRestockAmount}
-            onEditingIdChange={setEditingId}
-            onEditThresholdChange={setEditThreshold}
-            onEditingQuantityIdChange={setEditingQuantityId}
-            onEditQuantityChange={setEditQuantity}
-            onItemFormChange={setItemForm}
-            onCreateItem={openCreateItemForm}
-            onEditItem={openEditItemForm}
-            onSaveItem={handleSaveItem}
-            onDeleteItem={handleDeleteItem}
-            onCloseItemForm={closeItemForm}
-            onShowForecastsChange={setShowForecasts}
-          />
+          <>
+            <InventoryPulseGrid
+              counts={pulseCounts}
+              loading={loading || pulseLoading}
+              activeBucket={activeBucket}
+              onBucketToggle={handleBucketToggle}
+            />
+            <StockTab
+              items={items}
+              filteredItems={filteredItems}
+              loading={loading}
+              searchTerm={searchTerm}
+              sortBy={sortBy}
+              restockingId={restockingId}
+              restockAmount={restockAmount}
+              editingId={editingId}
+              editThreshold={editThreshold}
+              editingQuantityId={editingQuantityId}
+              editQuantity={editQuantity}
+              itemFormOpen={itemFormOpen}
+              itemFormMode={itemFormMode}
+              itemForm={itemForm}
+              actionLoading={actionLoading}
+              cogsSummary={cogsSummary}
+              forecasts={forecasts}
+              showForecasts={showForecasts}
+              addedTodayIds={addedTodayIds}
+              staleIds={staleIds}
+              dormantIds={dormantIds}
+              activeBucket={activeBucket}
+              onSearchChange={setSearchTerm}
+              onSortChange={setSortBy}
+              onRestock={handleRestock}
+              onEditThreshold={handleEditThreshold}
+              onEditQuantity={handleEditQuantity}
+              onRestockingIdChange={setRestockingId}
+              onRestockAmountChange={setRestockAmount}
+              onEditingIdChange={setEditingId}
+              onEditThresholdChange={setEditThreshold}
+              onEditingQuantityIdChange={setEditingQuantityId}
+              onEditQuantityChange={setEditQuantity}
+              onItemFormChange={setItemForm}
+              onCreateItem={openCreateItemForm}
+              onEditItem={openEditItemForm}
+              onSaveItem={handleSaveItem}
+              onDeleteItem={handleDeleteItem}
+              onCloseItemForm={closeItemForm}
+              onShowForecastsChange={setShowForecasts}
+            />
+          </>
         )}
 
         {activeTab === 'scan' && (

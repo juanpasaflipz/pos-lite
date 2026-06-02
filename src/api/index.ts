@@ -969,6 +969,22 @@ export async function touchInventoryRestocked(id: number): Promise<{ success: bo
   return apiRequest<{ success: boolean }>(`/inventory/${id}/touch-restocked`, { method: 'POST' });
 }
 
+export interface DormantStockItem {
+  id: number;
+  name: string;
+  quantity: number;
+  unit: string | null;
+  category: string | null;
+  cost_price: number;
+  last_restocked_at: string | null;
+  last_activity_at: string | null;
+  days_since_activity: number;
+}
+
+export async function getDormantStock(days = 30): Promise<DormantStockItem[]> {
+  return apiRequest<DormantStockItem[]>(`/inventory/dormant?days=${days}`);
+}
+
 export interface InventoryAuditStatus {
   total: number;
   missing_shelf_life: number;

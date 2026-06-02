@@ -647,5 +647,29 @@
     "receivePo": "Error al recibir",
     "cancelPo": "Error al cancelar OC",
     "loadData": "Error al cargar datos"
+  },
+  "pulse": {
+    "title": "Pulso del Inventario",
+    "totalItems": "{{n}} productos en total",
+    "addedToday": "Agregado Hoy",
+    "addedTodayHint": "Reabastecido hoy",
+    "addedTodayBadge": "Hoy",
+    "lowStock": "Por Acabarse",
+    "lowStockHint": "Reordena ya",
+    "lowChip": "bajo",
+    "stale": "Posible Vencido",
+    "staleHint": "Pasó vida útil",
+    "staleBadge": "Vencido",
+    "staleChip": "vencido",
+    "dormant": "Sin Movimiento",
+    "dormantHint": "30+ días sin tocar",
+    "dormantBadge": "Inactivo",
+    "healthy": "Saludable",
+    "healthyHint": "En buen estado",
+    "uncategorized": "Sin Categoría",
+    "expandAll": "Expandir Todo",
+    "collapseAll": "Colapsar Todo",
+    "filterActive": "Filtrando por: {{bucket}}",
+    "clearFilter": "Quitar filtro"
   }
 }

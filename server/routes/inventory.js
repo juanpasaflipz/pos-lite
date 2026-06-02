@@ -35,7 +35,10 @@ router.get('/', async (req, res) => {
              ${selectColumn(columns, 'sku')},
              ${selectColumn(columns, 'barcode')},
              ${selectColumn(columns, 'expiry_date')},
-             ${selectColumn(columns, 'lot_number')}
+             ${selectColumn(columns, 'lot_number')},
+             ${selectColumn(columns, 'last_restocked_at')},
+             ${selectColumn(columns, 'shelf_life_days')},
+             ${selectColumn(columns, 'storage_type')}
       FROM inventory_items
       ORDER BY category ASC, name ASC
     `);
@@ -906,6 +909,70 @@ router.get('/stale', async (req, res) => {
   } catch (err) {
     console.error('[Inventory] stale fetch error:', err.message);
     res.status(500).json({ error: 'Failed to fetch stale stock' });
+  }
+});
+
+// GET /api/inventory/dormant — items with quantity remaining that haven't
+// been touched (counted, wasted, restocked) in DORMANT_DAYS or more. Useful
+// for "stuff sitting in the back you're not using" — distinct from stale,
+// which is shelf-life-based.
+router.get('/dormant', async (req, res) => {
+  try {
+    const columns = await getInventoryColumns();
+    const hasLastRestocked = columns.has('last_restocked_at');
+    const hasLastCounted = columns.has('last_counted_at');
+
+    const days = Math.max(7, Math.min(180, parseInt(req.query.days, 10) || 30));
+
+    const lastRestockedExpr = hasLastRestocked ? 'ii.last_restocked_at' : 'NULL::timestamptz';
+    const lastCountedExpr = hasLastCounted ? 'ii.last_counted_at' : 'NULL::timestamptz';
+
+    const rows = await all(
+      `WITH activity AS (
+         SELECT
+           ii.id,
+           ${lastRestockedExpr} AS last_restocked_at,
+           ${lastCountedExpr}   AS last_counted_at,
+           (SELECT MAX(created_at) FROM inventory_counts ic WHERE ic.inventory_item_id = ii.id) AS last_count_event,
+           (SELECT MAX(created_at) FROM waste_log wl WHERE wl.inventory_item_id = ii.id) AS last_waste_event
+         FROM inventory_items ii
+         WHERE ii.quantity > 0
+       )
+       SELECT
+         ii.id, ii.name, ii.quantity, ii.unit, ii.category, ii.cost_price,
+         ${selectColumn(columns, 'last_restocked_at')},
+         GREATEST(
+           COALESCE(a.last_restocked_at, 'epoch'::timestamptz),
+           COALESCE(a.last_counted_at, 'epoch'::timestamptz),
+           COALESCE(a.last_count_event, 'epoch'::timestamptz),
+           COALESCE(a.last_waste_event, 'epoch'::timestamptz)
+         ) AS last_activity_at,
+         EXTRACT(EPOCH FROM (NOW() - GREATEST(
+           COALESCE(a.last_restocked_at, 'epoch'::timestamptz),
+           COALESCE(a.last_counted_at, 'epoch'::timestamptz),
+           COALESCE(a.last_count_event, 'epoch'::timestamptz),
+           COALESCE(a.last_waste_event, 'epoch'::timestamptz)
+         ))) / 86400.0 AS days_since_activity
+       FROM inventory_items ii
+       JOIN activity a ON a.id = ii.id
+       WHERE ii.quantity > 0
+         AND GREATEST(
+           COALESCE(a.last_restocked_at, 'epoch'::timestamptz),
+           COALESCE(a.last_counted_at, 'epoch'::timestamptz),
+           COALESCE(a.last_count_event, 'epoch'::timestamptz),
+           COALESCE(a.last_waste_event, 'epoch'::timestamptz)
+         ) < NOW() - ($1 || ' days')::interval
+       ORDER BY days_since_activity DESC NULLS LAST`,
+      [String(days)]
+    );
+
+    res.json(rows.map(r => ({
+      ...r,
+      days_since_activity: Math.round(Number(r.days_since_activity) || 0),
+    })));
+  } catch (err) {
+    console.error('[Inventory] dormant fetch error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch dormant stock' });
   }
 });
 

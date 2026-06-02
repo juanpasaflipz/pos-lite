@@ -647,5 +647,29 @@
     "receivePo": "Failed to receive",
     "cancelPo": "Failed to cancel PO",
     "loadData": "Failed to load data"
+  },
+  "pulse": {
+    "title": "Inventory Pulse",
+    "totalItems": "{{n}} items total",
+    "addedToday": "Added Today",
+    "addedTodayHint": "Restocked today",
+    "addedTodayBadge": "Today",
+    "lowStock": "Running Low",
+    "lowStockHint": "Reorder now",
+    "lowChip": "low",
+    "stale": "Possibly Stale",
+    "staleHint": "Past shelf life",
+    "staleBadge": "Stale",
+    "staleChip": "stale",
+    "dormant": "No Movement",
+    "dormantHint": "30+ days untouched",
+    "dormantBadge": "Dormant",
+    "healthy": "Healthy",
+    "healthyHint": "All good",
+    "uncategorized": "Uncategorized",
+    "expandAll": "Expand All",
+    "collapseAll": "Collapse All",
+    "filterActive": "Filtering by: {{bucket}}",
+    "clearFilter": "Clear filter"
   }
 }
