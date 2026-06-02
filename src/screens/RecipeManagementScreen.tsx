@@ -14,7 +14,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { createInventoryItem, deleteInventoryItem, getInventory, getItemRecipe, getRecipeSummary, suggestInventoryAttrs, updateItemRecipe } from '../api';
+import { createInventoryItem, deleteInventoryItem, deleteMenuItem, getInventory, getItemRecipe, getRecipeSummary, suggestInventoryAttrs, updateItemRecipe } from '../api';
 import type { InventoryItem, RecipeIngredient, RecipeSummaryItem } from '../types';
 import BrandLogo from '../components/BrandLogo';
 import BackToSetupButton from '../components/BackToSetupButton';
@@ -64,6 +64,7 @@ export default function RecipeManagementScreen() {
   const [aiSuggestion, setAiSuggestion] = useState<{ shelf_life_days: number; storage_type: string; source: string } | null>(null);
   const aiSuggestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [deletingIngredientId, setDeletingIngredientId] = useState<number | null>(null);
+  const [deletingMenuItemId, setDeletingMenuItemId] = useState<number | null>(null);
   const [manageIngredientsOpen, setManageIngredientsOpen] = useState(false);
   const [ingredientSearch, setIngredientSearch] = useState('');
 
@@ -274,6 +275,35 @@ export default function RecipeManagementScreen() {
     }
   };
 
+  const handleDeleteMenuItem = async (menuItemId: number) => {
+    const item = summaryItems.find(entry => entry.id === menuItemId);
+    if (!item) return;
+    if (!confirm(t('recipe.confirmDeleteMenuItem', { name: item.name }))) return;
+    try {
+      setDeletingMenuItemId(menuItemId);
+      setError(null);
+      await deleteMenuItem(menuItemId);
+      setSummaryItems(current => {
+        const next = current.filter(entry => entry.id !== menuItemId);
+        if (selectedItemId === menuItemId) {
+          setSelectedItemId(next[0]?.id ?? null);
+          setRecipeRows([{ ...EMPTY_ROW }]);
+        }
+        return next;
+      });
+      addToast(t('recipe.menuItemDeleted'), 'success');
+    } catch (err) {
+      const status = (err as { status?: number })?.status;
+      const message = status === 409
+        ? t('recipe.cannotDeleteItemHasOrders', { name: item.name })
+        : (err instanceof Error ? err.message : t('recipe.failedDeleteMenuItem'));
+      setError(message);
+      addToast(message, 'error');
+    } finally {
+      setDeletingMenuItemId(null);
+    }
+  };
+
   const handleCreateIngredient = async () => {
     const name = newIngredientForm.name.trim();
     const unit = newIngredientForm.unit.trim();
@@ -421,6 +451,7 @@ export default function RecipeManagementScreen() {
               {filteredItems.map(item => {
                 const isSelected = item.id === selectedItemId;
                 const missingRecipe = item.ingredient_count === 0;
+                const isDeleting = deletingMenuItemId === item.id;
                 const foodCostPct = item.price > 0 && item.cost_per_unit > 0
                   ? (item.cost_per_unit / item.price) * 100
                   : null;
@@ -432,21 +463,30 @@ export default function RecipeManagementScreen() {
                       ? 'border-cockpit-yellow bg-cockpit-yellow/50 text-cockpit-attention-text'
                       : 'border-cockpit-green bg-cockpit-green/40 text-cockpit-in-text';
                 return (
-                  <button
+                  <div
                     key={item.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setSelectedItemId(item.id)}
-                    className={`w-full text-left rounded-xl border p-4 transition-colors ${
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSelectedItemId(item.id);
+                      }
+                    }}
+                    aria-pressed={isSelected}
+                    className={`group relative w-full text-left rounded-xl border p-4 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
                       isSelected
                         ? 'border-brand-500 bg-brand-500/10'
                         : 'border-neutral-800 bg-neutral-950 hover:border-neutral-700'
-                    }`}
+                    } ${isDeleting ? 'opacity-50 pointer-events-none' : ''}`}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-semibold text-white">{item.name}</p>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-white truncate">{item.name}</p>
                         <p className="text-sm text-neutral-400">{item.category_name}</p>
                       </div>
-                      <span className={`text-[11px] px-2 py-1 rounded-full border ${
+                      <span className={`shrink-0 text-[11px] px-2 py-1 rounded-full border ${
                         missingRecipe
                           ? 'border-cockpit-yellow bg-cockpit-yellow/50 text-cockpit-attention-text'
                           : 'border-cockpit-green bg-cockpit-green/40 text-cockpit-in-text'
@@ -469,9 +509,22 @@ export default function RecipeManagementScreen() {
                         <span className="text-neutral-500 text-xs">
                           {t('recipe.ingredientCount', { count: item.ingredient_count })}
                         </span>
+                        <button
+                          type="button"
+                          onClick={e => {
+                            e.stopPropagation();
+                            void handleDeleteMenuItem(item.id);
+                          }}
+                          disabled={isDeleting}
+                          aria-label={t('recipe.deleteMenuItem')}
+                          title={t('recipe.deleteMenuItem')}
+                          className="h-9 w-9 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-cockpit-out-text/90 hover:border-cockpit-red/90 disabled:opacity-50 transition-colors inline-flex items-center justify-center"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </div>
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
