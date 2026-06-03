@@ -241,59 +241,61 @@ router.put('/shrinkage-alerts/:id/acknowledge', requireAuth('manage_inventory'),
 });
 
 // GET /api/inventory/cost-review/candidates
-// Surfaces SKUs whose stored cost_price is almost certainly a line_total that
-// was treated as a per-unit price. Fingerprint:
-//   - the most recent inventory_cost_history row equals the current cost_price
-//     (i.e., this purchase is what set the cost)
-//   - quantity_added > 1 (so dividing would actually change the value)
-//   - that history row's expense had only this one inventory line
-//   - the expense.amount ≈ the stored unit_cost (so the unit_cost is actually
-//     the whole-line total, not the per-unit price)
-// Owner sees stored vs proposed cost; one tap to apply. Once applied, the
-// row no longer matches the fingerprint and drops out of the list.
+// Surfaces SKUs whose stored cost_price is almost certainly a line_total
+// (or pack price) that was treated as a per-unit price during the original
+// receipt-vision ingest. Fingerprint (works for both single-line WhatsApp
+// purchases AND multi-line receipts):
+//   - the SKU's current cost_price equals an expense_items row's unit_cost
+//   - that line's quantity > 1 (dividing would actually change the value)
+//   - the receipt this line came from is "over-extracted":
+//       sum(expense_items.line_total) on that expense > expense.amount × 1.05
+//     This is the smoking gun — Claude treated per-line "amount" as
+//     quantity × per-unit-price, but the per-line totals balloon past the
+//     receipt total, meaning at least some unit_costs are actually line
+//     totals being multiplied a second time.
+//   - OR the expense had a single line and amount ≈ unit_cost (the original
+//     single-line WhatsApp purchase fingerprint, still caught here)
+// Owner sees stored vs proposed cost; one tap to apply. Once applied,
+// inventory_items.cost_price no longer matches the original unit_cost, so
+// the row drops out of the list naturally.
 router.get('/cost-review/candidates', requireAuth('manage_inventory'), async (req, res) => {
   try {
     const rows = await all(`
-      WITH latest_history AS (
-        SELECT DISTINCT ON (inventory_item_id)
-          inventory_item_id,
-          id AS history_id,
-          expense_id,
-          unit_cost,
-          quantity_added,
-          created_at
-        FROM inventory_cost_history
-        ORDER BY inventory_item_id, created_at DESC
-      ),
-      expense_line_count AS (
-        SELECT expense_id, COUNT(*) AS line_count
-        FROM inventory_cost_history
-        WHERE expense_id IS NOT NULL
-        GROUP BY expense_id
+      WITH receipt_totals AS (
+        SELECT
+          ei.expense_id,
+          SUM(ei.line_total) AS items_total,
+          COUNT(*) AS line_count
+        FROM expense_items ei
+        GROUP BY ei.expense_id
       )
       SELECT
         ii.id,
         ii.name,
         ii.unit,
         ii.cost_price::float AS stored_unit_cost,
-        lh.history_id,
-        lh.quantity_added::float AS quantity_added,
+        ei.id AS expense_item_id,
+        ei.quantity::float AS quantity_added,
+        ei.line_total::float AS line_total,
         e.amount::float AS expense_amount,
+        rt.items_total::float AS items_total,
+        rt.line_count::int AS line_count,
         e.expense_date,
         e.vendor,
-        (lh.unit_cost / lh.quantity_added)::numeric(12,4)::float AS proposed_unit_cost,
-        lh.created_at AS detected_at
+        (ei.unit_cost / ei.quantity)::numeric(12,4)::float AS proposed_unit_cost,
+        ei.created_at AS detected_at
       FROM inventory_items ii
-      JOIN latest_history lh ON lh.inventory_item_id = ii.id
-      LEFT JOIN expenses e ON e.id = lh.expense_id
-      LEFT JOIN expense_line_count elc ON elc.expense_id = lh.expense_id
+      JOIN expense_items ei ON ei.inventory_item_id = ii.id
+      JOIN expenses e ON e.id = ei.expense_id
+      JOIN receipt_totals rt ON rt.expense_id = ei.expense_id
       WHERE ii.cost_price > 0
-        AND ABS(ii.cost_price - lh.unit_cost) < 0.01
-        AND lh.quantity_added > 1
-        AND COALESCE(elc.line_count, 1) = 1
-        AND e.id IS NOT NULL
-        AND ABS(e.amount - lh.unit_cost) < 1.0
-      ORDER BY lh.created_at DESC
+        AND ABS(ii.cost_price - ei.unit_cost) < 0.01
+        AND ei.quantity > 1
+        AND (
+          rt.items_total > e.amount * 1.05
+          OR (rt.line_count = 1 AND ABS(e.amount - ei.unit_cost) < 1.0)
+        )
+      ORDER BY ei.created_at DESC
       LIMIT 100
     `);
 
