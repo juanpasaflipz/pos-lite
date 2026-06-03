@@ -297,28 +297,24 @@ router.post('/cash-tip-adjust', requireAuth('void_orders'), async (req, res) => 
       cashLegId = cashLeg.id;
     }
 
-    await run('BEGIN');
-    try {
+    // Tenant middleware already wraps the whole request in BEGIN/COMMIT
+    // on a reserved connection — a nested BEGIN errors out. If any of these
+    // statements throws, the surrounding request transaction will roll back.
+    await run(
+      `INSERT INTO order_tip_adjustments
+         (order_id, amount, payment_method, by_employee_id, note)
+       VALUES ($1, $2, 'cash', $3, $4)`,
+      [order_id, rounded, req.employee.id, note || null]
+    );
+    await run(
+      `UPDATE orders SET tip = COALESCE(tip, 0) + $1 WHERE id = $2`,
+      [rounded, order_id]
+    );
+    if (cashLegId) {
       await run(
-        `INSERT INTO order_tip_adjustments
-           (order_id, amount, payment_method, by_employee_id, note)
-         VALUES ($1, $2, 'cash', $3, $4)`,
-        [order_id, rounded, req.employee.id, note || null]
+        `UPDATE order_payments SET tip = COALESCE(tip, 0) + $1 WHERE id = $2`,
+        [rounded, cashLegId]
       );
-      await run(
-        `UPDATE orders SET tip = COALESCE(tip, 0) + $1 WHERE id = $2`,
-        [rounded, order_id]
-      );
-      if (cashLegId) {
-        await run(
-          `UPDATE order_payments SET tip = COALESCE(tip, 0) + $1 WHERE id = $2`,
-          [rounded, cashLegId]
-        );
-      }
-      await run('COMMIT');
-    } catch (e) {
-      await run('ROLLBACK');
-      throw e;
     }
 
     const updated = await get(
