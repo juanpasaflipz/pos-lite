@@ -624,8 +624,13 @@ export default function RecipeManagementScreen() {
 
                           <div>
                             <label className="block text-xs font-medium text-neutral-500 mb-2">{t('recipe.lineCost')}</label>
-                            <div className="px-3 py-3 rounded-lg bg-neutral-900 border border-neutral-800 text-white">
-                              {formatPrice(lineCost)}
+                            <div className="px-3 py-2 rounded-lg bg-neutral-900 border border-neutral-800 text-white">
+                              <div>{formatPrice(lineCost)}</div>
+                              {ingredient && quantity > 0 && ingredient.cost_price > 0 && (
+                                <div className="text-[10px] text-neutral-500 mt-0.5 leading-tight">
+                                  {quantity} {ingredient.unit || ''} × {formatPrice(ingredient.cost_price)}/{ingredient.unit || 'u'}
+                                </div>
+                              )}
                             </div>
                           </div>
 
