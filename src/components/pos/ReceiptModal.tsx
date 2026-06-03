@@ -1,12 +1,13 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QRCodeSVG } from 'qrcode.react';
-import { Clock } from 'lucide-react';
+import { Clock, Coins } from 'lucide-react';
 import { Order, CfdiInvoice, LoyaltyCustomer } from '../../types';
 import { formatPrice, TAX_LABEL } from '../../utils/currency';
 import { formatDateTime } from '../../utils/dateFormat';
 import { sendSmsReceipt, lookupLoyaltyCustomer } from '../../api';
 import BrandLogo from '../BrandLogo';
+import CashTipModal from './CashTipModal';
 import { useBranding } from '../../context/BrandingContext';
 
 const InvoiceModal = React.lazy(() => import('./InvoiceModal'));
@@ -30,6 +31,14 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
   const [smsState, setSmsState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [smsError, setSmsError] = useState<string | null>(null);
   const [foundCustomer, setFoundCustomer] = useState<LoyaltyCustomer | null>(null);
+  const [showCashTip, setShowCashTip] = useState(false);
+  // Optimistic tip — bumps the displayed tip immediately after a successful
+  // post-close add, without waiting for the parent to refetch the order.
+  const [tipBump, setTipBump] = useState(0);
+  const effectiveTip = (Number(order.tip) || 0) + tipBump;
+  const canAddCashTip =
+    (order.payment_status === 'paid' || order.payment_status === 'completed') &&
+    (order.payment_method === 'cash' || order.payment_method === 'split');
 
   // The effective customer: either passed in from POSScreen (order-start lookup)
   // or discovered live as the merchant types a known phone into the SMS form.
@@ -170,18 +179,18 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
                 <p>{t('receipt.taxIncluded', { label: TAX_LABEL })}</p>
                 <p>{formatPrice(order.tax)}</p>
               </div>
-              {order.tip > 0 && (
+              {effectiveTip > 0 && (
                 <div className="flex justify-between">
                   <p>{t('receipt.tip')}</p>
-                  <p className="font-semibold">{formatPrice(order.tip)}</p>
+                  <p className="font-semibold">{formatPrice(effectiveTip)}</p>
                 </div>
               )}
             </div>
 
-            {order.tip > 0 && (
+            {effectiveTip > 0 && (
               <div className="text-center py-3">
                 <p className="text-2xl font-bold text-neutral-900">
-                  {t('receipt.totalWithTip', { amount: formatPrice(order.total + (order.tip || 0)) })}
+                  {t('receipt.totalWithTip', { amount: formatPrice(order.total + effectiveTip) })}
                 </p>
               </div>
             )}
@@ -285,6 +294,15 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
                 </div>
               </div>
             )}
+            {canAddCashTip && (
+              <button
+                onClick={() => setShowCashTip(true)}
+                className="w-full py-3 bg-cockpit-yellow text-neutral-900 font-bold rounded-lg hover:bg-cockpit-yellow/90 transition-all inline-flex items-center justify-center gap-2"
+              >
+                <Coins className="w-4 h-4" />
+                Agregar propina en efectivo
+              </button>
+            )}
             {!invoiceIssued && !order.cfdi_invoice_id && (
               <button
                 onClick={() => setShowInvoiceModal(true)}
@@ -311,6 +329,20 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
             onInvoiceIssued={handleInvoiceIssued}
           />
         </React.Suspense>
+      )}
+
+      {showCashTip && (
+        <CashTipModal
+          orderId={order.id}
+          orderNumber={String(order.order_number)}
+          subtotal={Number(order.subtotal) || 0}
+          existingTip={effectiveTip}
+          onClose={() => setShowCashTip(false)}
+          onAdded={(added) => {
+            setTipBump((prev) => prev + added);
+            setShowCashTip(false);
+          }}
+        />
       )}
     </>
   );
