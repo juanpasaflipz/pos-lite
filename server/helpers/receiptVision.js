@@ -59,8 +59,8 @@ Return ONLY valid JSON, no prose:
       "raw_name": "string — brand / item description",
       "quantity": number | null,
       "unit": "kg" | "g" | "l" | "ml" | "pcs" | "btl" | "can" | "box" | "case" | null,
-      "unit_price": number | null,   // record_purchase only; null for count
-      "amount": number | null        // record_purchase only; null for count
+      "pack_size": number | null,    // contents of ONE pack expressed in 'unit'. "1 saco de 5 kg" → quantity=1, unit="kg", pack_size=5. "2.02 kg suelto" → quantity=2.02, unit="kg", pack_size=1. "caja de 24 latas" → quantity=1, unit="can", pack_size=24.
+      "line_total": number | null    // record_purchase only — TOTAL MONEY PAID for this whole line, before tax. Null for count.
     }
   ],
   "vendor": "string or null — supplier / store name (record_purchase only)",
@@ -73,7 +73,9 @@ Rules:
 - raw_name MUST be the clean brand or product label only (e.g. "Bohemia", "Bohemia Vienna", "XX Ámbar", "Tecate Original", "Vaso S113"). Do NOT add shelf positions, visibility caveats, observations, or any "(...)" annotations to raw_name — those go in the top-level "note" field. If you see the SAME brand on two shelves, emit ONE item line with the combined count; never emit two lines for the same product with positional labels.
 - If image is neither a receipt nor a count-able shelf/fridge (a person, raw food, prep area, screenshot, etc.), set intent="unknown" and put a Spanish clarifying_question like "Esa foto no parece recibo ni inventario. ¿Qué quieres registrar?".
 - A payment terminal slip with only a total is STILL intent="record_purchase" — leave items=[] and populate total_amount + payment_method.
-- For count_inventory: set vendor=null, total_amount=null, payment_method=null. Each item's unit_price and amount must be null. Use "pcs" or "btl"/"can" as appropriate.
+- For count_inventory: set vendor=null, total_amount=null, payment_method=null. Each item's line_total must be null. Use "pcs" or "btl"/"can" as appropriate.
+- CRITICAL: line_total is the money paid for the WHOLE line. Do NOT divide it. Do NOT confuse it with a per-kg or per-piece price. If the line shows "Picana 2.020 kg $888.70", emit quantity=2.02, unit="kg", pack_size=1, line_total=888.70 — the executor computes per-kg cost itself.
+- pack_size is the content of ONE pack. Loose produce/meat sold by weight → pack_size=1 always. Sealed pack ("5 kg sack", "24-can case", "1 L bottle in a 12-pack") → pack_size is the contents of one pack; quantity is how many packs were bought.
 - Numbers as JSON numbers — no currency symbols, no thousands separators.
 - Convert weights to kg/L when sensible. If a unit can't be determined, use null. Do not guess.
 - Skip subtotal/tax/change/discount/loyalty lines from items[].

@@ -55,6 +55,9 @@ import StockTab from '../components/inventory/StockTab';
 import InventoryPulseGrid, { PulseBucket } from '../components/inventory/InventoryPulseGrid';
 import UnlinkedPurchasesBanner from '../components/inventory/UnlinkedPurchasesBanner';
 import UnlinkedPurchasesModal from '../components/inventory/UnlinkedPurchasesModal';
+import CostReviewBanner from '../components/inventory/CostReviewBanner';
+import CostReviewPanel from '../components/inventory/CostReviewPanel';
+import { getCostReviewCandidates } from '../api';
 import ScanTab from '../components/inventory/ScanTab';
 import WasteTab from '../components/inventory/WasteTab';
 import CountTab from '../components/inventory/CountTab';
@@ -125,6 +128,8 @@ export default function InventoryScreen() {
   const [unlinkedExpenses, setUnlinkedExpenses] = useState<UnlinkedExpense[]>([]);
   const [unlinkedLoading, setUnlinkedLoading] = useState(false);
   const [unlinkedModalOpen, setUnlinkedModalOpen] = useState(false);
+  const [costReviewCount, setCostReviewCount] = useState(0);
+  const [costReviewOpen, setCostReviewOpen] = useState(false);
 
   // COGS widget state
   const [cogsSummary, setCogsSummary] = useState<COGSSummary | null>(null);
@@ -180,7 +185,17 @@ export default function InventoryScreen() {
       .catch(() => {});
     loadPulseBuckets();
     loadUnlinked();
+    loadCostReviewCount();
   }, []);
+
+  const loadCostReviewCount = async () => {
+    try {
+      const data = await getCostReviewCandidates();
+      setCostReviewCount(data.length);
+    } catch {
+      // Quiet — banner just won't show.
+    }
+  };
 
   const loadUnlinked = async () => {
     try {
@@ -793,6 +808,14 @@ export default function InventoryScreen() {
 
         {activeTab === 'stock' && (
           <>
+            <CostReviewBanner count={costReviewCount} onOpen={() => setCostReviewOpen(true)} />
+            <CostReviewPanel
+              open={costReviewOpen}
+              onClose={() => setCostReviewOpen(false)}
+              onApplied={async () => {
+                await Promise.all([loadCostReviewCount(), fetchItems()]);
+              }}
+            />
             <UnlinkedPurchasesBanner
               expenses={unlinkedExpenses}
               loading={unlinkedLoading}

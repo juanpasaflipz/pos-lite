@@ -1873,6 +1873,35 @@ export async function getShrinkageAlerts(acknowledged?: boolean): Promise<Shrink
   return apiRequest<ShrinkageAlert[]>(endpoint);
 }
 
+export interface CostReviewCandidate {
+  id: number;
+  name: string;
+  unit: string | null;
+  stored_unit_cost: number;
+  history_id: number;
+  quantity_added: number;
+  expense_amount: number | null;
+  expense_date: string | null;
+  vendor: string | null;
+  proposed_unit_cost: number;
+  detected_at: string;
+}
+
+export async function getCostReviewCandidates(): Promise<CostReviewCandidate[]> {
+  const res = await apiRequest<{ candidates: CostReviewCandidate[] }>('/inventory/cost-review/candidates');
+  return res.candidates || [];
+}
+
+export async function applyCostReviewCorrection(
+  item_id: number,
+  proposed_unit_cost: number
+): Promise<{ success: boolean; item_id: number; prev_cost_price: number; new_cost_price: number }> {
+  return apiRequest('/inventory/cost-review/apply', {
+    method: 'POST',
+    body: JSON.stringify({ item_id, proposed_unit_cost }),
+  });
+}
+
 export async function acknowledgeShrinkageAlert(id: number): Promise<any> {
   return apiRequest(`/inventory/shrinkage-alerts/${id}/acknowledge`, { method: 'PUT' });
 }

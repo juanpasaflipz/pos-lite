@@ -12,7 +12,7 @@
 // pg_trgm fuzzy match (same pattern as the receipt scanner).
 
 import { all, get, run, getTenantId } from '../db/index.js';
-import { detectOverpay } from './inventory.js';
+import { detectOverpay, detectCostAnomaly } from './inventory.js';
 
 const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
@@ -43,8 +43,9 @@ Return ONLY valid JSON, no prose, with this exact schema:
       "raw_name": "string — item name as spoken",
       "quantity": number | null,
       "unit": "string or null — lowercase (kg, g, l, ml, pcs, box, case)",
+      "pack_size": number | null,
+      "line_total": number | null,
       "reason": "spoilage" | "prep_error" | "dropped" | "expired" | "other" | null,
-      "unit_price": number | null,
       "active": boolean | null
     }
   ],
@@ -55,10 +56,12 @@ Return ONLY valid JSON, no prose, with this exact schema:
 }
 
 Rules:
-- TOGGLE_MENU: set "active" per item. Deactivation cues ("se acabó", "ya no hay", "86", "agotado", "no queda") → false. Reactivation cues ("ya hay", "vuelve", "regresa", "activate", "está disponible") → true. quantity/unit/reason all null for this intent.
-- WASTE: infer reason — quemado/burnt → prep_error; vencido/expired/echó a perder → spoilage or expired; tiré/dropped → dropped; default → other.
-- PURCHASE: total_amount is the total spent (number, no currency). If only line totals are mentioned, sum them.
-- COUNT: quantity is the counted on-hand amount in the inventory's unit.
+- TOGGLE_MENU: set "active" per item. Deactivation cues ("se acabó", "ya no hay", "86", "agotado", "no queda") → false. Reactivation cues ("ya hay", "vuelve", "regresa", "activate", "está disponible") → true. quantity/unit/reason/pack_size/line_total all null for this intent.
+- WASTE: infer reason — quemado/burnt → prep_error; vencido/expired/echó a perder → spoilage or expired; tiré/dropped → dropped; default → other. pack_size and line_total are null.
+- PURCHASE: total_amount is the TOTAL spent across all lines. line_total is the money paid for that ONE item line. If only one item is mentioned with one price ("20 kilos de arrachera, 2800 pesos"), set both: total_amount=2800 and line_total=2800.
+- PURCHASE CRITICAL: line_total is the MONEY PAID for the whole line. Do NOT divide it by quantity. Do NOT report a per-kilo or per-piece price. "Picana 2 kilos 888 pesos" → quantity=2, unit="kg", pack_size=1, line_total=888 — the executor computes per-kilo cost itself.
+- pack_size is the content of ONE pack expressed in 'unit'. Loose-by-weight ("2 kilos de picana") → pack_size=1. Sealed packs ("1 saco de 5 kilos", "caja de 24 latas") → pack_size = contents of one pack, quantity = number of packs.
+- COUNT: quantity is the counted on-hand amount in the inventory's unit. pack_size and line_total null.
 - Convert spoken quantity to the inventory item's unit when sensible (e.g. inventory in kg, voice says "500 gramos" → quantity 0.5, unit kg).
 - If the transcript is unclear or refers to items not in INVENTORY/MENU, set intent to "unknown" and put a short Spanish clarifying_question.
 - Numbers as JSON numbers, no strings, no currency symbols.`;
@@ -139,22 +142,45 @@ export function buildConfirmationMessage(parsed) {
     return `⚠️ Registrar merma:\n${lines}${reasons ? `\nMotivo: ${reasons}` : ''}\n\nResponde SI para guardar, NO para cancelar.`;
   }
   if (parsed.intent === 'record_purchase') {
-    // Purchase lines get a (NUEVO) tag for items enrichPurchaseItems() flagged
-    // as not in inventory yet — owner sees what new SKUs they're approving.
+    // Purchase lines now surface the DERIVED per-unit cost so the owner sees
+    // "$439.95/kg" before SI — the human checkpoint that catches the
+    // unit-of-measure mismatch class (line_total mistaken for per-kg price)
+    // BEFORE it propagates into recipe-cost math.
+    const fmtMoney = (n) => Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const purchaseLines = items
       .slice(0, 8)
       .map((it) => {
-        const q = Number(it.quantity);
+        const received = Number(it.received_qty_base_unit ?? it.quantity);
         const unit = it.unit || '';
         const name = it.raw_name || '(item)';
-        const qstr = Number.isFinite(q) ? (Number.isInteger(q) ? q : q.toFixed(2)) : '?';
+        const qstr = Number.isFinite(received) ? (Number.isInteger(received) ? received : received.toFixed(2)) : '?';
         const tag = it._will_create ? ' (NUEVO)' : '';
+        const alertTag = it._cost_alert?.severity === 'severe' ? ' ⚠️' : '';
+        const perUnit = it.derived_unit_cost;
+        const lineTotal = it.line_total;
+        if (perUnit != null && lineTotal != null) {
+          return `•${alertTag} ${name} — ${qstr} ${unit} @ $${fmtMoney(perUnit)}/${unit || 'u'} = $${fmtMoney(lineTotal)}${tag}`.replace(/\s+/g, ' ').trim();
+        }
         return `• ${qstr} ${unit} ${name}${tag}`.replace(/\s+/g, ' ').trim();
       })
       .join('\n');
     const vendor = parsed.vendor ? `\nProveedor: ${parsed.vendor}` : '';
-    const total = parsed.total_amount ? `\nTotal: $${Number(parsed.total_amount).toFixed(2)}` : '';
-    return `📦 Registrar compra:\n${purchaseLines}${vendor}${total}\n\nResponde SI para guardar, NO para cancelar.`;
+    const total = parsed.total_amount ? `\nTotal: $${fmtMoney(parsed.total_amount)}` : '';
+
+    // If any line tripped a severe alert, surface a single combined Spanish
+    // warning between the lines and the SI prompt. The intent is: don't block,
+    // but make absolutely sure the owner sees it before pressing SI on autopilot.
+    const flagged = items.filter((it) => it._cost_alert?.severity === 'severe');
+    const warningBlock = flagged.length
+      ? `\n\n⚠️ Revisa el precio:\n` + flagged.slice(0, 4).map((it) => {
+          const perUnit = it.derived_unit_cost;
+          const median = it._cost_alert.median;
+          const basis = it._cost_alert.basis === 'history' ? 'precio anterior' : 'productos similares';
+          return `  · ${it.raw_name}: $${fmtMoney(perUnit)}/${it.unit || 'u'} (vs ${basis} $${fmtMoney(median)}/${it.unit || 'u'}). ¿El precio era por una sola unidad?`;
+        }).join('\n')
+      : '';
+
+    return `📦 Registrar compra:\n${purchaseLines}${vendor}${total}${warningBlock}\n\nResponde SI para guardar, NO para cancelar.`;
   }
   if (parsed.intent === 'count_inventory') {
     // Surface SKUs the photo showed but inventory doesn't have so the owner
@@ -257,15 +283,20 @@ function modifierConflict(a, b) {
 }
 
 // Pre-confirmation enrichment for record_purchase and count_inventory intents.
-// Three responsibilities:
-//   1. Derive unit_price for purchase lines that only have amount + quantity.
+// Four responsibilities (purchase doors run all four; count runs 2+3):
+//   1. Normalize line_total per line (fall back to legacy amount/unit_price
+//      or to total_amount for single-line purchases).
 //   2. Fuzzy-match unbound items against existing inventory (pg_trgm @ 0.55),
 //      rejecting matches that disagree on a strong modifier (Vienna/Clara,
 //      Ultra/Light, etc.) so different products don't silently collapse.
 //   3. Dedup-and-sum: when Claude returns multiple lines binding to the same
 //      inventory_item_id (e.g. "Bohemia shelf superior" + "Bohemia shelf
 //      inferior"), merge into one line — otherwise executeCount overwrites
-//      qty on the second iteration and the first count is lost.
+//      qty on the second iteration and the first count is lost. Sums
+//      quantity AND line_total so step 4 derives the right basis.
+//   4. Derive received_qty_base_unit (quantity × pack_size) and
+//      derived_unit_cost (line_total ÷ received_qty_base_unit). These are
+//      the ONLY numbers executePurchase trusts for restock + cost-history.
 //
 // For purchase intents, true misses are flagged _will_create so
 // buildConfirmationMessage shows "(NUEVO)" and executePurchase inserts a
@@ -277,13 +308,29 @@ export async function enrichItemBindings(parsed) {
   if (parsed.intent !== 'record_purchase' && parsed.intent !== 'count_inventory') return parsed;
   const allowCreate = parsed.intent === 'record_purchase';
   const items = Array.isArray(parsed.items) ? parsed.items : [];
-  for (const it of items) {
-    // Derive per-unit price once so cost-price math has a value to use
-    // whether the line came from voice (unit_price) or from a receipt
-    // photo (only amount + quantity). Purchase-only.
-    if (allowCreate && it.unit_price == null && Number(it.amount) > 0 && Number(it.quantity) > 0) {
-      it.unit_price = Number(it.amount) / Number(it.quantity);
+
+  // Purchase-only step 1: normalize each line's line_total. The model now
+  // reports line_total directly, but legacy callers (older pending intents in
+  // voice_intents) may still send `amount` or `unit_price`. Reconstruct so
+  // confirmation replies from before the schema change still execute.
+  if (allowCreate) {
+    const onlyItem = items.length === 1 ? items[0] : null;
+    for (const it of items) {
+      if (it.line_total == null) {
+        if (Number(it.amount) > 0) it.line_total = Number(it.amount);
+        else if (Number(it.unit_price) > 0 && Number(it.quantity) > 0) {
+          it.line_total = Number(it.unit_price) * Number(it.quantity);
+        }
+      }
+      // Single-line purchases like "20 kilos arrachera 2800 pesos" often arrive
+      // with only total_amount set — fall back so we still have a line_total.
+      if (it === onlyItem && it.line_total == null && Number(parsed.total_amount) > 0) {
+        it.line_total = Number(parsed.total_amount);
+      }
     }
+  }
+
+  for (const it of items) {
     if (it.inventory_item_id) continue;
     if (!it.raw_name || typeof it.raw_name !== 'string') continue;
     try {
@@ -314,6 +361,9 @@ export async function enrichItemBindings(parsed) {
   // Claude returned "Bohemia shelf superior" + "Bohemia shelf inferior"),
   // merge into one line so executeCount/executePurchase don't run twice on
   // the same id (count: last write overwrites; purchase: two restock rows).
+  // line_total is summed so the per-unit derivation below stays correct after
+  // a merge (otherwise picana on two lines would double-count quantity but
+  // keep a single-line cost basis).
   const byId = new Map();
   const out = [];
   for (const it of items) {
@@ -321,7 +371,7 @@ export async function enrichItemBindings(parsed) {
     const prior = byId.get(it.inventory_item_id);
     if (prior) {
       prior.quantity = Number(prior.quantity || 0) + Number(it.quantity || 0);
-      // If a numeric amount is present on both, sum it too (purchase-relevant).
+      if (Number(it.line_total) > 0) prior.line_total = Number(prior.line_total || 0) + Number(it.line_total);
       if (Number(it.amount) > 0) prior.amount = Number(prior.amount || 0) + Number(it.amount);
       // Keep the shorter raw_name — Claude tends to put shelf/position context
       // in the longer one, and we want the clean brand label.
@@ -334,6 +384,43 @@ export async function enrichItemBindings(parsed) {
     out.push(it);
   }
   parsed.items = out;
+
+  // Purchase-only step 2: derive received_qty_base_unit and derived_unit_cost
+  // AFTER dedup, so a merged line gets the correct (summed-quantity,
+  // summed-line_total) basis. The model never reports cost_per_unit directly;
+  // that ratio is server-derived so a mis-labeled "unit_price" can't become
+  // the SKU's per-unit cost (the bug that turned $888.70 for 2.02 kg of
+  // picana into $888.70/kg).
+  if (allowCreate) {
+    for (const it of parsed.items) {
+      const packSize = Number(it.pack_size) > 0 ? Number(it.pack_size) : 1;
+      const qty = Number(it.quantity);
+      const received = Number.isFinite(qty) && qty > 0 ? qty * packSize : null;
+      it.received_qty_base_unit = received;
+
+      if (received && received > 0 && Number(it.line_total) > 0) {
+        it.derived_unit_cost = Number(it.line_total) / received;
+      } else {
+        it.derived_unit_cost = null;
+      }
+
+      // Pre-write anomaly check. _cost_alert is consumed by
+      // buildConfirmationMessage to render ⚠️ + a Spanish hint before SI.
+      // Existing items use their own history; new items (_will_create) fall
+      // back to same-unit peer median.
+      if (it.derived_unit_cost && it.derived_unit_cost > 0) {
+        try {
+          it._cost_alert = await detectCostAnomaly({
+            inventoryItemId: it._will_create ? null : it.inventory_item_id,
+            incomingUnitCost: it.derived_unit_cost,
+            unit: it.unit || null,
+          });
+        } catch {
+          it._cost_alert = null;
+        }
+      }
+    }
+  }
 
   return parsed;
 }
@@ -415,25 +502,30 @@ async function executePurchase(parsed, employeeId) {
   }
 
   // Mirror the receipt_data shape used by /api/expenses/scan-receipt so the
-  // expense list UI shows the line items the same way.
+  // expense list UI shows the line items the same way. unit_price here is the
+  // derived per-base-unit cost (line_total ÷ received_qty), NOT a model-reported
+  // value — keeps recipe-cost math consistent across all purchase doors.
   const receiptData = {
     source: 'whatsapp_voice',
     vendor: parsed.vendor || null,
     items: (parsed.items || []).map((it) => ({
       description: it.raw_name,
-      quantity: it.quantity,
+      quantity: it.received_qty_base_unit ?? it.quantity,
       unit: it.unit,
-      unit_price: it.unit_price ?? null,
-      amount: it.unit_price != null ? Number(it.unit_price) * Number(it.quantity) : null,
+      pack_size: it.pack_size ?? null,
+      unit_price: it.derived_unit_cost ?? null,
+      amount: it.line_total ?? null,
     })),
     total: amount,
   };
   const inventoryMatches = (parsed.items || [])
-    .filter((it) => it.inventory_item_id && it.quantity > 0)
+    .filter((it) => it.inventory_item_id && Number(it.received_qty_base_unit ?? it.quantity) > 0)
     .map((it) => ({
       inventory_item_id: it.inventory_item_id,
-      quantity: Number(it.quantity),
-      cost_price: it.unit_price != null ? Number(it.unit_price) : null,
+      // Restock in the inventory item's BASE unit, not "packs of N". A 1-sack
+      // line with pack_size=5 kg restocks 5 kg, not 1.
+      quantity: Number(it.received_qty_base_unit ?? it.quantity),
+      cost_price: it.derived_unit_cost != null ? Number(it.derived_unit_cost) : null,
       raw_description: it.raw_name || null,
     }));
   receiptData.inventory_matches = inventoryMatches;

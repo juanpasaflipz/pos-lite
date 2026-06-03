@@ -240,6 +240,112 @@ router.put('/shrinkage-alerts/:id/acknowledge', requireAuth('manage_inventory'),
   }
 });
 
+// GET /api/inventory/cost-review/candidates
+// Surfaces SKUs whose stored cost_price is almost certainly a line_total that
+// was treated as a per-unit price. Fingerprint:
+//   - the most recent inventory_cost_history row equals the current cost_price
+//     (i.e., this purchase is what set the cost)
+//   - quantity_added > 1 (so dividing would actually change the value)
+//   - that history row's expense had only this one inventory line
+//   - the expense.amount ≈ the stored unit_cost (so the unit_cost is actually
+//     the whole-line total, not the per-unit price)
+// Owner sees stored vs proposed cost; one tap to apply. Once applied, the
+// row no longer matches the fingerprint and drops out of the list.
+router.get('/cost-review/candidates', requireAuth('manage_inventory'), async (req, res) => {
+  try {
+    const rows = await all(`
+      WITH latest_history AS (
+        SELECT DISTINCT ON (inventory_item_id)
+          inventory_item_id,
+          id AS history_id,
+          expense_id,
+          unit_cost,
+          quantity_added,
+          created_at
+        FROM inventory_cost_history
+        ORDER BY inventory_item_id, created_at DESC
+      ),
+      expense_line_count AS (
+        SELECT expense_id, COUNT(*) AS line_count
+        FROM inventory_cost_history
+        WHERE expense_id IS NOT NULL
+        GROUP BY expense_id
+      )
+      SELECT
+        ii.id,
+        ii.name,
+        ii.unit,
+        ii.cost_price::float AS stored_unit_cost,
+        lh.history_id,
+        lh.quantity_added::float AS quantity_added,
+        e.amount::float AS expense_amount,
+        e.expense_date,
+        e.vendor,
+        (lh.unit_cost / lh.quantity_added)::numeric(12,4)::float AS proposed_unit_cost,
+        lh.created_at AS detected_at
+      FROM inventory_items ii
+      JOIN latest_history lh ON lh.inventory_item_id = ii.id
+      LEFT JOIN expenses e ON e.id = lh.expense_id
+      LEFT JOIN expense_line_count elc ON elc.expense_id = lh.expense_id
+      WHERE ii.cost_price > 0
+        AND ABS(ii.cost_price - lh.unit_cost) < 0.01
+        AND lh.quantity_added > 1
+        AND COALESCE(elc.line_count, 1) = 1
+        AND e.id IS NOT NULL
+        AND ABS(e.amount - lh.unit_cost) < 1.0
+      ORDER BY lh.created_at DESC
+      LIMIT 100
+    `);
+
+    res.json({ candidates: rows });
+  } catch (error) {
+    console.error('Error fetching cost-review candidates:', error);
+    res.status(500).json({ error: 'Failed to fetch cost-review candidates' });
+  }
+});
+
+// POST /api/inventory/cost-review/apply
+// Body: { item_id, proposed_unit_cost, history_id? }
+// Updates inventory_items.cost_price and appends a corrective
+// inventory_cost_history row (quantity_added=0 marks it as a manual
+// correction, not a restock — keeps the ledger honest).
+router.post('/cost-review/apply', requireAuth('manage_inventory'), async (req, res) => {
+  try {
+    const { item_id, proposed_unit_cost } = req.body || {};
+    const itemId = Number(item_id);
+    const proposed = Number(proposed_unit_cost);
+    if (!Number.isFinite(itemId) || itemId <= 0) {
+      return res.status(400).json({ error: 'item_id required' });
+    }
+    if (!Number.isFinite(proposed) || proposed <= 0) {
+      return res.status(400).json({ error: 'proposed_unit_cost must be > 0' });
+    }
+
+    const item = await get('SELECT id, cost_price FROM inventory_items WHERE id = $1', [itemId]);
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+
+    const prevCost = Number(item.cost_price) || 0;
+    const tid = getTenantId();
+    await run('UPDATE inventory_items SET cost_price = $1 WHERE id = $2', [proposed, itemId]);
+    try {
+      await run(
+        `INSERT INTO inventory_cost_history
+           (tenant_id, inventory_item_id, vendor_id, expense_id, quantity_added, unit_cost, prev_cost_price, new_cost_price)
+         VALUES ($1, $2, NULL, NULL, 0, $3, $4, $5)`,
+        [tid, itemId, proposed, prevCost, proposed]
+      );
+    } catch (err) {
+      // History append is non-fatal — primary cost_price update already landed.
+      console.warn('[cost-review] history append failed:', err.message);
+    }
+
+    res.json({ success: true, item_id: itemId, prev_cost_price: prevCost, new_cost_price: proposed });
+  } catch (error) {
+    console.error('Error applying cost-review correction:', error);
+    res.status(500).json({ error: 'Failed to apply correction' });
+  }
+});
+
 // POST /api/inventory/scan-restock - restock by barcode/sku scan
 router.post('/scan-restock', requireAuth('manage_inventory'), async (req, res) => {
   try {
