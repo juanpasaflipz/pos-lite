@@ -92,6 +92,7 @@ export default function ReportsScreen() {
     relatedItemId: 'all' as number | 'all',
   });
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const canEditFinancials = !!(currentEmployee && ['admin', 'manager'].includes(currentEmployee.role) && limits.reports.editVariables);
 
@@ -159,36 +160,171 @@ export default function ReportsScreen() {
     }
   };
 
-  const generateCSV = () => {
-    const headers = [t('sales.csvHeaders.metric'), t('sales.csvHeaders.value')];
-    const rows = [
-      [t('sales.csvHeaders.period'), `${getPeriodLabel(period)} (${getDateRangeLabel(period)})`],
-      [t('sales.csvHeaders.netSales'), salesData?.total_revenue || 0],
-      [t('sales.csvHeaders.iva'), salesData?.tax_total || 0],
-      [t('sales.csvHeaders.orderCount'), salesData?.order_count || 0],
-      [t('sales.csvHeaders.avgTicket'), salesData?.avg_ticket || 0],
-      [t('sales.csvHeaders.totalTips'), salesData?.tip_total || 0],
-    ];
+  // Escape a single value for CSV (RFC 4180): wrap in quotes, double-up inner quotes.
+  const csvCell = (v: unknown): string => {
+    const s = v == null ? '' : String(v);
+    return `"${s.replace(/"/g, '""')}"`;
+  };
+  const csvRow = (cells: unknown[]): string => cells.map(csvCell).join(',');
 
-    let csv = headers.join(',') + '\n';
-    rows.forEach((row) => {
-      csv += row.map((cell) => `"${cell}"`).join(',') + '\n';
-    });
+  // Multi-section CSV: pulls every report relevant for reconciliation
+  // (summary, per-day, per-payment-method, per-category, per-item, per-employee)
+  // regardless of which tab is currently active. Each section is preceded by a
+  // == Section == marker so spreadsheets can be split by hand if needed.
+  const generateCSV = async () => {
+    setExporting(true);
+    setError(null);
+    try {
+      const [sales, items, employees, cashCardData, dailySeries] = await Promise.all([
+        getSalesReport(period),
+        getItemSalesReport(period, {}),
+        getEmployeePerformance(period),
+        getCashCardBreakdown(period).catch(() => null),
+        getContributionMargin(period).catch(() => null),
+      ]);
 
-    const { start, end } = getPeriodRange(period);
-    const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const rangeSlug = iso(start) === iso(end) ? iso(start) : `${iso(start)}_${iso(end)}`;
-    const filename = `sales-report-${period}-${rangeSlug}.csv`;
+      const lines: string[] = [];
+      const push = (...rows: string[]) => lines.push(...rows);
+      const blank = () => lines.push('');
 
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
+      // -- Resumen --
+      push(`== ${t('sales.csv.sectionSummary')} ==`);
+      push(csvRow([t('sales.csvHeaders.metric'), t('sales.csvHeaders.value')]));
+      push(csvRow([t('sales.csvHeaders.period'), `${getPeriodLabel(period)} (${getDateRangeLabel(period)})`]));
+      push(csvRow([t('sales.csvHeaders.netSales'), sales.total_revenue ?? 0]));
+      push(csvRow([t('sales.csvHeaders.iva'), sales.tax_total ?? 0]));
+      push(csvRow([t('sales.csvHeaders.orderCount'), sales.order_count ?? 0]));
+      push(csvRow([t('sales.csvHeaders.avgTicket'), sales.avg_ticket ?? 0]));
+      push(csvRow([t('sales.csvHeaders.totalTips'), sales.tip_total ?? 0]));
+
+      // -- Por día --
+      if (dailySeries && dailySeries.data.length > 0) {
+        blank();
+        push(`== ${t('sales.csv.sectionDaily')} ==`);
+        push(csvRow([
+          t('sales.csv.colDate'),
+          t('sales.csv.colOrders'),
+          t('sales.csv.colRevenue'),
+        ]));
+        for (const d of dailySeries.data) {
+          push(csvRow([d.date, d.orders, d.revenue]));
+        }
+      }
+
+      // -- Por método de pago --
+      if (cashCardData && cashCardData.breakdown.length > 0) {
+        blank();
+        push(`== ${t('sales.csv.sectionPaymentMethod')} ==`);
+        push(csvRow([
+          t('sales.csv.colMethod'),
+          t('sales.csv.colOrders'),
+          t('sales.csv.colTotal'),
+          t('sales.csv.colTips'),
+          t('sales.csv.colPctOrders'),
+          t('sales.csv.colPctRevenue'),
+        ]));
+        for (const b of cashCardData.breakdown) {
+          push(csvRow([
+            b.display_name || b.payment_source || b.payment_method,
+            b.count,
+            b.total,
+            b.tips,
+            `${b.percentage}%`,
+            `${b.revenue_percentage}%`,
+          ]));
+        }
+      }
+
+      // -- Por categoría --
+      if (items.categories.length > 0) {
+        blank();
+        push(`== ${t('sales.csv.sectionCategory')} ==`);
+        push(csvRow([
+          t('sales.csv.colCategory'),
+          t('sales.csv.colQty'),
+          t('sales.csv.colRevenue'),
+          t('sales.csv.colItemMix'),
+        ]));
+        for (const c of items.categories) {
+          push(csvRow([
+            c.category_name,
+            c.quantity_sold,
+            c.revenue,
+            `${c.item_mix_percent}%`,
+          ]));
+        }
+      }
+
+      // -- Por artículo --
+      if (items.items.length > 0) {
+        blank();
+        push(`== ${t('sales.csv.sectionItem')} ==`);
+        push(csvRow([
+          t('sales.csv.colCategory'),
+          t('sales.csv.colItem'),
+          t('sales.csv.colQty'),
+          t('sales.csv.colOrders'),
+          t('sales.csv.colRevenue'),
+          t('sales.csv.colAvgPrice'),
+          t('sales.csv.colItemMix'),
+        ]));
+        for (const it of items.items) {
+          push(csvRow([
+            it.category_name,
+            it.item_name,
+            it.quantity_sold,
+            it.orders_count,
+            it.revenue,
+            it.avg_unit_price,
+            `${it.item_mix_percent}%`,
+          ]));
+        }
+      }
+
+      // -- Por empleado --
+      const empWithSales = employees.filter(e => (e.orders_processed || 0) > 0);
+      if (empWithSales.length > 0) {
+        blank();
+        push(`== ${t('sales.csv.sectionEmployee')} ==`);
+        push(csvRow([
+          t('sales.csv.colEmployee'),
+          t('sales.csv.colOrders'),
+          t('sales.csv.colSales'),
+          t('sales.csv.colAvgTicket'),
+          t('sales.csv.colTips'),
+        ]));
+        for (const e of empWithSales) {
+          push(csvRow([
+            e.employee_name,
+            e.orders_processed,
+            e.total_sales,
+            e.avg_ticket,
+            e.tips_received,
+          ]));
+        }
+      }
+
+      const { start, end } = getPeriodRange(period);
+      const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const rangeSlug = iso(start) === iso(end) ? iso(start) : `${iso(start)}_${iso(end)}`;
+      const filename = `sales-report-${period}-${rangeSlug}.csv`;
+
+      // BOM + CRLF so Excel opens it with UTF-8 and respects sections cleanly.
+      const csv = '\uFEFF' + lines.join('\r\n') + '\r\n';
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('errors.fetchReports'));
+    } finally {
+      setExporting(false);
+    }
   };
 
   const getPeriodLabel = (p: Period) => {
@@ -286,10 +422,11 @@ export default function ReportsScreen() {
           <div className="flex items-center gap-4">
             <button
               onClick={generateCSV}
-              className="px-6 py-3 bg-brand-600 text-white rounded-lg font-medium hover:bg-brand-700 transition-colors flex items-center gap-2 min-h-[44px]"
+              disabled={exporting}
+              className="px-6 py-3 bg-brand-600 text-white rounded-lg font-medium hover:bg-brand-700 transition-colors flex items-center gap-2 min-h-[44px] disabled:opacity-60 disabled:cursor-wait"
             >
               <Download size={20} />
-              {t('sales.exportCsv')}
+              {exporting ? t('sales.exporting') : t('sales.exportCsv')}
             </button>
             <BrandLogo className="h-10" />
           </div>

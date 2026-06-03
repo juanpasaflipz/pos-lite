@@ -2,6 +2,7 @@
   "sales": {
     "title": "Reportes de Ventas",
     "exportCsv": "Exportar CSV",
+    "exporting": "Exportando…",
     "periods": {
       "today": "Hoy",
       "yesterday": "Ayer",
@@ -33,6 +34,30 @@
       "orderCount": "Cantidad de Órdenes",
       "avgTicket": "Ticket Promedio",
       "totalTips": "Propinas Totales"
+    },
+    "csv": {
+      "sectionSummary": "Resumen",
+      "sectionDaily": "Por día",
+      "sectionPaymentMethod": "Por método de pago",
+      "sectionCategory": "Por categoría",
+      "sectionItem": "Por artículo",
+      "sectionEmployee": "Por empleado",
+      "colDate": "Fecha",
+      "colOrders": "Pedidos",
+      "colRevenue": "Ingresos",
+      "colMethod": "Método",
+      "colTotal": "Total",
+      "colTips": "Propinas",
+      "colPctOrders": "% pedidos",
+      "colPctRevenue": "% ingresos",
+      "colCategory": "Categoría",
+      "colItem": "Artículo",
+      "colQty": "Cantidad",
+      "colItemMix": "Mix de menú",
+      "colAvgPrice": "Precio promedio",
+      "colEmployee": "Empleado",
+      "colSales": "Ventas",
+      "colAvgTicket": "Ticket promedio"
     },
     "kpi": {
       "totalRevenue": "Ventas Totales",
