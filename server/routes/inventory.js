@@ -912,6 +912,41 @@ router.get('/stale', async (req, res) => {
   }
 });
 
+// GET /api/inventory/touched-today — inventory_item ids touched today by
+// any restock action. Union of:
+//   1. Direct manual restocks (last_restocked_at::date = today)
+//   2. Expense-driven restocks, including retroactive links of older
+//      purchases (inventory_cost_history.created_at::date = today)
+// The 2nd half is what the user expects from "Agregado Hoy": when they
+// link a Costco purchase from yesterday TODAY, those items show as added
+// today even though last_restocked_at = yesterday (which is correct for
+// the shelf-life clock).
+router.get('/touched-today', async (req, res) => {
+  try {
+    const columns = await getInventoryColumns();
+    const hasLastRestocked = columns.has('last_restocked_at');
+
+    const rows = await all(
+      `SELECT DISTINCT inventory_item_id FROM (
+         ${hasLastRestocked ? `
+         SELECT id AS inventory_item_id
+         FROM inventory_items
+         WHERE last_restocked_at::date = CURRENT_DATE
+         UNION
+         ` : ''}
+         SELECT ich.inventory_item_id
+         FROM inventory_cost_history ich
+         WHERE ich.created_at::date = CURRENT_DATE
+       ) t`
+    );
+    res.json(rows.map(r => r.inventory_item_id));
+  } catch (err) {
+    // Tables may not exist on stale schema — degrade gracefully.
+    console.warn('[Inventory] touched-today error:', err.message);
+    res.json([]);
+  }
+});
+
 // GET /api/inventory/dormant — items with quantity remaining that haven't
 // been touched (counted, wasted, restocked) in DORMANT_DAYS or more. Useful
 // for "stuff sitting in the back you're not using" — distinct from stale,

@@ -1004,6 +1004,10 @@ export async function getDormantStock(days = 30): Promise<DormantStockItem[]> {
   return apiRequest<DormantStockItem[]>(`/inventory/dormant?days=${days}`);
 }
 
+export async function getInventoryTouchedToday(): Promise<number[]> {
+  return apiRequest<number[]>(`/inventory/touched-today`);
+}
+
 export interface InventoryAuditStatus {
   total: number;
   missing_shelf_life: number;

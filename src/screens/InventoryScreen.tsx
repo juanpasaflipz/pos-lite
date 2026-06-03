@@ -34,6 +34,7 @@ import {
   getStaleStock,
   getDormantStock,
   getUnlinkedExpenses,
+  getInventoryTouchedToday,
 } from '../api';
 import type { UnlinkedExpense } from '../api';
 import {
@@ -118,6 +119,7 @@ export default function InventoryScreen() {
   const [showForecasts, setShowForecasts] = useState(false);
   const [staleIds, setStaleIds] = useState<Set<number>>(new Set());
   const [dormantIds, setDormantIds] = useState<Set<number>>(new Set());
+  const [touchedTodayIds, setTouchedTodayIds] = useState<Set<number>>(new Set());
   const [pulseLoading, setPulseLoading] = useState(false);
   const [activeBucket, setActiveBucket] = useState<PulseBucket | null>(null);
   const [unlinkedExpenses, setUnlinkedExpenses] = useState<UnlinkedExpense[]>([]);
@@ -201,35 +203,23 @@ export default function InventoryScreen() {
   const loadPulseBuckets = async () => {
     try {
       setPulseLoading(true);
-      const [stale, dormant] = await Promise.all([
+      const [stale, dormant, touched] = await Promise.all([
         getStaleStock(true).catch(() => []),
         getDormantStock(30).catch(() => []),
+        getInventoryTouchedToday().catch(() => []),
       ]);
       setStaleIds(new Set(stale.map((s) => s.id)));
       setDormantIds(new Set(dormant.map((d) => d.id)));
+      setTouchedTodayIds(new Set(touched));
     } finally {
       setPulseLoading(false);
     }
   };
 
-  // Items restocked today (calculated client-side from last_restocked_at)
-  const addedTodayIds = React.useMemo(() => {
-    const today = new Date();
-    const isSameLocalDay = (iso: string | null | undefined) => {
-      if (!iso) return false;
-      const d = new Date(iso);
-      return (
-        d.getFullYear() === today.getFullYear() &&
-        d.getMonth() === today.getMonth() &&
-        d.getDate() === today.getDate()
-      );
-    };
-    const ids = new Set<number>();
-    for (const it of items) {
-      if (isSameLocalDay(it.last_restocked_at)) ids.add(it.id);
-    }
-    return ids;
-  }, [items]);
+  // "Added today" = anything touched today (direct restock OR retroactive
+  // link of an older expense). Server endpoint is authoritative — see
+  // /api/inventory/touched-today.
+  const addedTodayIds = touchedTodayIds;
 
   const pulseCounts = React.useMemo(() => {
     let added_today = 0;
