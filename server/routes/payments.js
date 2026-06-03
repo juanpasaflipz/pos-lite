@@ -235,6 +235,109 @@ router.post('/cash', paymentLimiter, requireAuth('pos_access'), async (req, res)
   }
 });
 
+// POST /api/payments/cash-tip-adjust - record a cash tip added after the
+// order was already closed (customer leaves cash on the table after the
+// receipt prints — common in MX dine-in).
+//
+// Permission: void_orders (same trust gate used for editing paid orders).
+// Attribution: bumps orders.tip in place so the original shift's payroll
+// absorbs the tip; an audit row in order_tip_adjustments preserves the
+// add-time so reports can break out post-close tips later.
+router.post('/cash-tip-adjust', requireAuth('void_orders'), async (req, res) => {
+  try {
+    const { order_id, amount, note } = req.body;
+
+    if (!order_id) {
+      return res.status(400).json({ error: 'Missing order_id' });
+    }
+    const tipAmount = Number(amount);
+    if (!Number.isFinite(tipAmount) || tipAmount <= 0) {
+      return res.status(400).json({ error: 'Amount must be a positive number' });
+    }
+    const rounded = Math.round(tipAmount * 100) / 100;
+
+    const order = await get(
+      `SELECT id, subtotal, total, tip, payment_status, payment_method
+       FROM orders WHERE id = $1`,
+      [order_id]
+    );
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.payment_status !== 'paid') {
+      return res.status(400).json({ error: 'Order is not paid' });
+    }
+    // Only cash and split-with-cash orders can take a cash tip top-up.
+    // Card-only orders should void+rerun through the processor.
+    const orderMethod = (order.payment_method || '').toLowerCase();
+    if (orderMethod !== 'cash' && orderMethod !== 'split') {
+      return res.status(400).json({ error: 'Order has no cash payment leg' });
+    }
+
+    // Sanity cap: tip cannot exceed subtotal (covers the 100%-tip edge case
+    // and blocks obvious typos like 5000 instead of 50.00).
+    const subtotal = Number(order.subtotal) || 0;
+    if (rounded > subtotal) {
+      return res.status(400).json({
+        error: `Tip ${rounded} exceeds order subtotal ${subtotal}`,
+      });
+    }
+
+    // For splits, find the paid cash leg to credit. If none exists (e.g.
+    // split was card+card), reject.
+    let cashLegId = null;
+    if (orderMethod === 'split') {
+      const cashLeg = await get(
+        `SELECT id FROM order_payments
+         WHERE order_id = $1 AND payment_method = 'cash' AND status = 'paid'
+         ORDER BY id ASC LIMIT 1`,
+        [order_id]
+      );
+      if (!cashLeg) {
+        return res.status(400).json({ error: 'Split order has no paid cash leg' });
+      }
+      cashLegId = cashLeg.id;
+    }
+
+    await run('BEGIN');
+    try {
+      await run(
+        `INSERT INTO order_tip_adjustments
+           (order_id, amount, payment_method, by_employee_id, note)
+         VALUES ($1, $2, 'cash', $3, $4)`,
+        [order_id, rounded, req.employee.id, note || null]
+      );
+      await run(
+        `UPDATE orders SET tip = COALESCE(tip, 0) + $1 WHERE id = $2`,
+        [rounded, order_id]
+      );
+      if (cashLegId) {
+        await run(
+          `UPDATE order_payments SET tip = COALESCE(tip, 0) + $1 WHERE id = $2`,
+          [rounded, cashLegId]
+        );
+      }
+      await run('COMMIT');
+    } catch (e) {
+      await run('ROLLBACK');
+      throw e;
+    }
+
+    const updated = await get(
+      `SELECT id, order_number, total, tip FROM orders WHERE id = $1`,
+      [order_id]
+    );
+    res.json({
+      success: true,
+      order_id: updated.id,
+      order_number: updated.order_number,
+      tip_total: Number(updated.tip),
+      tip_added: rounded,
+    });
+  } catch (error) {
+    console.error('Error adjusting cash tip:', error);
+    res.status(500).json({ error: 'Failed to adjust cash tip' });
+  }
+});
+
 // POST /api/payments/split/start - register N pending splits on an order
 // Returns the order_payments rows the client must collect one-by-one.
 router.post('/split/start', paymentLimiter, requireAuth('pos_access'), async (req, res) => {
