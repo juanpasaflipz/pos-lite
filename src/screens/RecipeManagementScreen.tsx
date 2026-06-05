@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Calculator,
   ChefHat,
+  FileText,
   MinusCircle,
   Package,
   Plus,
@@ -14,6 +15,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import RecipeImporterModal from '../components/menu/RecipeImporterModal';
 import { createInventoryItem, deleteInventoryItem, deleteMenuItem, getInventory, getItemRecipe, getRecipeSummary, suggestInventoryAttrs, updateItemRecipe } from '../api';
 import type { InventoryItem, RecipeIngredient, RecipeSummaryItem } from '../types';
 import BrandLogo from '../components/BrandLogo';
@@ -67,6 +69,7 @@ export default function RecipeManagementScreen() {
   const [deletingMenuItemId, setDeletingMenuItemId] = useState<number | null>(null);
   const [manageIngredientsOpen, setManageIngredientsOpen] = useState(false);
   const [ingredientSearch, setIngredientSearch] = useState('');
+  const [importerOpen, setImporterOpen] = useState(false);
 
   useEffect(() => {
     void loadInitialData();
@@ -670,6 +673,14 @@ export default function RecipeManagementScreen() {
                       {t('recipe.newIngredient')}
                     </button>
                     <button
+                      onClick={() => setImporterOpen(true)}
+                      disabled={!selectedItemId}
+                      className="px-4 py-3 rounded-xl border border-amber-700 bg-amber-950/40 text-amber-200 hover:text-white hover:border-amber-500 disabled:opacity-50 transition-colors inline-flex items-center justify-center gap-2"
+                    >
+                      <FileText size={18} />
+                      {t('recipe.importText', { defaultValue: 'Import from text' })}
+                    </button>
+                    <button
                       onClick={() => { setIngredientSearch(''); setManageIngredientsOpen(true); }}
                       className="px-4 py-3 rounded-xl border border-neutral-700 bg-neutral-950 text-neutral-300 hover:text-white hover:border-brand-500 transition-colors inline-flex items-center justify-center gap-2"
                     >
@@ -857,6 +868,16 @@ export default function RecipeManagementScreen() {
             </div>
           </div>
         </div>
+      )}
+
+      {importerOpen && selectedItem && (
+        <RecipeImporterModal
+          menuItemId={selectedItem.id}
+          menuItemName={selectedItem.name}
+          inventory={inventoryItems}
+          onClose={() => setImporterOpen(false)}
+          onApplied={() => { void loadInitialData(); if (selectedItemId) void loadRecipe(selectedItemId); }}
+        />
       )}
 
       {manageIngredientsOpen && (

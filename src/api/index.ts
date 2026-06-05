@@ -1448,6 +1448,68 @@ export async function updateItemRecipe(
   });
 }
 
+/* ==================== Recipe Import Endpoints ==================== */
+
+export interface RecipeParseLine {
+  qty: number;
+  unit: string;
+  name: string;
+  raw: string;
+}
+
+export interface RecipeMatchedLine extends RecipeParseLine {
+  match: {
+    inventory_item_id: number;
+    name: string;
+    unit: string;
+    cost_price: number;
+    stock: number;
+    confidence: 'exact' | 'alias' | 'contains' | 'fuzzy' | 'none';
+    quantity_used: number;
+    unit_mismatch: boolean;
+    line_cost: number | null;
+  } | null;
+  candidates: { inventory_item_id: number; name: string; unit: string; score: number }[];
+  zombie_warning: { sibling_id: number; sibling_name: string } | null;
+}
+
+export interface RecipePreview {
+  menu_item: { id: number; name: string; price: number };
+  current: RecipeIngredient[];
+  matched: RecipeMatchedLine[];
+  summary: {
+    proposed_total_cost: number;
+    current_total_cost: number;
+    unmatched_count: number;
+    unit_mismatch_count: number;
+    zombie_warning_count: number;
+  };
+}
+
+export async function parseRecipeText(menuItemId: number, text: string): Promise<{ lines: RecipeParseLine[] }> {
+  return apiRequest(`/menu/items/${menuItemId}/recipe/parse`, {
+    method: 'POST',
+    body: JSON.stringify({ text }),
+  });
+}
+
+export async function previewRecipe(menuItemId: number, lines: RecipeParseLine[]): Promise<RecipePreview> {
+  return apiRequest(`/menu/items/${menuItemId}/recipe/preview`, {
+    method: 'POST',
+    body: JSON.stringify({ lines }),
+  });
+}
+
+export async function applyRecipe(
+  menuItemId: number,
+  ingredients: { inventory_item_id: number; quantity_used: number; alias?: string }[],
+): Promise<RecipeIngredient[]> {
+  return apiRequest(`/menu/items/${menuItemId}/recipe/apply`, {
+    method: 'POST',
+    body: JSON.stringify({ ingredients }),
+  });
+}
+
 /* ==================== Combo Endpoints ==================== */
 
 export async function getCombos(): Promise<ComboDefinition[]> {

@@ -6,6 +6,8 @@ import { requireAuth } from '../middleware/auth.js';
 import { requireOwner } from '../middleware/ownerAuth.js';
 import { checkLimit, planUpgradeError } from '../planLimits.js';
 import { audit } from '../lib/auditLog.js';
+import { parseRecipeText } from '../helpers/recipeParse.js';
+import { matchRecipeLines } from '../helpers/recipeMatch.js';
 // Template & AI parsing stubs (full AI removed in pos-lite)
 const TEMPLATE_LIST = [];
 const getTemplate = () => null;
@@ -511,6 +513,134 @@ router.put('/items/:id/recipe', requireAuth('manage_menu'), async (req, res) => 
   } catch (error) {
     console.error('Error updating recipe:', error);
     res.status(500).json({ error: 'Failed to update recipe' });
+  }
+});
+
+// ─── Recipe Import (paste-text → match → apply) ──────────────
+
+// POST /api/menu/items/:id/recipe/parse — text → structured ingredient lines
+router.post('/items/:id/recipe/parse', requireAuth('manage_menu'), async (req, res) => {
+  try {
+    const { text } = req.body || {};
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ error: 'text is required' });
+    }
+    const parsed = await parseRecipeText(text);
+    res.json(parsed);
+  } catch (error) {
+    console.error('Error parsing recipe:', error);
+    res.status(500).json({ error: error.message || 'Failed to parse recipe' });
+  }
+});
+
+// POST /api/menu/items/:id/recipe/preview — match parsed lines against inventory
+router.post('/items/:id/recipe/preview', requireAuth('manage_menu'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { lines } = req.body || {};
+    if (!Array.isArray(lines)) {
+      return res.status(400).json({ error: 'lines must be an array' });
+    }
+
+    const item = await get('SELECT id, name, price FROM menu_items WHERE id = $1', [id]);
+    if (!item) return res.status(404).json({ error: 'Menu item not found' });
+
+    const [inventory, aliases, current] = await Promise.all([
+      all(`SELECT id, name, unit, cost_price, quantity FROM inventory_items ORDER BY name ASC`),
+      all(`SELECT inventory_item_id, alias FROM inventory_aliases`),
+      all(`
+        SELECT mii.inventory_item_id, mii.quantity_used,
+               ii.name AS ingredient_name, ii.unit, ii.cost_price
+        FROM menu_item_ingredients mii
+        JOIN inventory_items ii ON ii.id = mii.inventory_item_id
+        WHERE mii.menu_item_id = $1
+      `, [id]),
+    ]);
+
+    const matched = matchRecipeLines(lines, inventory, aliases);
+    const proposed_total_cost = matched.reduce((s, l) => s + (l.match?.line_cost || 0), 0);
+    const current_total_cost = current.reduce(
+      (s, l) => s + Number(l.quantity_used) * Number(l.cost_price || 0), 0
+    );
+
+    res.json({
+      menu_item: { id: item.id, name: item.name, price: Number(item.price) || 0 },
+      current,
+      matched,
+      summary: {
+        proposed_total_cost: Number(proposed_total_cost.toFixed(2)),
+        current_total_cost: Number(current_total_cost.toFixed(2)),
+        unmatched_count: matched.filter((m) => !m.match).length,
+        unit_mismatch_count: matched.filter((m) => m.match?.unit_mismatch).length,
+        zombie_warning_count: matched.filter((m) => m.zombie_warning).length,
+      },
+    });
+  } catch (error) {
+    console.error('Error previewing recipe:', error);
+    res.status(500).json({ error: 'Failed to preview recipe' });
+  }
+});
+
+// POST /api/menu/items/:id/recipe/apply — write confirmed lines transactionally
+// Body: { ingredients: [{ inventory_item_id, quantity_used, alias? }] }
+//   alias (optional): the raw text the owner typed for this line; if present
+//   and not already an exact match, we persist it as an inventory_aliases row.
+router.post('/items/:id/recipe/apply', requireAuth('manage_menu'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { ingredients } = req.body || {};
+    if (!Array.isArray(ingredients)) {
+      return res.status(400).json({ error: 'ingredients must be an array' });
+    }
+
+    const item = await get('SELECT id FROM menu_items WHERE id = $1', [id]);
+    if (!item) return res.status(404).json({ error: 'Menu item not found' });
+
+    const tid = getTenantId();
+
+    await run('DELETE FROM menu_item_ingredients WHERE menu_item_id = $1', [id]);
+
+    for (const ing of ingredients) {
+      const invId = Number(ing.inventory_item_id);
+      const qty = Number(ing.quantity_used);
+      if (!invId || !(qty > 0)) continue;
+      await run(`
+        INSERT INTO menu_item_ingredients (tenant_id, menu_item_id, inventory_item_id, quantity_used)
+        VALUES ($1, $2, $3, $4)
+      `, [tid, id, invId, qty]);
+
+      const alias = typeof ing.alias === 'string' ? ing.alias.trim() : '';
+      if (alias) {
+        await run(`
+          INSERT INTO inventory_aliases (tenant_id, inventory_item_id, alias)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (tenant_id, alias) DO NOTHING
+        `, [tid, invId, alias]);
+      }
+    }
+
+    audit({
+      tenantId: req.tenant?.id || 'default',
+      actorType: 'employee',
+      actorId: req.headers['x-employee-id'] || 'unknown',
+      action: 'import',
+      resource: 'menu_item_recipe',
+      resourceId: String(id),
+      ip: req.ip,
+    });
+
+    const updated = await all(`
+      SELECT mii.inventory_item_id, mii.quantity_used,
+             ii.name AS ingredient_name, ii.unit, ii.cost_price
+      FROM menu_item_ingredients mii
+      JOIN inventory_items ii ON mii.inventory_item_id = ii.id
+      WHERE mii.menu_item_id = $1
+      ORDER BY ii.name ASC
+    `, [id]);
+    res.json(updated);
+  } catch (error) {
+    console.error('Error applying recipe:', error);
+    res.status(500).json({ error: 'Failed to apply recipe' });
   }
 });
 
