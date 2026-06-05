@@ -113,6 +113,11 @@
     "required": "This field is required",
     "invalidPin": "Invalid PIN"
   },
+  "idleLogout": {
+    "title": "Still there?",
+    "message": "You'll be logged out in {{seconds}} seconds due to inactivity.",
+    "stayLoggedIn": "I'm still here"
+  },
   "currency": {
     "subtotalBeforeTax": "Subtotal (before tax)",
     "taxIncluded": "IVA (16%) included",

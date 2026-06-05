@@ -113,6 +113,11 @@
     "required": "Este campo es obligatorio",
     "invalidPin": "PIN inválido"
   },
+  "idleLogout": {
+    "title": "¿Sigues aquí?",
+    "message": "Cerrarás sesión en {{seconds}} segundos por inactividad.",
+    "stayLoggedIn": "Sigo aquí"
+  },
   "currency": {
     "subtotalBeforeTax": "Subtotal (sin IVA)",
     "taxIncluded": "IVA (16%) incluido",

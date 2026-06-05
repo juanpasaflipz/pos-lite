@@ -16,6 +16,7 @@ import { resolveTenant, type TenantInfo } from './lib/tenantResolver';
 import { useDeviceType } from './hooks/useDeviceType';
 import { MobileCartProvider } from './context/MobileCartContext';
 import ErrorBoundary from './components/ErrorBoundary';
+import IdleLogoutGuard from './components/IdleLogoutGuard';
 import { getDeviceToken } from './api';
 
 // ==================== Lazy-loaded Screens (Lean POS) ====================
@@ -302,6 +303,7 @@ const AppContent: React.FC = () => {
             <TenantRoutes />
           </React.Suspense>
         </ErrorBoundary>
+        <IdleLogoutGuard />
         <AgentFAB />
       </Router>
     </TenantContext.Provider>
