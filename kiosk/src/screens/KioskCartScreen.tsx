@@ -75,16 +75,42 @@ const KioskCartScreen: React.FC = () => {
       // used to park as draft_kiosk for the cashier to claim, but that
       // left the kitchen idle while the customer walked to the register.
       const order = await sendKioskOrderToKitchen({ tenantId, kioskToken }, apiItems, opts);
-      navigate('/hold-confirmed', {
-        replace: true,
-        state: {
-          mode: 'kitchen',
-          orderId: order.id,
-          orderNumber: order.order_number,
-          total: order.total,
-          firstName: session?.firstName || resolvedCallName || undefined,
-        },
-      });
+      const firstName = session?.firstName || resolvedCallName || undefined;
+
+      if (isDineIn) {
+        // Para Aquí: let the customer choose pay-now vs save-tab. Cart stays
+        // intact so the choice screen can synthesize a receipt for pay-existing.
+        navigate('/post-order-choice', {
+          replace: true,
+          state: { order, firstName },
+        });
+        return;
+      }
+
+      // Para Llevar: pay-now is the default — customer is leaving with food.
+      // Build a KioskOpenOrder shape so KioskPayExistingScreen can render the
+      // receipt without a re-fetch.
+      const openOrder = {
+        id: order.id,
+        order_number: order.order_number,
+        subtotal: order.subtotal,
+        tax: order.tax,
+        total: order.total,
+        status: order.status,
+        payment_status: order.payment_status,
+        customer_call_name: order.customer_call_name,
+        order_fulfillment_type: order.order_fulfillment_type,
+        created_at: new Date().toISOString(),
+        items: lines.map((line, idx) => ({
+          order_item_id: idx + 1,
+          menu_item_id: line.menu_item_id,
+          item_name: line.name,
+          quantity: line.quantity,
+          unit_price: line.price,
+          modifiers: line.modifiers,
+        })),
+      };
+      navigate('/pay-existing', { replace: true, state: { order: openOrder } });
     } catch (err) {
       setHoldError(
         err instanceof Error

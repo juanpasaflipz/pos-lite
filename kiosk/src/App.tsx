@@ -15,6 +15,7 @@ import KioskLookupScreen from './screens/KioskLookupScreen';
 import KioskMenuScreen from './screens/KioskMenuScreen';
 import KioskCartScreen from './screens/KioskCartScreen';
 import KioskPayExistingScreen from './screens/KioskPayExistingScreen';
+import KioskPostOrderChoiceScreen from './screens/KioskPostOrderChoiceScreen';
 import KioskHoldConfirmationScreen from './screens/KioskHoldConfirmationScreen';
 
 const Routed: React.FC = () => {
@@ -42,6 +43,7 @@ const Routed: React.FC = () => {
       <Route path="/pagar" element={<KioskLookupScreen mode="pay" />} />
       <Route path="/agregar" element={<KioskLookupScreen mode="agregar" />} />
       <Route path="/pay-existing" element={<KioskPayExistingScreen />} />
+      <Route path="/post-order-choice" element={<KioskPostOrderChoiceScreen />} />
       <Route path="/hold-confirmed" element={<KioskHoldConfirmationScreen />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
