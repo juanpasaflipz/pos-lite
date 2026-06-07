@@ -840,6 +840,7 @@ router.get('/scheduled', requireAuth(), async (req, res) => {
              actual.id AS shift_id,
              actual.clock_in_at AS actual_clock_in_at,
              actual.clock_out_at AS actual_clock_out_at,
+             (actual.id IS NOT NULL AND actual.scheduled_shift_id IS NULL) AS actual_match_is_day_fallback,
              CASE
                WHEN actual.clock_out_at IS NOT NULL
                  THEN EXTRACT(EPOCH FROM (actual.clock_out_at - actual.clock_in_at))::INTEGER
@@ -847,7 +848,21 @@ router.get('/scheduled', requireAuth(), async (req, res) => {
              END AS actual_duration_seconds
       FROM scheduled_shifts ss
       JOIN employees e ON e.id = ss.employee_id
-      LEFT JOIN shifts actual ON actual.scheduled_shift_id = ss.id
+      LEFT JOIN LATERAL (
+        SELECT s.id, s.clock_in_at, s.clock_out_at, s.scheduled_shift_id
+          FROM shifts s
+         WHERE s.employee_id = ss.employee_id
+           AND (
+             s.scheduled_shift_id = ss.id
+             OR (
+               s.scheduled_shift_id IS NULL
+               AND s.clock_in_at::date = ss.starts_at::date
+             )
+           )
+         ORDER BY (s.scheduled_shift_id = ss.id) DESC,
+                  ABS(EXTRACT(EPOCH FROM (s.clock_in_at - ss.starts_at)))
+         LIMIT 1
+      ) actual ON TRUE
       WHERE ${where}
       ORDER BY ss.starts_at ASC
     `, params);

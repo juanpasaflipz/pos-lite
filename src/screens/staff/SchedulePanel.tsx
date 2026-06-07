@@ -134,9 +134,17 @@ export default function SchedulePanel() {
   }, [shifts]);
 
   const totalsByEmployee = useMemo(() => {
-    const map = new Map<number, number>();
+    const map = new Map<number, { scheduled: number; worked: number; hasWorked: boolean }>();
     for (const s of shifts) {
-      map.set(s.employee_id, (map.get(s.employee_id) || 0) + (s.scheduled_seconds || 0));
+      const cur = map.get(s.employee_id) || { scheduled: 0, worked: 0, hasWorked: false };
+      cur.scheduled += s.scheduled_seconds || 0;
+      if (s.actual_duration_seconds != null) {
+        cur.worked += s.actual_duration_seconds;
+        cur.hasWorked = true;
+      } else if (s.shift_id) {
+        cur.hasWorked = true;
+      }
+      map.set(s.employee_id, cur);
     }
     return map;
   }, [shifts]);
@@ -267,7 +275,7 @@ export default function SchedulePanel() {
             </thead>
             <tbody>
               {employees.map(emp => {
-                const total = totalsByEmployee.get(emp.id) || 0;
+                const totals = totalsByEmployee.get(emp.id) || { scheduled: 0, worked: 0, hasWorked: false };
                 return (
                   <tr key={emp.id} className="border-t border-neutral-800 align-top">
                     <td className="px-4 py-3 sticky left-0 bg-neutral-900 z-10">
@@ -282,21 +290,36 @@ export default function SchedulePanel() {
                       return (
                         <td key={day.toISOString()} className="px-2 py-2 border-l border-neutral-800/60">
                           <div className="flex flex-col gap-1.5">
-                            {cellShifts.map(s => (
-                              <button
-                                key={s.id}
-                                onClick={() => openEdit(s)}
-                                className="text-left px-2 py-1.5 rounded-md border border-cockpit-blue/60 bg-cockpit-blue/20 hover:bg-cockpit-blue/30 transition-colors"
-                              >
-                                <div className="text-cockpit-system-text text-xs font-semibold tabular-nums">
-                                  {fmtTime(s.starts_at)} – {fmtTime(s.ends_at)}
-                                </div>
-                                <div className="text-neutral-400 text-[11px]">
-                                  {fmtDuration(s.scheduled_seconds)}
-                                  {s.shift_id && <span className="ml-1 text-cockpit-in-text">· worked</span>}
-                                </div>
-                              </button>
-                            ))}
+                            {cellShifts.map(s => {
+                              const worked = s.actual_duration_seconds;
+                              const openShift = s.shift_id != null && worked == null;
+                              return (
+                                <button
+                                  key={s.id}
+                                  onClick={() => openEdit(s)}
+                                  className="text-left px-2 py-1.5 rounded-md border border-cockpit-blue/60 bg-cockpit-blue/20 hover:bg-cockpit-blue/30 transition-colors"
+                                >
+                                  <div className="text-cockpit-system-text text-xs font-semibold tabular-nums">
+                                    {fmtTime(s.starts_at)} – {fmtTime(s.ends_at)}
+                                  </div>
+                                  {worked != null ? (
+                                    <div className="text-[11px] tabular-nums">
+                                      <span className="text-cockpit-in-text font-semibold">{fmtDuration(worked)} worked</span>
+                                      <span className="text-neutral-500"> · plan {fmtDuration(s.scheduled_seconds)}</span>
+                                    </div>
+                                  ) : openShift ? (
+                                    <div className="text-[11px] tabular-nums">
+                                      <span className="text-cockpit-in-text font-semibold">on shift</span>
+                                      <span className="text-neutral-500"> · plan {fmtDuration(s.scheduled_seconds)}</span>
+                                    </div>
+                                  ) : (
+                                    <div className="text-neutral-400 text-[11px] tabular-nums">
+                                      {fmtDuration(s.scheduled_seconds)}
+                                    </div>
+                                  )}
+                                </button>
+                              );
+                            })}
                             <button
                               onClick={() => openAdd(emp.id, day)}
                               className="flex items-center justify-center gap-1 px-2 py-1 rounded-md border border-dashed border-neutral-700 text-neutral-500 hover:text-neutral-300 hover:border-neutral-500 text-xs min-h-[32px]"
@@ -308,7 +331,12 @@ export default function SchedulePanel() {
                       );
                     })}
                     <td className="px-4 py-3 text-right text-white font-semibold tabular-nums">
-                      {fmtDuration(total)}
+                      <div>{fmtDuration(totals.scheduled)}</div>
+                      {totals.hasWorked && (
+                        <div className="text-[11px] font-normal text-cockpit-in-text">
+                          {fmtDuration(totals.worked)} worked
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right text-neutral-200 tabular-nums">
                       {forecastByEmployee.has(emp.id) ? moneyMXN(forecastByEmployee.get(emp.id) || 0) : '—'}

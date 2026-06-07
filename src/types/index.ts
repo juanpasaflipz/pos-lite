@@ -1622,6 +1622,7 @@ export interface ScheduledShiftRow {
   actual_clock_in_at: string | null;
   actual_clock_out_at: string | null;
   actual_duration_seconds: number | null;
+  actual_match_is_day_fallback: boolean;
 }
 
 export interface ApiResponse<T> {
