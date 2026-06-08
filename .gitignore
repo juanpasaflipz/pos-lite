@@ -16,6 +16,9 @@ dist-kiosk/
 *.heic
 Screenshot *.png
 
+# Local scratch space — menu photo drops, scratch work, etc.
+scratch/
+
 # Capacitor / Android build artifacts
 android/.gradle/
 android/build/
