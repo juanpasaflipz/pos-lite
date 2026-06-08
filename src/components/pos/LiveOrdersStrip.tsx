@@ -145,7 +145,7 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, onRefund, refresh
   useEffect(() => {
     setLoading(true);
     fetchOrders();
-    pollRef.current = setInterval(fetchOrders, 8_000);
+    pollRef.current = setInterval(fetchOrders, 2_000);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };

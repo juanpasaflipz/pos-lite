@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 import { initDb, adminSql, shutdown as shutdownDb } from './db/index.js';
 import { initMigrations, runMigrations } from './db/migrate.js';
 import { tenantMiddleware } from './middleware/tenant.js';
+import { startAutoCompleteSweep, stopAutoCompleteSweep } from './lib/autoCompleteReadyOrders.js';
 
 // ==================== Route Imports (Lean POS) ====================
 
@@ -310,6 +311,8 @@ async function gracefulShutdown(signal) {
     server.close(() => console.log('[Shutdown] HTTP server closed'));
   }
 
+  stopAutoCompleteSweep();
+
   await shutdownDb();
   console.log('[Shutdown] Database pools closed');
   process.exit(0);
@@ -338,6 +341,8 @@ process.on('SIGINT', () => shutdownWithTimeout('SIGINT'));
     server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`POS Lite server running on port ${PORT}`);
     });
+
+    startAutoCompleteSweep();
   } catch (error) {
     console.error('Failed to initialize:', error);
     process.exit(1);
