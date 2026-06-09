@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Minus, Plus, Store, Trash2, Utensils } from 'lucide-react';
+import { ArrowLeft, Minus, Plus, Store, Trash2, Truck, Utensils } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useKioskBinding } from '../context/KioskBindingContext';
 import { useKioskCart } from '../context/KioskCartContext';
 import { useKioskCustomer } from '../context/KioskCustomerContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
-import { appendItemsToKioskOrder, sendKioskOrderToKitchen } from '../lib/kioskApi';
+import {
+  appendItemsToKioskOrder,
+  sendKioskDeliveryOrder,
+  sendKioskOrderToKitchen,
+} from '../lib/kioskApi';
 import CartUpsellStrip from '../components/CartUpsellStrip';
 import KioskCallNameModal from '../components/KioskCallNameModal';
 
@@ -15,21 +19,24 @@ const KioskCartScreen: React.FC = () => {
   const navigate = useNavigate();
   const { tenantId, kioskToken } = useKioskBinding();
   const { session } = useKioskCustomer();
-  const { lines, count, total, callName, fulfillmentType, appendToOrderId, incrementLine, decrementLine, removeLine, setCallName } = useKioskCart();
+  const { lines, count, total, callName, fulfillmentType, appendToOrderId, delivery, incrementLine, decrementLine, removeLine, setCallName } = useKioskCart();
   const [holding, setHolding] = useState(false);
   const [holdError, setHoldError] = useState<string | null>(null);
   const [askingName, setAskingName] = useState(false);
   useIdleTimer(() => navigate('/'), 60_000);
 
-  // Three submit modes:
-  //   - Append:  customer entered via "Agregar a mi orden", appendToOrderId set.
-  //              We POST items into the existing dine-in order.
-  //   - Otherwise: Para Aquí AND Para Llevar both fire to the kitchen
-  //                immediately (status='active', payment_status='unpaid'),
-  //                so the line can start cooking before the customer reaches
-  //                the register. Customer pays later via "Pagar mi cuenta".
+  // Four submit modes:
+  //   - Append:    customer entered via "Agregar a mi orden", appendToOrderId
+  //                set. We POST items into the existing dine-in order.
+  //   - Delivery:  customer chose "A domicilio" — a draft was captured on the
+  //                address screen. Submit creates the order AND dispatches an
+  //                Uber Direct courier in one server call.
+  //   - Para Aquí: fire to kitchen (active/unpaid). Pay later.
+  //   - Para Llevar: fire to kitchen (active/unpaid). Pay-now is the default
+  //                  on the next screen.
   const isAppend = appendToOrderId != null;
   const isDineIn = fulfillmentType === 'for_here';
+  const isDelivery = fulfillmentType === 'delivery';
 
   const submitOrder = async (resolvedCallName: string | null) => {
     if (!tenantId || !kioskToken || lines.length === 0 || holding) return;
@@ -62,6 +69,51 @@ const KioskCartScreen: React.FC = () => {
             addedCount: lines.reduce((sum, l) => sum + l.quantity, 0),
             firstName: session?.firstName || resolvedCallName || undefined,
           },
+        });
+        return;
+      }
+
+      if (isDelivery) {
+        if (!delivery) {
+          setHoldError('Faltan los datos de envío. Regresa a "A domicilio".');
+          setHolding(false);
+          return;
+        }
+        const result = await sendKioskDeliveryOrder({ tenantId, kioskToken }, apiItems, {
+          customerToken: session?.customerToken ?? null,
+          customerCallName: resolvedCallName || delivery.recipientName,
+          dropoffAddress: delivery.address,
+          dropoffPhoneNumber: delivery.phone,
+          dropoffName: delivery.recipientName,
+          dropoffNotes: delivery.notes,
+          quoteId: delivery.quoteId,
+        });
+        // For now, route through the same pay-now screen as Para Llevar so the
+        // customer can pay at the kiosk terminal. The courier is already
+        // dispatched server-side; tracking_url is on result.delivery.
+        const openOrder = {
+          id: result.id,
+          order_number: result.order_number,
+          subtotal: result.subtotal,
+          tax: result.tax,
+          total: result.total,
+          status: result.status,
+          payment_status: result.payment_status,
+          customer_call_name: result.customer_call_name,
+          order_fulfillment_type: result.order_fulfillment_type,
+          created_at: new Date().toISOString(),
+          items: lines.map((line, idx) => ({
+            order_item_id: idx + 1,
+            menu_item_id: line.menu_item_id,
+            item_name: line.name,
+            quantity: line.quantity,
+            unit_price: line.price,
+            modifiers: line.modifiers,
+          })),
+        };
+        navigate('/pay-existing', {
+          replace: true,
+          state: { order: openOrder, delivery: result.delivery, deliveryError: result.delivery_error },
         });
         return;
       }
@@ -125,10 +177,14 @@ const KioskCartScreen: React.FC = () => {
 
   const handlePrimary = () => {
     if (count === 0 || holding) return;
-    // Append mode: we already know who the customer is (lookup set callName /
-    // session). Skip the name prompt entirely.
     if (isAppend) {
       submitOrder(callName);
+      return;
+    }
+    // Delivery captured the recipient name on the address screen — skip the
+    // call-name modal entirely.
+    if (isDelivery) {
+      submitOrder(callName || delivery?.recipientName || null);
       return;
     }
     if (session) {
@@ -223,25 +279,37 @@ const KioskCartScreen: React.FC = () => {
         {holdError && (
           <p className="text-cockpit-out-text text-base font-bold text-center">{holdError}</p>
         )}
+        {isDelivery && delivery && (
+          <div className="rounded-lg bg-cockpit-green/15 border border-cockpit-green/40 px-4 py-3 grid grid-cols-[auto_1fr_auto] items-center gap-3">
+            <Truck className="h-6 w-6 text-cockpit-in-text" />
+            <div className="min-w-0">
+              <p className="text-sm text-neutral-400 font-bold uppercase">Envío a domicilio</p>
+              <p className="text-base font-bold truncate">{delivery.address}</p>
+            </div>
+            <p className="text-xl font-black text-cockpit-in-text">{money.format(delivery.quoteFee || 0)}</p>
+          </div>
+        )}
         <button
           disabled={count === 0 || holding}
           onClick={handlePrimary}
           className="w-full min-h-20 bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-500 rounded-lg py-4 px-6 text-3xl font-black touch-manipulation flex items-center justify-between gap-4"
         >
           <span className="inline-flex items-center gap-3">
-            {isAppend ? <Utensils className="h-7 w-7" /> : isDineIn ? <Utensils className="h-7 w-7" /> : <Store className="h-7 w-7" />}
+            {isAppend ? <Utensils className="h-7 w-7" /> : isDelivery ? <Truck className="h-7 w-7" /> : isDineIn ? <Utensils className="h-7 w-7" /> : <Store className="h-7 w-7" />}
             {holding
-              ? (isAppend ? 'Agregando…' : 'Enviando a la cocina…')
-              : (isAppend ? 'Agregar a mi cuenta' : 'Enviar a la cocina')}
+              ? (isAppend ? 'Agregando…' : isDelivery ? 'Pidiendo repartidor…' : 'Enviando a la cocina…')
+              : (isAppend ? 'Agregar a mi cuenta' : isDelivery ? 'Pedir y pagar' : 'Enviar a la cocina')}
           </span>
-          <span>{money.format(total)}</span>
+          <span>{money.format(total + (isDelivery ? (delivery?.quoteFee || 0) : 0))}</span>
         </button>
         <p className="text-center text-sm text-neutral-500 font-bold">
           {isAppend
             ? 'Lo sumamos a tu cuenta abierta y a tu próximo cobro.'
-            : isDineIn
-              ? 'Te llamamos por tu nombre cuando esté lista. Pagas al final.'
-              : 'Te llamamos por tu nombre cuando esté lista. Pagas al recogerla.'}
+            : isDelivery
+              ? 'Cobramos en la terminal. Llega un repartidor de Uber con tu pedido.'
+              : isDineIn
+                ? 'Te llamamos por tu nombre cuando esté lista. Pagas al final.'
+                : 'Te llamamos por tu nombre cuando esté lista. Pagas al recogerla.'}
         </p>
       </footer>
 

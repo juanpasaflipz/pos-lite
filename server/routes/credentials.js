@@ -103,6 +103,9 @@ const SERVICE_SCHEMA = {
       { key: 'client_id', label: 'Client ID', secret: false },
       { key: 'client_secret', label: 'Client Secret', secret: true },
       { key: 'webhook_signing_key', label: 'Webhook Signing Key', secret: true },
+      { key: 'pickup_name', label: 'Pickup Name (Restaurant)', secret: false },
+      { key: 'pickup_address', label: 'Pickup Address', secret: false },
+      { key: 'pickup_phone_number', label: 'Pickup Phone (E.164)', secret: false },
     ],
   },
 };

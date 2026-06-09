@@ -11,6 +11,7 @@ import KioskWelcomeScreen from './screens/KioskWelcomeScreen';
 import KioskHomeScreen from './screens/KioskHomeScreen';
 import KioskIdentifyScreen from './screens/KioskIdentifyScreen';
 import KioskFulfillmentScreen from './screens/KioskFulfillmentScreen';
+import KioskDeliveryAddressScreen from './screens/KioskDeliveryAddressScreen';
 import KioskLookupScreen from './screens/KioskLookupScreen';
 import KioskMenuScreen from './screens/KioskMenuScreen';
 import KioskCartScreen from './screens/KioskCartScreen';
@@ -36,6 +37,7 @@ const Routed: React.FC = () => {
       <Route path="/" element={<AttractScreen />} />
       <Route path="/home" element={<KioskHomeScreen />} />
       <Route path="/fulfillment" element={<KioskFulfillmentScreen />} />
+      <Route path="/delivery-address" element={<KioskDeliveryAddressScreen />} />
       <Route path="/welcome" element={<KioskWelcomeScreen />} />
       <Route path="/identify" element={<KioskIdentifyScreen />} />
       <Route path="/menu" element={<KioskMenuScreen />} />

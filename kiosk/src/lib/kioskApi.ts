@@ -68,7 +68,7 @@ function authHeaders({ tenantId, kioskToken }: AuthHeaders): HeadersInit {
   };
 }
 
-export type KioskFulfillmentType = 'for_here' | 'to_go';
+export type KioskFulfillmentType = 'for_here' | 'to_go' | 'delivery';
 
 export interface KioskMenuItem {
   id: number;
@@ -203,6 +203,79 @@ export async function sendKioskOrderToKitchen(
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `Send to kitchen failed (${res.status})`);
+  }
+  return res.json();
+}
+
+/* ==================== Uber Direct (delivery) ==================== */
+
+export interface KioskDeliveryQuote {
+  quote_id: string;
+  fee: number;
+  currency: string;
+  duration_min: number;
+  dropoff_eta: string | null;
+  expires: string | null;
+}
+
+export async function quoteKioskDelivery(
+  auth: AuthHeaders,
+  body: { dropoff_address: string; dropoff_phone_number: string; manifest_total_value?: number },
+): Promise<KioskDeliveryQuote> {
+  const res = await fetch(`${API_BASE}/api/kiosk/delivery/quote`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Quote failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export interface KioskDeliveryResponse extends KioskSendToKitchenResponse {
+  delivery: {
+    delivery_order_id: number;
+    external_id: string;
+    tracking_url: string | null;
+    status: string;
+    fee: number;
+    dropoff_eta: string | null;
+  } | null;
+  delivery_error: string | null;
+}
+
+export async function sendKioskDeliveryOrder(
+  auth: AuthHeaders,
+  items: CreateKioskOrderLine[],
+  opts: {
+    customerToken?: string | null;
+    customerCallName?: string | null;
+    dropoffAddress: string;
+    dropoffPhoneNumber: string;
+    dropoffName?: string | null;
+    dropoffNotes?: string | null;
+    quoteId?: string | null;
+  },
+): Promise<KioskDeliveryResponse> {
+  const res = await fetch(`${API_BASE}/api/kiosk/orders/send-to-delivery`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({
+      items,
+      customer_token: opts.customerToken || undefined,
+      customer_call_name: opts.customerCallName || undefined,
+      dropoff_address: opts.dropoffAddress,
+      dropoff_phone_number: opts.dropoffPhoneNumber,
+      dropoff_name: opts.dropoffName || undefined,
+      dropoff_notes: opts.dropoffNotes || undefined,
+      quote_id: opts.quoteId || undefined,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Delivery order failed (${res.status})`);
   }
   return res.json();
 }

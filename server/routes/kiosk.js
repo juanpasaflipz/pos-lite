@@ -30,12 +30,19 @@ import {
   mapPointOrderStatus,
 } from '../services/mercadopago.js';
 import { recordMpTerminalPayment, findActiveTerminalLock } from './payments.js';
+import {
+  createQuote as uberDirectCreateQuote,
+  createDelivery as uberDirectCreateDelivery,
+} from '../services/uber-direct.js';
+import { getServiceCredentials } from '../helpers/tenantCredentials.js';
 
 const router = Router();
 const TAX_RATE = 0.16;
 
 function normalizeKioskFulfillmentType(value) {
-  return value === 'for_here' || value === 'to_go' ? value : 'to_go';
+  return value === 'for_here' || value === 'to_go' || value === 'delivery'
+    ? value
+    : 'to_go';
 }
 
 const bindLimiter = rateLimit({
@@ -875,6 +882,219 @@ router.post('/orders/send-to-kitchen', verifyKioskToken, async (req, res) => {
   } catch (err) {
     console.error('[kiosk/orders/send-to-kitchen] error', err);
     res.status(500).json({ error: 'Failed to send order to kitchen' });
+  }
+});
+
+// ==================== Uber Direct (kiosk-scoped wrappers) ====================
+// The /api/uber-direct/* routes require an employee JWT. The kiosk only has a
+// kiosk_token, so these thin wrappers let the kiosk request a quote and book
+// a courier without leaking employee auth into the customer surface.
+
+// POST /api/kiosk/delivery/quote
+// Body: { dropoff_address, dropoff_phone_number, manifest_total_value? }
+// Returns Uber Direct quote { id, fee, currency, duration, dropoff_eta, expires }
+router.post('/delivery/quote', verifyKioskToken, async (req, res) => {
+  const tenantId = req.kioskTenantId;
+  try {
+    const { dropoff_address, dropoff_phone_number, manifest_total_value } = req.body || {};
+    if (!dropoff_address || !dropoff_phone_number) {
+      return res.status(400).json({ error: 'dropoff_address and dropoff_phone_number required' });
+    }
+
+    const creds = await getServiceCredentials(tenantId, 'uber_direct', {
+      pickup_address: '',
+      pickup_phone_number: '',
+    });
+    if (!creds.pickup_address || !creds.pickup_phone_number) {
+      return res.status(400).json({ error: 'Restaurant pickup address/phone not configured in Uber Direct credentials' });
+    }
+
+    const quote = await uberDirectCreateQuote(tenantId, {
+      pickup_address: creds.pickup_address,
+      pickup_phone_number: creds.pickup_phone_number,
+      dropoff_address,
+      dropoff_phone_number,
+      manifest_total_value: Math.round(Number(manifest_total_value || 0) * 100),
+    });
+
+    res.json({
+      quote_id: quote.id,
+      fee: (quote.fee || 0) / 100,
+      currency: quote.currency_type || quote.currency || 'MXN',
+      duration_min: Math.round((quote.duration || 0)),
+      dropoff_eta: quote.dropoff_eta,
+      expires: quote.expires,
+    });
+  } catch (err) {
+    console.error('[kiosk/delivery/quote] error', err.message);
+    res.status(err.status || 500).json({
+      error: err.data?.message || err.message || 'Failed to create quote',
+    });
+  }
+});
+
+// POST /api/kiosk/orders/send-to-delivery
+// Body: { items, customer_token?, customer_call_name, dropoff_address,
+//         dropoff_phone_number, dropoff_name?, dropoff_notes?, quote_id? }
+// Creates an internal order, then dispatches an Uber courier. Returns both.
+router.post('/orders/send-to-delivery', verifyKioskToken, async (req, res) => {
+  const tenantId = req.kioskTenantId;
+  try {
+    const {
+      items,
+      customer_token,
+      customer_call_name,
+      dropoff_address,
+      dropoff_phone_number,
+      dropoff_name,
+      dropoff_notes,
+      quote_id,
+    } = req.body || {};
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Cart is empty' });
+    }
+    if (!dropoff_address || !dropoff_phone_number) {
+      return res.status(400).json({ error: 'dropoff_address and dropoff_phone_number required' });
+    }
+
+    const loyaltyCustomerId = verifyCustomerToken(customer_token, tenantId);
+    const callName = loyaltyCustomerId
+      ? (dropoff_name?.slice(0, 40) || null)
+      : (typeof customer_call_name === 'string'
+          ? customer_call_name.trim().slice(0, 40) || null
+          : (dropoff_name?.slice(0, 40) || null));
+
+    if (!loyaltyCustomerId && !callName) {
+      return res.status(400).json({ error: 'Customer name required for delivery' });
+    }
+
+    const creds = await getServiceCredentials(tenantId, 'uber_direct', {
+      pickup_name: '',
+      pickup_address: '',
+      pickup_phone_number: '',
+    });
+    if (!creds.pickup_address || !creds.pickup_phone_number || !creds.pickup_name) {
+      return res.status(400).json({ error: 'Restaurant pickup details not configured' });
+    }
+
+    const employeeId = await resolveKioskEmployee(tenantId, req.kiosk);
+    if (!employeeId) {
+      return res.status(400).json({ error: 'No active employee available for kiosk orders' });
+    }
+
+    let orderItems, total;
+    try {
+      ({ orderItems, total } = await buildKioskOrderItems(tenantId, items));
+    } catch (err) {
+      return res.status(err.status || 500).json({ error: err.message });
+    }
+
+    const tax = Math.round((total - total / (1 + TAX_RATE)) * 100) / 100;
+    const subtotal = Math.round((total - tax) * 100) / 100;
+    const orderNumber = await nextOrderNumber(tenantId);
+
+    const [order] = await adminSql`
+      INSERT INTO orders (
+        tenant_id, order_number, employee_id, status, subtotal, tax, total,
+        payment_status, source, loyalty_customer_id, customer_call_name, order_fulfillment_type
+      )
+      VALUES (
+        ${tenantId}, ${orderNumber}, ${employeeId}, 'active', ${subtotal}, ${tax}, ${total},
+        'unpaid', 'customer_kiosk', ${loyaltyCustomerId}, ${callName}, 'delivery'
+      )
+      RETURNING id, order_number, subtotal, tax, total, status, payment_status, customer_call_name, order_fulfillment_type
+    `;
+
+    await insertKioskOrderItems(tenantId, order.id, orderItems);
+
+    // Build the manifest from cart items so Uber's courier app shows what's
+    // being picked up.
+    const manifestItems = orderItems.map((item) => ({
+      name: item.item_name,
+      quantity: item.quantity,
+      price: Math.round((item.unit_price || 0) * 100),
+    }));
+
+    let delivery = null;
+    let deliveryError = null;
+    try {
+      delivery = await uberDirectCreateDelivery(tenantId, {
+        quote_id: quote_id || undefined,
+        pickup_name: creds.pickup_name,
+        pickup_address: creds.pickup_address,
+        pickup_phone_number: creds.pickup_phone_number,
+        dropoff_name: callName || 'Customer',
+        dropoff_address,
+        dropoff_phone_number,
+        dropoff_notes: dropoff_notes || undefined,
+        manifest_items: manifestItems,
+        manifest_total_value: Math.round(total * 100),
+        external_id: String(order.id),
+      });
+    } catch (err) {
+      deliveryError = err.data?.message || err.message || 'Failed to dispatch courier';
+      console.error('[kiosk/orders/send-to-delivery] dispatch failed:', deliveryError);
+    }
+
+    // Always create the delivery_orders row — even on dispatch failure so the
+    // order is visible in the Delivery screen and an operator can retry.
+    const [platform] = await adminSql`
+      SELECT id FROM delivery_platforms WHERE tenant_id = ${tenantId} AND name = 'uber_direct'
+    `;
+    let platformId = platform?.id;
+    if (!platformId) {
+      const [created] = await adminSql`
+        INSERT INTO delivery_platforms (tenant_id, name, display_name, commission_percent, active)
+        VALUES (${tenantId}, 'uber_direct', 'Uber Direct', 0, true)
+        RETURNING id
+      `;
+      platformId = created.id;
+    }
+
+    const [deliveryRow] = await adminSql`
+      INSERT INTO delivery_orders (
+        tenant_id, order_id, platform_id, external_order_id, platform_status,
+        delivery_fee, customer_name, delivery_address, tracking_url,
+        courier_name, courier_phone, courier_vehicle, raw_webhook_data
+      ) VALUES (
+        ${tenantId}, ${order.id}, ${platformId},
+        ${delivery?.id || null},
+        ${delivery?.status || (deliveryError ? 'dispatch_failed' : 'pending')},
+        ${(delivery?.fee || 0) / 100},
+        ${callName},
+        ${dropoff_address},
+        ${delivery?.tracking_url || null},
+        ${delivery?.courier?.name || null},
+        ${delivery?.courier?.phone_number || null},
+        ${delivery?.courier?.vehicle_type || null},
+        ${delivery ? JSON.stringify(delivery) : null}
+      )
+      RETURNING id
+    `;
+
+    await adminSql`
+      UPDATE orders SET delivery_order_id = ${deliveryRow.id} WHERE id = ${order.id}
+    `;
+
+    res.status(201).json({
+      ...order,
+      items: orderItems,
+      delivery: delivery
+        ? {
+            delivery_order_id: deliveryRow.id,
+            external_id: delivery.id,
+            tracking_url: delivery.tracking_url,
+            status: delivery.status,
+            fee: (delivery.fee || 0) / 100,
+            dropoff_eta: delivery.dropoff_eta,
+          }
+        : null,
+      delivery_error: deliveryError,
+    });
+  } catch (err) {
+    console.error('[kiosk/orders/send-to-delivery] error', err);
+    res.status(500).json({ error: 'Failed to create delivery order' });
   }
 });
 
