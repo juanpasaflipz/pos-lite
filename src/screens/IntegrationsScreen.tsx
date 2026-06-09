@@ -18,13 +18,14 @@ const SERVICE_ICONS: Record<string, string> = {
   facturapi: '\uD83E\uDDFE',
   xai: '\uD83E\uDDE0',
   uber_eats: '\uD83C\uDF54',
+  uber_direct: '\uD83D\uDEF5',
   rappi: '\uD83E\uDDCA',
   didi_food: '\uD83D\uDE95',
 };
 
 const SERVICE_GROUP_KEYS: { labelKey: string; keys: string[] }[] = [
   { labelKey: 'integrations.groups.payments', keys: ['mercadopago', 'clip', 'stripe'] },
-  { labelKey: 'integrations.groups.delivery', keys: ['uber_eats', 'rappi', 'didi_food'] },
+  { labelKey: 'integrations.groups.delivery', keys: ['uber_eats', 'uber_direct', 'rappi', 'didi_food'] },
   { labelKey: 'integrations.groups.communications', keys: ['twilio'] },
   { labelKey: 'integrations.groups.invoicing', keys: ['facturapi'] },
   { labelKey: 'integrations.groups.ai', keys: ['xai'] },

@@ -358,6 +358,7 @@
       "facturapi": "Emite facturas CFDI 4.0 desde el POS usando tu propia cuenta de FacturAPI.",
       "xai": "Habilita sugerencias de IA, análisis de inventario y precios inteligentes con Grok.",
       "uber_eats": "Recibe órdenes de Uber Eats directamente en tu POS. Requiere cuenta de restaurante en Uber Eats.",
+      "uber_direct": "Despacha un repartidor de Uber para tus propias órdenes de kiosco, teléfono o web. Requiere una app de desarrollador de Uber Direct.",
       "rappi": "Integra tu restaurante con Rappi para recibir y gestionar órdenes desde el POS.",
       "didi_food": "Conecta con DiDi Food para recibir órdenes y sincronizar tu menú automáticamente."
     }

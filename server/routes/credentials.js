@@ -96,6 +96,15 @@ const SERVICE_SCHEMA = {
       { key: 'webhook_secret', label: 'Webhook Secret', secret: true },
     ],
   },
+  uber_direct: {
+    label: 'Uber Direct',
+    fields: [
+      { key: 'customer_id', label: 'Customer ID', secret: false },
+      { key: 'client_id', label: 'Client ID', secret: false },
+      { key: 'client_secret', label: 'Client Secret', secret: true },
+      { key: 'webhook_signing_key', label: 'Webhook Signing Key', secret: true },
+    ],
+  },
 };
 
 export { SERVICE_SCHEMA };

@@ -337,6 +337,10 @@ CREATE TABLE IF NOT EXISTS delivery_orders (
   platform_commission NUMERIC(10,2) DEFAULT 0,
   customer_name TEXT,
   delivery_address TEXT,
+  tracking_url TEXT,
+  courier_name TEXT,
+  courier_phone TEXT,
+  courier_vehicle TEXT,
   raw_webhook_data TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );

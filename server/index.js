@@ -35,6 +35,7 @@ import loyaltyRoutes from './routes/loyalty.js';
 // Delivery
 import deliveryRoutes from './routes/delivery.js';
 import deliveryIntelRoutes from './routes/delivery-intelligence.js';
+import uberDirectRoutes from './routes/uber-direct.js';
 import getnetRoutes from './routes/getnet.js';
 import getnetWebhook from './routes/getnetWebhook.js';
 
@@ -108,6 +109,7 @@ app.use(express.json({
   verify: (req, _res, buf) => {
     if (
       req.url?.startsWith('/api/delivery/webhook') ||
+      req.url?.startsWith('/api/uber-direct/webhook') ||
       req.url?.startsWith('/api/payments/conekta/webhook')
     ) {
       req.rawBody = buf;
@@ -248,6 +250,7 @@ app.use('/api/loyalty', loyaltyRoutes);
 // Delivery
 app.use('/api/delivery', deliveryRoutes);
 app.use('/api/delivery-intel', deliveryIntelRoutes);
+app.use('/api/uber-direct', uberDirectRoutes);
 app.use('/api/getnet', getnetRoutes);
 
 // Account & Settings

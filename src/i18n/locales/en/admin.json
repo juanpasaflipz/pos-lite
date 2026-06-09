@@ -359,6 +359,7 @@
       "facturapi": "Issue CFDI 4.0 invoices from the POS using your own FacturAPI account.",
       "xai": "Enable AI suggestions, inventory analysis, and smart pricing with Grok.",
       "uber_eats": "Receive Uber Eats orders directly in your POS. Requires an Uber Eats restaurant account.",
+      "uber_direct": "Dispatch an Uber courier for your own kiosk, phone, or web orders. Requires an Uber Direct developer app.",
       "rappi": "Integrate your restaurant with Rappi to receive and manage orders from the POS.",
       "didi_food": "Connect with DiDi Food to receive orders and sync your menu automatically."
     }
