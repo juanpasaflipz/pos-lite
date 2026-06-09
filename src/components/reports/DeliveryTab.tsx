@@ -23,7 +23,7 @@ export default function DeliveryTab({ deliveryData, channelData }: DeliveryTabPr
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={channelData.channels.map((c: any) => ({
               ...c,
-              channel: c.channel === 'pos' ? 'In-Store' : c.channel === 'uber_eats' ? 'Uber Eats' : c.channel === 'rappi' ? 'Rappi' : c.channel === 'didi_food' ? 'DiDi Food' : c.channel,
+              channel: c.channel === 'pos' ? 'In-Store' : c.channel === 'uber_eats' ? 'Uber Eats' : c.channel === 'uber_direct' ? 'Uber Direct' : c.channel === 'rappi' ? 'Rappi' : c.channel === 'didi_food' ? 'DiDi Food' : c.channel,
             }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#404040" />
               <XAxis dataKey="channel" stroke="#737373" />

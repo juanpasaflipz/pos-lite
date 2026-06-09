@@ -16,6 +16,7 @@ import {
   Wine,
   ChefHat,
   WifiOff,
+  MapPin,
 } from 'lucide-react';
 
 interface OrderWithElapsed extends Order {
@@ -546,9 +547,23 @@ function OrderCard({
             </div>
             {/* Fulfillment pill — load-bearing routing signal. */}
             {order.delivery_platform ? (
-              <span className="bg-cockpit-out text-white px-2.5 py-1 rounded-full font-black text-sm whitespace-nowrap uppercase tracking-wide shrink-0">
-                {order.delivery_platform}
-              </span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="bg-cockpit-out text-white px-2.5 py-1 rounded-full font-black text-sm whitespace-nowrap uppercase tracking-wide">
+                  {order.delivery_platform}
+                </span>
+                {order.tracking_url && (
+                  <a
+                    href={order.tracking_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-cockpit-green/30 text-cockpit-in-text hover:bg-cockpit-green/50"
+                    title="Rastrear repartidor"
+                  >
+                    <MapPin size={14} />
+                  </a>
+                )}
+              </div>
             ) : order.order_fulfillment_type === 'for_here' ? (
               <span className="bg-cockpit-system text-white px-2.5 py-1 rounded-full font-black text-sm whitespace-nowrap uppercase tracking-wide shrink-0">
                 {t('orders.forHere')}
@@ -614,9 +629,23 @@ function OrderCard({
                     PARA AQUÍ = enamel blue (sit-down, plate it nicely)
                     PARA LLEVAR = mustard yellow (wrap to-go) */}
               {order.delivery_platform ? (
-                <span className="bg-cockpit-out text-white px-3 py-1.5 rounded-full font-black text-sm whitespace-nowrap uppercase tracking-wide">
-                  {order.delivery_platform}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="bg-cockpit-out text-white px-3 py-1.5 rounded-full font-black text-sm whitespace-nowrap uppercase tracking-wide">
+                    {order.delivery_platform}
+                  </span>
+                  {order.tracking_url && (
+                    <a
+                      href={order.tracking_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-cockpit-green/30 text-cockpit-in-text hover:bg-cockpit-green/50"
+                      title="Rastrear repartidor"
+                    >
+                      <MapPin size={16} />
+                    </a>
+                  )}
+                </div>
               ) : order.order_fulfillment_type === 'for_here' ? (
                 <span className="bg-cockpit-system text-white px-3 py-1.5 rounded-full font-black text-sm whitespace-nowrap uppercase tracking-wide">
                   {t('orders.forHere')}

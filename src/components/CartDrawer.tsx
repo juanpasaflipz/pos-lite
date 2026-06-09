@@ -383,7 +383,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
         <div className="border-t border-neutral-800 p-3 space-y-2">
           {/* Fulfillment selector — kitchen needs to know if it's for here
               or to go. Mirrors the kiosk selector; defaults to take-away. */}
-          <div className="grid grid-cols-2 gap-2" role="group" aria-label={t('cart.fulfillmentLabel')}>
+          <div className="grid grid-cols-3 gap-2" role="group" aria-label={t('cart.fulfillmentLabel')}>
             <button
               type="button"
               onClick={() => onFulfillmentChange('to_go')}
@@ -407,6 +407,18 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
               }`}
             >
               {t('cart.forHere')}
+            </button>
+            <button
+              type="button"
+              onClick={() => onFulfillmentChange('delivery')}
+              aria-pressed={fulfillment === 'delivery'}
+              className={`py-2 text-sm font-bold rounded-lg transition-all touch-manipulation ${
+                fulfillment === 'delivery'
+                  ? 'bg-cockpit-green text-white'
+                  : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
+              }`}
+            >
+              {t('cart.delivery')}
             </button>
           </div>
           <button

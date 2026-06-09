@@ -956,6 +956,7 @@ router.get('/kitchen/active', async (req, res) => {
              e.name AS employee_name,
              COALESCE(lc.name, o.customer_call_name, do_row.customer_name) AS customer_name,
              dp.name AS delivery_platform,
+             do_row.tracking_url AS tracking_url,
              oi.id AS item_id, oi.item_name, oi.quantity, oi.notes, oi.combo_instance_id,
              oi.virtual_brand_id, vb.name AS brand_name, vb.primary_color AS brand_color,
              oi.added_at, oi.voided_at, oi.void_reason, oi.qty_changed_at, oi.original_quantity,
@@ -996,6 +997,7 @@ router.get('/kitchen/active', async (req, res) => {
           employee_name: row.employee_name,
           customer_name: row.customer_name,
           delivery_platform: row.delivery_platform,
+          tracking_url: row.tracking_url,
           items: new Map(),
         });
       }

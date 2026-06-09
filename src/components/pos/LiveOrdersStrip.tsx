@@ -12,6 +12,7 @@ import {
   User,
   ChevronRight,
   Pencil,
+  MapPin,
 } from 'lucide-react';
 import { getKitchenOrders, updateOrderStatus } from '../../api';
 import { Order } from '../../types';
@@ -83,6 +84,9 @@ function describeChannel(order: Order, t: (k: string, opts?: any) => string) {
   // Third-party delivery first — easiest to recognize by brand.
   if (order.source === 'uber_eats') {
     return { Icon: Bike, label: t('liveStrip.uberEats'), accent: 'text-green-400' };
+  }
+  if (order.source === 'uber_direct' || order.delivery_platform === 'uber_direct') {
+    return { Icon: Bike, label: t('liveStrip.uberDirect'), accent: 'text-cockpit-in-text' };
   }
   if (order.source === 'rappi') {
     return { Icon: Bike, label: t('liveStrip.rappi'), accent: 'text-pink-400' };
@@ -309,6 +313,19 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, onRefund, refresh
                       <channel.Icon className="w-3 h-3 flex-shrink-0" />
                       <span className="truncate">{channel.label}</span>
                     </span>
+                    {order.tracking_url && (
+                      <a
+                        href={order.tracking_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-cockpit-in-text hover:underline"
+                        title={t('liveStrip.trackCourier')}
+                      >
+                        <MapPin className="w-3 h-3 flex-shrink-0" />
+                        <span>{t('liveStrip.track')}</span>
+                      </a>
+                    )}
                     {!paid && (
                       <span className="bg-cockpit-yellow text-neutral-900 px-1.5 py-0.5 rounded-full text-[10px] font-black uppercase">
                         {t('liveStrip.unpaid')}

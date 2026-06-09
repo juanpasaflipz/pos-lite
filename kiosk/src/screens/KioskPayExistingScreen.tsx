@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Banknote, CreditCard, Loader2 } from 'lucide-react';
+import { ArrowLeft, Banknote, CreditCard, Loader2, MapPin, Truck } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useKioskBinding } from '../context/KioskBindingContext';
 import { useKioskCart } from '../context/KioskCartContext';
@@ -18,6 +18,15 @@ const POLL_MAX_ITERATIONS = 60; // 2.5s * 60 = ~2.5 minutes
 
 interface LocationState {
   order: KioskOpenOrder;
+  delivery?: {
+    delivery_order_id: number;
+    external_id: string;
+    tracking_url: string | null;
+    status: string;
+    fee: number;
+    dropoff_eta: string | null;
+  } | null;
+  deliveryError?: string | null;
 }
 
 const KioskPayExistingScreen: React.FC = () => {
@@ -171,6 +180,35 @@ const KioskPayExistingScreen: React.FC = () => {
               Incluye IVA · Subtotal {money.format(Number(order.subtotal))}
             </p>
           </div>
+
+          {state?.delivery && (
+            <div className="mb-4 rounded-lg bg-cockpit-green/15 border border-cockpit-green/40 px-5 py-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <Truck className="h-7 w-7 text-cockpit-in-text shrink-0" />
+                <div>
+                  <p className="text-lg font-black text-cockpit-in-text">Repartidor en camino</p>
+                  <p className="text-sm text-neutral-300">Envío {money.format(state.delivery.fee)}</p>
+                </div>
+              </div>
+              {state.delivery.tracking_url && (
+                <a
+                  href={state.delivery.tracking_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full inline-flex items-center justify-center gap-2 py-3 rounded-lg bg-cockpit-green text-white text-lg font-black"
+                >
+                  <MapPin className="h-5 w-5" />
+                  Rastrear repartidor
+                </a>
+              )}
+            </div>
+          )}
+          {state?.deliveryError && (
+            <div className="mb-4 rounded-lg bg-cockpit-red/20 border border-cockpit-red/50 px-5 py-3 text-base font-bold text-white">
+              No se pudo despachar al repartidor: {state.deliveryError}
+              <p className="text-sm font-normal text-neutral-300 mt-1">El operador podrá reintentar desde el POS.</p>
+            </div>
+          )}
 
           {message && (
             <div className="min-h-20 px-6 mb-4 rounded-lg bg-cockpit-yellow text-neutral-950 flex items-center gap-3 text-2xl font-black">
