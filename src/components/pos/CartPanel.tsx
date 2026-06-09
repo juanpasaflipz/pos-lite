@@ -1,9 +1,10 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { ClipboardList, Smartphone, Trash2, PauseCircle, Percent, User } from 'lucide-react';
+import { ClipboardList, Smartphone, Trash2, PauseCircle, Percent, Truck, User } from 'lucide-react';
 import { CartItem, Order, LoyaltyCustomer, ComboDefinition, Discount } from '../../types';
 import { formatPrice, TAX_LABEL } from '../../utils/currency';
 import { formatTime } from '../../utils/dateFormat';
+import type { DeliveryDraft } from './DeliveryAddressModal';
 
 interface ComboSuggestion {
   combo: ComboDefinition;
@@ -28,8 +29,10 @@ interface CartPanelProps {
   onSetNotesItem: (item: CartItem) => void;
   onShowPaymentModal: () => void;
   onSendToKitchen: () => void;
-  fulfillment: 'for_here' | 'to_go';
-  onFulfillmentChange: (next: 'for_here' | 'to_go') => void;
+  fulfillment: 'for_here' | 'to_go' | 'delivery';
+  onFulfillmentChange: (next: 'for_here' | 'to_go' | 'delivery') => void;
+  deliveryDraft?: DeliveryDraft | null;
+  onEditDelivery?: () => void;
   onShowCustomerLookup: () => void;
   onShowTemplates: () => void;
   onShowParkedCarts: () => void;
@@ -79,6 +82,8 @@ export default function CartPanel({
   onUnlinkCustomer,
   onApplyCartDiscount,
   onApplyLineDiscount,
+  deliveryDraft,
+  onEditDelivery,
 }: CartPanelProps) {
   const { t } = useTranslation('pos');
 
@@ -386,9 +391,9 @@ export default function CartPanel({
       </div>
 
       <div className="border-t border-neutral-800 p-4 space-y-3">
-        {/* Fulfillment selector — kitchen needs to know if it's for here or
-            to go. Mirrors the kiosk selector; defaults to take-away. */}
-        <div className="grid grid-cols-2 gap-2" role="group" aria-label={t('cart.fulfillmentLabel')}>
+        {/* Fulfillment selector — kitchen needs to know if it's for here, to
+            go, or delivery. Mirrors the kiosk selector; defaults to take-away. */}
+        <div className="grid grid-cols-3 gap-2" role="group" aria-label={t('cart.fulfillmentLabel')}>
           <button
             type="button"
             onClick={() => onFulfillmentChange('to_go')}
@@ -413,7 +418,44 @@ export default function CartPanel({
           >
             {t('cart.forHere')}
           </button>
+          <button
+            type="button"
+            onClick={() => onFulfillmentChange('delivery')}
+            aria-pressed={fulfillment === 'delivery'}
+            className={`py-2.5 text-sm font-bold rounded-lg transition-all touch-manipulation inline-flex items-center justify-center gap-1 ${
+              fulfillment === 'delivery'
+                ? 'bg-cockpit-green text-white'
+                : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
+            }`}
+          >
+            <Truck size={14} />
+            {t('cart.delivery')}
+          </button>
         </div>
+        {fulfillment === 'delivery' && (
+          <button
+            type="button"
+            onClick={onEditDelivery}
+            className="w-full rounded-lg bg-cockpit-green/15 border border-cockpit-green/40 p-3 text-left inline-flex items-center gap-3 hover:bg-cockpit-green/20 transition-colors"
+          >
+            <Truck size={18} className="text-cockpit-in-text flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              {deliveryDraft ? (
+                <>
+                  <p className="text-xs font-bold text-neutral-400 uppercase">
+                    {t('delivery.toAddress')} · {deliveryDraft.etaMin} min · {formatPrice(deliveryDraft.fee)}
+                  </p>
+                  <p className="text-sm font-bold text-white truncate">{deliveryDraft.address}</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs font-bold text-neutral-400 uppercase">{t('delivery.setup')}</p>
+                  <p className="text-sm font-bold text-cockpit-in-text">{t('delivery.tapToCapture')}</p>
+                </>
+              )}
+            </div>
+          </button>
+        )}
         <button
           onClick={onShowPaymentModal}
           disabled={cart.length === 0}

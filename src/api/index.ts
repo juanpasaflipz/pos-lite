@@ -575,7 +575,7 @@ interface CreateOrderData {
     discount?: DiscountPayload | null;
   }[];
   discount?: DiscountPayload | null;
-  order_fulfillment_type?: 'for_here' | 'to_go';
+  order_fulfillment_type?: 'for_here' | 'to_go' | 'delivery';
 }
 
 export async function createOrder(data: CreateOrderData): Promise<Order> {
@@ -1666,6 +1666,60 @@ export async function updateDeliveryOrderStatus(id: number, status: string): Pro
   return apiRequest(`/delivery/orders/${id}/status`, {
     method: 'PUT',
     body: JSON.stringify({ status }),
+  });
+}
+
+/* ==================== Uber Direct (POS / employee surfaces) ==================== */
+
+export interface UberDirectQuote {
+  id: string;
+  fee: number;
+  currency?: string;
+  currency_type?: string;
+  duration?: number;
+  dropoff_eta?: string;
+  expires?: string;
+}
+
+export async function quoteUberDirect(body: {
+  pickup_address?: string;
+  pickup_phone_number?: string;
+  dropoff_address: string;
+  dropoff_phone_number: string;
+  manifest_total_value?: number;
+}): Promise<UberDirectQuote> {
+  return apiRequest<UberDirectQuote>('/uber-direct/quote', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export interface UberDirectBooking {
+  delivery_order_id: number;
+  external_id: string;
+  tracking_url: string | null;
+  status: string;
+  fee: number;
+  dropoff_eta: string | null;
+}
+
+export async function bookUberDirect(body: {
+  order_id: number;
+  quote_id?: string;
+  pickup_name?: string;
+  pickup_address?: string;
+  pickup_phone_number?: string;
+  dropoff_name: string;
+  dropoff_address: string;
+  dropoff_phone_number: string;
+  dropoff_notes?: string;
+  manifest_items?: Array<{ name: string; quantity: number; price: number }>;
+  manifest_total_value?: number;
+  external_id?: string;
+}): Promise<UberDirectBooking> {
+  return apiRequest<UberDirectBooking>('/uber-direct/deliveries', {
+    method: 'POST',
+    body: JSON.stringify(body),
   });
 }
 

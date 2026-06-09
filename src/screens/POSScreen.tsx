@@ -18,6 +18,7 @@ import {
   conektaSpeiPayment,
   getnetTokenize,
   getnetCharge,
+  bookUberDirect,
 } from '../api';
 import {
   getCachedCategories,
@@ -66,6 +67,7 @@ import CategorySidebar from '../components/pos/CategorySidebar';
 import POSHeaderBar from '../components/pos/POSHeaderBar';
 import MenuGrid from '../components/pos/MenuGrid';
 import CartPanel from '../components/pos/CartPanel';
+import DeliveryAddressModal, { type DeliveryDraft } from '../components/pos/DeliveryAddressModal';
 import CashierOrdersPanel from '../components/pos/CashierOrdersPanel';
 import LiveOrdersStrip from '../components/pos/LiveOrdersStrip';
 import QuickOrdersModal from '../components/pos/QuickOrdersModal';
@@ -132,7 +134,11 @@ const POSScreen: React.FC = () => {
   const [cartDiscount, setCartDiscount] = useState<Discount | null>(null);
   // Counter-service in MX defaults to take-away; cashier flips to "Aquí"
   // when the customer is going to eat in. Resets to to_go when cart clears.
-  const [cartFulfillment, setCartFulfillment] = useState<'for_here' | 'to_go'>('to_go');
+  const [cartFulfillment, setCartFulfillment] = useState<'for_here' | 'to_go' | 'delivery'>('to_go');
+  // Uber Direct courier dispatch state — captured via DeliveryAddressModal when
+  // cashier switches the toggle to "Delivery". Cleared whenever the cart clears.
+  const [deliveryDraft, setDeliveryDraft] = useState<DeliveryDraft | null>(null);
+  const [showDeliveryModal, setShowDeliveryModal] = useState(false);
   const [discountTarget, setDiscountTarget] = useState<{ scope: 'cart' } | { scope: 'item'; cartId: string } | null>(null);
   const [showNavMenu, setShowNavMenu] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -606,6 +612,67 @@ const POSScreen: React.FC = () => {
     setLinkedCustomer(null);
     setCartDiscount(null);
     setCartFulfillment('to_go');
+    setDeliveryDraft(null);
+  };
+
+  // Switching to delivery prompts the modal if no draft exists yet. Switching
+  // away from delivery clears the draft so a stale quote can't leak into a
+  // dine-in / takeout order.
+  const handleFulfillmentChange = (next: 'for_here' | 'to_go' | 'delivery') => {
+    setCartFulfillment(next);
+    if (next === 'delivery' && !deliveryDraft) {
+      setShowDeliveryModal(true);
+    }
+    if (next !== 'delivery' && deliveryDraft) {
+      setDeliveryDraft(null);
+    }
+  };
+
+  // Dispatches an Uber Direct courier for an order that was just created with
+  // delivery fulfillment. Failure surfaces as a toast but does NOT throw — the
+  // order is real and the courier can be dispatched manually from the Delivery
+  // screen using the existing /api/uber-direct/deliveries route.
+  const dispatchCourierIfDelivery = async (orderId: number) => {
+    if (cartFulfillment !== 'delivery' || !deliveryDraft) return;
+    try {
+      const manifestItems = cart.map((item) => ({
+        name: item.item_name,
+        quantity: item.quantity,
+        price: Math.round(Number(item.unit_price) * 100),
+      }));
+      await bookUberDirect({
+        order_id: orderId,
+        quote_id: deliveryDraft.quoteId,
+        dropoff_name: deliveryDraft.customerName,
+        dropoff_address: deliveryDraft.address,
+        dropoff_phone_number: deliveryDraft.phone,
+        dropoff_notes: deliveryDraft.notes || undefined,
+        manifest_items: manifestItems,
+        manifest_total_value: Math.round(total * 100),
+        external_id: String(orderId),
+      });
+      addToast(t('delivery.dispatched', { eta: deliveryDraft.etaMin }), 'success');
+    } catch (err) {
+      addToast(
+        err instanceof Error
+          ? t('delivery.dispatchFailed', { reason: err.message })
+          : t('delivery.dispatchFailed', { reason: 'Unknown' }),
+        'error',
+      );
+    }
+  };
+
+  // All checkout paths funnel through this so courier dispatch is one line of
+  // call-site change. createOrder shape is identical across every caller.
+  const createOrderForCheckout = async () => {
+    const order = await createOrder({
+      employee_id: currentEmployee!.id,
+      items: buildOrderItems(),
+      discount: buildCartDiscountPayload(),
+      order_fulfillment_type: cartFulfillment,
+    });
+    await dispatchCourierIfDelivery(order.id);
+    return order;
   };
 
   const handleClaimKioskOrder = (order: KioskHeldOrder) => {
@@ -786,11 +853,7 @@ const POSScreen: React.FC = () => {
     if (cart.length === 0) { addToast(t('toast.cartEmpty'), 'error'); return; }
     setIsProcessingPayment(true);
     try {
-      const order = await createOrder({
-        employee_id: currentEmployee!.id,
-        items: buildOrderItems(),
-        discount: buildCartDiscountPayload(),
-      });
+      const order = await createOrderForCheckout();
       clearCart();
       bumpOrders();
       addToast(t('toast.sentToKitchen', { number: order.order_number }), 'success');
@@ -804,7 +867,7 @@ const POSScreen: React.FC = () => {
   const openPaymentModal = async () => {
     if ((isMpConnected || isConektaConfigured) && cart.length > 0) {
       try {
-        const order = await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload(), order_fulfillment_type: cartFulfillment });
+        const order = await createOrderForCheckout();
         setPreCreatedOrderId(order.id);
       } catch (err) {
         addToast(err instanceof Error ? err.message : 'Error creating order', 'error');
@@ -857,7 +920,7 @@ const POSScreen: React.FC = () => {
         // Matches the pattern in handleOxxoPayment / handleSpeiPayment.
         const order = preCreatedOrderId
           ? await getOrder(preCreatedOrderId)
-          : await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload(), order_fulfillment_type: cartFulfillment });
+          : await createOrderForCheckout();
         const result = await cashPayment({ order_id: order.id, tip, amount_received: amountReceived });
         const finalOrder: Order = { ...order, tip, total: Number(order.total) + tip, payment_method: 'cash', employee_name: currentEmployee?.name, estimated_ready_minutes: order.estimated_ready_minutes, estimated_ready_range: order.estimated_ready_range };
         await handleLoyaltyStamp(order);
@@ -880,7 +943,7 @@ const POSScreen: React.FC = () => {
     if (cart.length === 0 && !preCreatedOrderId) { addToast(t('toast.cartEmpty'), 'error'); return; }
     setIsProcessingPayment(true);
     try {
-      const orderId = preCreatedOrderId || (await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload(), order_fulfillment_type: cartFulfillment })).id;
+      const orderId = preCreatedOrderId || (await createOrderForCheckout()).id;
       const result = await conektaOxxoPayment({ order_id: orderId, tip });
       setOxxoResult({
         reference: result.reference,
@@ -909,7 +972,7 @@ const POSScreen: React.FC = () => {
     if (cart.length === 0 && !preCreatedOrderId) { addToast(t('toast.cartEmpty'), 'error'); return; }
     setIsProcessingPayment(true);
     try {
-      const orderId = preCreatedOrderId || (await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload(), order_fulfillment_type: cartFulfillment })).id;
+      const orderId = preCreatedOrderId || (await createOrderForCheckout()).id;
       const result = await conektaSpeiPayment({ order_id: orderId, tip });
       setSpeiResult({
         clabe: result.clabe,
@@ -938,7 +1001,7 @@ const POSScreen: React.FC = () => {
     if (cart.length === 0 && !preCreatedOrderId) { addToast(t('toast.cartEmpty'), 'error'); return; }
     setIsProcessingPayment(true);
     try {
-      const orderId = preCreatedOrderId || (await createOrder({ employee_id: currentEmployee!.id, items: buildOrderItems(), discount: buildCartDiscountPayload(), order_fulfillment_type: cartFulfillment })).id;
+      const orderId = preCreatedOrderId || (await createOrderForCheckout()).id;
       // For Getnet card payments, the card tokenization happens on the server side
       // In a full implementation, the card form would collect and tokenize first
       // For now, this creates the order and marks it for Getnet processing
@@ -966,11 +1029,7 @@ const POSScreen: React.FC = () => {
       if (cart.length === 0) {
         throw new Error(t('toast.cartEmpty'));
       }
-      order = await createOrder({
-        employee_id: currentEmployee!.id,
-        items: buildOrderItems(),
-        discount: buildCartDiscountPayload(),
-      });
+      order = await createOrderForCheckout();
     }
     splitOrderRef.current = order;
     const result = await splitStart({
@@ -1163,7 +1222,9 @@ const POSScreen: React.FC = () => {
         onShowPaymentModal={openPaymentModal}
         onSendToKitchen={handleSendToKitchen}
         fulfillment={cartFulfillment}
-        onFulfillmentChange={setCartFulfillment}
+        onFulfillmentChange={handleFulfillmentChange}
+        deliveryDraft={deliveryDraft}
+        onEditDelivery={() => setShowDeliveryModal(true)}
         onShowCustomerLookup={() => setShowCustomerLookup(true)}
         onShowTemplates={() => setShowTemplates(true)}
         onShowParkedCarts={() => setShowParkedCarts(true)}
@@ -1207,7 +1268,7 @@ const POSScreen: React.FC = () => {
             onShowPaymentModal={openPaymentModal}
             onSendToKitchen={handleSendToKitchen}
             fulfillment={cartFulfillment}
-            onFulfillmentChange={setCartFulfillment}
+            onFulfillmentChange={handleFulfillmentChange}
             onShowCustomerLookup={() => setShowCustomerLookup(true)}
             onShowTemplates={() => setShowTemplates(true)}
             onShowParkedCarts={() => setShowParkedCarts(true)}
@@ -1374,6 +1435,25 @@ const POSScreen: React.FC = () => {
           onClose={handleSplitClose}
         />
       )}
+
+      <DeliveryAddressModal
+        isOpen={showDeliveryModal}
+        initial={deliveryDraft}
+        manifestTotalValue={total || 0}
+        onClose={() => {
+          setShowDeliveryModal(false);
+          // If the cashier cancels before saving a quote and there's no prior
+          // draft, drop them back to to_go so the cart total doesn't show a
+          // courier fee row that has no quote behind it.
+          if (!deliveryDraft && cartFulfillment === 'delivery') {
+            setCartFulfillment('to_go');
+          }
+        }}
+        onSave={(draft) => {
+          setDeliveryDraft(draft);
+          setShowDeliveryModal(false);
+        }}
+      />
 
       {showPaymentModal && (
         <PaymentModal

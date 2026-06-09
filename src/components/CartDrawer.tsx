@@ -19,8 +19,8 @@ interface CartDrawerProps {
   onSetNotesItem: (item: CartItem) => void;
   onShowPaymentModal: () => void;
   onSendToKitchen: () => void;
-  fulfillment: 'for_here' | 'to_go';
-  onFulfillmentChange: (next: 'for_here' | 'to_go') => void;
+  fulfillment: 'for_here' | 'to_go' | 'delivery';
+  onFulfillmentChange: (next: 'for_here' | 'to_go' | 'delivery') => void;
   onShowCustomerLookup: () => void;
   onShowTemplates: () => void;
   onShowParkedCarts: () => void;
