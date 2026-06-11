@@ -16,6 +16,22 @@
   --n-800:  42  42  42; /* surface.border #2A2A2A */
   --n-900:  21  18  14; /* surface.warm   #15120E */
   --n-950:  10  10  10; /* surface.bg     #0A0A0A */
+
+  /* Brand override: Talavera Terracotta (#A8542A at 600). Replaces the
+     platform's enamel blue on customer-facing kiosk surfaces. Hue family is
+     warm-earth Mexican pottery — distinct from cockpit.out (#C94B1B alarm)
+     and cockpit.attention (#D9A021 mustard). */
+  --brand-50:  250 241 234;
+  --brand-100: 240 220 203;
+  --brand-200: 224 181 152;
+  --brand-300: 207 142 101;
+  --brand-400: 192 116  63;
+  --brand-500: 173 100  50;
+  --brand-600: 168  84  42;
+  --brand-700: 138  67  33;
+  --brand-800: 105  50  25;
+  --brand-900:  69  32  16;
+  --brand-950:  35  16   8;
 }
 
 html, body, #root {

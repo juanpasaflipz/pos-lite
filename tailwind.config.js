@@ -9,23 +9,25 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Brand = enamel blue (vintage Mexican signage / workwear), anchored on
-        // SYSTEM primary #2E5EAA. This is the single platform brand across every
-        // tenant — used for primary actions everywhere. Distinct from cockpit
-        // semantics; same hex as cockpit.system to keep the operator's mental
-        // model coherent (infrastructure actions wear infrastructure color).
+        // Brand = enamel blue by default (#2E5EAA, vintage Mexican signage /
+        // workwear), but driven by CSS variables so individual apps can swap the
+        // ramp without touching components. POS keeps enamel blue (defaults in
+        // src/index.css); kiosk overrides to Talavera Terracotta in
+        // kiosk/src/index.css. Distinct from cockpit semantics; the default
+        // matches cockpit.system to keep the operator's mental model coherent
+        // (infrastructure actions wear infrastructure color).
         brand: {
-          50:  '#eef3fa',
-          100: '#d7e2f2',
-          200: '#b0c5e5',
-          300: '#87a8d8',
-          400: '#6e97db', // SYSTEM hover
-          500: '#4b7ac7', // SYSTEM secondary
-          600: '#2e5eaa', // SYSTEM primary
-          700: '#244a88',
-          800: '#1b3766',
-          900: '#122448',
-          950: '#0f1728', // SYSTEM dark bg
+          50:  'rgb(var(--brand-50)  / <alpha-value>)',
+          100: 'rgb(var(--brand-100) / <alpha-value>)',
+          200: 'rgb(var(--brand-200) / <alpha-value>)',
+          300: 'rgb(var(--brand-300) / <alpha-value>)',
+          400: 'rgb(var(--brand-400) / <alpha-value>)',
+          500: 'rgb(var(--brand-500) / <alpha-value>)',
+          600: 'rgb(var(--brand-600) / <alpha-value>)',
+          700: 'rgb(var(--brand-700) / <alpha-value>)',
+          800: 'rgb(var(--brand-800) / <alpha-value>)',
+          900: 'rgb(var(--brand-900) / <alpha-value>)',
+          950: 'rgb(var(--brand-950) / <alpha-value>)',
         },
         // Cockpit zone palette — semantic operational meanings, not aesthetic
         // choices. Each color carries exactly one meaning so operators can scan

@@ -22,6 +22,20 @@
   --n-800:  42  42  42; /* surface.border #2A2A2A */
   --n-900:  21  18  14; /* surface.warm   #15120E */
   --n-950:  10  10  10; /* surface.bg     #0A0A0A */
+
+  /* Brand ramp — enamel blue (#2E5EAA at 600). Kiosk overrides in
+     kiosk/src/index.css; keep this file as the POS source of truth. */
+  --brand-50:  238 243 250;
+  --brand-100: 215 226 242;
+  --brand-200: 176 197 229;
+  --brand-300: 135 168 216;
+  --brand-400: 110 151 219;
+  --brand-500:  75 122 199;
+  --brand-600:  46  94 170;
+  --brand-700:  36  74 136;
+  --brand-800:  27  55 102;
+  --brand-900:  18  36  72;
+  --brand-950:  15  23  40;
 }
 
 html.light {
