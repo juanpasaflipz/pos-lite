@@ -28,11 +28,25 @@ router.get('/customers', requireAuth('manage_loyalty'), async (req, res) => {
     let where = '';
     const params = [];
 
-    if (search) {
-      // Escape LIKE special characters to prevent pattern injection
-      const escaped = search.replace(/[%_\\]/g, '\\$&');
-      where = `WHERE (name LIKE $1 ESCAPE '\\' OR phone LIKE $2 ESCAPE '\\')`;
-      params.push(`%${escaped}%`, `%${escaped}%`);
+    const trimmed = typeof search === 'string' ? search.trim() : '';
+    if (trimmed) {
+      // Escape LIKE special characters to prevent pattern injection.
+      const escaped = trimmed.replace(/[%_\\]/g, '\\$&');
+      // Phones are stored as 10-digit local (no separators, no country code) —
+      // strip everything non-digit from the input so "+52 55 4587 9933" still
+      // matches the stored "5545879933".
+      const digits = trimmed.replace(/\D/g, '');
+
+      const clauses = [];
+      // Name: case-insensitive + accent-folded so "jose" finds "José" and
+      // "Juan" finds "JUAN PEREZ". Mirrors the kiosk lookup pattern.
+      clauses.push(`unaccent(LOWER(name)) LIKE unaccent(LOWER($${params.length + 1})) ESCAPE '\\'`);
+      params.push(`%${escaped}%`);
+      if (digits.length >= 3) {
+        clauses.push(`phone LIKE $${params.length + 1} ESCAPE '\\'`);
+        params.push(`%${digits}%`);
+      }
+      where = `WHERE (${clauses.join(' OR ')})`;
     }
 
     const countResult = await get(`SELECT COUNT(*) as total FROM loyalty_customers ${where}`, params);

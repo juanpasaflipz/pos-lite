@@ -102,7 +102,7 @@ function CustomersTab() {
   const fetchCustomers = async (s?: string, p?: number) => {
     setLoading(true);
     try {
-      const res = await getLoyaltyCustomers({ search: s || search, page: p || page, limit: 15 });
+      const res = await getLoyaltyCustomers({ search: s ?? search, page: p ?? page, limit: 15 });
       setCustomers(res.data);
       setTotal(res.total);
     } catch {
@@ -112,7 +112,15 @@ function CustomersTab() {
     }
   };
 
-  useEffect(() => { fetchCustomers('', 1); }, []);
+  // Debounced live search — fires 300ms after the user stops typing, and resets
+  // to page 1 on every change so results don't drift onto an out-of-range page.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setPage(1);
+      fetchCustomers(search, 1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const handleSearch = () => {
     setPage(1);
