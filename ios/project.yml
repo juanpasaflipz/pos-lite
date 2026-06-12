@@ -30,6 +30,8 @@ targets:
         UIViewControllerBasedStatusBarAppearance: false
         UIRequiresFullScreen: true
         UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         NSAppTransportSecurity:
