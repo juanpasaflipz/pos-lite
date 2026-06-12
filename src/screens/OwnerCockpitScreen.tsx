@@ -24,6 +24,7 @@ import {
   SlidersHorizontal,
   Truck,
   Trash2,
+  Receipt,
 } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 import { useAuth } from '../context/AuthContext';
@@ -41,6 +42,7 @@ interface CockpitCard {
 
 const IN_CARDS: CockpitCard[] = [
   { to: '/pos', icon: <ShoppingCart size={32} />, label: 'POS', hint: 'Ring up sales', intensity: 'primary' },
+  { to: '/admin/orders', icon: <Receipt size={32} />, label: 'Orders', hint: 'Track every ticket', intensity: 'primary' },
   { to: '/admin/reports?tab=overview', icon: <TrendingUp size={32} />, label: 'Sales', hint: 'Daily revenue', intensity: 'primary' },
   { to: '/admin/menu', icon: <UtensilsCrossed size={28} />, label: 'Menu', hint: 'Items & prices', intensity: 'secondary' },
   { to: '/admin/loyalty', icon: <Heart size={28} />, label: 'Loyalty', hint: 'Repeat customers', intensity: 'secondary' },

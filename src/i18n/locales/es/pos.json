@@ -580,6 +580,17 @@
     "historySearchPlaceholder": "# de orden o cliente",
     "clearDate": "Quitar"
   },
+  "ordersScreen": {
+    "title": "Órdenes",
+    "subtitle": "Sigue cada orden de la cocina al recibo.",
+    "laneActive": "En Cocina",
+    "laneReady": "Listas",
+    "laneUnpaid": "Por Cobrar",
+    "laneCancelled": "Canceladas",
+    "laneHistory": "Historial",
+    "cancelOrder": "Cancelar orden",
+    "cancelledEmpty": "Sin órdenes canceladas hoy."
+  },
   "liveStrip": {
     "preparing": "En cocina",
     "readyCount": "Listas",

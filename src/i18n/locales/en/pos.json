@@ -580,6 +580,17 @@
     "historySearchPlaceholder": "Order # or customer",
     "clearDate": "Clear"
   },
+  "ordersScreen": {
+    "title": "Orders",
+    "subtitle": "Track every order from kitchen to receipt.",
+    "laneActive": "In Kitchen",
+    "laneReady": "Ready",
+    "laneUnpaid": "Needs Payment",
+    "laneCancelled": "Cancelled",
+    "laneHistory": "History",
+    "cancelOrder": "Cancel order",
+    "cancelledEmpty": "No cancelled orders today."
+  },
   "liveStrip": {
     "preparing": "In kitchen",
     "readyCount": "Ready",

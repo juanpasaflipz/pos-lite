@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTranslation } from 'react-i18next';
 import {
@@ -68,7 +68,6 @@ import POSHeaderBar from '../components/pos/POSHeaderBar';
 import MenuGrid from '../components/pos/MenuGrid';
 import CartPanel from '../components/pos/CartPanel';
 import DeliveryAddressModal, { type DeliveryDraft } from '../components/pos/DeliveryAddressModal';
-import CashierOrdersPanel from '../components/pos/CashierOrdersPanel';
 import LiveOrdersStrip from '../components/pos/LiveOrdersStrip';
 import QuickOrdersModal from '../components/pos/QuickOrdersModal';
 import ParkedCartsModal from '../components/pos/ParkedCartsModal';
@@ -85,6 +84,7 @@ interface Toast {
 
 const POSScreen: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { currentEmployee, logout, hasPermission } = useAuth();
   const { t } = useTranslation('pos');
   const { isOnline, pendingSyncCount } = useNetworkStatus();
@@ -159,9 +159,6 @@ const POSScreen: React.FC = () => {
   // When set, the existing PaymentModal is repurposed to charge this order
   // (kiosk / QR / unpaid orders), bypassing the cart-creation path.
   const [chargingOrder, setChargingOrder] = useState<Order | null>(null);
-
-  // Cashier live-orders board (slide-over)
-  const [showOrdersPanel, setShowOrdersPanel] = useState(false);
 
   // AI Suggestions
   const cartItemIds = useMemo(() => cart.map((c) => c.menu_item_id), [cart]);
@@ -1104,6 +1101,18 @@ const POSScreen: React.FC = () => {
     }
   };
 
+  // The /admin/orders screen hands the cashier an unpaid order to charge by
+  // navigating here with { state: { chargeOrderId } }. We pick it up on mount,
+  // open the payment flow, then clear the state so a refresh doesn't re-trigger.
+  useEffect(() => {
+    const state = location.state as { chargeOrderId?: number } | null;
+    const id = state?.chargeOrderId;
+    if (!id) return;
+    handleCobrar({ id } as Order);
+    navigate(location.pathname, { replace: true, state: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
+
   // ==================== Render ====================
 
   if (loading) {
@@ -1181,7 +1190,7 @@ const POSScreen: React.FC = () => {
         />
 
         <LiveOrdersStrip
-          onViewAll={() => setShowOrdersPanel(true)}
+          onViewAll={() => navigate('/admin/orders')}
           onCharge={handleCobrar}
           onRefund={(orderId) => {
             setRefundOrderId(orderId);
@@ -1545,21 +1554,6 @@ const POSScreen: React.FC = () => {
           }}
         />
       )}
-
-      <CashierOrdersPanel
-        isOpen={showOrdersPanel}
-        onClose={() => setShowOrdersPanel(false)}
-        onCharge={(order) => {
-          setShowOrdersPanel(false);
-          handleCobrar(order);
-        }}
-        onRefund={(orderId) => {
-          setShowOrdersPanel(false);
-          setRefundOrderId(orderId);
-          setShowRefundModal(true);
-        }}
-      />
-
 
       {/* Toast Notifications */}
       <div className={`fixed right-4 space-y-2 z-[60] pointer-events-none ${plan === 'free' ? 'bottom-16' : 'bottom-4'}`}>
