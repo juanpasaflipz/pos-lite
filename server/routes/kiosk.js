@@ -1130,18 +1130,23 @@ router.get('/orders/open', verifyKioskToken, async (req, res) => {
     //     first token OR the full name.
     // Token-based lookup (returning loyalty session on Welcome) is the simple
     // case — direct match on loyalty_customer_id.
-    const lowName = rawName.slice(0, 40).toLowerCase();
+    // Strip LIKE wildcards so user input is treated as literal text in the
+    // prefix match below. Names don't contain % or _, so this is defensive.
+    const lowName = rawName.slice(0, 40).toLowerCase().replace(/[%_]/g, '');
+    // Prefix match (stored starts with input) so "Test" finds "TEST2" and
+    // "Juan" finds "Juan Pérez". Disambiguator UI + 6h window + LIMIT 5
+    // contain the false-positive surface.
     const matchFilter = loyaltyCustomerId
       ? adminSql`o.loyalty_customer_id = ${loyaltyCustomerId}`
       : adminSql`(
           (o.loyalty_customer_id IS NULL
-             AND unaccent(LOWER(o.customer_call_name)) = unaccent(${lowName}))
+             AND unaccent(LOWER(o.customer_call_name)) LIKE unaccent(${lowName}) || '%')
           OR
           (o.loyalty_customer_id IS NOT NULL
              AND lc.id IS NOT NULL
              AND (
-               unaccent(LOWER(SPLIT_PART(lc.name, ' ', 1))) = unaccent(${lowName})
-               OR unaccent(LOWER(lc.name)) = unaccent(${lowName})
+               unaccent(LOWER(SPLIT_PART(lc.name, ' ', 1))) LIKE unaccent(${lowName}) || '%'
+               OR unaccent(LOWER(lc.name)) LIKE unaccent(${lowName}) || '%'
              ))
         )`;
 
