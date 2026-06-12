@@ -1284,8 +1284,28 @@ export async function toggleEmployee(id: number): Promise<any> {
 
 /* ==================== Reports Endpoints ==================== */
 
-export async function getSalesReport(period: string): Promise<SalesReport> {
-  return apiRequest<SalesReport>(`/reports/sales?period=${period}`);
+/**
+ * Optional explicit range for any report endpoint. When start_date and
+ * end_date are both provided, the server uses them verbatim (YYYY-MM-DD,
+ * inclusive). Otherwise it falls back to `period` anchored to
+ * `week_start_dow` (defaults to Monday).
+ */
+export interface ReportRangeOpts {
+  start_date?: string;
+  end_date?: string;
+  week_start_dow?: number;
+}
+
+function reportQS(period: string, opts: ReportRangeOpts = {}): string {
+  const p = new URLSearchParams({ period });
+  if (opts.start_date) p.set('start_date', opts.start_date);
+  if (opts.end_date) p.set('end_date', opts.end_date);
+  if (opts.week_start_dow !== undefined) p.set('week_start_dow', String(opts.week_start_dow));
+  return p.toString();
+}
+
+export async function getSalesReport(period: string, opts: ReportRangeOpts = {}): Promise<SalesReport> {
+  return apiRequest<SalesReport>(`/reports/sales?${reportQS(period, opts)}`);
 }
 
 export async function getTopItems(
@@ -1306,9 +1326,10 @@ export interface ItemSalesReportFilters {
 
 export async function getItemSalesReport(
   period: string,
-  filters: ItemSalesReportFilters = {}
+  filters: ItemSalesReportFilters = {},
+  opts: ReportRangeOpts = {}
 ): Promise<ItemSalesReport> {
-  const params = new URLSearchParams({ period });
+  const params = new URLSearchParams(reportQS(period, opts));
   if (filters.customerId && filters.customerId !== 'all') {
     params.set('customer_id', String(filters.customerId));
   }
@@ -1325,10 +1346,11 @@ export async function getItemSalesReport(
 }
 
 export async function getEmployeePerformance(
-  period: string
+  period: string,
+  opts: ReportRangeOpts = {}
 ): Promise<EmployeePerformanceReport[]> {
   return apiRequest<EmployeePerformanceReport[]>(
-    `/reports/employee-performance?period=${period}`
+    `/reports/employee-performance?${reportQS(period, opts)}`
   );
 }
 
@@ -1336,32 +1358,32 @@ export async function getHourlyReport(): Promise<HourlyReport[]> {
   return apiRequest<HourlyReport[]>('/reports/hourly');
 }
 
-export async function getCashCardBreakdown(period: string): Promise<CashCardBreakdown> {
-  return apiRequest<CashCardBreakdown>(`/reports/cash-card-breakdown?period=${period}`);
+export async function getCashCardBreakdown(period: string, opts: ReportRangeOpts = {}): Promise<CashCardBreakdown> {
+  return apiRequest<CashCardBreakdown>(`/reports/cash-card-breakdown?${reportQS(period, opts)}`);
 }
 
-export async function getCOGSReport(period: string): Promise<COGSReport> {
-  return apiRequest<COGSReport>(`/reports/cogs?period=${period}`);
+export async function getCOGSReport(period: string, opts: ReportRangeOpts = {}): Promise<COGSReport> {
+  return apiRequest<COGSReport>(`/reports/cogs?${reportQS(period, opts)}`);
 }
 
-export async function getCategoryMargins(period: string): Promise<CategoryMargins> {
-  return apiRequest<CategoryMargins>(`/reports/category-margins?period=${period}`);
+export async function getCategoryMargins(period: string, opts: ReportRangeOpts = {}): Promise<CategoryMargins> {
+  return apiRequest<CategoryMargins>(`/reports/category-margins?${reportQS(period, opts)}`);
 }
 
-export async function getContributionMargin(period: string): Promise<ContributionMarginReport> {
-  return apiRequest<ContributionMarginReport>(`/reports/contribution-margin?period=${period}`);
+export async function getContributionMargin(period: string, opts: ReportRangeOpts = {}): Promise<ContributionMarginReport> {
+  return apiRequest<ContributionMarginReport>(`/reports/contribution-margin?${reportQS(period, opts)}`);
 }
 
 export async function getLiveDashboard(): Promise<LiveDashboardData> {
   return apiRequest<LiveDashboardData>('/reports/live');
 }
 
-export async function getDeliveryMargins(period: string): Promise<any> {
-  return apiRequest(`/reports/delivery-margins?period=${period}`);
+export async function getDeliveryMargins(period: string, opts: ReportRangeOpts = {}): Promise<any> {
+  return apiRequest(`/reports/delivery-margins?${reportQS(period, opts)}`);
 }
 
-export async function getChannelComparison(period: string): Promise<any> {
-  return apiRequest(`/reports/channel-comparison?period=${period}`);
+export async function getChannelComparison(period: string, opts: ReportRangeOpts = {}): Promise<any> {
+  return apiRequest(`/reports/channel-comparison?${reportQS(period, opts)}`);
 }
 
 /* ==================== Modifier Endpoints ==================== */
@@ -1924,8 +1946,8 @@ export async function getReconciliation(startDate: string, endDate: string): Pro
   return apiRequest(`/reports/reconciliation?start_date=${startDate}&end_date=${endDate}`);
 }
 
-export async function getPaymentFees(period: string): Promise<PaymentFeeSummary> {
-  return apiRequest<PaymentFeeSummary>(`/reports/payment-fees?period=${period}`);
+export async function getPaymentFees(period: string, opts: ReportRangeOpts = {}): Promise<PaymentFeeSummary> {
+  return apiRequest<PaymentFeeSummary>(`/reports/payment-fees?${reportQS(period, opts)}`);
 }
 
 export async function getRefundSummary(startDate?: string, endDate?: string): Promise<RefundSummary> {
@@ -1949,8 +1971,8 @@ export async function updateFinancialTargets(targets: Array<{ category: string; 
   });
 }
 
-export async function getMenuEngineering(period: string): Promise<MenuEngineeringReport> {
-  return apiRequest<MenuEngineeringReport>(`/reports/menu-engineering?period=${period}`);
+export async function getMenuEngineering(period: string, opts: ReportRangeOpts = {}): Promise<MenuEngineeringReport> {
+  return apiRequest<MenuEngineeringReport>(`/reports/menu-engineering?${reportQS(period, opts)}`);
 }
 
 export async function updateFinancialActual(data: { period: string; category: string; amount: number }): Promise<any> {

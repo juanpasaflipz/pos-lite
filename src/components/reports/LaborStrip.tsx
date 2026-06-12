@@ -5,11 +5,36 @@ import { Link } from 'react-router-dom';
 import { getPayrollForecast, getPayrollLive } from '../../api';
 import type { PayrollForecast } from '../../api';
 import { PayrollSnapshot } from '../../types';
+import { formatDate } from '../../utils/dateFormat';
 
 const money = (cents: number) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format((cents || 0) / 100);
 
 const hoursFmt = (h: number) => `${(h || 0).toFixed(1)}h`;
+
+/**
+ * Render an inclusive human-readable date range from the snapshot's
+ * inclusive-start / exclusive-end YYYY-MM-DD pair. The backend returns
+ * period_end as exclusive (start of next week) so we subtract a day before
+ * formatting — otherwise the label reads as 8 days instead of 7.
+ */
+function formatPeriodRange(startStr: string, endStr: string): string {
+  const parse = (s: string): Date => {
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  };
+  const start = parse(startStr);
+  const endExclusive = parse(endStr);
+  const endInclusive = new Date(endExclusive);
+  endInclusive.setDate(endExclusive.getDate() - 1);
+  const sameYear = start.getFullYear() === endInclusive.getFullYear();
+  const startFmt = formatDate(start, sameYear
+    ? { month: 'short', day: 'numeric' }
+    : { year: 'numeric', month: 'short', day: 'numeric' });
+  const endFmt = formatDate(endInclusive, { year: 'numeric', month: 'short', day: 'numeric' });
+  if (start.getTime() === endInclusive.getTime()) return endFmt;
+  return `${startFmt} – ${endFmt}`;
+}
 
 /**
  * Always-visible labor cost strip at the top of Reports → Overview.
@@ -99,8 +124,7 @@ export default function LaborStrip() {
             <p className="text-2xl font-bold text-white mt-1">{hoursFmt(data.totals.hours_worked)}</p>
             <p className="text-xs text-neutral-500 mt-1">
               {t('payroll.laborStrip.period', {
-                start: data.period_start,
-                end: data.period_end,
+                range: formatPeriodRange(data.period_start, data.period_end),
               })}
             </p>
           </div>

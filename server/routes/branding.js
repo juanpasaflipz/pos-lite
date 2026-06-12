@@ -11,6 +11,7 @@ import { isConektaConfigured } from '../conekta.js';
 import { isGetnetConfigured } from '../services/getnet/auth.js';
 import { getClipAuthHeader } from '../services/clip.js';
 import { getDisplayMenuSettings, setDisplayMenuSettings } from '../lib/displayMenu.js';
+import { get as dbGet } from '../db/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.join(__dirname, '../../data/uploads');
@@ -84,6 +85,7 @@ router.get('/', async (req, res) => {
   let conektaConfigured = false;
   let getnetConfigured = false;
   let clipConfigured = false;
+  let weekStartDow = 1; // Monday default — Reports presets and labor strip anchor here
   try {
     conektaConfigured = await isConektaConfigured(tenant.id);
   } catch { /* non-blocking */ }
@@ -93,6 +95,12 @@ router.get('/', async (req, res) => {
   try {
     clipConfigured = !!(await getClipAuthHeader(tenant.id));
   } catch { /* non-blocking */ }
+  try {
+    const row = await dbGet('SELECT period_start_dow FROM payroll_settings WHERE tenant_id = $1', [tenant.id]);
+    if (row && Number.isFinite(Number(row.period_start_dow))) {
+      weekStartDow = Number(row.period_start_dow);
+    }
+  } catch { /* table may not exist on very old tenants — keep default */ }
 
   res.json({
     primaryColor: branding.primaryColor || '#0d9488',
@@ -110,6 +118,7 @@ router.get('/', async (req, res) => {
     getnetEnabled: !!tenant.getnet_enabled,
     clipConfigured,
     timezone: tenant.timezone || 'UTC',
+    weekStartDow,
   });
 });
 

@@ -32,6 +32,7 @@ interface PlanContextType {
   mpUserId: string | null;
   mpDefaultTerminalId: string | null;
   timezone: string;
+  weekStartDow: number;
   isPaid: boolean;
   isFree: boolean;
   isMpConnected: boolean;
@@ -76,6 +77,8 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   const [getnetEnabled, setGetnetEnabled] = useState(false);
   const [clipConfigured, setClipConfigured] = useState(false);
   const [timezone, setTimezone] = useState<string>('UTC');
+  // 0=Sun..6=Sat. Default Monday — matches payroll_settings.period_start_dow default.
+  const [weekStartDow, setWeekStartDow] = useState<number>(1);
 
   const fetchPlan = useCallback(async () => {
     try {
@@ -99,6 +102,9 @@ export function PlanProvider({ children }: { children: ReactNode }) {
         if (data.getnetEnabled !== undefined) setGetnetEnabled(data.getnetEnabled);
         if (data.clipConfigured !== undefined) setClipConfigured(data.clipConfigured);
         if (typeof data.timezone === 'string' && data.timezone) setTimezone(data.timezone);
+        if (typeof data.weekStartDow === 'number' && data.weekStartDow >= 0 && data.weekStartDow <= 6) {
+          setWeekStartDow(data.weekStartDow);
+        }
       }
     } catch {
       // Server unreachable — keep defaults
@@ -133,7 +139,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   }, [limits]);
 
   return (
-    <PlanContext.Provider value={{ plan, limits, ownerEmail, mpUserId, mpDefaultTerminalId, timezone, isPaid, isFree, isMpConnected, isConektaConfigured, isGetnetConfigured, isGetnetEnabled, isClipConfigured, isAtLimit, isFeatureLocked, refresh: fetchPlan }}>
+    <PlanContext.Provider value={{ plan, limits, ownerEmail, mpUserId, mpDefaultTerminalId, timezone, weekStartDow, isPaid, isFree, isMpConnected, isConektaConfigured, isGetnetConfigured, isGetnetEnabled, isClipConfigured, isAtLimit, isFeatureLocked, refresh: fetchPlan }}>
       {children}
     </PlanContext.Provider>
   );

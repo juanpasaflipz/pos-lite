@@ -9,7 +9,14 @@
       "week": "Esta Semana",
       "lastWeek": "Semana Pasada",
       "month": "Este Mes",
-      "lastMonth": "Mes Pasado"
+      "lastMonth": "Mes Pasado",
+      "custom": "Personalizado"
+    },
+    "customRange": {
+      "from": "Desde",
+      "to": "Hasta",
+      "apply": "Aplicar",
+      "invalid": "La fecha inicial debe ser igual o anterior a la fecha final"
     },
     "tabs": {
       "overview": "Resumen",
@@ -521,7 +528,7 @@
       "weekLabor": "Nómina de la semana",
       "ofSales": "de {{sales}} en ventas",
       "hours": "Horas trabajadas",
-      "period": "{{start}} → {{end}}",
+      "period": "{{range}}",
       "tipPool": "Bote de propinas",
       "onClock": "{{count}} en turno",
       "overtimeAlert": "Más de {{threshold}}h: {{names}}",

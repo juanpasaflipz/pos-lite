@@ -49,17 +49,26 @@ import FinancialsTab from '../components/reports/FinancialsTab';
 import MenuEngineeringTab from '../components/reports/MenuEngineeringTab';
 import PayrollTab from '../components/reports/PayrollTab';
 
-type Period = 'today' | 'week' | 'month' | 'yesterday' | 'last_week' | 'last_month';
+type Period = 'today' | 'week' | 'month' | 'yesterday' | 'last_week' | 'last_month' | 'custom';
 type Tab = 'overview' | 'cashcard' | 'cogs' | 'categories' | 'margin' | 'delivery' | 'fees' | 'refunds' | 'financials' | 'engineering' | 'payroll';
 
 const VALID_TABS: Tab[] = ['overview', 'cashcard', 'cogs', 'categories', 'margin', 'delivery', 'fees', 'refunds', 'financials', 'engineering', 'payroll'];
 
+// Local YYYY-MM-DD (matches the user's wall clock; tenant tz handled server-side).
+const localYmd = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 export default function ReportsScreen() {
   const { t } = useTranslation('reports');
   const { currentEmployee } = useAuth();
-  const { limits, timezone: tenantTz } = usePlan();
+  const { limits, timezone: tenantTz, weekStartDow } = usePlan();
   const [searchParams, setSearchParams] = useSearchParams();
   const [period, setPeriod] = useState<Period>('today');
+  // Custom range — initialized to "last 7 days" so the picker has sensible defaults.
+  const initEnd = new Date(); initEnd.setHours(0, 0, 0, 0);
+  const initStart = new Date(initEnd); initStart.setDate(initEnd.getDate() - 6);
+  const [customStart, setCustomStart] = useState<string>(localYmd(initStart));
+  const [customEnd, setCustomEnd] = useState<string>(localYmd(initEnd));
   const requestedTab = (searchParams.get('tab') || '').toLowerCase();
   const initialTab: Tab = (VALID_TABS as string[]).includes(requestedTab) ? (requestedTab as Tab) : 'overview';
   const [tab, setTabState] = useState<Tab>(initialTab);
@@ -97,8 +106,11 @@ export default function ReportsScreen() {
   const canEditFinancials = !!(currentEmployee && ['admin', 'manager'].includes(currentEmployee.role) && limits.reports.editVariables);
 
   useEffect(() => {
+    // Refetch when the custom range edits stabilize. Guard against partial
+    // dates so we don't spam requests while the user is typing.
+    if (period === 'custom' && (!customStart || !customEnd || customStart > customEnd)) return;
     fetchReportData();
-  }, [period, tab, financialMonth, itemSalesFilters]);
+  }, [period, tab, financialMonth, itemSalesFilters, customStart, customEnd]);
 
   const fetchReportData = async () => {
     if (tab === 'payroll') {
@@ -110,11 +122,12 @@ export default function ReportsScreen() {
       setLoading(true);
       setError(null);
 
+      const opts = rangeOpts(period);
       if (tab === 'overview') {
         const [sales, itemSalesData, perf, hourly] = await Promise.all([
-          getSalesReport(period),
-          getItemSalesReport(period, itemSalesFilters),
-          getEmployeePerformance(period),
+          getSalesReport(period, opts),
+          getItemSalesReport(period, itemSalesFilters, opts),
+          getEmployeePerformance(period, opts),
           getHourlyReport(),
         ]);
         setSalesData(sales);
@@ -122,32 +135,32 @@ export default function ReportsScreen() {
         setEmployeePerf(perf);
         setHourlyData(hourly);
       } else if (tab === 'cashcard') {
-        const data = await getCashCardBreakdown(period);
+        const data = await getCashCardBreakdown(period, opts);
         setCashCard(data);
       } else if (tab === 'cogs') {
-        const data = await getCOGSReport(period);
+        const data = await getCOGSReport(period, opts);
         setCogsData(data);
       } else if (tab === 'categories') {
-        const data = await getCategoryMargins(period);
+        const data = await getCategoryMargins(period, opts);
         setCategoryData(data);
       } else if (tab === 'margin') {
-        const data = await getContributionMargin(period);
+        const data = await getContributionMargin(period, opts);
         setMarginData(data);
       } else if (tab === 'delivery') {
         const [del, chan] = await Promise.all([
-          getDeliveryMargins(period),
-          getChannelComparison(period),
+          getDeliveryMargins(period, opts),
+          getChannelComparison(period, opts),
         ]);
         setDeliveryData(del);
         setChannelData(chan);
       } else if (tab === 'fees') {
-        const data = await getPaymentFees(period);
+        const data = await getPaymentFees(period, opts);
         setFeesData(data);
       } else if (tab === 'refunds') {
-        const data = await getRefundSummary();
+        const data = await getRefundSummary(opts.start_date, opts.end_date);
         setRefundData(data);
       } else if (tab === 'engineering') {
-        const data = await getMenuEngineering(period);
+        const data = await getMenuEngineering(period, opts);
         setEngineeringData(data);
       } else if (tab === 'financials') {
         const data = await getFinancialProjection(financialMonth);
@@ -175,12 +188,13 @@ export default function ReportsScreen() {
     setExporting(true);
     setError(null);
     try {
+      const opts = rangeOpts(period);
       const [sales, items, employees, cashCardData, dailySeries] = await Promise.all([
-        getSalesReport(period),
-        getItemSalesReport(period, {}),
-        getEmployeePerformance(period),
-        getCashCardBreakdown(period).catch(() => null),
-        getContributionMargin(period).catch(() => null),
+        getSalesReport(period, opts),
+        getItemSalesReport(period, {}, opts),
+        getEmployeePerformance(period, opts),
+        getCashCardBreakdown(period, opts).catch(() => null),
+        getContributionMargin(period, opts).catch(() => null),
       ]);
 
       const lines: string[] = [];
@@ -335,15 +349,19 @@ export default function ReportsScreen() {
       case 'yesterday': return t('sales.periods.yesterday');
       case 'last_week': return t('sales.periods.lastWeek');
       case 'last_month': return t('sales.periods.lastMonth');
+      case 'custom': return t('sales.periods.custom');
     }
   };
 
   // Returns { start, end } as local-midnight Dates for label rendering.
   // Mirrors the backend getPeriodRange so the label matches the data.
+  // Week anchor follows weekStartDow from PlanContext (mirror of
+  // payroll_settings.period_start_dow). Defaults to Monday.
   const getPeriodRange = (p: Period): { start: Date; end: Date } => {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
     const end = new Date(start);
+    const daysBack = ((end.getDay() - weekStartDow + 7) % 7);
     switch (p) {
       case 'today':
         return { start, end };
@@ -353,11 +371,11 @@ export default function ReportsScreen() {
         return { start, end };
       }
       case 'week':
-        start.setDate(start.getDate() - start.getDay());
+        start.setDate(start.getDate() - daysBack);
         return { start, end };
       case 'last_week': {
         const thisWeekStart = new Date(end);
-        thisWeekStart.setDate(end.getDate() - end.getDay());
+        thisWeekStart.setDate(end.getDate() - daysBack);
         const lastEnd = new Date(thisWeekStart);
         lastEnd.setDate(thisWeekStart.getDate() - 1);
         const lastStart = new Date(lastEnd);
@@ -372,14 +390,35 @@ export default function ReportsScreen() {
         const lastStart = new Date(lastEnd.getFullYear(), lastEnd.getMonth(), 1);
         return { start: lastStart, end: lastEnd };
       }
+      case 'custom': {
+        const [sy, sm, sd] = customStart.split('-').map(Number);
+        const [ey, em, ed] = customEnd.split('-').map(Number);
+        return {
+          start: new Date(sy, sm - 1, sd),
+          end: new Date(ey, em - 1, ed),
+        };
+      }
     }
   };
 
   const getPeriodStart = (p: Period): Date => getPeriodRange(p).start;
 
+  // Pack the date range into ReportRangeOpts for every backend call.
+  // Always send explicit dates so the server treats the frontend's choice
+  // (dow, custom picker) as authoritative.
+  const rangeOpts = (p: Period) => {
+    const { start, end } = getPeriodRange(p);
+    return {
+      start_date: localYmd(start),
+      end_date: localYmd(end),
+      week_start_dow: weekStartDow,
+    };
+  };
+
   const getDateRangeLabel = (p: Period): string => {
     const { start, end } = getPeriodRange(p);
-    if (p === 'today' || p === 'yesterday') {
+    const sameDay = localYmd(start) === localYmd(end);
+    if (p === 'today' || p === 'yesterday' || sameDay) {
       return formatDate(start, { year: 'numeric', month: 'short', day: 'numeric' });
     }
     const sameYear = start.getFullYear() === end.getFullYear();
@@ -445,7 +484,7 @@ export default function ReportsScreen() {
 
         {/* Period Selector */}
         <div className="flex flex-wrap gap-2 mb-2">
-          {(['today', 'yesterday', 'week', 'last_week', 'month', 'last_month'] as const).map((p) => (
+          {(['today', 'yesterday', 'week', 'last_week', 'month', 'last_month', 'custom'] as const).map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}
@@ -459,6 +498,33 @@ export default function ReportsScreen() {
             </button>
           ))}
         </div>
+        {period === 'custom' && (
+          <div className="flex flex-wrap items-end gap-3 mb-2 p-3 rounded-lg bg-neutral-900 border border-neutral-800">
+            <label className="flex flex-col text-xs text-neutral-400">
+              <span className="mb-1">{t('sales.customRange.from')}</span>
+              <input
+                type="date"
+                value={customStart}
+                max={customEnd || undefined}
+                onChange={e => setCustomStart(e.target.value)}
+                className="px-3 py-2 rounded-md bg-neutral-800 text-white border border-neutral-700 min-h-[40px]"
+              />
+            </label>
+            <label className="flex flex-col text-xs text-neutral-400">
+              <span className="mb-1">{t('sales.customRange.to')}</span>
+              <input
+                type="date"
+                value={customEnd}
+                min={customStart || undefined}
+                onChange={e => setCustomEnd(e.target.value)}
+                className="px-3 py-2 rounded-md bg-neutral-800 text-white border border-neutral-700 min-h-[40px]"
+              />
+            </label>
+            {customStart && customEnd && customStart > customEnd && (
+              <span className="text-xs text-cockpit-out-text">{t('sales.customRange.invalid')}</span>
+            )}
+          </div>
+        )}
         <div className="text-sm text-neutral-400 mb-4" aria-live="polite">
           {getDateRangeLabel(period)}
         </div>

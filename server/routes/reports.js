@@ -21,12 +21,18 @@ function tzToday(tz) {
  * so the optional "previous period" buttons (yesterday, last_week, last_month)
  * also have an upper bound — without it they'd run from start-of-last-period
  * to today and over-count.
+ *
+ * weekStartDow: 0=Sun, 1=Mon, ..., 6=Sat — used to anchor week and last_week.
+ * Defaults to 1 (Monday) to match payroll_settings.period_start_dow default
+ * and the way most MX restaurants schedule.
  */
-function getPeriodRange(period, tz = 'UTC') {
+function getPeriodRange(period, tz = 'UTC', weekStartDow = 1) {
   const todayStr = tzToday(tz);
   const [y, m, d] = todayStr.split('-').map(Number);
   const today = new Date(Date.UTC(y, m - 1, d));
   const fmt = (dt) => dt.toISOString().slice(0, 10);
+  const dow = ((Number(weekStartDow) % 7) + 7) % 7;
+  const daysBack = ((today.getUTCDay() - dow + 7) % 7);
 
   switch (period) {
     case 'daily':
@@ -41,12 +47,12 @@ function getPeriodRange(period, tz = 'UTC') {
     case 'weekly':
     case 'week': {
       const start = new Date(today);
-      start.setUTCDate(today.getUTCDate() - today.getUTCDay());
+      start.setUTCDate(today.getUTCDate() - daysBack);
       return { start: fmt(start), end: todayStr };
     }
     case 'last_week': {
       const thisWeekStart = new Date(today);
-      thisWeekStart.setUTCDate(today.getUTCDate() - today.getUTCDay());
+      thisWeekStart.setUTCDate(today.getUTCDate() - daysBack);
       const lastEnd = new Date(thisWeekStart);
       lastEnd.setUTCDate(thisWeekStart.getUTCDate() - 1);
       const lastStart = new Date(lastEnd);
@@ -69,8 +75,30 @@ function getPeriodRange(period, tz = 'UTC') {
 }
 
 /** Back-compat: start-only string. */
-function getDateRange(period, tz = 'UTC') {
-  return getPeriodRange(period, tz).start;
+function getDateRange(period, tz = 'UTC', weekStartDow = 1) {
+  return getPeriodRange(period, tz, weekStartDow).start;
+}
+
+/**
+ * Resolve a YYYY-MM-DD {start, end} range from a request.
+ *
+ * Honors explicit start_date/end_date params when both present (used by the
+ * "Custom range" picker and by every preset chip so the frontend's
+ * weekStartDow choice is authoritative). Falls back to legacy
+ * `period=` + `week_start_dow=` params for compatibility with older clients
+ * and the CSV exporter.
+ */
+function resolveDateRange(req, tz = 'UTC') {
+  const { start_date, end_date, period = 'today', week_start_dow } = req.query || {};
+  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+  if (typeof start_date === 'string' && typeof end_date === 'string'
+      && dateRe.test(start_date) && dateRe.test(end_date)) {
+    const start = start_date <= end_date ? start_date : end_date;
+    const end = start_date <= end_date ? end_date : start_date;
+    return { start, end };
+  }
+  const dow = week_start_dow !== undefined ? Number(week_start_dow) : 1;
+  return getPeriodRange(String(period), tz, Number.isFinite(dow) ? dow : 1);
 }
 
 function paymentSourceSql(alias = '') {
@@ -113,7 +141,7 @@ router.get('/sales', async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
+    const { start: startDate, end: endDate } = resolveDateRange(req, tz);
 
     const stats = await get(`
       SELECT
@@ -146,7 +174,7 @@ router.get('/top-items', async (req, res) => {
   try {
     const { period = 'daily', limit = 10 } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
+    const { start: startDate, end: endDate } = resolveDateRange(req, tz);
     const limitNum = Math.min(parseInt(limit) || 10, 100);
 
     const items = await all(`
@@ -181,7 +209,7 @@ router.get('/item-sales', async (req, res) => {
       related_item_id,
     } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
+    const { start: startDate, end: endDate } = resolveDateRange(req, tz);
 
     const where = [
       `(COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2`,
@@ -339,7 +367,7 @@ router.get('/employee-performance', async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
+    const { start: startDate, end: endDate } = resolveDateRange(req, tz);
 
     const employees = await all(`
       SELECT
@@ -410,7 +438,7 @@ router.get('/cash-card-breakdown', async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
+    const { start: startDate, end: endDate } = resolveDateRange(req, tz);
 
     const breakdown = await all(`
       SELECT
@@ -530,7 +558,7 @@ router.get('/cogs', async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
+    const { start: startDate, end: endDate } = resolveDateRange(req, tz);
 
     // Get revenue per menu item
     const items = await all(`
@@ -596,7 +624,7 @@ router.get('/category-margins', async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
+    const { start: startDate, end: endDate } = resolveDateRange(req, tz);
 
     const categories = await all(`
       SELECT
@@ -673,7 +701,7 @@ router.get('/contribution-margin', async (req, res) => {
   try {
     const { period = 'weekly', group_by = 'day' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
+    const { start: startDate, end: endDate } = resolveDateRange(req, tz);
 
     const dailyRevenue = await all(`
       SELECT
@@ -835,7 +863,7 @@ router.get('/delivery-margins', async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
+    const { start: startDate, end: endDate } = resolveDateRange(req, tz);
 
     const platforms = await all(`
       SELECT
@@ -875,7 +903,7 @@ router.get('/channel-comparison', async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
+    const { start: startDate, end: endDate } = resolveDateRange(req, tz);
 
     const channels = await all(`
       SELECT
@@ -956,7 +984,7 @@ router.get('/payment-fees', requireAuth('view_reports'), async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
+    const { start: startDate, end: endDate } = resolveDateRange(req, tz);
 
     const daily = {};
     const byProcessor = {};
@@ -1067,7 +1095,7 @@ router.get('/refund-summary', requireAuth('view_reports'), async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
+    const { start: startDate, end: endDate } = resolveDateRange(req, tz);
 
     const summary = await get(`
       SELECT
@@ -1363,7 +1391,7 @@ router.get('/menu-engineering', async (req, res) => {
   try {
     const { period = 'monthly' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
-    const { start: startDate, end: endDate } = getPeriodRange(period, tz);
+    const { start: startDate, end: endDate } = resolveDateRange(req, tz);
 
     // Get all sold items with quantities and revenue
     const items = await all(`

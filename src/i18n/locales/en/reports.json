@@ -9,7 +9,14 @@
       "week": "This Week",
       "lastWeek": "Last Week",
       "month": "This Month",
-      "lastMonth": "Last Month"
+      "lastMonth": "Last Month",
+      "custom": "Custom"
+    },
+    "customRange": {
+      "from": "From",
+      "to": "To",
+      "apply": "Apply",
+      "invalid": "Start date must be on or before end date"
     },
     "tabs": {
       "overview": "Overview",
@@ -521,7 +528,7 @@
       "weekLabor": "This week's labor",
       "ofSales": "of {{sales}} in sales",
       "hours": "Hours worked",
-      "period": "{{start}} → {{end}}",
+      "period": "{{range}}",
       "tipPool": "Tip pool",
       "onClock": "{{count}} on clock",
       "overtimeAlert": "Over {{threshold}}h: {{names}}",
