@@ -386,11 +386,12 @@ export async function appendItemsToKioskOrder(
 
 export async function fetchOpenOrders(
   auth: AuthHeaders,
-  by: { name?: string; customerToken?: string },
+  by: { name?: string; customerToken?: string; mode?: 'pay' | 'agregar' },
 ): Promise<KioskOpenOrder[]> {
   const params = new URLSearchParams();
   if (by.name) params.set('name', by.name);
   if (by.customerToken) params.set('customer_token', by.customerToken);
+  if (by.mode) params.set('mode', by.mode);
   const res = await fetch(`${API_BASE}/api/kiosk/orders/open?${params.toString()}`, {
     headers: authHeaders(auth),
   });

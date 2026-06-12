@@ -1098,17 +1098,23 @@ router.post('/orders/send-to-delivery', verifyKioskToken, async (req, res) => {
   }
 });
 
-// GET /api/kiosk/orders/open?name=Juan  OR  ?customer_token=...
-// Returns open dine-in unpaid orders matching this customer/name. Used by:
+// GET /api/kiosk/orders/open?name=Juan&mode=pay  OR  ?customer_token=...
+// Returns open unpaid orders matching this customer/name. Used by:
 //   - Welcome banner (with customer_token from prior session)
-//   - Pagar mi cuenta flow (with name) → fetches order to charge
-//   - Agregar a mi orden flow (with name) → appends more items
+//   - Pagar mi cuenta flow (mode='pay') → fetches order to charge.
+//     Includes counter-rung dine-in tabs (any source) so a customer can pay
+//     at the kiosk even if the cashier opened the tab.
+//   - Agregar a mi orden flow (mode='agregar', default) → appends more items.
+//     Restricted to source='customer_kiosk' because the append-items endpoint
+//     refuses non-kiosk orders (counter cashier owns those tabs).
 // 6-hour rolling window prevents day-old name collisions ("Juan from yesterday").
+// Name match uses unaccent() so "Jose" finds "José".
 router.get('/orders/open', verifyKioskToken, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
     const rawName = typeof req.query.name === 'string' ? req.query.name.trim() : '';
     const customerToken = typeof req.query.customer_token === 'string' ? req.query.customer_token : null;
+    const mode = req.query.mode === 'pay' ? 'pay' : 'agregar';
     const loyaltyCustomerId = verifyCustomerToken(customerToken, tenantId);
 
     if (!loyaltyCustomerId && !rawName) {
@@ -1129,15 +1135,22 @@ router.get('/orders/open', verifyKioskToken, async (req, res) => {
       ? adminSql`o.loyalty_customer_id = ${loyaltyCustomerId}`
       : adminSql`(
           (o.loyalty_customer_id IS NULL
-             AND LOWER(o.customer_call_name) = ${lowName})
+             AND unaccent(LOWER(o.customer_call_name)) = unaccent(${lowName}))
           OR
           (o.loyalty_customer_id IS NOT NULL
              AND lc.id IS NOT NULL
              AND (
-               LOWER(SPLIT_PART(lc.name, ' ', 1)) = ${lowName}
-               OR LOWER(lc.name) = ${lowName}
+               unaccent(LOWER(SPLIT_PART(lc.name, ' ', 1))) = unaccent(${lowName})
+               OR unaccent(LOWER(lc.name)) = unaccent(${lowName})
              ))
         )`;
+
+    // Pay mode: any dine-in tab (kiosk OR counter-rung) is fair game — worst
+    // case is paying the wrong tab, which is reversible.
+    // Agregar mode: kiosk-only — append-items 403s on non-kiosk sources.
+    const sourceFilter = mode === 'pay'
+      ? adminSql`o.order_fulfillment_type = 'for_here'`
+      : adminSql`o.source = 'customer_kiosk'`;
 
     const orders = await adminSql`
       SELECT o.id, o.order_number, o.total, o.subtotal, o.tax,
@@ -1147,7 +1160,7 @@ router.get('/orders/open', verifyKioskToken, async (req, res) => {
       FROM orders o
       LEFT JOIN loyalty_customers lc ON lc.id = o.loyalty_customer_id
       WHERE o.tenant_id = ${tenantId}
-        AND o.source = 'customer_kiosk'
+        AND ${sourceFilter}
         AND o.payment_status IN ('unpaid', 'partial', 'pending_terminal')
         AND o.status NOT IN ('cancelled', 'voided', 'draft_kiosk')
         AND o.created_at > NOW() - INTERVAL '6 hours'

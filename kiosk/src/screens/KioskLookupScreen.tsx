@@ -107,7 +107,7 @@ const KioskLookupScreen: React.FC<Props> = ({ mode }) => {
     setBusy(true);
     setError(null);
     try {
-      const orders = await fetchOpenOrders(auth, { name: trimmed });
+      const orders = await fetchOpenOrders(auth, { name: trimmed, mode });
       if (orders.length === 0) {
         setResults([]);
         setStep('results');
@@ -141,7 +141,7 @@ const KioskLookupScreen: React.FC<Props> = ({ mode }) => {
         return;
       }
       setSessionFromIdentify(result);
-      const orders = await fetchOpenOrders(auth, { customerToken: result.customer_token });
+      const orders = await fetchOpenOrders(auth, { customerToken: result.customer_token, mode });
       if (orders.length === 0) {
         setResults([]);
         setStep('results');
