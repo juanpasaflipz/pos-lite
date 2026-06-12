@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { X, Plus, Check } from 'lucide-react';
+import { X, Check } from 'lucide-react';
 import type { KioskMenuItem, KioskModifier, KioskModifierGroup } from '../lib/kioskApi';
 
 const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
@@ -148,10 +148,9 @@ const KioskModifierModal: React.FC<Props> = ({ item, groups, onCancel, onConfirm
           <button
             onClick={() => canConfirm && onConfirm(flatPicks)}
             disabled={!canConfirm}
-            className="h-16 px-8 rounded-2xl bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-600 text-lg font-black touch-manipulation inline-flex items-center gap-3 justify-center"
+            className="h-16 px-8 rounded-2xl bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-600 text-lg font-black touch-manipulation inline-flex items-center justify-center"
           >
-            <Plus className="h-6 w-6" />
-            Agregar · {money.format(total)}
+            {money.format(total)}
           </button>
         </div>
       </div>
