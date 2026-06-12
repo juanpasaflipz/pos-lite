@@ -513,36 +513,41 @@ const LiveGrid: React.FC<LiveGridProps> = ({ orders, now, actionId, lane, onEdit
               tier === 'critical' ? 'ring-1 ring-cockpit-red/40' : ''
             }`}
           >
-            <div className="flex items-center justify-between gap-2 px-3 pt-3 flex-wrap">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xl font-black text-white">#{order.order_number}</span>
-                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${STATUS_BADGE[order.status] || 'bg-neutral-600 text-white'}`}>
-                  {t(`common:orderStatus.${order.status}`, order.status)}
-                </span>
-                {paid ? (
-                  <span className="bg-cockpit-green text-neutral-900 px-2 py-0.5 rounded-full text-xs font-bold inline-flex items-center gap-1">
-                    <Check size={12} strokeWidth={3} /> {t('pos:ordersPanel.paid')}
+            <div className="flex items-start justify-between gap-2 px-3 pt-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-2 min-w-0">
+                  <span className="text-xl font-black text-white truncate">
+                    {order.customer_name?.trim() || `#${order.order_number}`}
                   </span>
-                ) : (
-                  <span className="bg-cockpit-yellow text-neutral-900 px-2 py-0.5 rounded-full text-xs font-bold">
-                    {t('pos:ordersPanel.unpaid')}
+                  {order.customer_name?.trim() && (
+                    <span className="text-sm font-bold text-neutral-500 shrink-0">#{order.order_number}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 flex-wrap mt-1.5">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${STATUS_BADGE[order.status] || 'bg-neutral-600 text-white'}`}>
+                    {t(`common:orderStatus.${order.status}`, order.status)}
                   </span>
-                )}
-                {order.table_number && (
-                  <span className="bg-cockpit-blue text-white px-2 py-0.5 rounded-full text-xs font-bold">
-                    Table {order.table_number}
-                  </span>
-                )}
+                  {paid ? (
+                    <span className="bg-cockpit-green text-neutral-900 px-2 py-0.5 rounded-full text-xs font-bold inline-flex items-center gap-1">
+                      <Check size={12} strokeWidth={3} /> {t('pos:ordersPanel.paid')}
+                    </span>
+                  ) : (
+                    <span className="bg-cockpit-yellow text-neutral-900 px-2 py-0.5 rounded-full text-xs font-bold">
+                      {t('pos:ordersPanel.unpaid')}
+                    </span>
+                  )}
+                  {order.table_number && (
+                    <span className="bg-cockpit-blue text-white px-2 py-0.5 rounded-full text-xs font-bold">
+                      Table {order.table_number}
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className={`flex items-center gap-1 text-sm font-bold ${TIER_TIME_TEXT[tier]} ${tier === 'critical' ? 'animate-pulse' : ''}`}>
+              <div className={`flex items-center gap-1 text-sm font-bold shrink-0 ${TIER_TIME_TEXT[tier]} ${tier === 'critical' ? 'animate-pulse' : ''}`}>
                 <Clock className="w-4 h-4" />
                 {formatElapsed(elapsed)}
               </div>
             </div>
-
-            {order.customer_name && (
-              <div className="px-3 pt-1 text-xs text-neutral-400 truncate">{order.customer_name}</div>
-            )}
 
             {order.items && order.items.length > 0 && (
               <div className="px-3 pt-2 space-y-1">
@@ -631,13 +636,15 @@ const HistoryGrid: React.FC<{
             className="w-full text-left bg-neutral-900 rounded-lg border border-neutral-800 hover:border-neutral-600 hover:bg-neutral-800/60 transition-colors p-3 min-h-[40px] disabled:opacity-60"
           >
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                <span className="text-base font-black text-white">#{o.order_number}</span>
-                {o.customer_name && (
-                  <span className="text-xs text-neutral-400 truncate">{o.customer_name}</span>
+              <div className="flex items-baseline gap-2 min-w-0">
+                <span className="text-base font-black text-white truncate">
+                  {o.customer_name?.trim() || `#${o.order_number}`}
+                </span>
+                {o.customer_name?.trim() && (
+                  <span className="text-xs font-bold text-neutral-500 shrink-0">#{o.order_number}</span>
                 )}
               </div>
-              <span className="text-sm font-bold text-brand-500 whitespace-nowrap">
+              <span className="text-sm font-bold text-brand-500 whitespace-nowrap shrink-0">
                 {formatPrice(Number(o.total))}
               </span>
             </div>
@@ -681,17 +688,21 @@ const CancelledGrid: React.FC<{
             disabled={opening}
             className="w-full text-left bg-neutral-900 rounded-lg border border-cockpit-red/30 hover:border-cockpit-red/60 hover:bg-neutral-800/60 transition-colors p-3 min-h-[40px] disabled:opacity-60"
           >
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                <span className="text-base font-black text-white">#{o.order_number}</span>
-                <span className="bg-cockpit-red text-white px-2 py-0.5 rounded-full text-[10px] font-bold uppercase">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-2 min-w-0">
+                  <span className="text-base font-black text-white truncate">
+                    {o.customer_name?.trim() || `#${o.order_number}`}
+                  </span>
+                  {o.customer_name?.trim() && (
+                    <span className="text-xs font-bold text-neutral-500 shrink-0">#{o.order_number}</span>
+                  )}
+                </div>
+                <span className="inline-block bg-cockpit-red text-white px-2 py-0.5 rounded-full text-[10px] font-bold uppercase mt-1">
                   {t('common:orderStatus.cancelled', { defaultValue: 'Cancelled' })}
                 </span>
-                {o.customer_name && (
-                  <span className="text-xs text-neutral-400 truncate">{o.customer_name}</span>
-                )}
               </div>
-              <span className="text-sm font-bold text-neutral-400 whitespace-nowrap">
+              <span className="text-sm font-bold text-neutral-400 whitespace-nowrap shrink-0">
                 {formatPrice(Number(o.total))}
               </span>
             </div>

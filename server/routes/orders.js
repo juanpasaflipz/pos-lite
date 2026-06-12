@@ -153,6 +153,7 @@ async function insertOrderWithNumber(conn, {
   employee_id, subtotal, tax, total, offline_temp_id, tenantId,
   discount_amount = 0, discount_type = null, discount_reason = null, discount_authorized_by = null,
   order_fulfillment_type = 'to_go',
+  customer_call_name = null,
 }) {
   await ensureCounterTable();
 
@@ -179,14 +180,14 @@ async function insertOrderWithNumber(conn, {
       tenant_id, order_number, employee_id, status, subtotal, tax, total,
       payment_status, offline_temp_id,
       discount_amount, discount_type, discount_reason, discount_authorized_by,
-      order_fulfillment_type
+      order_fulfillment_type, customer_call_name
     )
-    VALUES ($1, $2, $3, 'active', $4, $5, $6, 'unpaid', $7, $8, $9, $10, $11, $12)
+    VALUES ($1, $2, $3, 'active', $4, $5, $6, 'unpaid', $7, $8, $9, $10, $11, $12, $13)
     RETURNING id, order_number
   `, [
     tid, orderNumber, employee_id, subtotal, tax, total, offline_temp_id || null,
     discount_amount, discount_type, discount_reason, discount_authorized_by,
-    fulfillment,
+    fulfillment, customer_call_name,
   ]);
 
   return { orderId: inserted.id, orderNumber: inserted.order_number };
@@ -505,6 +506,14 @@ async function fetchExistingByOfflineTempId(offline_temp_id) {
  */
 async function buildOrderFromRequest(req) {
   const { employee_id, items, offline_temp_id, discount: orderDiscount, order_fulfillment_type } = req.body;
+  // Cashier-entered "Juan", "Mesa 3", "Pickup Order" — short label that fronts the
+  // KDS ticket and the admin/orders board so staff can find the order at a glance.
+  // Falls back to NULL when blank so the COALESCE chain (loyalty → call_name →
+  // delivery customer) still resolves cleanly.
+  const rawCallName = req.body?.customer_call_name;
+  const customer_call_name = typeof rawCallName === 'string' && rawCallName.trim()
+    ? rawCallName.trim().slice(0, 60)
+    : null;
 
   if (!employee_id || !items || items.length === 0) {
     const err = new Error('Missing required fields');
@@ -683,6 +692,7 @@ async function buildOrderFromRequest(req) {
       discount_reason: orderDiscountAmount > 0 ? (orderDiscount?.reason || null) : null,
       discount_authorized_by: orderAuthorizedBy,
       order_fulfillment_type,
+      customer_call_name,
     }));
     await conn.unsafe('RELEASE SAVEPOINT order_insert');
   } catch (err) {

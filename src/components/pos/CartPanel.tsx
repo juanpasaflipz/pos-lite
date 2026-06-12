@@ -15,6 +15,8 @@ interface ComboSuggestion {
 interface CartPanelProps {
   cart: CartItem[];
   linkedCustomer: LoyaltyCustomer | null;
+  customerCallName: string;
+  onChangeCustomerCallName: (value: string) => void;
   unpaidOrders: Order[];
   showUnpaidOrders: boolean;
   comboSuggestion: ComboSuggestion | null;
@@ -52,6 +54,8 @@ interface CartPanelProps {
 export default function CartPanel({
   cart,
   linkedCustomer,
+  customerCallName,
+  onChangeCustomerCallName,
   unpaidOrders,
   showUnpaidOrders,
   comboSuggestion,
@@ -118,7 +122,7 @@ export default function CartPanel({
             </button>
           )}
         </div>
-        {linkedCustomer && (
+        {linkedCustomer ? (
           <div className="mt-2 flex items-center justify-between bg-brand-700/50 rounded-lg px-3 py-2">
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold">{linkedCustomer.name}</span>
@@ -134,6 +138,18 @@ export default function CartPanel({
             >
               {t('cart.unlink')}
             </button>
+          </div>
+        ) : (
+          <div className="mt-2 flex items-center gap-2 bg-brand-700/40 rounded-lg px-3 py-1.5">
+            <User className="w-4 h-4 text-brand-200 shrink-0" />
+            <input
+              type="text"
+              value={customerCallName}
+              onChange={(e) => onChangeCustomerCallName(e.target.value)}
+              maxLength={60}
+              placeholder={t('cart.customerNamePlaceholder', { defaultValue: 'Nombre del cliente (opcional)' })}
+              className="flex-1 bg-transparent text-white placeholder-brand-200/70 text-sm font-bold focus:outline-none"
+            />
           </div>
         )}
       </div>

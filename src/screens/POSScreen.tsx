@@ -113,6 +113,9 @@ const POSScreen: React.FC = () => {
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [refundOrderId, setRefundOrderId] = useState<number | null>(null);
   const [linkedCustomer, setLinkedCustomer] = useState<LoyaltyCustomer | null>(null);
+  // Walk-in name on the cart — populates orders.customer_call_name so the order
+  // shows up on KDS/admin as "Juan" instead of "#20260611031". Cleared on send.
+  const [customerCallName, setCustomerCallName] = useState('');
   const [showCustomerLookup, setShowCustomerLookup] = useState(false);
   // Tracks whether we've already auto-prompted the loyalty modal for the current
   // cart cycle. Resets when the cart goes empty (cleared, paid, or parked).
@@ -607,6 +610,7 @@ const POSScreen: React.FC = () => {
   const clearCart = () => {
     setCart([]);
     setLinkedCustomer(null);
+    setCustomerCallName('');
     setCartDiscount(null);
     setCartFulfillment('to_go');
     setDeliveryDraft(null);
@@ -662,11 +666,15 @@ const POSScreen: React.FC = () => {
   // All checkout paths funnel through this so courier dispatch is one line of
   // call-site change. createOrder shape is identical across every caller.
   const createOrderForCheckout = async () => {
+    // Loyalty join wins on display, so don't also persist a stale call-name when
+    // a customer is linked — the linkedCustomer.name is authoritative.
+    const callName = linkedCustomer ? undefined : customerCallName.trim() || undefined;
     const order = await createOrder({
       employee_id: currentEmployee!.id,
       items: buildOrderItems(),
       discount: buildCartDiscountPayload(),
       order_fulfillment_type: cartFulfillment,
+      customer_call_name: callName,
     });
     await dispatchCourierIfDelivery(order.id);
     return order;
@@ -761,6 +769,7 @@ const POSScreen: React.FC = () => {
       setParkedCarts(fresh);
       setCart([]);
       setLinkedCustomer(null);
+      setCustomerCallName('');
       setShowParkedCarts(false);
       addToast(t('parkedCarts.parked', { name }), 'success');
       void id;
@@ -1216,6 +1225,8 @@ const POSScreen: React.FC = () => {
       <CartPanel
         cart={cart}
         linkedCustomer={linkedCustomer}
+        customerCallName={customerCallName}
+        onChangeCustomerCallName={setCustomerCallName}
         unpaidOrders={unpaidOrders}
         showUnpaidOrders={showUnpaidOrders}
         comboSuggestion={comboSuggestion}
@@ -1267,6 +1278,8 @@ const POSScreen: React.FC = () => {
             onClose={() => setIsCartOpen(false)}
             cart={cart}
             linkedCustomer={linkedCustomer}
+            customerCallName={customerCallName}
+            onChangeCustomerCallName={setCustomerCallName}
             unpaidOrders={unpaidOrders}
             showUnpaidOrders={showUnpaidOrders}
             parkedCount={parkedCarts.length}
