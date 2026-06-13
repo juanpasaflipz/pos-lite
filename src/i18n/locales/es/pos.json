@@ -574,6 +574,8 @@
     "start": "Iniciar",
     "markReady": "Marcar Listo",
     "complete": "Completar",
+    "recheckTerminal": "Verificar terminal",
+    "recheckTerminalHint": "Volver a consultar el estado del pago en la terminal",
     "tabActive": "Activas",
     "tabHistory": "Historial",
     "historyEmpty": "Sin órdenes pasadas",

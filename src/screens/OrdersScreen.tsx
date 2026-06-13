@@ -14,11 +14,14 @@ import {
   CreditCard,
   Ban,
   ChevronRight,
+  ScanLine,
 } from 'lucide-react';
 import {
   getKitchenOrders,
   getOrders,
   getOrder,
+  getPaymentStatus,
+  lookupOrders,
   updateOrderStatus,
 } from '../api';
 import { Order } from '../types';
@@ -117,22 +120,23 @@ export default function OrdersScreen() {
   // History filters
   const [historyDate, setHistoryDate] = useState<string>('');
   const [historySearch, setHistorySearch] = useState('');
+  // Debounced copy of historySearch — the typed value is used for the input
+  // (responsive feel) while the debounced value drives the server lookup, so
+  // we don't fire a request on every keystroke.
+  const [debouncedHistorySearch, setDebouncedHistorySearch] = useState('');
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Pull every in-flight + ready order in one shot (with items + modifiers).
-  // Splits client-side into Active / Ready buckets and surfaces unpaid ones in
-  // the Needs Payment lane so a missed Cobrar isn't hiding inside another tab.
+  // Splits client-side into Active / Ready buckets.
   const fetchKitchen = useCallback(async () => {
     try {
       const data = await getKitchenOrders({ includeReady: true });
       const active: Order[] = [];
       const ready: Order[] = [];
-      const unpaidInFlight: Order[] = [];
       for (const o of data) {
         if (o.status === 'ready') ready.push(o);
         else if (IN_FLIGHT.has(o.status)) active.push(o);
-        if (!isPaid(o) && o.status !== 'cancelled') unpaidInFlight.push(o);
       }
       // Oldest-first inside each lane — the manager's eye should land on the
       // order that's been waiting the longest, not the newest one.
@@ -140,12 +144,38 @@ export default function OrdersScreen() {
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
       active.sort(byAge);
       ready.sort(byAge);
-      unpaidInFlight.sort(byAge);
       setActiveOrders(active);
       setReadyOrders(ready);
-      setUnpaidOrders(unpaidInFlight);
     } catch {
       // non-blocking — keep last good data, retry on next poll
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  // Unpaid lane uses /api/orders?payment_status=unpaid (not the kitchen feed),
+  // because kiosk Para Aquí orders can reach status='completed' while still
+  // unpaid — those are invisible to /kitchen/active. Mirrors POSScreen's
+  // "Pedidos por cobrar" filter so the cashier strip and admin lane match.
+  const fetchUnpaid = useCallback(async () => {
+    try {
+      const data = await getOrders({ payment_status: 'unpaid' });
+      const relevant = data.filter(
+        (o) =>
+          o.status !== 'cancelled' &&
+          (o.status === 'ready' ||
+            o.status === 'completed' ||
+            o.source === 'qr_order' ||
+            o.source === 'customer_kiosk' ||
+            IN_FLIGHT.has(o.status)),
+      );
+      relevant.sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      );
+      setUnpaidOrders(relevant);
+    } catch {
+      // non-blocking
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -168,6 +198,16 @@ export default function OrdersScreen() {
 
   const fetchHistory = useCallback(async () => {
     try {
+      // With a search query, hit the tenant-wide lookup endpoint so the
+      // cashier can find orders that have fallen off the 100-row paid history
+      // — e.g. an unpaid two-day-old kiosk order, or one in 'cancelled'.
+      // Date filter is intentionally ignored while searching; the user is
+      // hunting a specific order, not browsing a day.
+      if (debouncedHistorySearch.trim()) {
+        const data = await lookupOrders(debouncedHistorySearch.trim());
+        setHistoryOrders(data);
+        return;
+      }
       const filters: { payment_status: string; date?: string } = { payment_status: 'paid' };
       if (historyDate) filters.date = historyDate;
       const data = await getOrders(filters);
@@ -178,11 +218,13 @@ export default function OrdersScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [historyDate]);
+  }, [historyDate, debouncedHistorySearch]);
 
   // Live lanes share one polling source (kitchen feed). Cancelled has its own.
   // History is on-demand. Polling cadence matches the KDS (8s) so the manager's
-  // board and the cook's board never drift apart during a rush.
+  // board and the cook's board never drift apart during a rush. Unpaid lane
+  // runs in parallel with kitchen feed so its badge count stays accurate even
+  // when the manager is on Active / Ready.
   useEffect(() => {
     if (pollRef.current) clearInterval(pollRef.current);
     setLoading(true);
@@ -193,14 +235,18 @@ export default function OrdersScreen() {
     } else if (lane === 'history') {
       fetchHistory();
     } else {
-      fetchKitchen();
-      pollRef.current = setInterval(fetchKitchen, 8_000);
+      const tick = () => {
+        fetchKitchen();
+        fetchUnpaid();
+      };
+      tick();
+      pollRef.current = setInterval(tick, 8_000);
     }
 
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [lane, fetchKitchen, fetchCancelled, fetchHistory]);
+  }, [lane, fetchKitchen, fetchUnpaid, fetchCancelled, fetchHistory]);
 
   // Live tick for elapsed-time labels on live lanes.
   useEffect(() => {
@@ -209,11 +255,21 @@ export default function OrdersScreen() {
     return () => clearInterval(tick);
   }, [lane]);
 
+  // Debounce typing in the Historial search box so we hit the lookup endpoint
+  // ~300ms after the cashier stops typing.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedHistorySearch(historySearch), 300);
+    return () => clearTimeout(t);
+  }, [historySearch]);
+
   const handleRefresh = () => {
     setRefreshing(true);
     if (lane === 'cancelled') fetchCancelled();
     else if (lane === 'history') fetchHistory();
-    else fetchKitchen();
+    else {
+      fetchKitchen();
+      fetchUnpaid();
+    }
   };
 
   const handleAdvance = async (order: Order) => {
@@ -222,7 +278,7 @@ export default function OrdersScreen() {
     setActionId(order.id);
     try {
       await updateOrderStatus(order.id, step.next);
-      await fetchKitchen();
+      await Promise.all([fetchKitchen(), fetchUnpaid()]);
     } catch {
       // surfaced by next poll
     } finally {
@@ -235,7 +291,7 @@ export default function OrdersScreen() {
     setActionId(order.id);
     try {
       await updateOrderStatus(order.id, 'cancelled');
-      await fetchKitchen();
+      await Promise.all([fetchKitchen(), fetchUnpaid()]);
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Failed to cancel order');
     } finally {
@@ -248,6 +304,22 @@ export default function OrdersScreen() {
   // via router state — POSScreen reads it on mount.
   const handleCharge = (order: Order) => {
     navigate('/pos', { state: { chargeOrderId: order.id } });
+  };
+
+  // Manual rescue for terminal-paid-but-DB-unpaid orders. /api/payments/:id
+  // live-pulls MP / Clip when the row is pending_terminal with a payment id
+  // attached, and updates the DB if the processor says paid. Use this when
+  // the cashier swears the terminal showed OK but our UI still says SIN PAGAR.
+  const handleRecheckTerminal = async (order: Order) => {
+    setActionId(order.id);
+    try {
+      await getPaymentStatus(order.id);
+      await fetchUnpaid();
+    } catch {
+      // non-blocking; cashier can retap
+    } finally {
+      setActionId(null);
+    }
   };
 
   const handleRefund = (orderId: number) => {
@@ -266,15 +338,21 @@ export default function OrdersScreen() {
     }
   };
 
+  // When a search is active, historyOrders is already the server-filtered
+  // lookup result (which spans all statuses + all dates). When idle, we still
+  // do a light client-side filter so typing into the box feels instant before
+  // the 300ms debounce fires.
   const filteredHistory = useMemo(() => {
-    const q = historySearch.trim().toLowerCase();
-    if (!q) return historyOrders;
+    const typed = historySearch.trim().toLowerCase();
+    const debounced = debouncedHistorySearch.trim().toLowerCase();
+    if (debounced) return historyOrders;
+    if (!typed) return historyOrders;
     return historyOrders.filter((o) => {
       const orderNum = String(o.order_number ?? '').toLowerCase();
       const name = (o.customer_name || '').toLowerCase();
-      return orderNum.includes(q) || name.includes(q);
+      return orderNum.includes(typed) || name.includes(typed);
     });
-  }, [historyOrders, historySearch]);
+  }, [historyOrders, historySearch, debouncedHistorySearch]);
 
   const counts = {
     active: activeOrders.length,
@@ -384,6 +462,7 @@ export default function OrdersScreen() {
                 onCharge={handleCharge}
                 onAdvance={handleAdvance}
                 onCancel={handleCancel}
+                onRecheckTerminal={handleRecheckTerminal}
                 t={t}
               />
             )}
@@ -485,11 +564,12 @@ interface LiveGridProps {
   onCharge: (o: Order) => void;
   onAdvance: (o: Order) => void;
   onCancel: (o: Order) => void;
+  onRecheckTerminal: (o: Order) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   t: any;
 }
 
-const LiveGrid: React.FC<LiveGridProps> = ({ orders, now, actionId, lane, onEdit, onCharge, onAdvance, onCancel, t }) => {
+const LiveGrid: React.FC<LiveGridProps> = ({ orders, now, actionId, lane, onEdit, onCharge, onAdvance, onCancel, onRecheckTerminal, t }) => {
   if (orders.length === 0) {
     return (
       <div className="text-center py-20 text-neutral-500">
@@ -576,6 +656,18 @@ const LiveGrid: React.FC<LiveGridProps> = ({ orders, now, actionId, lane, onEdit
                   <Pencil size={12} />
                   {t('pos:ordersPanel.edit')}
                 </button>
+                {!paid && lane === 'unpaid' && (
+                  <button
+                    onClick={() => onRecheckTerminal(order)}
+                    disabled={busy}
+                    className="px-2 py-2 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-neutral-200 text-xs font-bold rounded-lg transition-colors min-h-[40px] inline-flex items-center gap-1"
+                    title={t('pos:ordersPanel.recheckTerminalHint', 'Re-check terminal payment status')}
+                    aria-label={t('pos:ordersPanel.recheckTerminal', 'Re-check terminal')}
+                  >
+                    <ScanLine size={12} />
+                    {t('pos:ordersPanel.recheckTerminal', 'Verificar terminal')}
+                  </button>
+                )}
                 {!paid && (
                   <button
                     onClick={() => onCharge(order)}
@@ -616,7 +708,7 @@ const HistoryGrid: React.FC<{
   openingId: number | null;
   onOpen: (id: number) => void;
 }> = ({ orders, openingId, onOpen }) => {
-  const { t } = useTranslation('pos');
+  const { t } = useTranslation(['pos', 'common']);
   if (orders.length === 0) {
     return (
       <div className="text-center py-20 text-neutral-500">
@@ -628,6 +720,11 @@ const HistoryGrid: React.FC<{
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
       {orders.map((o) => {
         const opening = openingId === o.id;
+        const paid = isPaid(o);
+        // Search results can include non-paid / cancelled / in-flight orders.
+        // Surface that on the card so the cashier knows immediately why an
+        // order they "thought was closed" is actually still open.
+        const showStatusPill = !paid || o.status === 'cancelled' || o.status !== 'completed';
         return (
           <button
             key={o.id}
@@ -652,10 +749,22 @@ const HistoryGrid: React.FC<{
               <span className="text-xs text-neutral-500">
                 {formatTime(new Date(o.created_at))}
               </span>
-              <span className="inline-flex items-center gap-1 text-[10px] uppercase text-neutral-400 font-bold tracking-wide">
-                <Receipt size={12} />
-                {o.payment_method || t('ordersPanel.paid')}
-              </span>
+              <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                {showStatusPill && (
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide ${STATUS_BADGE[o.status] || 'bg-neutral-700 text-neutral-200'}`}>
+                    {t(`common:orderStatus.${o.status}`, o.status)}
+                  </span>
+                )}
+                {!paid && (
+                  <span className="bg-cockpit-yellow text-neutral-900 px-1.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide">
+                    {t('ordersPanel.unpaid')}
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1 text-[10px] uppercase text-neutral-400 font-bold tracking-wide">
+                  <Receipt size={12} />
+                  {o.payment_method || (paid ? t('ordersPanel.paid') : '—')}
+                </span>
+              </div>
             </div>
           </button>
         );

@@ -1363,6 +1363,28 @@ router.post('/mp/cancel', requireAuth('pos_access'), requirePro, async (req, res
 
     const accessToken = await ensureFreshToken(tenant, adminSql);
     const termId = tenant.mp_default_terminal_id;
+
+    // Race guard: before we cancel + null mp_order_id, ask MP one more time
+    // whether the terminal payment already cleared. Common scenario: cashier
+    // taps Cancelar at the exact moment the customer's card clears — without
+    // this guard we'd void the recovery key and the order ends up "paid on
+    // the terminal" but "unpaid in our DB" with no automatic way back.
+    if (order.mp_order_id) {
+      try {
+        const mpOrder = await getPointOrder(accessToken, order.mp_order_id, termId);
+        if (mapPointOrderStatus(mpOrder) === 'paid') {
+          await markTerminalOrderPaid(order.id, req.tenant.id, {
+            mpOrder,
+            mpAccessToken: accessToken,
+          });
+          return res.json({ success: true, cancelled: false, paid: true });
+        }
+      } catch (pollErr) {
+        // Non-blocking — if MP is unreachable we still let the cashier cancel.
+        console.warn('MP cancel pre-poll failed (continuing with cancel):', pollErr.message);
+      }
+    }
+
     if (termId && order.mp_order_id) {
       try {
         await cancelPointOrder(accessToken, termId, order.mp_order_id);
@@ -1376,7 +1398,7 @@ router.post('/mp/cancel', requireAuth('pos_access'), requirePro, async (req, res
       [order.id]
     );
 
-    res.json({ success: true });
+    res.json({ success: true, cancelled: true });
   } catch (error) {
     console.error('MP cancel error:', error);
     res.status(500).json({ error: 'Failed to cancel terminal payment' });

@@ -524,6 +524,12 @@ export async function getOrder(id: number): Promise<Order> {
   return apiRequest<Order>(`/orders/${id}`);
 }
 
+export async function lookupOrders(query: string): Promise<Order[]> {
+  const q = query.trim();
+  if (!q) return [];
+  return apiRequest<Order[]>(`/orders/lookup?q=${encodeURIComponent(q)}`);
+}
+
 export async function getTodayOrderCount(): Promise<number> {
   const res = await apiRequest<{ count: number }>('/orders/today-count');
   return res.count ?? 0;

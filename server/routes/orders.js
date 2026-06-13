@@ -421,6 +421,40 @@ router.get('/today-count', async (req, res) => {
   }
 });
 
+// GET /api/orders/lookup?q=<query> - tenant-wide search across ALL orders
+// (any status, any payment_status, any date) by order_number or customer name.
+// Use case: cashier needs to find an order that's fallen off the live strip or
+// the 100-row Historial — e.g. a customer comes back the next day claiming
+// they paid but it never marked, or a kiosk order that's "missing." Returns
+// the same shape as GET /api/orders so the existing UI can render it.
+// IMPORTANT: must be declared before the '/:id' route to avoid being matched
+// as an order id.
+router.get('/lookup', async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (!q) return res.json([]);
+    const like = `%${q}%`;
+    const orders = await all(`
+      SELECT o.id, o.order_number, o.employee_id, o.status, o.subtotal, o.tax, o.tip, o.total,
+             o.payment_status, o.payment_method, o.paid_at, o.source, o.order_fulfillment_type, o.created_at,
+             o.loyalty_customer_id, e.name as employee_name,
+             COALESCE(c.name, o.customer_call_name) as customer_name
+      FROM orders o
+      JOIN employees e ON o.employee_id = e.id
+      LEFT JOIN loyalty_customers c ON c.id = o.loyalty_customer_id
+      WHERE CAST(o.order_number AS TEXT) ILIKE $1
+         OR COALESCE(c.name, '') ILIKE $1
+         OR COALESCE(o.customer_call_name, '') ILIKE $1
+      ORDER BY o.created_at DESC
+      LIMIT 25
+    `, [like]);
+    res.json(orders);
+  } catch (error) {
+    console.error('Error looking up orders:', error);
+    res.status(500).json({ error: 'Failed to lookup orders' });
+  }
+});
+
 // GET /api/orders/:id - single order with items
 router.get('/:id', async (req, res) => {
   try {

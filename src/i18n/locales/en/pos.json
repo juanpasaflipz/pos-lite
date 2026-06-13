@@ -574,6 +574,8 @@
     "start": "Start",
     "markReady": "Mark Ready",
     "complete": "Complete",
+    "recheckTerminal": "Re-check terminal",
+    "recheckTerminalHint": "Re-pull terminal payment status from the processor",
     "tabActive": "Active",
     "tabHistory": "History",
     "historyEmpty": "No past orders match",
