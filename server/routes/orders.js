@@ -936,6 +936,8 @@ router.put('/:id/status', async (req, res) => {
       confirmed:  ['preparing', 'active', 'ready', 'cancelled'],
       preparing:  ['active', 'ready', 'cancelled'],
       ready:      ['completed', 'cancelled'],
+      // Kiosk "pay at register" hold — cashier can cancel without claiming.
+      draft_kiosk: ['active', 'cancelled'],
       completed:  [],
       cancelled:  [],
     };

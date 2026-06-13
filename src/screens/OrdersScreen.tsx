@@ -476,7 +476,7 @@ export default function OrdersScreen() {
         isOpen={editingOrder !== null}
         order={editingOrder}
         onClose={() => setEditingOrder(null)}
-        onChanged={fetchKitchen}
+        onChanged={() => { fetchKitchen(); fetchUnpaid(); }}
         onRefund={handleRefund}
       />
 
