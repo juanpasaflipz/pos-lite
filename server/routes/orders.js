@@ -274,7 +274,14 @@ router.get('/', async (req, res) => {
       params.push(status);
     }
 
-    if (payment_status) {
+    if (payment_status === 'unpaid') {
+      // "unpaid" here means "needs payment" — matches isPaid() on the client
+      // (src/lib/orderUrgency.ts). Covers pending_terminal (stranded kiosk
+      // terminal), pending_oxxo, pending_spei, pending, failed, and NULL —
+      // without these, kiosk orders showing as COBRAR on /pos would vanish
+      // from admin/orders?lane=unpaid.
+      query += ` AND (o.payment_status IS NULL OR o.payment_status NOT IN ('paid', 'completed'))`;
+    } else if (payment_status) {
       query += ` AND o.payment_status = $${paramIdx++}`;
       params.push(payment_status);
     }
