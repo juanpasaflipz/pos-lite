@@ -733,24 +733,24 @@ router.post('/orders/:id/append-items', verifyKioskToken, async (req, res) => {
     // Ownership: any of these constitutes proof of ownership.
     //  (a) Same loyalty session token as the order was placed under.
     //  (b) Anonymous match — order has no loyalty profile and typed name
-    //      matches the persisted customer_call_name.
+    //      prefix-matches the persisted customer_call_name.
     //  (c) Loyalty-name match — order has a loyalty profile but customer is
-    //      coming back without their phone; typed name matches the profile's
-    //      first token or full name (same rule as the open-orders lookup).
-    const lowClaimed = claimedName.toLowerCase();
+    //      coming back without their phone; typed name prefix-matches the
+    //      profile's first token or full name.
+    // Mirrors the unaccent + prefix semantics of the /orders/open lookup so a
+    // customer who finds their tab as "Test" → "TEST2" can also append to it.
+    const stripAccents = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const lowClaimed = stripAccents(claimedName.toLowerCase().replace(/[%_]/g, ''));
+    const startsWithClaimed = (stored) => !!lowClaimed
+      && stripAccents(String(stored || '').toLowerCase()).startsWith(lowClaimed);
     const loyaltyFirst = String(order.loyalty_name || '').trim().split(/\s+/)[0] || '';
     const matchesLoyaltyId = !!loyaltyCustomerId && order.loyalty_customer_id === loyaltyCustomerId;
     const matchesAnonName = !loyaltyCustomerId
       && order.loyalty_customer_id == null
-      && !!claimedName
-      && String(order.customer_call_name || '').toLowerCase() === lowClaimed;
+      && startsWithClaimed(order.customer_call_name);
     const matchesLoyaltyName = !loyaltyCustomerId
       && order.loyalty_customer_id != null
-      && !!claimedName
-      && (
-        loyaltyFirst.toLowerCase() === lowClaimed
-        || String(order.loyalty_name || '').toLowerCase() === lowClaimed
-      );
+      && (startsWithClaimed(loyaltyFirst) || startsWithClaimed(order.loyalty_name));
     if (!matchesLoyaltyId && !matchesAnonName && !matchesLoyaltyName) {
       return res.status(403).json({ error: 'This order does not match your name or account' });
     }
