@@ -1,13 +1,11 @@
-import React from 'react';
+import type { CfdiInvoice } from '../../types';
 
 interface Props {
-  isOpen: boolean;
+  invoice: CfdiInvoice;
+  onCancel: (motive: string, substituteUUID?: string) => Promise<void>;
   onClose: () => void;
-  invoiceId?: number;
-  onCancelled?: () => void;
 }
 
-export default function CancellationModal({ isOpen, onClose }: Props) {
-  if (!isOpen) return null;
+export default function CancellationModal(_props: Props) {
   return null;
 }
