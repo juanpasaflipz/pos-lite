@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
-import type { KioskMenuItem, KioskModifier } from '../lib/kioskApi';
+import type { KioskMenuItem, KioskModifier, KioskOpenOrder } from '../lib/kioskApi';
 
 export interface KioskCartLine {
   menu_item_id: number;
@@ -38,6 +38,10 @@ interface KioskCartState {
   /** Non-null when the customer is adding to an existing dine-in order.
    *  Cart submit calls the append-items endpoint instead of creating a new one. */
   appendToOrderId: number | null;
+  /** Snapshot of the existing tab the customer is appending to. Captured at
+   *  lookup time so the menu + cart can show prior items and the running
+   *  total without re-fetching. */
+  existingOrder: KioskOpenOrder | null;
   /** Delivery draft captured before the menu step. Cleared on clearCart(). */
   delivery: KioskDeliveryDraft | null;
   addItem: (item: KioskMenuItem, modifiers?: KioskModifier[]) => void;
@@ -49,6 +53,7 @@ interface KioskCartState {
   setCallName: (name: string | null) => void;
   setFulfillmentType: (type: KioskFulfillmentType | null) => void;
   setAppendToOrderId: (orderId: number | null) => void;
+  setExistingOrder: (order: KioskOpenOrder | null) => void;
   setDelivery: (delivery: KioskDeliveryDraft | null) => void;
 }
 
@@ -59,6 +64,7 @@ export const KioskCartProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [callName, setCallName] = useState<string | null>(null);
   const [fulfillmentType, setFulfillmentType] = useState<KioskFulfillmentType | null>(null);
   const [appendToOrderId, setAppendToOrderId] = useState<number | null>(null);
+  const [existingOrder, setExistingOrder] = useState<KioskOpenOrder | null>(null);
   const [delivery, setDelivery] = useState<KioskDeliveryDraft | null>(null);
 
   const addItem = useCallback((item: KioskMenuItem, modifiers: KioskModifier[] = []) => {
@@ -111,6 +117,7 @@ export const KioskCartProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setCallName(null);
     setFulfillmentType(null);
     setAppendToOrderId(null);
+    setExistingOrder(null);
     setDelivery(null);
   }, []);
 
@@ -138,6 +145,7 @@ export const KioskCartProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       callName,
       fulfillmentType,
       appendToOrderId,
+      existingOrder,
       delivery,
       addItem,
       incrementLine,
@@ -148,9 +156,10 @@ export const KioskCartProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setCallName,
       setFulfillmentType,
       setAppendToOrderId,
+      setExistingOrder,
       setDelivery,
     };
-  }, [addItem, appendToOrderId, callName, clearCart, decrementLine, delivery, fulfillmentType, incrementLine, lines, removeLine, replaceLines]);
+  }, [addItem, appendToOrderId, callName, clearCart, decrementLine, delivery, existingOrder, fulfillmentType, incrementLine, lines, removeLine, replaceLines]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 };

@@ -19,7 +19,7 @@ const KioskCartScreen: React.FC = () => {
   const navigate = useNavigate();
   const { tenantId, kioskToken } = useKioskBinding();
   const { session } = useKioskCustomer();
-  const { lines, count, total, callName, fulfillmentType, appendToOrderId, delivery, incrementLine, decrementLine, removeLine, setCallName } = useKioskCart();
+  const { lines, count, total, callName, fulfillmentType, appendToOrderId, existingOrder, delivery, incrementLine, decrementLine, removeLine, setCallName } = useKioskCart();
   const [holding, setHolding] = useState(false);
   const [holdError, setHoldError] = useState<string | null>(null);
   const [askingName, setAskingName] = useState(false);
@@ -198,8 +198,28 @@ const KioskCartScreen: React.FC = () => {
     setAskingName(true);
   };
 
+  const existingTotal = existingOrder ? Number(existingOrder.total) : 0;
+  const combinedTotal = total + existingTotal;
+
   return (
     <div className="h-full w-full bg-neutral-950 text-white flex flex-col">
+      {isAppend && existingOrder && (
+        <div className="bg-brand-600 text-white px-6 py-3 grid grid-cols-[auto_1fr_auto] items-center gap-4 border-b-2 border-brand-700">
+          <Plus className="h-8 w-8 shrink-0" strokeWidth={3} />
+          <div className="min-w-0">
+            <p className="text-2xl font-black leading-tight truncate">
+              Agregando a tu cuenta · #{existingOrder.order_number}
+            </p>
+            <p className="text-sm font-bold opacity-90 mt-0.5">
+              Tu cuenta hasta ahora: {money.format(existingTotal)}
+            </p>
+          </div>
+          <div className="text-right shrink-0">
+            <p className="text-xs font-bold uppercase tracking-wider opacity-80">Total nuevo</p>
+            <p className="text-2xl font-black tabular-nums">{money.format(combinedTotal)}</p>
+          </div>
+        </div>
+      )}
       <header className="px-6 py-4 border-b border-neutral-800 grid grid-cols-[auto_1fr_auto] items-center gap-4">
         <button
           onClick={() => navigate('/menu')}
@@ -228,6 +248,39 @@ const KioskCartScreen: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-4">
+            {isAppend && existingOrder && existingOrder.items.length > 0 && (
+              <div className="rounded-lg border-2 border-brand-600/40 bg-brand-600/10 p-5">
+                <div className="flex items-baseline justify-between mb-3">
+                  <p className="text-lg font-black uppercase tracking-wider text-brand-300">
+                    Ya tenías en tu cuenta
+                  </p>
+                  <p className="text-xl font-black text-brand-300 tabular-nums">
+                    {money.format(existingTotal)}
+                  </p>
+                </div>
+                <ul className="space-y-2">
+                  {existingOrder.items.map((it) => (
+                    <li
+                      key={it.order_item_id}
+                      className="flex items-baseline justify-between gap-3 text-lg"
+                    >
+                      <span className="font-bold text-neutral-200 truncate">
+                        <span className="text-neutral-400">{it.quantity}×</span>{' '}
+                        {it.item_name}
+                      </span>
+                      <span className="font-bold text-neutral-400 tabular-nums shrink-0">
+                        {money.format(Number(it.unit_price) * it.quantity)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {isAppend && (
+              <p className="text-base font-black uppercase tracking-wider text-neutral-400 pt-1">
+                Lo que vas a sumar
+              </p>
+            )}
             {lines.map((line) => (
               <div key={line.line_key} className="rounded-lg bg-neutral-900 border border-neutral-800 p-5 grid grid-cols-[1fr_256px] gap-4 items-center">
                 <div className="min-w-0">
@@ -300,7 +353,7 @@ const KioskCartScreen: React.FC = () => {
               ? (isAppend ? 'Agregando…' : isDelivery ? 'Pidiendo repartidor…' : 'Enviando a la cocina…')
               : (isAppend ? 'Agregar a mi cuenta' : isDelivery ? 'Pedir y pagar' : 'Enviar a la cocina')}
           </span>
-          <span>{money.format(total + (isDelivery ? (delivery?.quoteFee || 0) : 0))}</span>
+          <span>{money.format(isAppend ? combinedTotal : total + (isDelivery ? (delivery?.quoteFee || 0) : 0))}</span>
         </button>
         <p className="text-center text-sm text-neutral-500 font-bold">
           {isAppend

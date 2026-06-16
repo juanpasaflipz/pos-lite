@@ -57,7 +57,8 @@ const StampBar: React.FC<{ stamp: StampStatus }> = ({ stamp }) => {
 const KioskMenuScreen: React.FC = () => {
   const navigate = useNavigate();
   const { tenantId, kioskToken } = useKioskBinding();
-  const { addItem, count, total } = useKioskCart();
+  const { addItem, count, total, appendToOrderId, existingOrder } = useKioskCart();
+  const isAppend = appendToOrderId != null;
   const { session } = useKioskCustomer();
   const { modifierMap, anonPopular } = useKioskSuggestions();
   const [categories, setCategories] = useState<KioskMenuCategory[]>([]);
@@ -165,6 +166,32 @@ const KioskMenuScreen: React.FC = () => {
 
   return (
     <div className="h-full w-full bg-neutral-950 text-white flex flex-col">
+      {isAppend && (
+        <div className="bg-brand-600 text-white px-6 py-3 grid grid-cols-[auto_1fr_auto] items-center gap-4 border-b-2 border-brand-700">
+          <Plus className="h-8 w-8 shrink-0" strokeWidth={3} />
+          <div className="min-w-0">
+            <p className="text-2xl font-black leading-tight truncate">
+              Agregando a tu cuenta
+              {existingOrder && (
+                <span className="opacity-80"> · #{existingOrder.order_number}</span>
+              )}
+            </p>
+            {existingOrder && (
+              <p className="text-sm font-bold opacity-90 mt-0.5">
+                Tu cuenta hasta ahora: {money.format(Number(existingOrder.total))}
+              </p>
+            )}
+          </div>
+          {existingOrder && (
+            <div className="text-right shrink-0">
+              <p className="text-xs font-bold uppercase tracking-wider opacity-80">Total nuevo</p>
+              <p className="text-2xl font-black tabular-nums">
+                {money.format(Number(existingOrder.total) + total)}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
       <header className="px-6 py-4 border-b border-neutral-800 flex items-center justify-between gap-4">
         <div className="min-w-0">
           {session ? (

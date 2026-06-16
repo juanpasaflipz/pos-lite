@@ -65,7 +65,7 @@ const KioskLookupScreen: React.FC<Props> = ({ mode }) => {
   const navigate = useNavigate();
   const { tenantId, kioskToken } = useKioskBinding();
   const { setSessionFromIdentify } = useKioskCustomer();
-  const { setAppendToOrderId, setCallName } = useKioskCart();
+  const { setAppendToOrderId, setCallName, setExistingOrder } = useKioskCart();
 
   const [step, setStep] = useState<'name' | 'phone' | 'results'>('name');
   const [name, setName] = useState('');
@@ -91,8 +91,10 @@ const KioskLookupScreen: React.FC<Props> = ({ mode }) => {
       });
     } else {
       // Cart context tracks appendToOrderId so the cart screen knows to call
-      // appendOrderItems instead of creating a new order.
+      // appendOrderItems instead of creating a new order. The snapshot lets
+      // the menu + cart show prior items and running total without a re-fetch.
       setAppendToOrderId(order.id);
+      setExistingOrder(order);
       navigate('/menu', { replace: true });
     }
   };
