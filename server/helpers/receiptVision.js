@@ -18,7 +18,11 @@
 import fs from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
+import { fileURLToPath } from 'url';
 import { all } from '../db/index.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const RECEIPTS_DIR = path.join(__dirname, '../../data/uploads/receipts');
 
 const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
@@ -145,8 +149,7 @@ export async function persistReceiptBuffer(buffer, contentType) {
   const subtype = String(contentType || '').split('/')[1] || 'jpg';
   const ext = subtype === 'jpeg' ? 'jpg' : subtype.replace(/[^a-z0-9]/gi, '') || 'jpg';
   const filename = `wa-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${ext}`;
-  const uploadsDir = path.resolve(process.cwd(), 'uploads', 'receipts');
-  await fs.mkdir(uploadsDir, { recursive: true });
-  await fs.writeFile(path.join(uploadsDir, filename), buffer);
+  await fs.mkdir(RECEIPTS_DIR, { recursive: true });
+  await fs.writeFile(path.join(RECEIPTS_DIR, filename), buffer);
   return `/uploads/receipts/${filename}`;
 }
