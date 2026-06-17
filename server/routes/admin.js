@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { createTenant, getTenant, listTenants, updateTenant } from '../tenants.js';
@@ -462,7 +463,7 @@ router.post('/tenants', async (req, res) => {
     });
 
     // Generate random 4-digit PIN for the admin employee
-    const pin = String(Math.floor(1000 + Math.random() * 9000));
+    const pin = String(crypto.randomInt(1000, 10000));
     const hashedPin = await bcrypt.hash(pin, BCRYPT_ROUNDS);
 
     await adminSql`

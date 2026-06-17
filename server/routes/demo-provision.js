@@ -87,7 +87,7 @@ router.post('/provision', demoLimiter, async (req, res) => {
     });
 
     // Generate random 4-digit PIN for admin employee
-    const pin = String(Math.floor(1000 + Math.random() * 9000));
+    const pin = String(crypto.randomInt(1000, 10000));
     const hashedPin = await bcrypt.hash(pin, BCRYPT_ROUNDS);
 
     // Create admin employee
