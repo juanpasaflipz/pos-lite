@@ -40,8 +40,8 @@ export function requireAuth(permission) {
     }
 
     const employee = await get(
-      'SELECT id, name, role, active FROM employees WHERE id = $1',
-      [decoded.employeeId]
+      'SELECT id, name, role, active FROM employees WHERE id = $1 AND tenant_id = $2',
+      [decoded.employeeId, currentTenant]
     );
 
     if (!employee) {
