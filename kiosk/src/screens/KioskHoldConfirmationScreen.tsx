@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useKioskCart } from '../context/KioskCartContext';
 import { useKioskCustomer } from '../context/KioskCustomerContext';
 
-type ConfirmMode = 'hold' | 'kitchen' | 'appended' | 'paid' | 'cash-counter';
+type ConfirmMode = 'hold' | 'kitchen' | 'appended' | 'paid';
 
 interface HoldState {
   mode?: ConfirmMode;
@@ -24,7 +24,6 @@ const COUNTDOWN_BY_MODE: Record<ConfirmMode, number> = {
   kitchen: 12,
   appended: 10,
   paid: 12,
-  'cash-counter': 15,
 };
 
 const KioskHoldConfirmationScreen: React.FC = () => {
@@ -34,7 +33,7 @@ const KioskHoldConfirmationScreen: React.FC = () => {
   const { clearSession } = useKioskCustomer();
 
   const state = (location.state as HoldState | null) || null;
-  const validModes = new Set<ConfirmMode>(['hold', 'kitchen', 'appended', 'paid', 'cash-counter']);
+  const validModes = new Set<ConfirmMode>(['hold', 'kitchen', 'appended', 'paid']);
   const mode: ConfirmMode = validModes.has(state?.mode as ConfirmMode)
     ? (state!.mode as ConfirmMode)
     : 'hold';
@@ -90,14 +89,11 @@ const KioskHoldConfirmationScreen: React.FC = () => {
   const isKitchen = mode === 'kitchen';
   const isAppended = mode === 'appended';
   const isPaid = mode === 'paid';
-  const isCashCounter = mode === 'cash-counter';
   const showsBigOrderCard = !isAppended;
 
   let heading: string;
   if (isPaid) {
     heading = state.firstName ? `¡Gracias, ${state.firstName}!` : '¡Gracias!';
-  } else if (isCashCounter) {
-    heading = state.firstName ? `${state.firstName}, ve a la caja` : 'Ve a la caja';
   } else if (isAppended) {
     heading = state.firstName ? `¡Agregado, ${state.firstName}!` : '¡Agregado!';
   } else {
@@ -107,8 +103,6 @@ const KioskHoldConfirmationScreen: React.FC = () => {
   let subheading: string;
   if (isPaid) {
     subheading = 'Pago recibido. ¡Vuelve pronto!';
-  } else if (isCashCounter) {
-    subheading = `Di tu nombre en la caja y te ayudamos a pagar ${money.format(state.total)}.`;
   } else if (isAppended) {
     subheading = `Sumamos ${state.addedCount ?? 'tus'} ${state.addedCount === 1 ? 'producto' : 'productos'} a tu cuenta. La cocina los está preparando. Tu total actualizado es ${money.format(state.total)}.`;
   } else if (isKitchen) {
@@ -140,7 +134,7 @@ const KioskHoldConfirmationScreen: React.FC = () => {
         </div>
       )}
 
-      {isKitchen || isAppended || isPaid || isCashCounter ? (
+      {isKitchen || isAppended || isPaid ? (
         // Single big "Listo" for any flow where the customer's task is done.
         // Adding more requires going back through Agregar a mi orden from
         // Welcome, so we don't expose a misleading "Agregar más" here that
