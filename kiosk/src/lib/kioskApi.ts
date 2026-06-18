@@ -326,14 +326,27 @@ export async function chargeExistingKioskOrderOnTerminal(
   return res.json();
 }
 
-// Polled by Pagar mi cuenta after the terminal charge fires. Backend reconciles
-// MP tip + records the payment row when status flips to 'paid'.
+// Polled after the terminal charge fires. Backend reconciles MP tip + records
+// the payment row when status flips to 'paid'. For delivery orders, the
+// courier is also dispatched on the tick that flips us to paid — `delivery`
+// is non-null when the booking succeeded, and `delivery_error` carries the
+// human message when it failed (payment still stands either way).
 export interface KioskOrderStatusResponse {
   id: number;
   order_number: string | number;
   total: number;
   payment_status: string;
   invoice_token: string | null;
+  delivery: {
+    delivery_order_id: number;
+    external_id: string;
+    tracking_url: string | null;
+    status: string;
+    fee: number;
+    dropoff_eta: string | null;
+  } | null;
+  delivery_error: string | null;
+  just_paid: boolean;
 }
 
 export async function fetchKioskOrderStatus(

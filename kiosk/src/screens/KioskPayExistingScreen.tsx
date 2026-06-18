@@ -38,10 +38,16 @@ const KioskPayExistingScreen: React.FC = () => {
 
   const state = (location.state as LocationState | null) || null;
   const order = state?.order || null;
+  const isDelivery = order?.order_fulfillment_type === 'delivery';
 
   const [busy, setBusy] = useState<'cash' | 'card' | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Delivery dispatch result. Seeded from the (now legacy) navigation state;
+  // updated from the status poll once the courier is actually booked. In the
+  // pay-first flow the seed is always null and the value lands during polling.
+  const [deliveryInfo, setDeliveryInfo] = useState(state?.delivery ?? null);
+  const [deliveryError, setDeliveryError] = useState<string | null>(state?.deliveryError ?? null);
   const cancelledRef = useRef(false);
 
   // Stretch idle timeout while a terminal charge is in flight — customer is
@@ -109,7 +115,18 @@ const KioskPayExistingScreen: React.FC = () => {
         if (cancelledRef.current) return;
         await wait(POLL_INTERVAL_MS);
         const status = await fetchKioskOrderStatus(auth, order.id);
+        if (status.delivery) setDeliveryInfo(status.delivery);
+        if (status.delivery_error) setDeliveryError(status.delivery_error);
         if (status.payment_status === 'paid') {
+          // Delivery + dispatch failed: payment cleared but no courier was
+          // booked. The cashier needs to rebook from the POS — don't whisk
+          // the customer to the happy-path success screen.
+          if (isDelivery && status.delivery_error) {
+            setError(`Pago recibido, pero no pudimos despachar al repartidor: ${status.delivery_error}. Avisa al cajero.`);
+            setMessage(null);
+            setBusy(null);
+            return;
+          }
           clearCart();
           clearSession();
           onPaidSuccess();
@@ -183,18 +200,26 @@ const KioskPayExistingScreen: React.FC = () => {
             </p>
           </div>
 
-          {state?.delivery && (
+          {isDelivery && !deliveryInfo && !deliveryError && (
+            <div className="mb-4 rounded-lg bg-neutral-900 border border-neutral-800 px-5 py-4 flex items-center gap-3">
+              <Truck className="h-6 w-6 text-neutral-400 shrink-0" />
+              <p className="text-sm font-bold text-neutral-300">
+                Pedimos al repartidor en cuanto se confirme tu pago.
+              </p>
+            </div>
+          )}
+          {deliveryInfo && (
             <div className="mb-4 rounded-lg bg-cockpit-green/15 border border-cockpit-green/40 px-5 py-4 space-y-3">
               <div className="flex items-center gap-3">
                 <Truck className="h-7 w-7 text-cockpit-in-text shrink-0" />
                 <div>
                   <p className="text-lg font-black text-cockpit-in-text">Repartidor en camino</p>
-                  <p className="text-sm text-neutral-300">Envío {money.format(state.delivery.fee)}</p>
+                  <p className="text-sm text-neutral-300">Envío {money.format(deliveryInfo.fee)}</p>
                 </div>
               </div>
-              {state.delivery.tracking_url && (
+              {deliveryInfo.tracking_url && (
                 <a
-                  href={state.delivery.tracking_url}
+                  href={deliveryInfo.tracking_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-full inline-flex items-center justify-center gap-2 py-3 rounded-lg bg-cockpit-green text-white text-lg font-black"
@@ -205,9 +230,9 @@ const KioskPayExistingScreen: React.FC = () => {
               )}
             </div>
           )}
-          {state?.deliveryError && (
+          {deliveryError && (
             <div className="mb-4 rounded-lg bg-cockpit-red/20 border border-cockpit-red/50 px-5 py-3 text-base font-bold text-white">
-              No se pudo despachar al repartidor: {state.deliveryError}
+              No se pudo despachar al repartidor: {deliveryError}
               <p className="text-sm font-normal text-neutral-300 mt-1">El operador podrá reintentar desde el POS.</p>
             </div>
           )}
@@ -234,15 +259,17 @@ const KioskPayExistingScreen: React.FC = () => {
               Pagar con tarjeta
               <span className="text-base font-bold text-white/75">En el terminal</span>
             </button>
-            <button
-              disabled={!!busy}
-              onClick={handleCash}
-              className="w-full min-h-[120px] bg-neutral-800 active:bg-neutral-700 disabled:opacity-50 rounded-lg text-2xl font-black touch-manipulation flex flex-col items-center justify-center gap-1"
-            >
-              <Banknote className="h-12 w-12" />
-              Pagar en efectivo
-              <span className="text-sm font-bold text-neutral-400">En la caja</span>
-            </button>
+            {!isDelivery && (
+              <button
+                disabled={!!busy}
+                onClick={handleCash}
+                className="w-full min-h-[120px] bg-neutral-800 active:bg-neutral-700 disabled:opacity-50 rounded-lg text-2xl font-black touch-manipulation flex flex-col items-center justify-center gap-1"
+              >
+                <Banknote className="h-12 w-12" />
+                Pagar en efectivo
+                <span className="text-sm font-bold text-neutral-400">En la caja</span>
+              </button>
+            )}
           </div>
         </aside>
       </main>

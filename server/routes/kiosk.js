@@ -942,7 +942,17 @@ router.post('/delivery/quote', verifyKioskToken, async (req, res) => {
 // POST /api/kiosk/orders/send-to-delivery
 // Body: { items, customer_token?, customer_call_name, dropoff_address,
 //         dropoff_phone_number, dropoff_name?, dropoff_notes?, quote_id? }
-// Creates an internal order, then dispatches an Uber courier. Returns both.
+//
+// Creates an internal order as status='draft_kiosk' (no kitchen ticket) and a
+// delivery_orders row with platform_status='pending_payment' that stashes the
+// Uber dispatch payload. The courier is NOT booked yet — that happens once
+// the card terminal confirms the payment (see dispatchPendingCourier() called
+// from the /orders/:id/status poll). This keeps the merchant from paying for
+// couriers on unpaid orders.
+//
+// Cash payment isn't supported for delivery from the kiosk: by the time the
+// customer walks to the cashier they're not at home to receive the courier.
+// The /pay-existing screen hides the cash button when fulfillment is delivery.
 router.post('/orders/send-to-delivery', verifyKioskToken, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
@@ -1006,7 +1016,7 @@ router.post('/orders/send-to-delivery', verifyKioskToken, async (req, res) => {
         payment_status, source, loyalty_customer_id, customer_call_name, order_fulfillment_type
       )
       VALUES (
-        ${tenantId}, ${orderNumber}, ${employeeId}, 'active', ${subtotal}, ${tax}, ${total},
+        ${tenantId}, ${orderNumber}, ${employeeId}, 'draft_kiosk', ${subtotal}, ${tax}, ${total},
         'unpaid', 'customer_kiosk', ${loyaltyCustomerId}, ${callName}, 'delivery'
       )
       RETURNING id, order_number, subtotal, tax, total, status, payment_status, customer_call_name, order_fulfillment_type
@@ -1014,37 +1024,6 @@ router.post('/orders/send-to-delivery', verifyKioskToken, async (req, res) => {
 
     await insertKioskOrderItems(tenantId, order.id, orderItems);
 
-    // Build the manifest from cart items so Uber's courier app shows what's
-    // being picked up.
-    const manifestItems = orderItems.map((item) => ({
-      name: item.item_name,
-      quantity: item.quantity,
-      price: Math.round((item.unit_price || 0) * 100),
-    }));
-
-    let delivery = null;
-    let deliveryError = null;
-    try {
-      delivery = await uberDirectCreateDelivery(tenantId, {
-        quote_id: quote_id || undefined,
-        pickup_name: creds.pickup_name,
-        pickup_address: creds.pickup_address,
-        pickup_phone_number: creds.pickup_phone_number,
-        dropoff_name: callName || 'Customer',
-        dropoff_address,
-        dropoff_phone_number,
-        dropoff_notes: dropoff_notes || undefined,
-        manifest_items: manifestItems,
-        manifest_total_value: Math.round(total * 100),
-        external_id: String(order.id),
-      });
-    } catch (err) {
-      deliveryError = err.data?.message || err.message || 'Failed to dispatch courier';
-      console.error('[kiosk/orders/send-to-delivery] dispatch failed:', deliveryError);
-    }
-
-    // Always create the delivery_orders row — even on dispatch failure so the
-    // order is visible in the Delivery screen and an operator can retry.
     const [platform] = await adminSql`
       SELECT id FROM delivery_platforms WHERE tenant_id = ${tenantId} AND name = 'uber_direct'
     `;
@@ -1058,23 +1037,31 @@ router.post('/orders/send-to-delivery', verifyKioskToken, async (req, res) => {
       platformId = created.id;
     }
 
+    // Stash the dispatch payload so dispatchPendingCourier() can re-hydrate it
+    // after the card terminal confirms the payment. Manifest items are derived
+    // from the order at dispatch time (read off order_items) rather than
+    // duplicated here, so item edits between draft and dispatch (rare, but
+    // possible via cashier claim) flow through.
+    const pendingDispatch = {
+      quote_id: quote_id || null,
+      pickup_name: creds.pickup_name,
+      pickup_address: creds.pickup_address,
+      pickup_phone_number: creds.pickup_phone_number,
+      dropoff_name: callName || 'Customer',
+      dropoff_address,
+      dropoff_phone_number,
+      dropoff_notes: dropoff_notes || null,
+    };
+
     const [deliveryRow] = await adminSql`
       INSERT INTO delivery_orders (
         tenant_id, order_id, platform_id, external_order_id, platform_status,
-        delivery_fee, customer_name, delivery_address, tracking_url,
-        courier_name, courier_phone, courier_vehicle, raw_webhook_data
+        delivery_fee, customer_name, delivery_address, pending_dispatch
       ) VALUES (
         ${tenantId}, ${order.id}, ${platformId},
-        ${delivery?.id || null},
-        ${delivery?.status || (deliveryError ? 'dispatch_failed' : 'pending')},
-        ${(delivery?.fee || 0) / 100},
-        ${callName},
-        ${dropoff_address},
-        ${delivery?.tracking_url || null},
-        ${delivery?.courier?.name || null},
-        ${delivery?.courier?.phone_number || null},
-        ${delivery?.courier?.vehicle_type || null},
-        ${delivery ? JSON.stringify(delivery) : null}
+        NULL, 'pending_payment',
+        0, ${callName}, ${dropoff_address},
+        ${pendingDispatch}
       )
       RETURNING id
     `;
@@ -1083,12 +1070,108 @@ router.post('/orders/send-to-delivery', verifyKioskToken, async (req, res) => {
       UPDATE orders SET delivery_order_id = ${deliveryRow.id} WHERE id = ${order.id}
     `;
 
+    // Courier is NOT booked yet. The kiosk routes to /pay-existing where the
+    // customer pays by card; the /orders/:id/status poll dispatches the
+    // courier on payment success and surfaces tracking info on the next tick.
     res.status(201).json({
       ...order,
       items: orderItems,
+      delivery: null,
+      delivery_error: null,
+    });
+  } catch (err) {
+    console.error('[kiosk/orders/send-to-delivery] error', err);
+    res.status(500).json({ error: 'Failed to create delivery order' });
+  }
+});
+
+// Internal helper: book the deferred Uber Direct courier for `orderId` after
+// the customer has paid by card. Idempotent — if the row's platform_status is
+// no longer 'pending_payment' we just return whatever's already there.
+// Returns { delivery, delivery_error }. Never throws.
+async function dispatchPendingCourier(orderId, tenantId) {
+  try {
+    const [row] = await adminSql`
+      SELECT id, platform_status, pending_dispatch, external_order_id, tracking_url,
+             delivery_fee
+      FROM delivery_orders
+      WHERE tenant_id = ${tenantId} AND order_id = ${orderId}
+    `;
+    if (!row) return { delivery: null, delivery_error: null };
+
+    // Already dispatched (or never deferred) — return the existing shape.
+    if (row.platform_status !== 'pending_payment') {
+      return {
+        delivery: row.external_order_id
+          ? {
+              delivery_order_id: row.id,
+              external_id: row.external_order_id,
+              tracking_url: row.tracking_url,
+              status: row.platform_status,
+              fee: Number(row.delivery_fee || 0),
+              dropoff_eta: null,
+            }
+          : null,
+        delivery_error: row.platform_status === 'dispatch_failed'
+          ? 'Courier dispatch previously failed'
+          : null,
+      };
+    }
+
+    const payload = row.pending_dispatch || {};
+    const items = await adminSql`
+      SELECT item_name, quantity, unit_price
+      FROM order_items
+      WHERE tenant_id = ${tenantId} AND order_id = ${orderId} AND voided_at IS NULL
+    `;
+    const [orderHead] = await adminSql`
+      SELECT total FROM orders WHERE tenant_id = ${tenantId} AND id = ${orderId}
+    `;
+    const manifestItems = items.map((it) => ({
+      name: it.item_name,
+      quantity: it.quantity,
+      price: Math.round(Number(it.unit_price || 0) * 100),
+    }));
+
+    let delivery = null;
+    let deliveryError = null;
+    try {
+      delivery = await uberDirectCreateDelivery(tenantId, {
+        quote_id: payload.quote_id || undefined,
+        pickup_name: payload.pickup_name,
+        pickup_address: payload.pickup_address,
+        pickup_phone_number: payload.pickup_phone_number,
+        dropoff_name: payload.dropoff_name,
+        dropoff_address: payload.dropoff_address,
+        dropoff_phone_number: payload.dropoff_phone_number,
+        dropoff_notes: payload.dropoff_notes || undefined,
+        manifest_items: manifestItems,
+        manifest_total_value: Math.round(Number(orderHead?.total || 0) * 100),
+        external_id: String(orderId),
+      });
+    } catch (err) {
+      deliveryError = err.data?.message || err.message || 'Failed to dispatch courier';
+      console.error('[kiosk/dispatchPendingCourier] dispatch failed:', deliveryError);
+    }
+
+    await adminSql`
+      UPDATE delivery_orders
+      SET external_order_id = ${delivery?.id || null},
+          platform_status = ${delivery?.status || 'dispatch_failed'},
+          delivery_fee = ${(delivery?.fee || 0) / 100},
+          tracking_url = ${delivery?.tracking_url || null},
+          courier_name = ${delivery?.courier?.name || null},
+          courier_phone = ${delivery?.courier?.phone_number || null},
+          courier_vehicle = ${delivery?.courier?.vehicle_type || null},
+          raw_webhook_data = ${delivery ? JSON.stringify(delivery) : null},
+          pending_dispatch = NULL
+      WHERE tenant_id = ${tenantId} AND id = ${row.id}
+    `;
+
+    return {
       delivery: delivery
         ? {
-            delivery_order_id: deliveryRow.id,
+            delivery_order_id: row.id,
             external_id: delivery.id,
             tracking_url: delivery.tracking_url,
             status: delivery.status,
@@ -1097,12 +1180,12 @@ router.post('/orders/send-to-delivery', verifyKioskToken, async (req, res) => {
           }
         : null,
       delivery_error: deliveryError,
-    });
+    };
   } catch (err) {
-    console.error('[kiosk/orders/send-to-delivery] error', err);
-    res.status(500).json({ error: 'Failed to create delivery order' });
+    console.error('[kiosk/dispatchPendingCourier] unexpected:', err);
+    return { delivery: null, delivery_error: 'Internal dispatch error' };
   }
-});
+}
 
 // GET /api/kiosk/orders/open?name=Juan&mode=pay  OR  ?customer_token=...
 // Returns open unpaid orders matching this customer/name. Used by:
@@ -1403,6 +1486,7 @@ router.get('/orders/:id/status', verifyKioskToken, async (req, res) => {
 
     let paymentStatus = order.payment_status;
     let invoiceToken = order.invoice_token || null;
+    let justPaid = false;
 
     if (paymentStatus === 'pending_terminal' && order.mp_order_id) {
       const tenant = await getTenant(tenantId);
@@ -1421,6 +1505,7 @@ router.get('/orders/:id/status', verifyKioskToken, async (req, res) => {
           }
           invoiceToken = await markKioskOrderPaid(order.id, tenantId);
           paymentStatus = 'paid';
+          justPaid = true;
         } else if (mapped === 'failed') {
           await adminSql`
             UPDATE orders SET payment_status = 'failed', status = 'cancelled'
@@ -1431,12 +1516,27 @@ router.get('/orders/:id/status', verifyKioskToken, async (req, res) => {
       }
     }
 
+    // Delivery orders defer the Uber Direct courier booking until the card
+    // clears. Run on the tick that flips us to paid AND on any subsequent
+    // poll while the row is still pending_payment (handles transient errors
+    // where the first dispatch attempt failed but the customer is still here).
+    let delivery = null;
+    let deliveryError = null;
+    if (paymentStatus === 'paid') {
+      const result = await dispatchPendingCourier(order.id, tenantId);
+      delivery = result.delivery;
+      deliveryError = result.delivery_error;
+    }
+
     res.json({
       id: order.id,
       order_number: order.order_number,
       total: Number(order.total),
       payment_status: paymentStatus,
       invoice_token: invoiceToken,
+      delivery,
+      delivery_error: deliveryError,
+      just_paid: justPaid,
     });
   } catch (err) {
     console.error('[kiosk/status] error', err);
