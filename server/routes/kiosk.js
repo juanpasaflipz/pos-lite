@@ -822,12 +822,18 @@ router.post('/orders/:id/append-items', verifyKioskToken, async (req, res) => {
   }
 });
 
-// POST /api/kiosk/orders/send-to-kitchen — fire a Para Comer Aquí order straight
-// to the kitchen (status='confirmed', payment_status='unpaid'). Customer eats
-// first, comes back to pay later via the Pagar mi cuenta flow. Unlike /hold,
-// this does NOT supersede prior orders — the same customer could legitimately
-// have a paid order from earlier and a new pending order in the same visit
-// (e.g., a second round of micheladas).
+// POST /api/kiosk/orders/send-to-kitchen — create a kiosk order as a HELD draft
+// (status='draft_kiosk'). The KDS does NOT see this order yet. The kiosk routes
+// the customer to /pay-existing where one of two things promotes it:
+//   - Card on terminal: markKioskOrderPaid flips draft_kiosk → active on
+//     payment success (so the kitchen ticket appears the instant the card
+//     clears).
+//   - Cash at counter:  the customer walks to the cashier; the cashier sees
+//     the order in /api/orders/kiosk-held, takes cash, claims it via
+//     POST /api/orders/:id/claim which promotes draft_kiosk → active.
+// Either way the kitchen never sees an unpaid ticket. Unlike /hold this does
+// NOT supersede prior orders — same customer can legitimately have a paid
+// earlier order and a new pending one (second round of micheladas).
 router.post('/orders/send-to-kitchen', verifyKioskToken, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
@@ -870,7 +876,7 @@ router.post('/orders/send-to-kitchen', verifyKioskToken, async (req, res) => {
         payment_status, source, loyalty_customer_id, customer_call_name, order_fulfillment_type
       )
       VALUES (
-        ${tenantId}, ${orderNumber}, ${employeeId}, 'active', ${subtotal}, ${tax}, ${total},
+        ${tenantId}, ${orderNumber}, ${employeeId}, 'draft_kiosk', ${subtotal}, ${tax}, ${total},
         'unpaid', 'customer_kiosk', ${loyaltyCustomerId}, ${callName}, ${fulfillmentType}
       )
       RETURNING id, order_number, subtotal, tax, total, status, payment_status, customer_call_name, order_fulfillment_type

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, CreditCard, Loader2, MapPin, Truck } from 'lucide-react';
+import { ArrowLeft, Banknote, CreditCard, Loader2, MapPin, Truck } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useKioskBinding } from '../context/KioskBindingContext';
 import { useKioskCart } from '../context/KioskCartContext';
@@ -39,7 +39,7 @@ const KioskPayExistingScreen: React.FC = () => {
   const state = (location.state as LocationState | null) || null;
   const order = state?.order || null;
 
-  const [busy, setBusy] = useState<'card' | null>(null);
+  const [busy, setBusy] = useState<'cash' | 'card' | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const cancelledRef = useRef(false);
@@ -68,6 +68,26 @@ const KioskPayExistingScreen: React.FC = () => {
       replace: true,
       state: {
         mode: 'paid',
+        orderId: order.id,
+        orderNumber: order.order_number,
+        total: order.total,
+        firstName: customerName || undefined,
+      },
+    });
+  };
+
+  // Cash path: order stays as draft_kiosk on the server. Customer walks to the
+  // cashier, who finds it in /api/orders/kiosk-held, collects cash, and claims
+  // it (promotes status → 'active'). The kitchen ticket only appears at that
+  // moment. We just acknowledge here and clear the tablet.
+  const handleCash = () => {
+    if (busy) return;
+    setBusy('cash');
+    setError(null);
+    navigate('/hold-confirmed', {
+      replace: true,
+      state: {
+        mode: 'cash-counter',
         orderId: order.id,
         orderNumber: order.order_number,
         total: order.total,
@@ -204,7 +224,7 @@ const KioskPayExistingScreen: React.FC = () => {
             </div>
           )}
 
-          <div className="mt-auto">
+          <div className="space-y-4 mt-auto">
             <button
               disabled={!!busy}
               onClick={handleCard}
@@ -213,6 +233,15 @@ const KioskPayExistingScreen: React.FC = () => {
               {busy === 'card' ? <Loader2 className="h-16 w-16 animate-spin" /> : <CreditCard className="h-16 w-16" />}
               Pagar con tarjeta
               <span className="text-base font-bold text-white/75">En el terminal</span>
+            </button>
+            <button
+              disabled={!!busy}
+              onClick={handleCash}
+              className="w-full min-h-[120px] bg-neutral-800 active:bg-neutral-700 disabled:opacity-50 rounded-lg text-2xl font-black touch-manipulation flex flex-col items-center justify-center gap-1"
+            >
+              <Banknote className="h-12 w-12" />
+              Pagar en efectivo
+              <span className="text-sm font-bold text-neutral-400">En la caja</span>
             </button>
           </div>
         </aside>
