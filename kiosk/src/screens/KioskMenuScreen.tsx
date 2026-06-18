@@ -82,8 +82,15 @@ const KioskMenuScreen: React.FC = () => {
         if (!alive) return;
         const activeItems = data.items.filter((item) => item.active);
         const usedCategories = new Set(activeItems.map((item) => item.category_id));
-        setCategories(data.categories.filter((cat) => usedCategories.has(cat.id)));
+        const visibleCategories = data.categories.filter((cat) => usedCategories.has(cat.id));
+        setCategories(visibleCategories);
         setItems(activeItems);
+        // Land on the first real menu category (Burritos for Juanberto's)
+        // instead of the personalized suggestions tab. Customers want to see
+        // food first; the suggestions lane is still a tap away.
+        if (visibleCategories.length > 0) {
+          setActiveCategory(visibleCategories[0].id);
+        }
         setError(null);
       })
       .catch((err) => {
