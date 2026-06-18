@@ -350,59 +350,6 @@ export async function fetchKioskOrderStatus(
   return res.json();
 }
 
-// Customer-initiated "Agregar a mi orden": appends items to an open dine-in
-// order. Backend requires the customer match the order's loyalty profile or
-// (case-insensitive) call name — the ownership boundary.
-export interface KioskAppendItemsResponse {
-  success: true;
-  order_id: number;
-  inserted_item_ids: number[];
-  subtotal: number;
-  tax: number;
-  total: number;
-}
-
-export async function appendItemsToKioskOrder(
-  auth: AuthHeaders,
-  orderId: number,
-  items: CreateKioskOrderLine[],
-  identity: { customerToken?: string | null; customerCallName?: string | null },
-): Promise<KioskAppendItemsResponse> {
-  const res = await fetch(`${API_BASE}/api/kiosk/orders/${orderId}/append-items`, {
-    method: 'POST',
-    headers: authHeaders(auth),
-    body: JSON.stringify({
-      items,
-      customer_token: identity.customerToken || undefined,
-      customer_call_name: identity.customerCallName || undefined,
-    }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Append failed (${res.status})`);
-  }
-  return res.json();
-}
-
-export async function fetchOpenOrders(
-  auth: AuthHeaders,
-  by: { name?: string; customerToken?: string; mode?: 'pay' | 'agregar' },
-): Promise<KioskOpenOrder[]> {
-  const params = new URLSearchParams();
-  if (by.name) params.set('name', by.name);
-  if (by.customerToken) params.set('customer_token', by.customerToken);
-  if (by.mode) params.set('mode', by.mode);
-  const res = await fetch(`${API_BASE}/api/kiosk/orders/open?${params.toString()}`, {
-    headers: authHeaders(auth),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Open orders fetch failed (${res.status})`);
-  }
-  const body = await res.json();
-  return body.orders || [];
-}
-
 export interface KioskActiveDraft {
   id: number;
   order_number: string | number;
