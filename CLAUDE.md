@@ -10,9 +10,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Hosted on Railway (service name `pos-lite`)
 
 ## Commands
-- `npm run dev` — runs server + client concurrently (POS web)
+- `npm run dev` — runs server (`:3001`) + client (`:5173`) concurrently (POS web)
+- `npm run dev:server` / `npm run dev:client` — run either half alone
 - `npm run dev:kiosk` — kiosk Vite dev server (separate app)
 - `npm run build` — builds both POS and kiosk; what Railway runs
+- `npm run build:client` / `npm run build:kiosk` — build either bundle alone
 - `npm run start` — production server (`NODE_ENV=production node server/index.js`)
 - `npx tsc --noEmit -p .` — typecheck (no separate `lint` or `test` script; tsc is the gate)
 - `npm run smoketest:orders` / `smoketest:kds` — load/smoke scripts under `scripts/`
@@ -52,6 +54,7 @@ Brand: kiosk wears Talavera Terracotta (`#A8542A`), driven by CSS variables in `
 - Numbering is sequential; current latest is `0071_delivery_pending_dispatch.js`. `MAX(version)` bug was fixed 2026-05-27 — set-difference tracking means renumbered/missing versions are tolerated
 
 ## Auth conventions
+- Two auth surfaces: **Employee PIN login** (cashier/kitchen/bar — local POS entry) and **Owner JWT** (admin, billing, super-admin). Both end up as Bearer JWT for `/api/*` calls
 - Employee auth uses **Bearer JWT** in `Authorization` header, not cookies (`server/middleware/auth.js`)
 - **OAuth initiation endpoints must return `{ auth_url }` JSON**, never `res.redirect`. Anchor-tag navigation does not send the Authorization header, so server-side redirects break for authenticated OAuth entry points. Clients fetch authenticated then do `window.location = auth_url`
 - OAuth `redirect_uri` must be derived from `req.get('host')`, not from `process.env.BASE_URL` (which is hardcoded to the platform subdomain). Each tenant whitelists their own subdomain callback URL in their own third-party app config
@@ -61,6 +64,9 @@ Brand: kiosk wears Talavera Terracotta (`#A8542A`), driven by CSS variables in `
 - Per-tenant credentials stored in `tenant_credentials` table (see `server/routes/credentials.js`)
 - Platform env vars (`MP_CLIENT_ID` etc.) act as fallback when tenant has no per-tenant creds
 - **Webhooks are per-tenant config** — merchants register webhook URLs in their own processor's dashboard. Don't depend on webhooks for correctness; always implement a live-pull fallback in the status-polling endpoint (see `server/routes/payments.js` MP status pull for the pattern)
+
+## Offline behavior
+- Frontend caches menu + queues orders via **Dexie/IndexedDB** + a service worker; reconnect triggers automatic sync. When debugging "order missing on server" check the offline queue first before assuming a backend bug
 
 ## Order lifecycle
 - Status values collapsed in migration 0066 (Phase 0b): `pending`/`confirmed`/`preparing` → `active`. Backend writes `active` only; reads still tolerate legacy values during rollout
