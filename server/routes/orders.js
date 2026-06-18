@@ -358,10 +358,20 @@ router.get('/kiosk-held', requireAuth('pos_access'), async (req, res) => {
   }
 });
 
-// POST /api/orders/:id/claim - cashier pulls a held or stranded kiosk order into
-// the register. For draft_kiosk it just flips to pending; for a stranded
-// terminal attempt it also wipes the failed card payment state so the cashier
-// can charge fresh (cash or a new card swipe).
+// POST /api/orders/:id/claim - cashier pulls a held or stranded kiosk order
+// into the register.
+//
+// For draft_kiosk (cash-at-counter handoff): the held-list response already
+// includes the order's items, and the client loads them into the cashier's
+// cart. We DROP the draft here — the cashier's normal "Cobrar" path will
+// create a single fresh order and fire the KDS once on payment. Promoting
+// the draft to 'active' here (the original behavior) fired the KDS ticket
+// *before* payment AND duplicated it once the cashier's new order landed.
+//
+// For stranded_terminal (card payment timed out): the order is real, already
+// on the KDS, and the customer is still expecting their food — we keep the
+// order and just clear the failed terminal state so the cashier can charge
+// fresh (cash or a new swipe).
 router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
   try {
     const orderId = Number(req.params.id);
@@ -389,20 +399,28 @@ router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
     }
 
     if (isHeld) {
+      // Cascade order children before the order row (FK constraints). Same
+      // pattern as DELETE /api/orders/:id. Drafts shouldn't have payments
+      // or refunds, but delivery drafts do have a delivery_orders row with
+      // pending_dispatch — clear it so we don't dispatch a courier later.
       await run(
-        `UPDATE orders SET status = 'active', employee_id = $1 WHERE id = $2`,
-        [employeeId, orderId],
+        `DELETE FROM order_item_modifiers WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = $1)`,
+        [orderId],
       );
-      audit(req, 'order.claimed_from_kiosk', { order_id: orderId });
-    } else {
-      await run(
-        `UPDATE orders
-         SET payment_status = 'unpaid', payment_method = NULL, employee_id = $1
-         WHERE id = $2`,
-        [employeeId, orderId],
-      );
-      audit(req, 'order.rescued_from_terminal', { order_id: orderId });
+      await run(`DELETE FROM delivery_orders WHERE order_id = $1`, [orderId]);
+      await run(`DELETE FROM order_items WHERE order_id = $1`, [orderId]);
+      await run(`DELETE FROM orders WHERE id = $1`, [orderId]);
+      audit(req, 'order.discarded_from_kiosk_claim', { order_id: orderId });
+      return res.json({ id: orderId, status: 'discarded' });
     }
+
+    await run(
+      `UPDATE orders
+       SET payment_status = 'unpaid', payment_method = NULL, employee_id = $1
+       WHERE id = $2`,
+      [employeeId, orderId],
+    );
+    audit(req, 'order.rescued_from_terminal', { order_id: orderId });
     res.json({ id: orderId, status: 'active' });
   } catch (error) {
     console.error('Error claiming kiosk order:', error);
