@@ -129,13 +129,13 @@ const KioskHoldConfirmationScreen: React.FC = () => {
 
       {showsBigOrderCard && (
         <div className="mt-10 grid grid-cols-2 gap-6 max-w-xl w-full">
-          <div className="rounded-2xl bg-neutral-900 border border-neutral-800 p-6">
+          <div className="rounded-2xl bg-neutral-900 border border-neutral-800 p-6 min-w-0">
             <p className="text-sm text-neutral-500 font-bold uppercase tracking-wider">Orden</p>
-            <p className="text-5xl font-black text-brand-300 mt-1">#{state.orderNumber}</p>
+            <p className="text-4xl font-black text-brand-300 mt-1 tabular-nums truncate">#{state.orderNumber}</p>
           </div>
-          <div className="rounded-2xl bg-neutral-900 border border-neutral-800 p-6">
+          <div className="rounded-2xl bg-neutral-900 border border-neutral-800 p-6 min-w-0">
             <p className="text-sm text-neutral-500 font-bold uppercase tracking-wider">Total</p>
-            <p className="text-5xl font-black mt-1">{money.format(state.total)}</p>
+            <p className="text-4xl font-black mt-1 tabular-nums truncate">{money.format(state.total)}</p>
           </div>
         </div>
       )}
