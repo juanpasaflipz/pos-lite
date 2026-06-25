@@ -607,6 +607,12 @@ const POSScreen: React.FC = () => {
     );
   };
 
+  // Idempotency key for the current cart's submit attempts. Stays stable across
+  // retries within one cart so a double-click or network-retry can't create two
+  // orders (we saw 6261 + 6262 today, identical items 22s apart). Resets when
+  // the cart clears — legitimate identical follow-up orders get a fresh key.
+  const cartSubmitIdRef = useRef<string | null>(null);
+
   const clearCart = () => {
     setCart([]);
     setLinkedCustomer(null);
@@ -614,6 +620,7 @@ const POSScreen: React.FC = () => {
     setCartDiscount(null);
     setCartFulfillment('to_go');
     setDeliveryDraft(null);
+    cartSubmitIdRef.current = null;
   };
 
   // Switching to delivery prompts the modal if no draft exists yet. Switching
@@ -669,12 +676,20 @@ const POSScreen: React.FC = () => {
     // Loyalty join wins on display, so don't also persist a stale call-name when
     // a customer is linked — the linkedCustomer.name is authoritative.
     const callName = linkedCustomer ? undefined : customerCallName.trim() || undefined;
+    if (!cartSubmitIdRef.current) {
+      cartSubmitIdRef.current = `pos-${currentEmployee!.id}-${
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      }`;
+    }
     const order = await createOrder({
       employee_id: currentEmployee!.id,
       items: buildOrderItems(),
       discount: buildCartDiscountPayload(),
       order_fulfillment_type: cartFulfillment,
       customer_call_name: callName,
+      offline_temp_id: cartSubmitIdRef.current,
     });
     await dispatchCourierIfDelivery(order.id);
     return order;

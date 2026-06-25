@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Zap, ZapOff } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -67,6 +67,20 @@ const MobilePOSScreen: React.FC = () => {
     setTimeout(() => setToast(null), 2000);
   }, []);
 
+  // Idempotency key — stable across retries within one cart's lifetime so a
+  // double-tap of "Send to Kitchen" can't fire the same order twice.
+  const cartSubmitIdRef = useRef<string | null>(null);
+  const getSubmitId = (employeeId: number) => {
+    if (!cartSubmitIdRef.current) {
+      cartSubmitIdRef.current = `pos-mq-${employeeId}-${
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      }`;
+    }
+    return cartSubmitIdRef.current;
+  };
+
   // Tap logic: quickMode on → always addItem; quickMode off + has modifiers → detail
   const handleItemTap = useCallback((item: MenuItem) => {
     tapFeedback();
@@ -97,12 +111,17 @@ const MobilePOSScreen: React.FC = () => {
           combo_instance_id: null,
           virtual_brand_id: null,
         }));
-        await createOrder({ employee_id: currentEmployee!.id, items: orderItems });
+        await createOrder({
+          employee_id: currentEmployee!.id,
+          items: orderItems,
+          offline_temp_id: getSubmitId(currentEmployee!.id),
+        });
       } else {
         await createOfflineOrder(currentEmployee!.id, currentEmployee!.name, cart.items, 0, 0);
       }
       successFeedback();
       cart.clearCart();
+      cartSubmitIdRef.current = null;
       showToast(isOnline ? t('mobilePOS.orderSentToKitchen') : t('mobilePOS.offlineOrderSaved'));
     } catch (err) {
       errorFeedback();

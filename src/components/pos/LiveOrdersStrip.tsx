@@ -381,7 +381,10 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, onRefund, refresh
                 </div>
 
                 {/* Actions — Editar is icon-only to keep Cobrar / advance prominent on the
-                    w-72 card. Opens the same OrderEditModal the secondary panel uses. */}
+                    w-72 card. Opens the same OrderEditModal the secondary panel uses.
+                    For unpaid POS orders we hide the "Entregar" advance button entirely:
+                    the server now rejects PUT /:id/status → completed while unpaid, so
+                    showing the button is a footgun — Cobrar is the only forward path. */}
                 <div className="px-3 pb-2.5 flex items-center gap-2">
                   <button
                     onClick={() => setEditingOrder(order)}
@@ -399,7 +402,7 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, onRefund, refresh
                       {t('liveStrip.charge')}
                     </button>
                   )}
-                  {step && (
+                  {step && !(step.next === 'completed' && !paid) && (
                     <button
                       onClick={() => handleAdvance(order)}
                       disabled={busy}

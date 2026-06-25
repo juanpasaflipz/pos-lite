@@ -583,6 +583,11 @@ interface CreateOrderData {
   discount?: DiscountPayload | null;
   order_fulfillment_type?: 'for_here' | 'to_go' | 'delivery';
   customer_call_name?: string;
+  // Idempotency key. Server dedupes via the unique index on
+  // (tenant_id, offline_temp_id) — a retry of the same submit returns
+  // the existing order instead of creating a duplicate. Required on POS
+  // surfaces; offline sync path already passes its own tempId.
+  offline_temp_id?: string;
 }
 
 export async function createOrder(data: CreateOrderData): Promise<Order> {

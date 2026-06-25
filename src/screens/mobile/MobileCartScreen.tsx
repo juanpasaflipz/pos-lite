@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Minus, Plus, Trash2 } from 'lucide-react';
@@ -34,6 +34,20 @@ const MobileCartScreen: React.FC = () => {
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Idempotency key — stable across retries within one cart so a double-tap
+  // can't create two orders. Reset on successful checkout.
+  const cartSubmitIdRef = useRef<string | null>(null);
+  const getSubmitId = (employeeId: number) => {
+    if (!cartSubmitIdRef.current) {
+      cartSubmitIdRef.current = `pos-m-${employeeId}-${
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      }`;
+    }
+    return cartSubmitIdRef.current;
+  };
+
   const buildOrderItems = useCallback(() =>
     cart.items.map((ci) => ({
       menu_item_id: ci.menu_item_id,
@@ -57,7 +71,11 @@ const MobileCartScreen: React.FC = () => {
         const receiptOrder = toReceiptOrder(offlineOrder);
         setCompletedOrder(receiptOrder);
       } else {
-        const order = await createOrder({ employee_id: currentEmployee.id, items: buildOrderItems() });
+        const order = await createOrder({
+          employee_id: currentEmployee.id,
+          items: buildOrderItems(),
+          offline_temp_id: getSubmitId(currentEmployee.id),
+        });
         await cashPayment({ order_id: order.id, tip: cart.tip, amount_received: amountReceived });
         const finalOrder: Order = {
           ...order,
@@ -71,6 +89,7 @@ const MobileCartScreen: React.FC = () => {
       successFeedback();
       setShowCash(false);
       cart.clearCart();
+      cartSubmitIdRef.current = null;
     } catch (err) {
       errorFeedback();
     } finally {
@@ -83,7 +102,11 @@ const MobileCartScreen: React.FC = () => {
     if (!currentEmployee || !isOnline) return;
     setCardState('processing');
     try {
-      const order = await createOrder({ employee_id: currentEmployee.id, items: buildOrderItems() });
+      const order = await createOrder({
+        employee_id: currentEmployee.id,
+        items: buildOrderItems(),
+        offline_temp_id: getSubmitId(currentEmployee.id),
+      });
       const pi = await createPaymentIntent({ order_id: order.id, tip: cart.tip });
       await confirmPayment({ order_id: order.id, payment_intent_id: pi.payment_intent_id });
       const finalOrder: Order = {
@@ -97,6 +120,7 @@ const MobileCartScreen: React.FC = () => {
       successFeedback();
       setCompletedOrder(finalOrder);
       cart.clearCart();
+      cartSubmitIdRef.current = null;
     } catch (err) {
       errorFeedback();
       setCardError(err instanceof Error ? err.message : t('mobilePOS.paymentFailed'));

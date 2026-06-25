@@ -940,7 +940,10 @@ router.put('/:id/status', async (req, res) => {
       return res.status(400).json({ error: 'Invalid status' });
     }
 
-    const order = await get('SELECT id, status FROM orders WHERE id = $1', [id]);
+    const order = await get(
+      'SELECT id, status, source, payment_status FROM orders WHERE id = $1',
+      [id]
+    );
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
@@ -964,6 +967,23 @@ router.put('/:id/status', async (req, res) => {
     if (!allowed.includes(status)) {
       return res.status(400).json({
         error: `Cannot transition from '${order.status}' to '${status}'`,
+      });
+    }
+
+    // Block completion of unpaid POS orders. Today (2026-06-24) three orders
+    // shipped food and got marked completed while the MP terminal had charged
+    // the card off-flow — pos-lite never saw the payment. Force a Cobrar
+    // step before a register order can leave the open-orders strip.
+    if (
+      status === 'completed' &&
+      order.source === 'pos' &&
+      order.payment_status !== 'paid' &&
+      order.payment_status !== 'comped' &&
+      order.payment_status !== 'refunded'
+    ) {
+      return res.status(409).json({
+        error: 'unpaid_order',
+        message: 'Cobra el pedido antes de completarlo.',
       });
     }
 

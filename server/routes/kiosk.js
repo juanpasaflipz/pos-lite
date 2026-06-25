@@ -642,6 +642,17 @@ router.post('/orders/hold', verifyKioskToken, async (req, res) => {
                    AND LOWER(o.customer_call_name) = LOWER(${callName})
                    AND o.created_at > NOW() - INTERVAL '30 minutes'`;
 
+    // Never nuke a draft that already has an MP charge in flight or settled.
+    // 2026-06-24: order 6269 was deleted by this supersede after MP had
+    // already approved a $688 charge — the kiosk re-submitted /orders/hold
+    // before the pending_terminal → paid promotion poll fired. The card
+    // cleared but pos-lite had no order to attach it to.
+    const safeToSupersede = adminSql`
+      o.status = 'draft_kiosk'
+        AND o.mp_order_id IS NULL
+        AND o.payment_status NOT IN ('pending_terminal', 'paid')
+    `;
+
     await adminSql`
       DELETE FROM order_item_modifiers
       WHERE tenant_id = ${tenantId}
@@ -649,7 +660,7 @@ router.post('/orders/hold', verifyKioskToken, async (req, res) => {
           SELECT oi.id FROM order_items oi
           JOIN orders o ON o.id = oi.order_id
           WHERE o.tenant_id = ${tenantId}
-            AND o.status = 'draft_kiosk'
+            AND ${safeToSupersede}
             AND ${supersedeFilter}
         )
     `;
@@ -659,14 +670,14 @@ router.post('/orders/hold', verifyKioskToken, async (req, res) => {
         AND order_id IN (
           SELECT o.id FROM orders o
           WHERE o.tenant_id = ${tenantId}
-            AND o.status = 'draft_kiosk'
+            AND ${safeToSupersede}
             AND ${supersedeFilter}
         )
     `;
     await adminSql`
       DELETE FROM orders o
       WHERE o.tenant_id = ${tenantId}
-        AND o.status = 'draft_kiosk'
+        AND ${safeToSupersede}
         AND ${supersedeFilter}
     `;
 
