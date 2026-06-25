@@ -580,7 +580,10 @@
     "tabHistory": "Historial",
     "historyEmpty": "Sin órdenes pasadas",
     "historySearchPlaceholder": "# de orden o cliente",
-    "clearDate": "Quitar"
+    "clearDate": "Quitar",
+    "openReceipt": "Ver recibo / imprimir",
+    "noItems": "Sin partidas",
+    "totalWithTipLabel": "Total + Propina"
   },
   "ordersScreen": {
     "title": "Órdenes",

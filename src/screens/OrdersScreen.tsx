@@ -14,6 +14,7 @@ import {
   CreditCard,
   Ban,
   ChevronRight,
+  ChevronDown,
   ScanLine,
 } from 'lucide-react';
 import {
@@ -25,7 +26,7 @@ import {
   updateOrderStatus,
 } from '../api';
 import { Order } from '../types';
-import { formatPrice } from '../utils/currency';
+import { formatPrice, TAX_LABEL } from '../utils/currency';
 import { formatTime } from '../utils/dateFormat';
 import { getTimeTier, isPaid, type TimeTier } from '../lib/orderUrgency';
 import BrandLogo from '../components/BrandLogo';
@@ -709,6 +710,28 @@ const HistoryGrid: React.FC<{
   onOpen: (id: number) => void;
 }> = ({ orders, openingId, onOpen }) => {
   const { t } = useTranslation(['pos', 'common']);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [detailsCache, setDetailsCache] = useState<Record<number, Order>>({});
+  const [loadingDetailsId, setLoadingDetailsId] = useState<number | null>(null);
+
+  const toggleExpand = useCallback(async (o: Order) => {
+    if (expandedId === o.id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(o.id);
+    if (detailsCache[o.id]) return;
+    setLoadingDetailsId(o.id);
+    try {
+      const full = await getOrder(o.id);
+      setDetailsCache((prev) => ({ ...prev, [o.id]: full }));
+    } catch {
+      // leave cache untouched — header summary still renders; user can retap
+    } finally {
+      setLoadingDetailsId(null);
+    }
+  }, [expandedId, detailsCache]);
+
   if (orders.length === 0) {
     return (
       <div className="text-center py-20 text-neutral-500">
@@ -719,54 +742,149 @@ const HistoryGrid: React.FC<{
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
       {orders.map((o) => {
-        const opening = openingId === o.id;
         const paid = isPaid(o);
-        // Search results can include non-paid / cancelled / in-flight orders.
-        // Surface that on the card so the cashier knows immediately why an
-        // order they "thought was closed" is actually still open.
         const showStatusPill = !paid || o.status === 'cancelled' || o.status !== 'completed';
+        const expanded = expandedId === o.id;
+        const detail = detailsCache[o.id];
+        const loading = loadingDetailsId === o.id;
+        const opening = openingId === o.id;
+        const tip = Number(o.tip) || 0;
         return (
-          <button
+          <div
             key={o.id}
-            onClick={() => onOpen(o.id)}
-            disabled={opening}
-            className="w-full text-left bg-neutral-900 rounded-lg border border-neutral-800 hover:border-neutral-600 hover:bg-neutral-800/60 transition-colors p-3 min-h-[40px] disabled:opacity-60"
+            className="bg-neutral-900 rounded-lg border border-neutral-800 hover:border-neutral-600 transition-colors"
           >
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-baseline gap-2 min-w-0">
-                <span className="text-base font-black text-white truncate">
-                  {o.customer_name?.trim() || `#${o.order_number}`}
+            <button
+              onClick={() => toggleExpand(o)}
+              aria-expanded={expanded}
+              className="w-full text-left p-3 min-h-[40px] hover:bg-neutral-800/60 rounded-lg transition-colors"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-baseline gap-2 min-w-0">
+                  <span className="text-base font-black text-white truncate">
+                    {o.customer_name?.trim() || `#${o.order_number}`}
+                  </span>
+                  {o.customer_name?.trim() && (
+                    <span className="text-xs font-bold text-neutral-500 shrink-0">#{o.order_number}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-sm font-bold text-brand-500 whitespace-nowrap">
+                    {formatPrice(Number(o.total))}
+                  </span>
+                  {expanded ? (
+                    <ChevronDown size={14} className="text-neutral-500" />
+                  ) : (
+                    <ChevronRight size={14} className="text-neutral-500" />
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-2 mt-1">
+                <span className="text-xs text-neutral-500">
+                  {formatTime(new Date(o.created_at))}
                 </span>
-                {o.customer_name?.trim() && (
-                  <span className="text-xs font-bold text-neutral-500 shrink-0">#{o.order_number}</span>
+                <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                  {showStatusPill && (
+                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide ${STATUS_BADGE[o.status] || 'bg-neutral-700 text-neutral-200'}`}>
+                      {t(`common:orderStatus.${o.status}`, o.status)}
+                    </span>
+                  )}
+                  {!paid && (
+                    <span className="bg-cockpit-yellow text-neutral-900 px-1.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide">
+                      {t('ordersPanel.unpaid')}
+                    </span>
+                  )}
+                  <span className="inline-flex items-center gap-1 text-[10px] uppercase text-neutral-400 font-bold tracking-wide">
+                    <Receipt size={12} />
+                    {o.payment_method || (paid ? t('ordersPanel.paid') : '—')}
+                  </span>
+                </div>
+              </div>
+            </button>
+
+            {expanded && (
+              <div className="border-t border-neutral-800 px-3 py-3 text-sm">
+                {loading && !detail ? (
+                  <div className="py-6 flex items-center justify-center text-neutral-500">
+                    <Clock className="w-4 h-4 animate-spin mr-2" />
+                    <span className="text-xs">{t('common:loading', 'Cargando...')}</span>
+                  </div>
+                ) : (
+                  <>
+                    <ul className="space-y-1.5 mb-3">
+                      {(detail?.items || []).map((item, idx) => (
+                        <li key={item.id ?? `${item.menu_item_id}-${idx}`} className="flex justify-between gap-3 text-neutral-200">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold leading-tight">
+                              <span className="tabular-nums text-white">{item.quantity}×</span>{' '}
+                              {item.item_name}
+                            </p>
+                            {item.modifiers && item.modifiers.length > 0 && (
+                              <ul className="mt-0.5 ml-4 space-y-0.5">
+                                {item.modifiers.map((m) => (
+                                  <li key={m.id} className="text-xs text-neutral-400">
+                                    + {m.modifier_name}
+                                    {Number(m.price_adjustment) > 0 && (
+                                      <span className="text-neutral-500"> ({formatPrice(Number(m.price_adjustment))})</span>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            {item.notes && (
+                              <p className="text-xs text-neutral-500 italic mt-0.5">{item.notes}</p>
+                            )}
+                          </div>
+                          <span className="text-neutral-300 whitespace-nowrap tabular-nums">
+                            {formatPrice(Number(item.unit_price) * Number(item.quantity))}
+                          </span>
+                        </li>
+                      ))}
+                      {detail && (detail.items?.length ?? 0) === 0 && (
+                        <li className="text-xs text-neutral-500 italic">
+                          {t('ordersPanel.noItems', 'Sin partidas')}
+                        </li>
+                      )}
+                    </ul>
+
+                    <div className="space-y-1 border-t border-neutral-800 pt-2 text-xs">
+                      <div className="flex justify-between text-neutral-400">
+                        <span>{t('receipt.subtotalBeforeTax')}</span>
+                        <span className="tabular-nums">{formatPrice(Number(o.subtotal))}</span>
+                      </div>
+                      <div className="flex justify-between text-neutral-400">
+                        <span>{t('receipt.taxIncluded', { label: TAX_LABEL })}</span>
+                        <span className="tabular-nums">{formatPrice(Number(o.tax))}</span>
+                      </div>
+                      {tip > 0 && (
+                        <div className="flex justify-between text-neutral-200">
+                          <span>{t('receipt.tip')}</span>
+                          <span className="tabular-nums font-semibold">{formatPrice(tip)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-white text-sm font-bold pt-1">
+                        <span>{tip > 0
+                          ? t('ordersPanel.totalWithTipLabel')
+                          : t('totals.total')}</span>
+                        <span className="tabular-nums">{formatPrice(Number(o.total) + tip)}</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-3 flex justify-end">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onOpen(o.id); }}
+                        disabled={opening}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-60 text-neutral-200 text-xs font-bold rounded-md min-h-[32px]"
+                      >
+                        <Receipt size={12} />
+                        {t('ordersPanel.openReceipt', 'Ver recibo / imprimir')}
+                      </button>
+                    </div>
+                  </>
                 )}
               </div>
-              <span className="text-sm font-bold text-brand-500 whitespace-nowrap shrink-0">
-                {formatPrice(Number(o.total))}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-2 mt-1">
-              <span className="text-xs text-neutral-500">
-                {formatTime(new Date(o.created_at))}
-              </span>
-              <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                {showStatusPill && (
-                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide ${STATUS_BADGE[o.status] || 'bg-neutral-700 text-neutral-200'}`}>
-                    {t(`common:orderStatus.${o.status}`, o.status)}
-                  </span>
-                )}
-                {!paid && (
-                  <span className="bg-cockpit-yellow text-neutral-900 px-1.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide">
-                    {t('ordersPanel.unpaid')}
-                  </span>
-                )}
-                <span className="inline-flex items-center gap-1 text-[10px] uppercase text-neutral-400 font-bold tracking-wide">
-                  <Receipt size={12} />
-                  {o.payment_method || (paid ? t('ordersPanel.paid') : '—')}
-                </span>
-              </div>
-            </div>
-          </button>
+            )}
+          </div>
         );
       })}
     </div>

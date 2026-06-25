@@ -580,7 +580,10 @@
     "tabHistory": "History",
     "historyEmpty": "No past orders match",
     "historySearchPlaceholder": "Order # or customer",
-    "clearDate": "Clear"
+    "clearDate": "Clear",
+    "openReceipt": "View / print receipt",
+    "noItems": "No line items",
+    "totalWithTipLabel": "Total + Tip"
   },
   "ordersScreen": {
     "title": "Orders",
