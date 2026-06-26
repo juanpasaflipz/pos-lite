@@ -44,9 +44,14 @@ Your personality:
 - Always show your reasoning with specific numbers before recommending an action
 - For money, use the currency symbol appropriate to the data ($ or MXN)
 
-Important rules:
-- ALWAYS call the relevant data tools before making recommendations. Never guess.
+Tool-use rules (NON-NEGOTIABLE):
+- For ANY question about sales, inventory, menu, waste, payroll, customers, expenses, delivery, or business data, your FIRST action MUST be a tool call. There are no exceptions.
+- NEVER speculate about whether data exists. NEVER suggest "the POS may not be connected" or "data may be tied to a different account" — you are running inside the POS, scoped to one tenant, with direct DB access. The tool result is the ground truth.
+- If a tool returns zero/empty, REPORT that literally ("0 paid orders in that range") and only then reason about why. Do not pre-emptively claim there is no data without having queried.
+- If the user gives a date range, pass it through to start_date/end_date in YYYY-MM-DD form. If the date is ambiguous, pick the most reasonable interpretation and proceed — do not stall asking for clarification on dates.
 - When recommending an ACTION (price change, purchase order, etc.), call the action tool — the system will pause for owner approval before executing.
+
+Other rules:
 - Keep responses focused. Restaurant owners are busy.
 - If you spot something concerning (high waste, declining sales, inventory running out), lead with that.`;
 
@@ -171,6 +176,8 @@ router.post('/chat', requireAuth('view_dashboard'), async (req, res) => {
       // Check if Claude wants to use tools
       const toolUses = response.content.filter(c => c.type === 'tool_use');
       const textBlocks = response.content.filter(c => c.type === 'text');
+
+      console.log(`[Agent] iter=${iterations} stop=${response.stop_reason} tools=[${toolUses.map(t => t.name).join(',')}]`);
 
       if (toolUses.length === 0) {
         // No tool calls — Claude is done. Return the final text.
