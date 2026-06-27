@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { setKioskAuthFailureHandler } from '../lib/kioskApi';
 
 interface BindingPayload {
   tenant_id: string;
@@ -39,6 +40,14 @@ export const KioskBindingProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const unbind = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
     setStored(null);
+  }, []);
+
+  useEffect(() => {
+    setKioskAuthFailureHandler(() => {
+      localStorage.removeItem(STORAGE_KEY);
+      setStored(null);
+    });
+    return () => setKioskAuthFailureHandler(null);
   }, []);
 
   return (

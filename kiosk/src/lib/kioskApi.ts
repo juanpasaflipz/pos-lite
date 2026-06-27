@@ -68,6 +68,29 @@ function authHeaders({ tenantId, kioskToken }: AuthHeaders): HeadersInit {
   };
 }
 
+// Triggered when an authed kiosk fetch sees 401/403 — the kiosk token is
+// invalid/expired/tenant-mismatched and the device must re-pair. Registered
+// by KioskBindingProvider; routes to `unbind()` which kicks the UI back to
+// /bind via the App.tsx route guard.
+let authFailureHandler: (() => void) | null = null;
+
+export function setKioskAuthFailureHandler(handler: (() => void) | null): void {
+  authFailureHandler = handler;
+}
+
+async function authedFetch(
+  auth: AuthHeaders,
+  input: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const headers = { ...authHeaders(auth), ...(init.headers || {}) };
+  const res = await fetch(input, { ...init, headers });
+  if ((res.status === 401 || res.status === 403) && authFailureHandler) {
+    authFailureHandler();
+  }
+  return res;
+}
+
 export type KioskFulfillmentType = 'for_here' | 'to_go' | 'delivery';
 
 export interface KioskMenuItem {
@@ -91,8 +114,8 @@ export async function fetchMenu(auth: AuthHeaders): Promise<{
   items: KioskMenuItem[];
 }> {
   const [catsRes, itemsRes] = await Promise.all([
-    fetch(`${API_BASE}/api/menu/categories`, { headers: authHeaders(auth) }),
-    fetch(`${API_BASE}/api/menu/items`, { headers: authHeaders(auth) }),
+    authedFetch(auth, `${API_BASE}/api/menu/categories`),
+    authedFetch(auth, `${API_BASE}/api/menu/items`),
   ]);
   if (!catsRes.ok) throw new Error(`Categories ${catsRes.status}`);
   if (!itemsRes.ok) throw new Error(`Items ${itemsRes.status}`);
@@ -127,7 +150,7 @@ export interface KioskModifierGroup {
 export type KioskModifierMap = Record<number, KioskModifierGroup[]>;
 
 export async function fetchModifierMap(auth: AuthHeaders): Promise<KioskModifierMap> {
-  const res = await fetch(`${API_BASE}/api/kiosk/modifier-map`, { headers: authHeaders(auth) });
+  const res = await authedFetch(auth, `${API_BASE}/api/kiosk/modifier-map`);
   if (!res.ok) {
     throw new Error(`Modifiers fetch failed (${res.status})`);
   }
@@ -154,9 +177,8 @@ export async function holdKioskOrder(
   items: CreateKioskOrderLine[],
   opts: HoldKioskOrderOpts = {},
 ): Promise<KioskHoldResponse> {
-  const res = await fetch(`${API_BASE}/api/kiosk/orders/hold`, {
+  const res = await authedFetch(auth, `${API_BASE}/api/kiosk/orders/hold`, {
     method: 'POST',
-    headers: authHeaders(auth),
     body: JSON.stringify({
       items,
       customer_token: opts.customerToken || undefined,
@@ -190,9 +212,8 @@ export async function sendKioskOrderToKitchen(
   items: CreateKioskOrderLine[],
   opts: HoldKioskOrderOpts = {},
 ): Promise<KioskSendToKitchenResponse> {
-  const res = await fetch(`${API_BASE}/api/kiosk/orders/send-to-kitchen`, {
+  const res = await authedFetch(auth, `${API_BASE}/api/kiosk/orders/send-to-kitchen`, {
     method: 'POST',
-    headers: authHeaders(auth),
     body: JSON.stringify({
       items,
       customer_token: opts.customerToken || undefined,
@@ -222,9 +243,8 @@ export async function quoteKioskDelivery(
   auth: AuthHeaders,
   body: { dropoff_address: string; dropoff_phone_number: string; manifest_total_value?: number },
 ): Promise<KioskDeliveryQuote> {
-  const res = await fetch(`${API_BASE}/api/kiosk/delivery/quote`, {
+  const res = await authedFetch(auth, `${API_BASE}/api/kiosk/delivery/quote`, {
     method: 'POST',
-    headers: authHeaders(auth),
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -259,9 +279,8 @@ export async function sendKioskDeliveryOrder(
     quoteId?: string | null;
   },
 ): Promise<KioskDeliveryResponse> {
-  const res = await fetch(`${API_BASE}/api/kiosk/orders/send-to-delivery`, {
+  const res = await authedFetch(auth, `${API_BASE}/api/kiosk/orders/send-to-delivery`, {
     method: 'POST',
-    headers: authHeaders(auth),
     body: JSON.stringify({
       items,
       customer_token: opts.customerToken || undefined,
@@ -315,9 +334,8 @@ export async function chargeExistingKioskOrderOnTerminal(
   auth: AuthHeaders,
   orderId: number,
 ): Promise<KioskTerminalChargeResponse> {
-  const res = await fetch(`${API_BASE}/api/kiosk/orders/${orderId}/mp-charge`, {
+  const res = await authedFetch(auth, `${API_BASE}/api/kiosk/orders/${orderId}/mp-charge`, {
     method: 'POST',
-    headers: authHeaders(auth),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -353,9 +371,7 @@ export async function fetchKioskOrderStatus(
   auth: AuthHeaders,
   orderId: number,
 ): Promise<KioskOrderStatusResponse> {
-  const res = await fetch(`${API_BASE}/api/kiosk/orders/${orderId}/status`, {
-    headers: authHeaders(auth),
-  });
+  const res = await authedFetch(auth, `${API_BASE}/api/kiosk/orders/${orderId}/status`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `Status fetch failed (${res.status})`);
@@ -382,7 +398,7 @@ export async function fetchActiveDraft(
   customerToken: string,
 ): Promise<KioskActiveDraft | null> {
   const url = `${API_BASE}/api/kiosk/orders/active?customer_token=${encodeURIComponent(customerToken)}`;
-  const res = await fetch(url, { headers: authHeaders(auth) });
+  const res = await authedFetch(auth, url);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `Active fetch failed (${res.status})`);
@@ -396,9 +412,8 @@ export async function resumeDraft(
   orderId: number,
   customerToken: string,
 ): Promise<KioskActiveDraft['items']> {
-  const res = await fetch(`${API_BASE}/api/kiosk/orders/${orderId}/resume`, {
+  const res = await authedFetch(auth, `${API_BASE}/api/kiosk/orders/${orderId}/resume`, {
     method: 'POST',
-    headers: authHeaders(auth),
     body: JSON.stringify({ customer_token: customerToken }),
   });
   if (!res.ok) {
@@ -476,9 +491,8 @@ export async function identifyCustomer(
   auth: AuthHeaders,
   body: IdentifyBody,
 ): Promise<IdentifyResult> {
-  const res = await fetch(`${API_BASE}/api/kiosk/identify`, {
+  const res = await authedFetch(auth, `${API_BASE}/api/kiosk/identify`, {
     method: 'POST',
-    headers: authHeaders(auth),
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -489,9 +503,7 @@ export async function identifyCustomer(
 }
 
 export async function fetchPopular(auth: AuthHeaders): Promise<SuggestionItem[]> {
-  const res = await fetch(`${API_BASE}/api/kiosk/popular`, {
-    headers: authHeaders(auth),
-  });
+  const res = await authedFetch(auth, `${API_BASE}/api/kiosk/popular`);
   if (!res.ok) throw new Error(`Popular ${res.status}`);
   const data = await res.json();
   return data.popular || [];
@@ -512,9 +524,8 @@ export function logSuggestionEvents(
   events: SuggestionEvent[],
 ): void {
   if (!events.length) return;
-  fetch(`${API_BASE}/api/kiosk/suggestion-event`, {
+  authedFetch(auth, `${API_BASE}/api/kiosk/suggestion-event`, {
     method: 'POST',
-    headers: authHeaders(auth),
     body: JSON.stringify({ customer_token: customerToken || undefined, events }),
   }).catch(() => {
     /* telemetry is best-effort */
