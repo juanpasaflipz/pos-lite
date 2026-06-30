@@ -56,14 +56,41 @@ Other rules:
 - If you spot something concerning (high waste, declining sales, inventory running out), lead with that.`;
 
 /**
- * Call Claude Messages API with tools
+ * True if the last message is a fresh user question — plain text content,
+ * no tool_use/tool_result blocks. Used to decide whether to force tool use
+ * on the first iteration of the agent loop.
  */
-async function callClaude(messages, tools) {
+function lastMessageIsPlainUser(messages) {
+  if (!messages.length) return false;
+  const last = messages[messages.length - 1];
+  if (last.role !== 'user') return false;
+  if (typeof last.content === 'string') return true;
+  if (Array.isArray(last.content)) {
+    return last.content.every((c) => c.type === 'text');
+  }
+  return false;
+}
+
+/**
+ * Call Claude Messages API with tools. When `toolChoice` is set, the
+ * model is forced to pick one — used on the first turn of a data
+ * question so the model can't hedge with "POS may not be connected".
+ */
+async function callClaude(messages, tools, toolChoice = null) {
   if (!ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
 
   const model = 'claude-sonnet-4-6';
+
+  const body = {
+    model,
+    max_tokens: 4096,
+    system: SYSTEM_PROMPT,
+    tools,
+    messages,
+  };
+  if (toolChoice) body.tool_choice = toolChoice;
 
   const response = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
@@ -72,13 +99,7 @@ async function callClaude(messages, tools) {
       'x-api-key': ANTHROPIC_API_KEY,
       'anthropic-version': '2023-06-01',
     },
-    body: JSON.stringify({
-      model,
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
-      tools,
-      messages,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -171,7 +192,15 @@ router.post('/chat', requireAuth('view_dashboard'), async (req, res) => {
     while (iterations < MAX_ITERATIONS) {
       iterations++;
 
-      const response = await callClaude(messages, CLAUDE_TOOLS);
+      // On the first turn, if the last message is a fresh user question
+      // (no tool_result blocks yet), force Claude to call a tool. The model
+      // has been ignoring the system prompt and answering from priors
+      // ("POS may not be connected") — tool_choice='any' makes hedging
+      // structurally impossible. Once tool results are in the message
+      // history, drop the constraint so Claude can write a text answer.
+      const forceTool = iterations === 1 && lastMessageIsPlainUser(messages);
+      const toolChoice = forceTool ? { type: 'any' } : null;
+      const response = await callClaude(messages, CLAUDE_TOOLS, toolChoice);
 
       // Check if Claude wants to use tools
       const toolUses = response.content.filter(c => c.type === 'tool_use');
