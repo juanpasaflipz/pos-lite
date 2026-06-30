@@ -13,7 +13,7 @@ const KioskHomeScreen: React.FC = () => {
   const navigate = useNavigate();
   const { tenantName } = useKioskBinding();
 
-  useIdleTimer(() => navigate('/'), 30_000);
+  useIdleTimer(() => navigate('/'), 60_000);
 
   return (
     <div className="h-full w-full bg-neutral-950 text-white flex flex-col px-10 py-8">

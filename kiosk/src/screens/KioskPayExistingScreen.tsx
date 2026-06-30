@@ -32,7 +32,7 @@ interface LocationState {
 const KioskPayExistingScreen: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { tenantId, kioskToken } = useKioskBinding();
+  const { tenantId, kioskToken, terminalId } = useKioskBinding();
   const { clearCart } = useKioskCart();
   const { clearSession, session } = useKioskCustomer();
 
@@ -52,7 +52,7 @@ const KioskPayExistingScreen: React.FC = () => {
 
   // Stretch idle timeout while a terminal charge is in flight — customer is
   // standing there with their card, not idle.
-  useIdleTimer(() => navigate('/'), busy ? 180_000 : 60_000);
+  useIdleTimer(() => navigate('/'), busy ? 300_000 : 120_000);
 
   useEffect(() => {
     if (!state) {
@@ -108,7 +108,7 @@ const KioskPayExistingScreen: React.FC = () => {
     setError(null);
     setMessage('Enviando al terminal…');
     try {
-      await chargeExistingKioskOrderOnTerminal(auth, order.id);
+      await chargeExistingKioskOrderOnTerminal(auth, order.id, terminalId);
       setMessage('Paga en el terminal');
 
       for (let i = 0; i < POLL_MAX_ITERATIONS; i += 1) {

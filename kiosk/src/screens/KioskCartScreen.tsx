@@ -23,7 +23,7 @@ const KioskCartScreen: React.FC = () => {
   const [holding, setHolding] = useState(false);
   const [holdError, setHoldError] = useState<string | null>(null);
   const [askingName, setAskingName] = useState(false);
-  useIdleTimer(() => navigate('/'), 60_000);
+  useIdleTimer(() => navigate('/'), 120_000);
 
   // Two submit modes — both pay-when-ordering:
   //   - Delivery:  customer chose "A domicilio" — a draft was captured on the

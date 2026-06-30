@@ -7,47 +7,73 @@ interface BindingPayload {
   kiosk_token: string;
 }
 
+// Each kiosk device can pair to its own MP Point terminal so two kiosks at the
+// counter don't race to the same device. Stored on this device only — separate
+// from `mp_default_terminal_id` (tenant-wide fallback for un-paired kiosks).
+interface TerminalPairing {
+  id: string;
+  label: string;
+}
+
 interface BindingState {
   tenantId: string | null;
   tenantName: string | null;
   kioskToken: string | null;
+  terminalId: string | null;
+  terminalLabel: string | null;
   bind: (payload: BindingPayload) => void;
   unbind: () => void;
+  setTerminal: (pairing: TerminalPairing | null) => void;
 }
 
-const STORAGE_KEY = 'kiosk-binding-v1';
+const BINDING_KEY = 'kiosk-binding-v1';
+const TERMINAL_KEY = 'kiosk-terminal-v1';
 
 const Ctx = createContext<BindingState | null>(null);
 
-function readStored(): BindingPayload | null {
+function readStored<T>(key: string): T | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
-    return JSON.parse(raw) as BindingPayload;
+    return JSON.parse(raw) as T;
   } catch {
     return null;
   }
 }
 
 export const KioskBindingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [stored, setStored] = useState<BindingPayload | null>(() => readStored());
+  const [stored, setStored] = useState<BindingPayload | null>(() => readStored<BindingPayload>(BINDING_KEY));
+  const [terminal, setTerminalState] = useState<TerminalPairing | null>(() => readStored<TerminalPairing>(TERMINAL_KEY));
 
   const bind = useCallback((payload: BindingPayload) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    localStorage.setItem(BINDING_KEY, JSON.stringify(payload));
     setStored(payload);
   }, []);
 
   const unbind = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(BINDING_KEY);
+    localStorage.removeItem(TERMINAL_KEY);
     setStored(null);
+    setTerminalState(null);
   }, []);
 
   useEffect(() => {
     setKioskAuthFailureHandler(() => {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(BINDING_KEY);
+      localStorage.removeItem(TERMINAL_KEY);
       setStored(null);
+      setTerminalState(null);
     });
     return () => setKioskAuthFailureHandler(null);
+  }, []);
+
+  const setTerminal = useCallback((pairing: TerminalPairing | null) => {
+    if (pairing) {
+      localStorage.setItem(TERMINAL_KEY, JSON.stringify(pairing));
+    } else {
+      localStorage.removeItem(TERMINAL_KEY);
+    }
+    setTerminalState(pairing);
   }, []);
 
   return (
@@ -56,8 +82,11 @@ export const KioskBindingProvider: React.FC<{ children: React.ReactNode }> = ({ 
         tenantId: stored?.tenant_id ?? null,
         tenantName: stored?.tenant_name ?? null,
         kioskToken: stored?.kiosk_token ?? null,
+        terminalId: terminal?.id ?? null,
+        terminalLabel: terminal?.label ?? null,
         bind,
         unbind,
+        setTerminal,
       }}
     >
       {children}

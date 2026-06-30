@@ -18,6 +18,8 @@ import {
   isQueueStuckError,
   recoverStuckQueue,
   extractMpFees,
+  MP_POINT_MIN_AMOUNT,
+  parseMpError,
 } from '../services/mercadopago.js';
 import { getServiceCredentials } from '../helpers/tenantCredentials.js';
 import {
@@ -440,6 +442,14 @@ router.post('/split/charge-card', paymentLimiter, requireAuth('pos_access'), req
     const chargeAmount = Number(split.amount) + (Number(split.tip) || 0);
     const externalRef = `${req.tenant.id}-${split.order_id}-sp${split.id}`;
 
+    if (chargeAmount < MP_POINT_MIN_AMOUNT) {
+      return res.status(400).json({
+        error: `El monto mínimo para terminal es $${MP_POINT_MIN_AMOUNT.toFixed(2)} MXN. Ajusta este split o cobra en efectivo.`,
+        code: 'amount_below_min',
+        min_amount: MP_POINT_MIN_AMOUNT,
+      });
+    }
+
     const mpOrder = await createPointOrder(accessToken, {
       amount: chargeAmount,
       externalRef,
@@ -456,7 +466,8 @@ router.post('/split/charge-card', paymentLimiter, requireAuth('pos_access'), req
     res.json({ success: true, order_payment_id: split.id, mp_order_id: mpOrder.id });
   } catch (error) {
     console.error('Split MP charge error:', error);
-    res.status(500).json({ error: 'Failed to create terminal payment for split' });
+    const { status, payload } = parseMpError(error);
+    res.status(status).json(payload);
   }
 });
 
@@ -1123,32 +1134,62 @@ async function markTerminalOrderPaid(orderId, tenantId = 'default', { mpOrder = 
 /**
  * Returns the order currently holding the MP terminal for this tenant, or null
  * if free. Cross-device coordination: prevents two kiosks (or kiosk + POS) from
- * racing each other to the single shared terminal. The 3-minute window matches
+ * racing each other to the same terminal. The 3-minute window matches
  * the stranded-terminal threshold in /api/orders/kiosk-held — anything older
  * is presumed dead and rescuable, so we don't lock the terminal forever.
  *
  * Checks both order-level (`orders.payment_status`) and split-level
  * (`order_payments.status`) pending_terminal rows.
+ *
+ * When `terminalId` is provided, the lock is scoped to that specific MP device
+ * so two kiosks paired to different terminals don't collide. Splits don't
+ * carry a per-row terminal id (the POS picks one at charge time), so scoping
+ * is best-effort there — we still consider any in-flight split as a tenant-
+ * wide lock to avoid double-firing the POS terminal.
  */
-export async function findActiveTerminalLock(tenantId, { excludeOrderId = null } = {}) {
-  const orderRows = excludeOrderId
-    ? await adminSql`
-        SELECT order_number, source, id
-        FROM orders
-        WHERE tenant_id = ${tenantId}
-          AND payment_status = 'pending_terminal'
-          AND created_at > NOW() - INTERVAL '3 minutes'
-          AND id != ${excludeOrderId}
-        ORDER BY created_at DESC LIMIT 1
-      `
-    : await adminSql`
-        SELECT order_number, source, id
-        FROM orders
-        WHERE tenant_id = ${tenantId}
-          AND payment_status = 'pending_terminal'
-          AND created_at > NOW() - INTERVAL '3 minutes'
-        ORDER BY created_at DESC LIMIT 1
-      `;
+export async function findActiveTerminalLock(
+  tenantId,
+  { excludeOrderId = null, terminalId = null } = {}
+) {
+  const orderRows = terminalId
+    ? (excludeOrderId
+        ? await adminSql`
+            SELECT order_number, source, id
+            FROM orders
+            WHERE tenant_id = ${tenantId}
+              AND payment_status = 'pending_terminal'
+              AND mp_terminal_id = ${terminalId}
+              AND created_at > NOW() - INTERVAL '3 minutes'
+              AND id != ${excludeOrderId}
+            ORDER BY created_at DESC LIMIT 1
+          `
+        : await adminSql`
+            SELECT order_number, source, id
+            FROM orders
+            WHERE tenant_id = ${tenantId}
+              AND payment_status = 'pending_terminal'
+              AND mp_terminal_id = ${terminalId}
+              AND created_at > NOW() - INTERVAL '3 minutes'
+            ORDER BY created_at DESC LIMIT 1
+          `)
+    : (excludeOrderId
+        ? await adminSql`
+            SELECT order_number, source, id
+            FROM orders
+            WHERE tenant_id = ${tenantId}
+              AND payment_status = 'pending_terminal'
+              AND created_at > NOW() - INTERVAL '3 minutes'
+              AND id != ${excludeOrderId}
+            ORDER BY created_at DESC LIMIT 1
+          `
+        : await adminSql`
+            SELECT order_number, source, id
+            FROM orders
+            WHERE tenant_id = ${tenantId}
+              AND payment_status = 'pending_terminal'
+              AND created_at > NOW() - INTERVAL '3 minutes'
+            ORDER BY created_at DESC LIMIT 1
+          `);
   if (orderRows[0]) return orderRows[0];
 
   const splitRows = excludeOrderId
@@ -1295,12 +1336,23 @@ router.post('/mp/charge', requireAuth('pos_access'), requirePro, async (req, res
     const termId = terminal_id || tenant.mp_default_terminal_id;
     if (!termId) return res.status(400).json({ error: 'No terminal selected' });
 
-    const lock = await findActiveTerminalLock(req.tenant.id, { excludeOrderId: order.id });
+    const lock = await findActiveTerminalLock(req.tenant.id, {
+      excludeOrderId: order.id,
+      terminalId: termId,
+    });
     if (lock) return res.status(409).json(terminalBusyResponse(lock));
 
     const tipAmount = typeof tip === 'number' ? tip : 0;
     const totalAmount = Number(order.total) + tipAmount;
     const externalRef = `${req.tenant.id}-${order.id}`;
+
+    if (totalAmount < MP_POINT_MIN_AMOUNT) {
+      return res.status(400).json({
+        error: `El monto mínimo para terminal es $${MP_POINT_MIN_AMOUNT.toFixed(2)} MXN. Cobra en efectivo o ajusta el total.`,
+        code: 'amount_below_min',
+        min_amount: MP_POINT_MIN_AMOUNT,
+      });
+    }
 
     let mpOrder;
     try {
@@ -1333,14 +1385,15 @@ router.post('/mp/charge', requireAuth('pos_access'), requirePro, async (req, res
     }
 
     await run(
-      `UPDATE orders SET mp_order_id = $1, payment_status = 'pending_terminal', tip = $2 WHERE id = $3`,
-      [mpOrder.id, tipAmount, order.id]
+      `UPDATE orders SET mp_order_id = $1, payment_status = 'pending_terminal', tip = $2, mp_terminal_id = $3 WHERE id = $4`,
+      [mpOrder.id, tipAmount, termId, order.id]
     );
 
     res.json({ success: true, mp_order_id: mpOrder.id, payment_intent_id: mpOrder.id });
   } catch (error) {
     console.error('MP charge error:', error);
-    res.status(500).json({ error: 'Failed to create terminal payment' });
+    const { status, payload } = parseMpError(error);
+    res.status(status).json(payload);
   }
 });
 

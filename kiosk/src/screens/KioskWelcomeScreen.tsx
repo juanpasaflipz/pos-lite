@@ -50,7 +50,7 @@ const KioskWelcomeScreen: React.FC = () => {
     firstName: string;
   } | null>(null);
 
-  useIdleTimer(() => navigate('/'), 60_000);
+  useIdleTimer(() => navigate('/'), 120_000);
 
   const auth = tenantId && kioskToken ? { tenantId, kioskToken } : null;
 

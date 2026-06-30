@@ -7,6 +7,56 @@ import { getServiceCredentials } from '../helpers/tenantCredentials.js';
 
 const MP = 'https://api.mercadopago.com';
 
+// MP Point /v1/orders rejects amounts under this floor (MXN). Below this the
+// MP API returns HTTP 400 with a property_value error, which our pre-flight
+// guards convert to a user-friendly message instead of letting it explode
+// inside createPointOrder.
+export const MP_POINT_MIN_AMOUNT = 5;
+
+/**
+ * Convert an error thrown by createPointOrder/getPointOrder into a structured
+ * response for the client. Unwraps MP's error envelope so cashiers see the
+ * real reason ("monto mínimo $5.00") instead of a generic "Failed to create
+ * terminal payment".
+ *
+ * Returns { status, payload } — pass straight to res.status(...).json(...).
+ *   - 400 when MP rejected our request (validation / business rule)
+ *   - 502 when MP itself failed (5xx / network)
+ *   - 500 for non-MP errors (DB, programming bugs)
+ */
+export function parseMpError(err) {
+  const msg = err?.message || '';
+  const match = msg.match(/^MP \w+ failed: (\d{3}) ([\s\S]*)$/);
+  if (!match) {
+    return { status: 500, payload: { error: msg || 'Error de Mercado Pago' } };
+  }
+  const upstreamStatus = Number(match[1]);
+  const raw = match[2];
+  let body = null;
+  try { body = JSON.parse(raw); } catch { /* leave null */ }
+
+  let detail = '';
+  if (body?.errors?.[0]) {
+    const e = body.errors[0];
+    detail = (e.details?.[0] || e.message || '').toString();
+    // MP prefixes property errors with a JSONPath like "'$.transactions.payments[0].amount' "
+    detail = detail.replace(/^'[^']+'\s*/, '');
+  } else if (body?.message) {
+    detail = body.message;
+  } else if (raw) {
+    detail = String(raw).slice(0, 200);
+  }
+
+  const clientStatus = upstreamStatus >= 400 && upstreamStatus < 500 ? 400 : 502;
+  return {
+    status: clientStatus,
+    payload: {
+      error: detail || 'Mercado Pago rechazó el cobro',
+      mp_status: upstreamStatus,
+    },
+  };
+}
+
 /**
  * Ensure the tenant's MP access token is fresh.
  * Refreshes if expiring within 5 minutes.

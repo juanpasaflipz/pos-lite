@@ -27,7 +27,10 @@ import {
   ensureFreshToken,
   createPointOrder,
   getPointOrder,
+  getTerminals as mpGetTerminals,
   mapPointOrderStatus,
+  MP_POINT_MIN_AMOUNT,
+  parseMpError,
 } from '../services/mercadopago.js';
 import { recordMpTerminalPayment, findActiveTerminalLock } from './payments.js';
 import {
@@ -1436,7 +1439,30 @@ router.post('/orders/:id/resume', verifyKioskToken, async (req, res) => {
   }
 });
 
-// POST /api/kiosk/orders/:id/mp-charge — push kiosk order to default Mercado Pago terminal
+// GET /api/kiosk/mp/terminals — list MP Point devices in PDV mode.
+// Used by the kiosk settings screen so an admin can pair this specific kiosk
+// to its own terminal (e.g., two kiosks at the counter, two terminals).
+router.get('/mp/terminals', verifyKioskToken, async (req, res) => {
+  const tenantId = req.kioskTenantId;
+  try {
+    const tenant = await getTenant(tenantId);
+    if (tenant?.plan !== 'pro') return res.status(403).json({ error: 'Mercado Pago Point requires Pro' });
+    if (!tenant?.mp_access_token) return res.status(400).json({ error: 'Mercado Pago not connected' });
+    const accessToken = await ensureFreshToken(tenant, adminSql);
+    const terminals = await mpGetTerminals(accessToken);
+    res.json({
+      terminals,
+      default_terminal_id: tenant.mp_default_terminal_id || null,
+    });
+  } catch (err) {
+    console.error('[kiosk/mp/terminals] error', err);
+    res.status(500).json({ error: 'Failed to fetch terminals' });
+  }
+});
+
+// POST /api/kiosk/orders/:id/mp-charge — push kiosk order to a Mercado Pago terminal.
+// Body: { terminal_id? } — when present, charges the device this kiosk is paired
+// to. Falls back to the tenant default for un-bound kiosks.
 router.post('/orders/:id/mp-charge', verifyKioskToken, async (req, res) => {
   const tenantId = req.kioskTenantId;
   const orderId = Number(req.params.id);
@@ -1452,9 +1478,15 @@ router.post('/orders/:id/mp-charge', verifyKioskToken, async (req, res) => {
     const tenant = await getTenant(tenantId);
     if (tenant?.plan !== 'pro') return res.status(403).json({ error: 'Mercado Pago Point requires Pro' });
     if (!tenant?.mp_access_token) return res.status(400).json({ error: 'Mercado Pago not connected' });
-    if (!tenant?.mp_default_terminal_id) return res.status(400).json({ error: 'No default terminal selected' });
 
-    const lock = await findActiveTerminalLock(tenantId, { excludeOrderId: order.id });
+    const requested = typeof req.body?.terminal_id === 'string' ? req.body.terminal_id.trim() : '';
+    const termId = requested || tenant.mp_default_terminal_id;
+    if (!termId) return res.status(400).json({ error: 'No terminal selected' });
+
+    const lock = await findActiveTerminalLock(tenantId, {
+      excludeOrderId: order.id,
+      terminalId: termId,
+    });
     if (lock) {
       return res.status(409).json({
         error: `Terminal en uso — orden #${lock.order_number} en proceso. Inténtalo en unos segundos.`,
@@ -1463,23 +1495,36 @@ router.post('/orders/:id/mp-charge', verifyKioskToken, async (req, res) => {
       });
     }
 
+    const chargeAmount = Number(order.total);
+    if (chargeAmount < MP_POINT_MIN_AMOUNT) {
+      return res.status(400).json({
+        error: `El monto mínimo para terminal es $${MP_POINT_MIN_AMOUNT.toFixed(2)} MXN. Paga en caja.`,
+        code: 'amount_below_min',
+        min_amount: MP_POINT_MIN_AMOUNT,
+      });
+    }
+
     const accessToken = await ensureFreshToken(tenant, adminSql);
     const mpOrder = await createPointOrder(accessToken, {
-      amount: Number(order.total),
+      amount: chargeAmount,
       externalRef: `${tenantId}-${order.id}`,
-      terminalId: tenant.mp_default_terminal_id,
+      terminalId: termId,
     });
 
     await adminSql`
       UPDATE orders
-      SET mp_order_id = ${mpOrder.id}, payment_status = 'pending_terminal', payment_method = 'card'
+      SET mp_order_id = ${mpOrder.id},
+          mp_terminal_id = ${termId},
+          payment_status = 'pending_terminal',
+          payment_method = 'card'
       WHERE tenant_id = ${tenantId} AND id = ${order.id}
     `;
 
     res.json({ success: true, mp_order_id: mpOrder.id, payment_status: 'pending_terminal' });
   } catch (err) {
     console.error('[kiosk/mp-charge] error', err);
-    res.status(500).json({ error: 'Failed to send payment to terminal' });
+    const { status, payload } = parseMpError(err);
+    res.status(status).json(payload);
   }
 });
 
@@ -1489,7 +1534,7 @@ router.get('/orders/:id/status', verifyKioskToken, async (req, res) => {
   const orderId = Number(req.params.id);
   try {
     const [order] = await adminSql`
-      SELECT id, order_number, total, payment_status, mp_order_id, invoice_token
+      SELECT id, order_number, total, payment_status, mp_order_id, mp_terminal_id, invoice_token
       FROM orders
       WHERE tenant_id = ${tenantId} AND id = ${orderId} AND source = 'customer_kiosk'
     `;
@@ -1503,7 +1548,11 @@ router.get('/orders/:id/status', verifyKioskToken, async (req, res) => {
       const tenant = await getTenant(tenantId);
       if (tenant?.mp_access_token) {
         const accessToken = await ensureFreshToken(tenant, adminSql);
-        const mpOrder = await getPointOrder(accessToken, order.mp_order_id, tenant.mp_default_terminal_id);
+        // Use the terminal stamped on the order (legacy MP payment-intents
+        // require it; new /v1/orders ignores it). Fall back to the tenant
+        // default for any pre-migration rows.
+        const lookupTerminal = order.mp_terminal_id || tenant.mp_default_terminal_id;
+        const mpOrder = await getPointOrder(accessToken, order.mp_order_id, lookupTerminal);
         const mapped = mapPointOrderStatus(mpOrder);
         if (mapped === 'paid') {
           // Reconcile any tip the customer added on the MP terminal screen

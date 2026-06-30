@@ -19,6 +19,7 @@ import {
 } from '../lib/kioskApi';
 import KioskModifierModal from '../components/KioskModifierModal';
 import SuggestionsPanel from '../components/SuggestionsPanel';
+import { tap, success } from '../lib/haptics';
 
 const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
 
@@ -66,7 +67,8 @@ const KioskMenuScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [modifierItem, setModifierItem] = useState<KioskMenuItem | null>(null);
-  useIdleTimer(() => navigate('/'), 60_000);
+  const [flashItemId, setFlashItemId] = useState<number | null>(null);
+  useIdleTimer(() => navigate('/'), 120_000);
 
   const auth = useMemo(
     () => (tenantId && kioskToken ? { tenantId, kioskToken } : null),
@@ -122,9 +124,15 @@ const KioskMenuScreen: React.FC = () => {
   const handleItemTap = (item: KioskMenuItem) => {
     const groups = modifierMap[item.id];
     if (groups && groups.length) {
+      tap('light');
       setModifierItem(item);
     } else {
+      success();
       addItem(item);
+      setFlashItemId(item.id);
+      window.setTimeout(() => {
+        setFlashItemId((curr) => (curr === item.id ? null : curr));
+      }, 350);
     }
   };
 
@@ -259,11 +267,16 @@ const KioskMenuScreen: React.FC = () => {
             <div className="grid grid-cols-3 gap-4 pb-4">
               {visibleItems.map((item) => {
                 const hasModifiers = !!(modifierMap[item.id] && modifierMap[item.id].length);
+                const isFlashing = flashItemId === item.id;
                 return (
                 <button
                   key={item.id}
                   onClick={() => handleItemTap(item)}
-                  className="rounded-lg bg-neutral-900 border border-neutral-800 active:border-brand-500 text-left touch-manipulation flex flex-col overflow-hidden"
+                  className={`rounded-lg border text-left touch-manipulation flex flex-col overflow-hidden transition-transform duration-100 active:scale-[0.97] ${
+                    isFlashing
+                      ? 'bg-brand-900/30 border-brand-400 ring-2 ring-brand-400'
+                      : 'bg-neutral-900 border-neutral-800 active:border-brand-500'
+                  }`}
                 >
                   <div className="aspect-[4/3] w-full bg-gradient-to-br from-neutral-800 to-neutral-900 flex items-center justify-center overflow-hidden">
                     {item.image_url ? (
@@ -312,8 +325,11 @@ const KioskMenuScreen: React.FC = () => {
       <footer className="p-4 border-t border-neutral-800 bg-neutral-950">
         <button
           disabled={count === 0}
-          onClick={() => navigate('/cart')}
-          className="w-full min-h-20 bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-500 rounded-lg py-4 px-6 text-2xl font-black touch-manipulation flex items-center justify-between gap-4"
+          onClick={() => {
+            tap('medium');
+            navigate('/cart');
+          }}
+          className="w-full min-h-20 bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-500 rounded-lg py-4 px-6 text-2xl font-black touch-manipulation flex items-center justify-between gap-4 transition-transform duration-100 active:scale-[0.99]"
         >
           <span className="inline-flex items-center gap-3">
             <ShoppingCart className="h-8 w-8" />

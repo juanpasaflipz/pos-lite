@@ -51,7 +51,7 @@ const KioskIdentifyScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  useIdleTimer(() => navigate('/'), 60_000);
+  useIdleTimer(() => navigate('/'), 120_000);
 
   const auth = tenantId && kioskToken ? { tenantId, kioskToken } : null;
   const restaurantName = tenantName || 'nosotros';

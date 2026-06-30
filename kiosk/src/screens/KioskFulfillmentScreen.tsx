@@ -8,7 +8,7 @@ const KioskFulfillmentScreen: React.FC = () => {
   const navigate = useNavigate();
   const { setFulfillmentType, setDelivery } = useKioskCart();
 
-  useIdleTimer(() => navigate('/'), 30_000);
+  useIdleTimer(() => navigate('/'), 60_000);
 
   const choose = (type: KioskFulfillmentType) => {
     setFulfillmentType(type);

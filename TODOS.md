@@ -539,6 +539,34 @@ end-to-end). Or sooner if a second cross-tenant FK case appears.
 
 ---
 
+## Security follow-ups
+
+### Per-employee session invalidation on PIN change
+
+**What:** Add `tokens_valid_after TIMESTAMPTZ` column to `employees`. In `requireAuth`
+(`server/middleware/auth.js`), reject when `decoded.iat * 1000 < tokens_valid_after`.
+Bump `tokens_valid_after = NOW()` whenever an employee's PIN is changed
+(`server/routes/employees.js` PIN update handler) or when an admin explicitly
+"revoke sessions" on an employee.
+
+**Why:** Today a PIN rotation does not invalidate already-issued JWTs — they
+remain valid for up to 24h (`expiresIn: '24h'` in `server/routes/employees.js:272`).
+The only available knob is toggling `employees.active`, which is a blunt
+instrument (locks everyone out, including the legitimate user, and idle attacker
+tokens resume working once `active` flips back to true).
+
+**Trigger:** This came up 2026-06-22 after a suspicious unpaid $809 order on
+juanbertos under the shared "Caja" cashier account from a VPN-range IP.
+Workaround used: change PIN in UI + toggle `active = false → true` to bounce
+cached sessions. Promote to a real fix the next time a PIN needs to be rotated
+under suspicion, or when a second tenant has more than one cashier sharing a
+PIN (multiplies the blast radius of any leak).
+
+**Scope:** ~15 lines + 1 migration. No frontend changes required — the existing
+401 handling already bounces to login.
+
+---
+
 ## Carryover from design doc / CEO plan
 
 These were explicitly deferred in the original plan — re-listed here so TODOS.md

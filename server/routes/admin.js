@@ -7,6 +7,7 @@ import { tenantCache } from '../lib/tenantCache.js';
 import { run, adminSql, TENANT_POOL_MAX, ADMIN_POOL_MAX } from '../db/index.js';
 import { sendPinEmail, sendWelcomeEmail } from '../helpers/email.js';
 import { audit } from '../lib/auditLog.js';
+import { purgeTenant, dryRunPurge } from '../helpers/tenantPurge.js';
 import { BCRYPT_ROUNDS } from '../lib/constants.js';
 import os from 'os';
 // Monitoring stubs (full monitoring removed in pos-lite)
@@ -677,83 +678,33 @@ router.get('/tenants/:id/export', async (req, res) => {
   }
 });
 
-// DELETE /admin/tenants/:id — permanently delete a tenant and all data
+// DELETE /admin/tenants/:id — permanently delete a tenant and all data.
+// The cascade is driven by tenantPurge: it scans information_schema for
+// every table carrying a tenant_id column and topologically sorts FK
+// dependencies from pg_constraint, so new tenant-scoped tables are
+// automatically covered the moment they ship.
+//
+// Pass ?dry_run=true to get the discovered table list + per-table row
+// counts without deleting anything.
 router.delete('/tenants/:id', async (req, res) => {
   try {
     const tenant = await getTenant(req.params.id);
     if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+
+    const tid = tenant.id;
+    const dryRun = req.query.dry_run === 'true' || req.query.dry_run === '1';
+
+    if (dryRun) {
+      const plan = await dryRunPurge(tid);
+      return res.json({ dry_run: true, ...plan });
+    }
 
     const { confirm } = req.body;
     if (confirm !== req.params.id) {
       return res.status(400).json({ error: 'Must confirm deletion by passing { confirm: tenantId }' });
     }
 
-    const tid = tenant.id;
-
-    // Delete in FK-safe order using a transaction
-    await adminSql.begin(async (sql) => {
-      // Layer 1 — deepest leaves
-      const layer1 = [
-        'order_payment_items', 'order_item_modifiers', 'stamp_events', 'referral_events',
-        'loyalty_messages', 'delivery_recapture', 'delivery_markup_rules',
-        'virtual_brand_items', 'category_printer_routes', 'menu_item_modifier_groups',
-        'menu_item_ingredients', 'purchase_order_items', 'vendor_items',
-        'ai_suggestion_events', 'ai_item_pairs', 'ai_inventory_velocity', 'ai_restock_log',
-        'ai_category_roles', 'inventory_counts', 'shrinkage_alerts', 'refunds',
-        'cfdi_invoice_tokens', 'cfdi_invoices', 'price_history', 'pricing_experiments',
-        'pricing_guardrails', 'waste_log',
-        'bank_transactions', 'bank_sync_logs',
-      ];
-      for (const t of layer1) {
-        await sql.unsafe(`DELETE FROM ${t} WHERE tenant_id = $1`, [tid]);
-      }
-
-      // Layer 2
-      const layer2 = [
-        'stamp_cards', 'order_items', 'order_payments', 'delivery_orders',
-        'combo_slots', 'modifiers', 'purchase_orders',
-        'bank_accounts',
-      ];
-      for (const t of layer2) {
-        await sql.unsafe(`DELETE FROM ${t} WHERE tenant_id = $1`, [tid]);
-      }
-
-      // Layer 3 — re-delete AI tables first to handle race with background AI scheduler
-      // (scheduler may re-insert ai_item_pairs referencing menu_items between layers)
-      await sql.unsafe(`DELETE FROM ai_item_pairs WHERE tenant_id = $1`, [tid]);
-      await sql.unsafe(`DELETE FROM ai_restock_log WHERE tenant_id = $1`, [tid]);
-      await sql.unsafe(`DELETE FROM ai_inventory_velocity WHERE tenant_id = $1`, [tid]);
-      const layer3 = [
-        'orders', 'menu_items', 'virtual_brands', 'combo_definitions',
-        'modifier_groups', 'delivery_platforms', 'printers',
-      ];
-      for (const t of layer3) {
-        await sql.unsafe(`DELETE FROM ${t} WHERE tenant_id = $1`, [tid]);
-      }
-
-      // Layer 4
-      const layer4 = [
-        'menu_categories', 'inventory_items', 'vendors', 'employees', 'loyalty_customers',
-      ];
-      for (const t of layer4) {
-        await sql.unsafe(`DELETE FROM ${t} WHERE tenant_id = $1`, [tid]);
-      }
-
-      // Config tables (no FK deps)
-      const config = [
-        'ai_config', 'ai_suggestion_cache', 'ai_hourly_snapshots',
-        'financial_targets', 'financial_actuals', 'loyalty_config',
-        'role_permissions', 'order_templates',
-        'cfdi_config', 'pricing_rules', 'tenant_credentials', 'audit_log',
-        'bank_connections', 'leads',
-      ];
-      for (const t of config) {
-        await sql.unsafe(`DELETE FROM ${t} WHERE tenant_id = $1`, [tid]);
-      }
-
-      // Finally delete the tenant record
-      await sql`DELETE FROM tenants WHERE id = ${tid}`;
-    });
+    const result = await purgeTenant(tid);
 
     // Invalidate tenant cache so subsequent lookups return 404
     tenantCache.invalidate(tid);
@@ -765,14 +716,17 @@ router.delete('/tenants/:id', async (req, res) => {
       action: 'delete',
       resource: 'tenant',
       resourceId: tid,
-      details: { reason: 'admin action' },
+      details: { reason: 'admin action', ...result },
       ip: req.ip,
     });
 
-    res.json({ message: `Tenant '${tid}' and all associated data deleted permanently` });
+    res.json({
+      message: `Tenant '${tid}' and all associated data deleted permanently`,
+      ...result,
+    });
   } catch (error) {
     console.error('Error deleting tenant:', error);
-    res.status(500).json({ error: 'Failed to delete tenant' });
+    res.status(500).json({ error: 'Failed to delete tenant', detail: error.message });
   }
 });
 

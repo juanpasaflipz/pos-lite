@@ -31,7 +31,7 @@ const KioskDeliveryAddressScreen: React.FC = () => {
   const [quoting, setQuoting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useIdleTimer(() => navigate('/'), 90_000);
+  useIdleTimer(() => navigate('/'), 150_000);
 
   const canQuote = name.trim().length >= 2 && phone.trim().length >= 8 && address.trim().length >= 8;
 

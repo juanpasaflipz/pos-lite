@@ -333,13 +333,33 @@ export interface KioskTerminalChargeResponse {
 export async function chargeExistingKioskOrderOnTerminal(
   auth: AuthHeaders,
   orderId: number,
+  terminalId?: string | null,
 ): Promise<KioskTerminalChargeResponse> {
   const res = await authedFetch(auth, `${API_BASE}/api/kiosk/orders/${orderId}/mp-charge`, {
     method: 'POST',
+    body: JSON.stringify({ terminal_id: terminalId || undefined }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `Terminal charge failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export interface KioskMpTerminal {
+  id: string;
+  external_pos_id: string | null;
+  operating_mode: string;
+}
+
+export async function listKioskMpTerminals(auth: AuthHeaders): Promise<{
+  terminals: KioskMpTerminal[];
+  default_terminal_id: string | null;
+}> {
+  const res = await authedFetch(auth, `${API_BASE}/api/kiosk/mp/terminals`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Terminal list failed (${res.status})`);
   }
   return res.json();
 }

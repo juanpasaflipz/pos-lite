@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { X, Check } from 'lucide-react';
 import type { KioskMenuItem, KioskModifier, KioskModifierGroup } from '../lib/kioskApi';
+import { selectionChanged, success } from '../lib/haptics';
 
 const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
 
@@ -31,6 +32,7 @@ const KioskModifierModal: React.FC<Props> = ({ item, groups, onCancel, onConfirm
   });
 
   const togglePick = (group: KioskModifierGroup, modifierId: number) => {
+    selectionChanged();
     setSelection((prev) => {
       const next: SelectionMap = { ...prev };
       const current = new Set(prev[group.id] || []);
@@ -107,27 +109,32 @@ const KioskModifierModal: React.FC<Props> = ({ item, groups, onCancel, onConfirm
                       <button
                         key={mod.id}
                         onClick={() => togglePick(group, mod.id)}
-                        className={`min-h-[64px] rounded-2xl border-2 px-5 py-3 text-left flex items-center justify-between gap-3 touch-manipulation ${
+                        className={`min-h-[64px] rounded-2xl border-2 px-5 py-3 text-left flex items-center justify-between gap-3 touch-manipulation transition-transform duration-100 active:scale-95 ${
                           isOn
-                            ? 'border-brand-500 bg-brand-600/15'
+                            ? 'border-brand-400 bg-brand-600 text-white shadow-lg shadow-brand-900/40 scale-[1.02]'
                             : 'border-neutral-800 bg-neutral-800/40 active:bg-neutral-800'
                         }`}
                       >
                         <div className="min-w-0">
                           <p className="text-lg font-black leading-tight">{mod.name}</p>
                           {Number(mod.price_adjustment) !== 0 && (
-                            <p className={`text-sm font-bold ${isOn ? 'text-brand-300' : 'text-neutral-400'}`}>
+                            <p className={`text-sm font-bold ${isOn ? 'text-brand-100' : 'text-neutral-400'}`}>
                               {Number(mod.price_adjustment) > 0 ? '+' : ''}
                               {money.format(Number(mod.price_adjustment))}
                             </p>
                           )}
+                          {isOn && (
+                            <p className="text-xs font-black uppercase tracking-wider text-brand-100 mt-0.5">
+                              ✓ Agregado
+                            </p>
+                          )}
                         </div>
                         <span
-                          className={`h-9 w-9 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                            isOn ? 'border-brand-500 bg-brand-500 text-neutral-950' : 'border-neutral-700'
+                          className={`h-10 w-10 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                            isOn ? 'border-white bg-white text-brand-700' : 'border-neutral-700'
                           }`}
                         >
-                          {isOn && <Check className="h-5 w-5" />}
+                          {isOn && <Check className="h-6 w-6 stroke-[3]" />}
                         </span>
                       </button>
                     );
@@ -146,9 +153,13 @@ const KioskModifierModal: React.FC<Props> = ({ item, groups, onCancel, onConfirm
             Cancelar
           </button>
           <button
-            onClick={() => canConfirm && onConfirm(flatPicks)}
+            onClick={() => {
+              if (!canConfirm) return;
+              success();
+              onConfirm(flatPicks);
+            }}
             disabled={!canConfirm}
-            className="h-16 px-8 rounded-2xl bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-600 text-lg font-black touch-manipulation inline-flex items-center justify-center"
+            className="h-16 px-8 rounded-2xl bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-600 text-lg font-black touch-manipulation inline-flex items-center justify-center transition-transform duration-100 active:scale-95"
           >
             {money.format(total)}
           </button>
