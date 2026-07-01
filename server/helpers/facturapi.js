@@ -102,7 +102,17 @@ export async function uploadCSD(orgId, cerBuffer, keyBuffer, password) {
       password,
     });
     console.log(`[FacturAPI] CSD uploaded for org ${orgId}`);
-    return result;
+    // FacturAPI's upload response doesn't always include expiry; re-read the
+    // org so we can persist csd_valid_until (used for the merchant expiry
+    // warning surfaced by GET /api/cfdi/config).
+    let expires_at = null;
+    try {
+      const org = await client.organizations.retrieve(orgId);
+      expires_at = org?.certificate?.expires_at || null;
+    } catch (readErr) {
+      console.warn(`[FacturAPI] Could not read CSD expiry after upload: ${readErr.message}`);
+    }
+    return { ...result, expires_at };
   } catch (err) {
     console.error(`[FacturAPI] Failed to upload CSD for org ${orgId}:`, err.message);
     throw err;

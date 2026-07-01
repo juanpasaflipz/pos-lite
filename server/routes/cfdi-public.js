@@ -6,8 +6,11 @@ import {
   mapOrderItemsToCFDI,
   mapPaymentToFormaPago,
 } from '../helpers/facturapi.js';
+import { audit } from '../lib/auditLog.js';
 
 const router = Router();
+
+const PG_UNIQUE_VIOLATION = '23505';
 
 // Rate limit: 10 requests per IP per 15 minutes
 const publicLimiter = rateLimit({
@@ -196,25 +199,37 @@ router.post('/:token/issue', async (req, res) => {
       series: config.invoice_series,
     });
 
-    // Save invoice record (via adminSql, setting tenant_id explicitly)
-    const insertResult = await adminSql`
-      INSERT INTO cfdi_invoices (
-        tenant_id, order_id, facturapi_invoice_id, uuid_fiscal, series, folio,
-        receptor_rfc, receptor_name, receptor_tax_regime, receptor_postal_code, receptor_uso_cfdi,
-        subtotal, tax_total, total, forma_pago, metodo_pago,
-        xml_url, pdf_url, requested_by
-      ) VALUES (
-        ${tokenRow.tenant_id}, ${order.id}, ${invoice.id}, ${invoice.uuid},
-        ${invoice.series || null}, ${invoice.folio_number || null},
-        ${receptorData.rfc}, ${receptorData.name}, ${receptorData.tax_regime},
-        ${receptorData.postal_code}, ${receptorData.uso_cfdi},
-        ${order.subtotal}, ${order.tax}, ${order.total},
-        ${formaPago}, 'PUE',
-        ${invoice.xml_url || null}, ${invoice.pdf_url || null}, 'customer'
-      ) RETURNING id
-    `;
-
-    const invoiceId = insertResult[0]?.id;
+    // Save invoice record (via adminSql, setting tenant_id explicitly).
+    // Partial unique index (mig 0074) will 23505 if the staff path or a
+    // parallel token request already inserted. The CFDI was still stamped
+    // at FacturAPI in that case; surface as 409 so the client shows
+    // "already invoiced" instead of retrying and double-stamping.
+    let invoiceId;
+    try {
+      const insertResult = await adminSql`
+        INSERT INTO cfdi_invoices (
+          tenant_id, order_id, facturapi_invoice_id, uuid_fiscal, series, folio,
+          receptor_rfc, receptor_name, receptor_tax_regime, receptor_postal_code, receptor_uso_cfdi,
+          subtotal, tax_total, total, forma_pago, metodo_pago,
+          xml_url, pdf_url, requested_by
+        ) VALUES (
+          ${tokenRow.tenant_id}, ${order.id}, ${invoice.id}, ${invoice.uuid},
+          ${invoice.series || null}, ${invoice.folio_number || null},
+          ${receptorData.rfc}, ${receptorData.name}, ${receptorData.tax_regime},
+          ${receptorData.postal_code}, ${receptorData.uso_cfdi},
+          ${order.subtotal}, ${order.tax}, ${order.total},
+          ${formaPago}, 'PUE',
+          ${invoice.xml_url || null}, ${invoice.pdf_url || null}, 'customer'
+        ) RETURNING id
+      `;
+      invoiceId = insertResult[0]?.id;
+    } catch (insertErr) {
+      if (insertErr.code === PG_UNIQUE_VIOLATION) {
+        console.warn(`[CFDI-Public] Race: order ${order.id} was already invoiced (FacturAPI id ${invoice.id} orphaned)`);
+        return res.status(409).json({ error: 'This order already has an invoice' });
+      }
+      throw insertErr;
+    }
 
     // Mark token as used
     await adminSql`
@@ -227,6 +242,24 @@ router.post('/:token/issue', async (req, res) => {
       UPDATE orders SET cfdi_invoice_id = ${invoiceId}
       WHERE id = ${order.id} AND tenant_id = ${tokenRow.tenant_id}
     `;
+
+    audit({
+      tenantId: tokenRow.tenant_id,
+      actorType: 'system',
+      actorId: 'cfdi-public-token',
+      action: 'create',
+      resource: 'cfdi_invoices',
+      resourceId: String(invoiceId),
+      details: {
+        order_id: order.id,
+        facturapi_invoice_id: invoice.id,
+        uuid_fiscal: invoice.uuid,
+        receptor_rfc: receptorData.rfc,
+        total: order.total,
+        via: 'customer_token',
+      },
+      ip: req.ip,
+    });
 
     res.json({
       uuid_fiscal: invoice.uuid,
