@@ -2859,6 +2859,88 @@ export async function mpCancelCharge(order_id: number): Promise<{ success: boole
   });
 }
 
+/* ==================== Cobrar Juntas (Pay Together) ==================== */
+
+export interface PayTogetherShare {
+  order_id: number;
+  subtotal: number;
+  tax: number;
+  total: number;
+  tip_share: number;
+  charge_share: number;
+}
+
+export interface PayTogetherResponse {
+  payment_group_id: number;
+  status: 'paid' | 'pending_terminal';
+  payment_method: 'cash' | 'mp_terminal';
+  total: number;
+  change_due?: number;
+  mp_order_id?: string;
+  mp_terminal_id?: string;
+  orders: PayTogetherShare[];
+}
+
+export async function payTogether(input: {
+  order_ids: number[];
+  payment_method: 'cash' | 'mp_terminal';
+  tip?: number;
+  mp_terminal_id?: string;
+  cash_received?: number;
+}): Promise<PayTogetherResponse> {
+  return apiRequest('/payments/pay-together', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function cancelPayTogether(payment_group_id: number): Promise<{ success: boolean; cancelled: boolean; paid?: boolean }> {
+  return apiRequest(`/payments/pay-together/${payment_group_id}/cancel`, {
+    method: 'POST',
+  });
+}
+
+export async function getPaymentGroupStatus(payment_group_id: number): Promise<{
+  payment_group_id: number;
+  status: 'pending' | 'paid' | 'failed' | 'cancelled';
+  payment_method: 'cash' | 'mp_terminal';
+  total: number;
+  tip: number;
+}> {
+  return apiRequest(`/payment-groups/${payment_group_id}/status`);
+}
+
+export interface PaymentGroupDetail {
+  group: {
+    id: number;
+    subtotal: number;
+    tax: number;
+    tip: number;
+    total: number;
+    payment_method: string;
+    status: string;
+    created_at: string;
+    paid_at: string | null;
+  };
+  orders: Array<{
+    id: number;
+    order_number: number;
+    customer_call_name: string | null;
+    subtotal: number;
+    tax: number;
+    tip: number;
+    total: number;
+    status: string;
+    payment_status: string;
+    order_fulfillment_type: string | null;
+    items: Array<{ order_id: number; item_name: string; quantity: number; unit_price: number; notes: string | null }>;
+  }>;
+}
+
+export async function getPaymentGroup(payment_group_id: number): Promise<PaymentGroupDetail> {
+  return apiRequest(`/payment-groups/${payment_group_id}`);
+}
+
 /* ==================== Clip PinPad Terminal ==================== */
 
 export async function getClipStatus(): Promise<{ configured: boolean; default_terminal_id: string | null }> {

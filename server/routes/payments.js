@@ -1574,6 +1574,360 @@ router.post('/clip/cancel', requireAuth('pos_access'), async (req, res) => {
   }
 });
 
+// ==================== Cobrar Juntas (Pay Together) ====================
+//
+// One CC swipe (or one cash tender) closes N open tickets at once.
+// Motivation: cashiers used to void + re-ring when a customer wanted to pay
+// multiple open checks together, which left orphan "ready + unpaid" rows in
+// the DB (see 2026-06-30 pilot audit). Each ticket keeps its own KDS
+// lifecycle, loyalty attribution, and refund path — this only consolidates
+// the payment leg.
+//
+// Split math: shares are proportional to each order's total (subtotal + tax).
+// Rounding delta lands on the largest ticket so the sum matches to the cent.
+
+function splitProportionally(orders, tipAmount) {
+  const totals = orders.map((o) => Number(o.total) || 0);
+  const grandTotal = totals.reduce((a, b) => a + b, 0);
+  const largestIdx = totals.reduce((maxI, v, i, arr) => (v > arr[maxI] ? i : maxI), 0);
+
+  const tipCents = Math.round((Number(tipAmount) || 0) * 100);
+  const rawTipCents = totals.map((t) =>
+    grandTotal > 0 ? Math.round((t / grandTotal) * tipCents) : 0
+  );
+  const tipDelta = tipCents - rawTipCents.reduce((a, b) => a + b, 0);
+  rawTipCents[largestIdx] += tipDelta;
+
+  return orders.map((o, i) => ({
+    order_id: o.id,
+    subtotal: Number(o.subtotal) || 0,
+    tax: Number(o.tax) || 0,
+    total: Number(o.total) || 0,
+    tip_share: Math.round(rawTipCents[i]) / 100,
+    charge_share: (Number(o.total) || 0) + Math.round(rawTipCents[i]) / 100,
+  }));
+}
+
+router.post('/pay-together', paymentLimiter, requireAuth('pos_access'), async (req, res) => {
+  try {
+    const { order_ids, payment_method, tip = 0, mp_terminal_id, cash_received } = req.body || {};
+
+    if (!Array.isArray(order_ids) || order_ids.length < 2) {
+      return res.status(400).json({ error: 'Provide at least 2 order_ids' });
+    }
+    const uniqueIds = [...new Set(order_ids.map(Number))].filter(Number.isInteger);
+    if (uniqueIds.length !== order_ids.length) {
+      return res.status(400).json({ error: 'order_ids must be unique integers' });
+    }
+    if (!['cash', 'mp_terminal'].includes(payment_method)) {
+      return res.status(400).json({ error: 'payment_method must be cash or mp_terminal' });
+    }
+    const tipAmount = Math.max(0, Number(tip) || 0);
+
+    const orders = await all(
+      `SELECT id, order_number, subtotal, tax, tip, total, status, payment_status, source, loyalty_customer_id
+       FROM orders
+       WHERE id = ANY($1::int[])
+       ORDER BY id ASC`,
+      [uniqueIds]
+    );
+    if (orders.length !== uniqueIds.length) {
+      return res.status(404).json({ error: 'One or more orders not found' });
+    }
+    for (const o of orders) {
+      if (o.status === 'draft_kiosk') {
+        return res.status(400).json({ error: `Order #${o.order_number} is a kiosk draft — claim it first` });
+      }
+      if (!['unpaid', 'failed'].includes(o.payment_status)) {
+        return res.status(400).json({ error: `Order #${o.order_number} is not unpaid (${o.payment_status})` });
+      }
+    }
+
+    const shares = splitProportionally(orders, tipAmount);
+    const subtotalSum = orders.reduce((a, o) => a + Number(o.subtotal || 0), 0);
+    const taxSum = orders.reduce((a, o) => a + Number(o.tax || 0), 0);
+    const totalSum = orders.reduce((a, o) => a + Number(o.total || 0), 0);
+    const combinedCharge = Math.round((totalSum + tipAmount) * 100) / 100;
+
+    const tenantId = req.tenant.id;
+
+    // --- Cash path: everything closes in the request transaction ---
+    if (payment_method === 'cash') {
+      const group = await get(
+        `INSERT INTO payment_groups
+           (employee_id, subtotal, tax, tip, total, payment_method, status, paid_at)
+         VALUES ($1, $2, $3, $4, $5, 'cash', 'paid', NOW())
+         RETURNING id, created_at, paid_at`,
+        [req.employee.id, subtotalSum, taxSum, tipAmount, combinedCharge]
+      );
+
+      for (const s of shares) {
+        await run(
+          `INSERT INTO order_payments
+             (order_id, payment_method, amount, tip, status)
+           VALUES ($1, 'cash', $2, $3, 'paid')`,
+          [s.order_id, s.total, s.tip_share]
+        );
+        await run(
+          `UPDATE orders
+             SET payment_status = 'paid',
+                 status = 'completed',
+                 payment_method = 'cash',
+                 payment_group_id = $1,
+                 tip = $2,
+                 paid_at = COALESCE(paid_at, NOW()),
+                 completed_at = COALESCE(completed_at, NOW())
+           WHERE id = $3`,
+          [group.id, s.tip_share, s.order_id]
+        );
+      }
+
+      // Non-blocking side effects (inventory, invoice tokens). Loyalty stamps
+      // per-order via the existing hook path in orders.js is not fired here —
+      // opt-in flow: cashier links customer per ticket at ring time.
+      for (const s of shares) {
+        try { await deductInventoryForOrder(s.order_id); } catch (e) {
+          console.warn('pay-together inventory deduct failed:', e.message);
+        }
+      }
+      for (const s of shares) {
+        try {
+          const token = await generateInvoiceToken(tenantId, s.order_id, 72);
+          await run('UPDATE orders SET invoice_token = $1 WHERE id = $2', [token, s.order_id]);
+        } catch (tokErr) {
+          console.warn('pay-together invoice token failed:', tokErr.message);
+        }
+      }
+
+      const changeDue = cash_received > 0 ? Math.max(0, Number(cash_received) - combinedCharge) : 0;
+      return res.json({
+        payment_group_id: group.id,
+        status: 'paid',
+        payment_method: 'cash',
+        total: combinedCharge,
+        change_due: Math.round(changeDue * 100) / 100,
+        orders: shares,
+      });
+    }
+
+    // --- MP Terminal path ---
+    const tenant = await getTenant(tenantId);
+    if (tenant?.plan !== 'pro') {
+      return res.status(403).json({ error: 'Mercado Pago Point requires a Pro plan' });
+    }
+    if (!tenant?.mp_access_token) {
+      return res.status(400).json({ error: 'Mercado Pago not connected' });
+    }
+    const accessToken = await ensureFreshToken(tenant, adminSql);
+    const termId = mp_terminal_id || tenant.mp_default_terminal_id;
+    if (!termId) return res.status(400).json({ error: 'No terminal selected' });
+
+    if (combinedCharge < MP_POINT_MIN_AMOUNT) {
+      return res.status(400).json({
+        error: `El monto mínimo para terminal es $${MP_POINT_MIN_AMOUNT.toFixed(2)} MXN. Cobra en efectivo o ajusta el total.`,
+        code: 'amount_below_min',
+        min_amount: MP_POINT_MIN_AMOUNT,
+      });
+    }
+
+    const lock = await findActiveTerminalLock(tenantId, { terminalId: termId });
+    if (lock && !uniqueIds.includes(lock.id)) {
+      return res.status(409).json(terminalBusyResponse(lock));
+    }
+
+    const groupPending = await get(
+      `INSERT INTO payment_groups
+         (employee_id, subtotal, tax, tip, total, payment_method, mp_terminal_id, status)
+       VALUES ($1, $2, $3, $4, $5, 'mp_terminal', $6, 'pending')
+       RETURNING id`,
+      [req.employee.id, subtotalSum, taxSum, tipAmount, combinedCharge, termId]
+    );
+
+    const externalRef = `${tenantId}-pg-${groupPending.id}`;
+    let mpOrder;
+    try {
+      mpOrder = await createPointOrder(accessToken, {
+        amount: combinedCharge,
+        externalRef,
+        terminalId: termId,
+      });
+    } catch (err) {
+      if (!isQueueStuckError(err)) throw err;
+      const recovery = await recoverStuckQueue(accessToken, { tenantId, sql: adminSql });
+      console.log(`pay-together auto-recovery: cleared ${recovery.cleared}/${recovery.attempted}`);
+      try {
+        mpOrder = await createPointOrder(accessToken, {
+          amount: combinedCharge, externalRef, terminalId: termId,
+        });
+      } catch (retryErr) {
+        if (isQueueStuckError(retryErr)) {
+          return res.status(409).json({
+            error: 'queue_stuck',
+            message: 'La cola de la terminal sigue bloqueada. Reinicia la terminal e inténtalo de nuevo.',
+            recovery,
+          });
+        }
+        throw retryErr;
+      }
+    }
+
+    await run(
+      `UPDATE payment_groups SET mp_order_id = $1, payment_intent_id = $1 WHERE id = $2`,
+      [mpOrder.id, groupPending.id]
+    );
+    for (const s of shares) {
+      await run(
+        `UPDATE orders
+           SET mp_order_id = $1,
+               mp_terminal_id = $2,
+               payment_status = 'pending_terminal',
+               payment_group_id = $3,
+               tip = $4
+         WHERE id = $5`,
+        [mpOrder.id, termId, groupPending.id, s.tip_share, s.order_id]
+      );
+    }
+
+    res.json({
+      payment_group_id: groupPending.id,
+      status: 'pending_terminal',
+      payment_method: 'mp_terminal',
+      mp_order_id: mpOrder.id,
+      mp_terminal_id: termId,
+      total: combinedCharge,
+      orders: shares,
+    });
+  } catch (error) {
+    console.error('pay-together error:', error);
+    const { status, payload } = parseMpError(error);
+    res.status(status).json(payload);
+  }
+});
+
+// POST /api/payments/pay-together/:id/cancel — cancel a pending grouped
+// terminal payment (single Cancelar tap in the confirm modal).
+router.post('/pay-together/:id/cancel', requireAuth('pos_access'), async (req, res) => {
+  try {
+    const groupId = Number(req.params.id);
+    const group = await get(
+      `SELECT id, mp_order_id, mp_terminal_id, payment_method, status
+       FROM payment_groups WHERE id = $1`,
+      [groupId]
+    );
+    if (!group) return res.status(404).json({ error: 'Payment group not found' });
+    if (group.status === 'paid') return res.status(400).json({ error: 'Group already paid' });
+
+    if (group.payment_method === 'mp_terminal' && group.mp_order_id) {
+      const tenant = await getTenant(req.tenant.id);
+      const accessToken = tenant?.mp_access_token ? await ensureFreshToken(tenant, adminSql) : null;
+      if (accessToken && group.mp_terminal_id) {
+        // Race guard mirrors the single-order flow: recheck MP before cancelling
+        try {
+          const mpOrder = await getPointOrder(accessToken, group.mp_order_id, group.mp_terminal_id);
+          if (mapPointOrderStatus(mpOrder) === 'paid') {
+            await settlePaymentGroupPaid(groupId, req.tenant.id, { mpOrder, mpAccessToken: accessToken });
+            return res.json({ success: true, cancelled: false, paid: true });
+          }
+        } catch (pollErr) {
+          console.warn('pay-together cancel pre-poll failed:', pollErr.message);
+        }
+        try {
+          await cancelPointOrder(accessToken, group.mp_terminal_id, group.mp_order_id);
+        } catch (cancelErr) {
+          console.warn('pay-together MP cancel warning:', cancelErr.message);
+        }
+      }
+    }
+
+    await run(
+      `UPDATE orders
+         SET payment_status = 'unpaid', mp_order_id = NULL, mp_terminal_id = NULL, payment_group_id = NULL, tip = 0
+       WHERE payment_group_id = $1`,
+      [groupId]
+    );
+    await run(`UPDATE payment_groups SET status = 'cancelled' WHERE id = $1`, [groupId]);
+
+    res.json({ success: true, cancelled: true });
+  } catch (error) {
+    console.error('pay-together cancel error:', error);
+    res.status(500).json({ error: 'Failed to cancel grouped payment' });
+  }
+});
+
+/**
+ * Mark all orders in a group as paid + record processor fee once, then flip
+ * the group row to paid. Idempotent — safe to call from status-poll, webhook,
+ * or the cancel-race-guard path.
+ */
+export async function settlePaymentGroupPaid(groupId, tenantId, { mpOrder = null, mpAccessToken = null } = {}) {
+  const group = await get(
+    `SELECT id, status, mp_order_id FROM payment_groups WHERE id = $1`,
+    [groupId]
+  );
+  if (!group || group.status === 'paid') return;
+
+  const orderRows = await all(
+    `SELECT id, tip FROM orders WHERE payment_group_id = $1`,
+    [groupId]
+  );
+
+  for (const o of orderRows) {
+    await run(
+      `UPDATE orders
+         SET payment_status = 'paid',
+             status = CASE WHEN status IN ('ready', 'completed') THEN status ELSE 'completed' END,
+             payment_method = 'card',
+             paid_at = COALESCE(paid_at, NOW()),
+             completed_at = COALESCE(completed_at, NOW())
+       WHERE id = $1
+         AND (payment_status IS DISTINCT FROM 'paid' OR payment_method IS DISTINCT FROM 'card')`,
+      [o.id]
+    );
+    try { await deductInventoryForOrder(o.id); } catch (e) {
+      console.warn('settlePaymentGroupPaid inventory failed:', e.message);
+    }
+  }
+
+  // One order_payments row per order, sharing the same mp_order_id.
+  // Fee is reported by MP for the combined charge only; we attribute the
+  // entire fee to the largest ticket (v1) rather than pro-rate it — the
+  // group total is the reconcilable unit for owner reports anyway.
+  if (mpOrder && orderRows.length) {
+    try {
+      const fees = mpAccessToken ? await extractMpFees(mpAccessToken, mpOrder) : { fee: null, net: null, raw: null };
+      const largest = orderRows.reduce((maxO, o) => (Number(o.tip) > Number(maxO.tip) ? o : maxO), orderRows[0]);
+      for (const o of orderRows) {
+        const existing = await get(
+          `SELECT id FROM order_payments WHERE order_id = $1 AND payment_method = 'mp_terminal'`,
+          [o.id]
+        );
+        if (existing) continue;
+        const orderRow = await get(`SELECT total, tip FROM orders WHERE id = $1`, [o.id]);
+        const feeCredit = o.id === largest.id ? fees.fee : null;
+        const netCredit = o.id === largest.id ? fees.net : null;
+        await run(
+          `INSERT INTO order_payments
+             (order_id, payment_method, amount, tip, payment_intent_id, status, processor_fee, processor_net, processor_response)
+           VALUES ($1, 'mp_terminal', $2, $3, $4, 'paid', $5, $6, $7)`,
+          [
+            o.id,
+            Number(orderRow?.total || 0),
+            Number(orderRow?.tip || 0),
+            mpOrder.id,
+            feeCredit,
+            netCredit,
+            o.id === largest.id && fees.raw ? JSON.stringify(fees.raw) : null,
+          ]
+        );
+      }
+    } catch (feeErr) {
+      console.warn('settlePaymentGroupPaid fee record failed:', feeErr.message);
+    }
+  }
+
+  await run(`UPDATE payment_groups SET status = 'paid', paid_at = COALESCE(paid_at, NOW()) WHERE id = $1`, [groupId]);
+}
+
 // GET /api/payments/:order_id - get payment status
 router.get('/:order_id', async (req, res) => {
   try {

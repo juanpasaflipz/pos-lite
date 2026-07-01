@@ -36,6 +36,8 @@ import type { KioskHeldOrder } from '../api';
 import NotesModal from '../components/pos/NotesModal';
 import DiscountModal from '../components/pos/DiscountModal';
 import PaymentModal from '../components/pos/PaymentModal';
+import PayTogetherModal from '../components/pos/PayTogetherModal';
+import PayTogetherReceiptModal from '../components/pos/PayTogetherReceiptModal';
 import OxxoReferenceModal from '../components/pos/OxxoReferenceModal';
 import SpeiReferenceModal from '../components/pos/SpeiReferenceModal';
 import ReceiptModal from '../components/pos/ReceiptModal';
@@ -162,6 +164,10 @@ const POSScreen: React.FC = () => {
   // When set, the existing PaymentModal is repurposed to charge this order
   // (kiosk / QR / unpaid orders), bypassing the cart-creation path.
   const [chargingOrder, setChargingOrder] = useState<Order | null>(null);
+  // Multi-select for "Cobrar Juntas" — long-press an unpaid ticket to enter.
+  const [selectedUnpaidIds, setSelectedUnpaidIds] = useState<Set<number>>(new Set());
+  const [showPayTogether, setShowPayTogether] = useState(false);
+  const [payTogetherReceiptId, setPayTogetherReceiptId] = useState<number | null>(null);
 
   // AI Suggestions
   const cartItemIds = useMemo(() => cart.map((c) => c.menu_item_id), [cart]);
@@ -1125,6 +1131,39 @@ const POSScreen: React.FC = () => {
     }
   };
 
+  // Multi-select: long-press an unpaid ticket to enter select mode, then tap
+  // additional tickets to add. "Cobrar Juntas" fires the grouped payment flow.
+  const handleToggleUnpaidSelected = (order: Order) => {
+    setSelectedUnpaidIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(order.id)) next.delete(order.id);
+      else next.add(order.id);
+      return next;
+    });
+    setShowUnpaidOrders(true);
+  };
+  const handleClearUnpaidSelection = () => setSelectedUnpaidIds(new Set());
+  const handleOpenPayTogether = () => {
+    if (selectedUnpaidIds.size < 2) return;
+    setShowPayTogether(true);
+  };
+  const handlePayTogetherSuccess = async (paymentGroupId: number) => {
+    setShowPayTogether(false);
+    setSelectedUnpaidIds(new Set());
+    setPayTogetherReceiptId(paymentGroupId);
+    try {
+      const orders = await getOrders({ payment_status: 'unpaid' });
+      setUnpaidOrders(
+        orders.filter(
+          (o) =>
+            o.status === 'ready' || o.status === 'completed' ||
+            o.source === 'qr_order' || o.source === 'customer_kiosk'
+        )
+      );
+    } catch { /* non-blocking */ }
+    addToast(t('cart.cobrarJuntasSuccess', { defaultValue: 'Cobro conjunto completado' }), 'success');
+  };
+
   // The /admin/orders screen hands the cashier an unpaid order to charge by
   // navigating here with { state: { chargeOrderId } }. We pick it up on mount,
   // open the payment flow, then clear the state so a refresh doesn't re-trigger.
@@ -1273,6 +1312,10 @@ const POSScreen: React.FC = () => {
         onUnlinkCustomer={() => setLinkedCustomer(null)}
         onApplyCartDiscount={() => setDiscountTarget({ scope: 'cart' })}
         onApplyLineDiscount={(item) => setDiscountTarget({ scope: 'item', cartId: item.cart_id })}
+        selectedUnpaidIds={selectedUnpaidIds}
+        onToggleUnpaidSelected={handleToggleUnpaidSelected}
+        onClearUnpaidSelection={handleClearUnpaidSelection}
+        onCobrarJuntas={handleOpenPayTogether}
         onDeleteUnpaidOrder={async (order) => {
           if (!window.confirm(`Delete order #${order.order_number}? This cannot be undone.`)) return;
           try {
@@ -1324,6 +1367,10 @@ const POSScreen: React.FC = () => {
                 window.alert(err instanceof Error ? err.message : 'Failed to delete order');
               }
             }}
+            selectedUnpaidIds={selectedUnpaidIds}
+            onToggleUnpaidSelected={handleToggleUnpaidSelected}
+            onClearUnpaidSelection={handleClearUnpaidSelection}
+            onCobrarJuntas={handleOpenPayTogether}
             comboSuggestion={comboSuggestion}
             onConvertToCombo={convertToCombo}
             total={total}
@@ -1450,6 +1497,21 @@ const POSScreen: React.FC = () => {
         <ComboBuilder
           onAddCombo={handleAddCombo}
           onClose={() => setShowComboBuilder(false)}
+        />
+      )}
+
+      {showPayTogether && selectedUnpaidIds.size >= 2 && (
+        <PayTogetherModal
+          orders={unpaidOrders.filter((o) => selectedUnpaidIds.has(o.id))}
+          onCancel={() => setShowPayTogether(false)}
+          onSuccess={handlePayTogetherSuccess}
+        />
+      )}
+
+      {payTogetherReceiptId !== null && (
+        <PayTogetherReceiptModal
+          paymentGroupId={payTogetherReceiptId}
+          onClose={() => setPayTogetherReceiptId(null)}
         />
       )}
 

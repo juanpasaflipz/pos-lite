@@ -17,6 +17,7 @@ import { startAutoCompleteSweep, stopAutoCompleteSweep } from './lib/autoComplet
 import menuRoutes from './routes/menu.js';
 import ordersRoutes from './routes/orders.js';
 import paymentsRoutes, { mpOAuthCallback, mpWebhook, conektaWebhook } from './routes/payments.js';
+import paymentGroupsRoutes from './routes/payment-groups.js';
 import inventoryRoutes from './routes/inventory.js';
 import employeesRoutes from './routes/employees.js';
 import shiftsRoutes from './routes/shifts.js';
@@ -232,6 +233,7 @@ app.use('/api/menu-board', menuBoardRoutes);
 app.use('/api/menu', menuRoutes);
 app.use('/api/orders', ordersRoutes);
 app.use('/api/payments', paymentsRoutes);
+app.use('/api/payment-groups', paymentGroupsRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/employees', employeesRoutes);
 app.use('/api/shifts', shiftsRoutes);

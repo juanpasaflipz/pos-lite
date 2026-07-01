@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { CartItem, LoyaltyCustomer, ComboDefinition, Discount, Order } from '../types';
 import { formatPrice, TAX_LABEL } from '../utils/currency';
 import { formatTime } from '../utils/dateFormat';
-import { ClipboardList, PauseCircle, Percent, Smartphone, Trash2, User, X } from 'lucide-react';
+import { Check, ClipboardList, PauseCircle, Percent, Smartphone, Trash2, User, X } from 'lucide-react';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -33,6 +33,10 @@ interface CartDrawerProps {
   onCobrar: (order: Order) => void;
   onToggleUnpaidOrders: () => void;
   onDeleteUnpaidOrder?: (order: Order) => void;
+  selectedUnpaidIds?: Set<number>;
+  onToggleUnpaidSelected?: (order: Order) => void;
+  onClearUnpaidSelection?: () => void;
+  onCobrarJuntas?: () => void;
   comboSuggestion: { combo: ComboDefinition; matchedItems: CartItem[]; savings: number } | null;
   onConvertToCombo: () => void;
   total: number;
@@ -81,11 +85,18 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
   totalDiscount,
   onApplyCartDiscount,
   onApplyLineDiscount,
+  selectedUnpaidIds,
+  onToggleUnpaidSelected,
+  onClearUnpaidSelection,
+  onCobrarJuntas,
 }) => {
   const { t } = useTranslation('pos');
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const pendingTotal = unpaidOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+  const selectionMode = !!(selectedUnpaidIds && selectedUnpaidIds.size > 0);
+  const selectedOrders = selectionMode ? unpaidOrders.filter((o) => selectedUnpaidIds!.has(o.id)) : [];
+  const selectedTotal = selectedOrders.reduce((s, o) => s + Number(o.total || 0), 0);
 
   // Lock body scroll when drawer open
   useEffect(() => {
@@ -177,59 +188,105 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
           <div className="border-b border-neutral-800 bg-cockpit-yellow/10">
             <div className="flex items-center justify-between px-3 pt-2 pb-1">
               <span className="text-cockpit-attention-text font-bold text-xs">{t('cart.unpaidOrders')}</span>
+              {selectionMode && onClearUnpaidSelection && (
+                <button onClick={onClearUnpaidSelection} className="text-[11px] text-neutral-400 hover:text-white font-bold">
+                  {t('cart.clearSelection', { defaultValue: 'Limpiar' })}
+                </button>
+              )}
             </div>
             <div className="px-3 pb-2 space-y-1.5 max-h-48 overflow-y-auto">
-              {unpaidOrders.map((order) => (
-                <div
-                  key={order.id}
-                  className="flex items-center justify-between bg-neutral-800 rounded-lg px-2.5 py-1.5 border border-neutral-700"
-                >
-                  <div className="min-w-0 flex-1 mr-2">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <p className="text-white font-bold text-xs">#{order.order_number}</p>
-                      {order.source === 'customer_kiosk' && (
-                        <span
-                          className="inline-flex items-center gap-1 rounded-full bg-brand-600/20 border border-brand-600/40 text-brand-200 text-[9px] font-black uppercase px-1.5 py-0.5 tracking-wide"
-                          title={t('cart.fromKiosk')}
-                        >
-                          <Smartphone className="h-3 w-3" />
-                          Kiosko
-                        </span>
+              {unpaidOrders.map((order) => {
+                const isSelected = selectedUnpaidIds?.has(order.id) || false;
+                const disableToggle = order.source === 'customer_kiosk' && String(order.status) === 'draft_kiosk';
+                let pressTimer: ReturnType<typeof setTimeout> | null = null;
+                const rowClasses = isSelected
+                  ? 'bg-brand-600/20 border-brand-500'
+                  : 'bg-neutral-800 border-neutral-700';
+                return (
+                  <div
+                    key={order.id}
+                    className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 border ${rowClasses}`}
+                    onPointerDown={() => {
+                      if (disableToggle || !onToggleUnpaidSelected) return;
+                      pressTimer = setTimeout(() => onToggleUnpaidSelected(order), 400);
+                    }}
+                    onPointerUp={() => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } }}
+                    onPointerLeave={() => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } }}
+                    onClick={() => {
+                      if (selectionMode && onToggleUnpaidSelected && !disableToggle) onToggleUnpaidSelected(order);
+                    }}
+                  >
+                    {selectionMode && (
+                      <div className={`flex-shrink-0 mr-2 w-5 h-5 rounded border-2 flex items-center justify-center ${isSelected ? 'bg-brand-500 border-brand-500' : 'border-neutral-500'}`}>
+                        {isSelected && <Check className="w-3 h-3 text-white" />}
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1 mr-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-white font-bold text-xs">#{order.order_number}</p>
+                        {order.source === 'customer_kiosk' && (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full bg-brand-600/20 border border-brand-600/40 text-brand-200 text-[9px] font-black uppercase px-1.5 py-0.5 tracking-wide"
+                            title={t('cart.fromKiosk')}
+                          >
+                            <Smartphone className="h-3 w-3" />
+                            Kiosko
+                          </span>
+                        )}
+                        {order.order_fulfillment_type && (
+                          <span className="inline-flex items-center rounded-full bg-cockpit-yellow text-neutral-950 text-[9px] font-black uppercase px-1.5 py-0.5 tracking-wide whitespace-nowrap">
+                            {order.order_fulfillment_type === 'for_here' ? t('cart.forHere') : t('cart.toGo')}
+                          </span>
+                        )}
+                      </div>
+                      {order.customer_name && (
+                        <p className="text-neutral-300 text-[11px] truncate inline-flex items-center gap-1">
+                          <User className="h-3 w-3 text-neutral-500 shrink-0" />
+                          {order.customer_name}
+                        </p>
                       )}
-                      {order.order_fulfillment_type && (
-                        <span className="inline-flex items-center rounded-full bg-cockpit-yellow text-neutral-950 text-[9px] font-black uppercase px-1.5 py-0.5 tracking-wide whitespace-nowrap">
-                          {order.order_fulfillment_type === 'for_here' ? t('cart.forHere') : t('cart.toGo')}
-                        </span>
-                      )}
+                      <p className="text-neutral-400 text-[11px]">{formatPrice(order.total)}</p>
                     </div>
-                    {order.customer_name && (
-                      <p className="text-neutral-300 text-[11px] truncate inline-flex items-center gap-1">
-                        <User className="h-3 w-3 text-neutral-500 shrink-0" />
-                        {order.customer_name}
-                      </p>
-                    )}
-                    <p className="text-neutral-400 text-[11px]">{formatPrice(order.total)}</p>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => onCobrar(order)}
-                      className="px-2.5 py-1.5 bg-brand-600 text-white text-[11px] font-bold rounded-lg hover:bg-brand-700 transition-all min-h-[40px]"
-                    >
-                      {t('cart.charge')}
-                    </button>
-                    {onDeleteUnpaidOrder && (
-                      <button
-                        onClick={() => onDeleteUnpaidOrder(order)}
-                        title="Delete order"
-                        className="p-1.5 text-neutral-400 hover:text-cockpit-out-text/90 hover:bg-neutral-700 rounded-lg transition-all min-h-[40px] min-w-[40px] flex items-center justify-center"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                    {!selectionMode && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onCobrar(order); }}
+                          className="px-2.5 py-1.5 bg-brand-600 text-white text-[11px] font-bold rounded-lg hover:bg-brand-700 transition-all min-h-[40px]"
+                        >
+                          {t('cart.charge')}
+                        </button>
+                        {onDeleteUnpaidOrder && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onDeleteUnpaidOrder(order); }}
+                            title="Delete order"
+                            className="p-1.5 text-neutral-400 hover:text-cockpit-out-text/90 hover:bg-neutral-700 rounded-lg transition-all min-h-[40px] min-w-[40px] flex items-center justify-center"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
+            {selectionMode && selectedOrders.length >= 2 && onCobrarJuntas && (
+              <div className="px-3 pb-2">
+                <button
+                  onClick={onCobrarJuntas}
+                  className="w-full py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-black text-xs shadow-lg transition-all min-h-[44px]"
+                >
+                  {t('cart.cobrarJuntas', { defaultValue: 'Cobrar juntas' })} · {selectedOrders.length} · {formatPrice(selectedTotal)}
+                </button>
+              </div>
+            )}
+            {selectionMode && selectedOrders.length < 2 && (
+              <div className="px-3 pb-2">
+                <div className="w-full py-2.5 rounded-xl bg-neutral-800 text-neutral-500 text-center font-bold text-xs">
+                  {t('cart.selectAtLeastTwo', { defaultValue: 'Selecciona al menos 2 pedidos' })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
