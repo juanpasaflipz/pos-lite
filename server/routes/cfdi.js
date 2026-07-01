@@ -15,8 +15,14 @@ import {
   generateInvoiceToken,
 } from '../helpers/facturapi.js';
 import { taxRegimes, usoCfdi, formaPago, cancellationMotives } from '../data/sat-catalogs.js';
+import { audit } from '../lib/auditLog.js';
 
 const router = Router();
+
+// Postgres unique_violation. Both /invoices and cfdi-public rely on the
+// partial unique index uniq_cfdi_invoices_order_active (migration 0074) to
+// close the concurrent-issue race.
+const PG_UNIQUE_VIOLATION = '23505';
 
 // Multer: memory storage for CSD file uploads (no disk writes)
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 } });
@@ -34,9 +40,21 @@ router.get('/catalogs', requireAuth(), async (req, res) => {
 router.get('/config', requireAuth('manage_invoicing'), async (req, res) => {
   try {
     const config = await get('SELECT * FROM cfdi_config WHERE tenant_id = current_setting($1, true)', ['app.tenant_id']);
+    // Surface CSD expiry state so the UI can warn ~30 days out. Merchants
+    // routinely forget their CSD needs renewal every 4 years; a silent expiry
+    // turns every invoice attempt into a 500 with no owner-visible reason.
+    let csd_expires_in_days = null;
+    let csd_expired = null;
+    if (config?.csd_valid_until) {
+      const ms = new Date(config.csd_valid_until).getTime() - Date.now();
+      csd_expires_in_days = Math.floor(ms / (1000 * 60 * 60 * 24));
+      csd_expired = ms <= 0;
+    }
     res.json({
       config: config || null,
       facturapi_configured: isFacturapiConfigured(),
+      csd_expires_in_days,
+      csd_expired,
     });
   } catch (err) {
     console.error('[CFDI] Error fetching config:', err.message);
@@ -118,12 +136,13 @@ router.post('/config/csd', requireAuth('manage_invoicing'), upload.fields([
       return res.status(400).json({ error: 'CSD .cer file, .key file, and password are required' });
     }
 
-    await uploadCSD(config.facturapi_org_id, cerFile.buffer, keyFile.buffer, password);
+    const uploadResult = await uploadCSD(config.facturapi_org_id, cerFile.buffer, keyFile.buffer, password);
 
     await run(`
-      UPDATE cfdi_config SET csd_uploaded = true, active = true, updated_at = NOW()
+      UPDATE cfdi_config SET csd_uploaded = true, active = true,
+        csd_valid_until = $1, updated_at = NOW()
       WHERE tenant_id = current_setting('app.tenant_id', true)
-    `);
+    `, [uploadResult?.expires_at || null]);
 
     const updated = await get('SELECT * FROM cfdi_config WHERE tenant_id = current_setting($1, true)', ['app.tenant_id']);
     res.json({ config: updated, message: 'CSD uploaded and CFDI activated' });
@@ -142,6 +161,15 @@ router.post('/config/test', requireAuth('manage_invoicing'), async (req, res) =>
     }
 
     const result = await testStamp(config.facturapi_org_id);
+    // Refresh the persisted expiry when the merchant runs the test — cheap
+    // and keeps the expiry warning honest if they renew directly at FacturAPI.
+    if (result?.success && result.expires_at) {
+      await run(
+        `UPDATE cfdi_config SET csd_valid_until = $1, updated_at = NOW()
+         WHERE tenant_id = current_setting('app.tenant_id', true)`,
+        [result.expires_at]
+      );
+    }
     res.json(result);
   } catch (err) {
     console.error('[CFDI] Test stamp error:', err.message);
@@ -234,26 +262,58 @@ router.post('/invoices', requireAuth('manage_invoicing'), async (req, res) => {
       series: config.invoice_series,
     });
 
-    // Save invoice record
+    // Save invoice record. Partial unique index (mig 0074) will 23505 if
+    // another request already inserted a live invoice for this order — the
+    // CFDI was still stamped at FacturAPI, so we surface a 409 rather than a
+    // 500 so the UI can render "already invoiced" instead of "try again"
+    // (which would double-stamp).
     const tid = getTenantId();
-    const result = await run(`
-      INSERT INTO cfdi_invoices (
-        tenant_id, order_id, facturapi_invoice_id, uuid_fiscal, series, folio,
-        receptor_rfc, receptor_name, receptor_tax_regime, receptor_postal_code, receptor_uso_cfdi,
-        subtotal, tax_total, total, forma_pago, metodo_pago,
-        xml_url, pdf_url, requested_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-    `, [
-      tid, order_id, invoice.id, invoice.uuid, invoice.series, invoice.folio_number,
-      receptorData.rfc, receptorData.name, receptorData.tax_regime, receptorData.postal_code, receptorData.uso_cfdi,
-      order.subtotal, order.tax, order.total, formaPago, 'PUE',
-      invoice.xml_url || null, invoice.pdf_url || null, 'staff',
-    ]);
+    let result;
+    try {
+      result = await run(`
+        INSERT INTO cfdi_invoices (
+          tenant_id, order_id, facturapi_invoice_id, uuid_fiscal, series, folio,
+          receptor_rfc, receptor_name, receptor_tax_regime, receptor_postal_code, receptor_uso_cfdi,
+          subtotal, tax_total, total, forma_pago, metodo_pago,
+          xml_url, pdf_url, requested_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+      `, [
+        tid, order_id, invoice.id, invoice.uuid, invoice.series, invoice.folio_number,
+        receptorData.rfc, receptorData.name, receptorData.tax_regime, receptorData.postal_code, receptorData.uso_cfdi,
+        order.subtotal, order.tax, order.total, formaPago, 'PUE',
+        invoice.xml_url || null, invoice.pdf_url || null, 'staff',
+      ]);
+    } catch (insertErr) {
+      if (insertErr.code === PG_UNIQUE_VIOLATION) {
+        console.warn(`[CFDI] Race: order ${order_id} was already invoiced (FacturAPI id ${invoice.id} orphaned)`);
+        return res.status(409).json({ error: 'This order already has an invoice', facturapi_invoice_id: invoice.id });
+      }
+      throw insertErr;
+    }
 
     // Update order with invoice reference
     await run('UPDATE orders SET cfdi_invoice_id = $1 WHERE id = $2', [result.lastInsertRowid, order_id]);
 
     const saved = await get('SELECT * FROM cfdi_invoices WHERE id = $1', [result.lastInsertRowid]);
+
+    audit({
+      tenantId: tid,
+      actorType: 'employee',
+      actorId: req.employee?.id ? String(req.employee.id) : null,
+      action: 'create',
+      resource: 'cfdi_invoices',
+      resourceId: String(result.lastInsertRowid),
+      details: {
+        order_id,
+        facturapi_invoice_id: invoice.id,
+        uuid_fiscal: invoice.uuid,
+        receptor_rfc: receptorData.rfc,
+        total: order.total,
+        publico_general: !!publico_general,
+      },
+      ip: req.ip,
+    });
+
     res.json(saved);
   } catch (err) {
     console.error('[CFDI] Error issuing invoice:', err.message);
@@ -403,6 +463,24 @@ router.post('/invoices/:id/cancel', requireAuth('manage_invoicing'), async (req,
     await run('UPDATE orders SET cfdi_invoice_id = NULL WHERE id = $1', [invoice.order_id]);
 
     const updated = await get('SELECT * FROM cfdi_invoices WHERE id = $1', [req.params.id]);
+
+    audit({
+      tenantId: getTenantId(),
+      actorType: 'employee',
+      actorId: req.employee?.id ? String(req.employee.id) : null,
+      action: 'delete',
+      resource: 'cfdi_invoices',
+      resourceId: String(req.params.id),
+      details: {
+        order_id: invoice.order_id,
+        facturapi_invoice_id: invoice.facturapi_invoice_id,
+        uuid_fiscal: invoice.uuid_fiscal,
+        motive,
+        substitute_uuid: substitute_uuid || null,
+      },
+      ip: req.ip,
+    });
+
     res.json(updated);
   } catch (err) {
     console.error('[CFDI] Error cancelling invoice:', err.message);
