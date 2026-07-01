@@ -9,6 +9,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { audit } from '../lib/auditLog.js';
 import { sendReceiptMessage, sendReceiptLoyaltyMessage, sendOrderReadyMessage } from '../helpers/twilio.js';
 import { findOrCreateCustomer, addStampsForOrder, getConfigValue } from '../helpers/loyalty.js';
+import { tzDate } from '../lib/tz.js';
 
 const router = Router();
 
@@ -150,14 +151,17 @@ async function ensureCounterTable() {
  * can ever get the same sequence number.
  */
 async function insertOrderWithNumber(conn, {
-  employee_id, subtotal, tax, total, offline_temp_id, tenantId,
+  employee_id, subtotal, tax, total, offline_temp_id, tenantId, tenantTz,
   discount_amount = 0, discount_type = null, discount_reason = null, discount_authorized_by = null,
   order_fulfillment_type = 'to_go',
   customer_call_name = null,
 }) {
   await ensureCounterTable();
 
-  const dateStr = new Date().toISOString().split('T')[0];
+  // date_key follows the merchant's local day, not UTC — otherwise the daily
+  // sequence in Mexico City rolls over at 6pm local instead of midnight and
+  // owners see order #YYYYMMDD001 dated to tomorrow before they close.
+  const dateStr = tzDate(new Date(), tenantTz);
   const datePrefix = parseInt(dateStr.replace(/-/g, '')) * 1000;
   const tid = tenantId || 'default';
 
@@ -746,6 +750,7 @@ async function buildOrderFromRequest(req) {
     ({ orderId, orderNumber } = await insertOrderWithNumber(conn, {
       employee_id, subtotal, tax, total, offline_temp_id,
       tenantId: req.tenant?.id,
+      tenantTz: req.tenant?.timezone,
       discount_amount: orderDiscountAmount,
       discount_type: orderDiscountAmount > 0 ? (orderDiscount?.type || null) : null,
       discount_reason: orderDiscountAmount > 0 ? (orderDiscount?.reason || null) : null,

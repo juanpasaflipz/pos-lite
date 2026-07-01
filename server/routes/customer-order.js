@@ -271,6 +271,7 @@ router.post('/', customerOrderLimiter, async (req, res) => {
       tax,
       total,
       tenantId,
+      tenantTz: req.tenant?.timezone,
     });
 
     // Per-order secret — required on the public status/payment-intent/confirm-payment endpoints

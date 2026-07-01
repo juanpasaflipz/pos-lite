@@ -2,17 +2,11 @@ import { Router } from 'express';
 import { all, get, run, getTenantId } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { audit } from '../lib/auditLog.js';
+import { tzDate } from '../lib/tz.js';
 
 const router = Router();
 
 // ---------- helpers ----------
-
-/** YYYY-MM-DD for the given date in the tenant's IANA timezone. */
-function tzDate(date, tz) {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(date);
-}
 
 /**
  * Compute the current weekly payroll period start (inclusive) and end

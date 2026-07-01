@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import { adminSql, withTenant, get } from '../db/index.js';
 import { JWT_SECRET } from '../lib/constants.js';
 import { getTenant } from '../tenants.js';
+import { tzDate } from '../lib/tz.js';
 import { deductInventoryForOrder } from '../helpers/inventory.js';
 import { generateInvoiceToken } from '../helpers/facturapi.js';
 import {
@@ -261,9 +262,11 @@ async function awardKioskOrderStamps(orderId, tenantId) {
   }
 }
 
-async function nextOrderNumber(tenantId) {
+async function nextOrderNumber(tenantId, tenantTz) {
   await ensureCounterTable();
-  const dateStr = new Date().toISOString().split('T')[0];
+  // Use tenant-local day so #YYYYMMDDNNN reflects the merchant's calendar
+  // date, not UTC. See notes on insertOrderWithNumber in orders.js.
+  const dateStr = tzDate(new Date(), tenantTz);
   const datePrefix = parseInt(dateStr.replace(/-/g, ''), 10) * 1000;
   const [counter] = await adminSql.unsafe(`
     INSERT INTO daily_order_counter (tenant_id, date_key, last_seq)
@@ -573,7 +576,7 @@ router.post('/orders', verifyKioskToken, async (req, res) => {
 
     const tax = Math.round((total - total / (1 + TAX_RATE)) * 100) / 100;
     const subtotal = Math.round((total - tax) * 100) / 100;
-    const orderNumber = await nextOrderNumber(tenantId);
+    const orderNumber = await nextOrderNumber(tenantId, (await getTenant(tenantId))?.timezone);
     const paymentStatus = 'unpaid';
     const paymentMethod = payment_choice === 'counter_cash' ? null : 'card';
     const fulfillmentType = normalizeKioskFulfillmentType(fulfillment_type);
@@ -633,7 +636,7 @@ router.post('/orders/hold', verifyKioskToken, async (req, res) => {
 
     const tax = Math.round((total - total / (1 + TAX_RATE)) * 100) / 100;
     const subtotal = Math.round((total - tax) * 100) / 100;
-    const orderNumber = await nextOrderNumber(tenantId);
+    const orderNumber = await nextOrderNumber(tenantId, (await getTenant(tenantId))?.timezone);
     const fulfillmentType = normalizeKioskFulfillmentType(fulfillment_type);
 
     // Supersede any existing held drafts for this customer — only one active hold at a time.
@@ -881,7 +884,7 @@ router.post('/orders/send-to-kitchen', verifyKioskToken, async (req, res) => {
 
     const tax = Math.round((total - total / (1 + TAX_RATE)) * 100) / 100;
     const subtotal = Math.round((total - tax) * 100) / 100;
-    const orderNumber = await nextOrderNumber(tenantId);
+    const orderNumber = await nextOrderNumber(tenantId, (await getTenant(tenantId))?.timezone);
     const fulfillmentType = normalizeKioskFulfillmentType(fulfillment_type);
 
     const [order] = await adminSql`
@@ -1022,7 +1025,7 @@ router.post('/orders/send-to-delivery', verifyKioskToken, async (req, res) => {
 
     const tax = Math.round((total - total / (1 + TAX_RATE)) * 100) / 100;
     const subtotal = Math.round((total - tax) * 100) / 100;
-    const orderNumber = await nextOrderNumber(tenantId);
+    const orderNumber = await nextOrderNumber(tenantId, (await getTenant(tenantId))?.timezone);
 
     const [order] = await adminSql`
       INSERT INTO orders (
