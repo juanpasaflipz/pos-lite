@@ -164,8 +164,10 @@ const POSScreen: React.FC = () => {
   // When set, the existing PaymentModal is repurposed to charge this order
   // (kiosk / QR / unpaid orders), bypassing the cart-creation path.
   const [chargingOrder, setChargingOrder] = useState<Order | null>(null);
-  // Multi-select for "Cobrar Juntas" — long-press an unpaid ticket to enter.
+  // Multi-select for "Cobrar Juntas" — explicit "Seleccionar" button in the
+  // drawer header, or long-press on a row, both enter select mode.
   const [selectedUnpaidIds, setSelectedUnpaidIds] = useState<Set<number>>(new Set());
+  const [unpaidSelectMode, setUnpaidSelectMode] = useState(false);
   const [showPayTogether, setShowPayTogether] = useState(false);
   const [payTogetherReceiptId, setPayTogetherReceiptId] = useState<number | null>(null);
 
@@ -1131,8 +1133,9 @@ const POSScreen: React.FC = () => {
     }
   };
 
-  // Multi-select: long-press an unpaid ticket to enter select mode, then tap
-  // additional tickets to add. "Cobrar Juntas" fires the grouped payment flow.
+  // Multi-select: tap "Seleccionar" in the drawer header (or long-press a row)
+  // to enter select mode, then tap additional tickets to add. "Cobrar Juntas"
+  // fires the grouped payment flow.
   const handleToggleUnpaidSelected = (order: Order) => {
     setSelectedUnpaidIds((prev) => {
       const next = new Set(prev);
@@ -1140,9 +1143,20 @@ const POSScreen: React.FC = () => {
       else next.add(order.id);
       return next;
     });
+    setUnpaidSelectMode(true);
     setShowUnpaidOrders(true);
   };
-  const handleClearUnpaidSelection = () => setSelectedUnpaidIds(new Set());
+  const handleClearUnpaidSelection = () => {
+    setSelectedUnpaidIds(new Set());
+    setUnpaidSelectMode(false);
+  };
+  const handleToggleUnpaidSelectMode = () => {
+    setUnpaidSelectMode((prev) => {
+      if (prev) setSelectedUnpaidIds(new Set());
+      return !prev;
+    });
+    setShowUnpaidOrders(true);
+  };
   const handleOpenPayTogether = () => {
     if (selectedUnpaidIds.size < 2) return;
     setShowPayTogether(true);
@@ -1150,6 +1164,7 @@ const POSScreen: React.FC = () => {
   const handlePayTogetherSuccess = async (paymentGroupId: number) => {
     setShowPayTogether(false);
     setSelectedUnpaidIds(new Set());
+    setUnpaidSelectMode(false);
     setPayTogetherReceiptId(paymentGroupId);
     try {
       const orders = await getOrders({ payment_status: 'unpaid' });
@@ -1313,6 +1328,8 @@ const POSScreen: React.FC = () => {
         onApplyCartDiscount={() => setDiscountTarget({ scope: 'cart' })}
         onApplyLineDiscount={(item) => setDiscountTarget({ scope: 'item', cartId: item.cart_id })}
         selectedUnpaidIds={selectedUnpaidIds}
+        unpaidSelectMode={unpaidSelectMode}
+        onToggleUnpaidSelectMode={handleToggleUnpaidSelectMode}
         onToggleUnpaidSelected={handleToggleUnpaidSelected}
         onClearUnpaidSelection={handleClearUnpaidSelection}
         onCobrarJuntas={handleOpenPayTogether}
@@ -1368,6 +1385,8 @@ const POSScreen: React.FC = () => {
               }
             }}
             selectedUnpaidIds={selectedUnpaidIds}
+            unpaidSelectMode={unpaidSelectMode}
+            onToggleUnpaidSelectMode={handleToggleUnpaidSelectMode}
             onToggleUnpaidSelected={handleToggleUnpaidSelected}
             onClearUnpaidSelection={handleClearUnpaidSelection}
             onCobrarJuntas={handleOpenPayTogether}

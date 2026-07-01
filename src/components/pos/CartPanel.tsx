@@ -49,6 +49,9 @@ interface CartPanelProps {
   onDeleteUnpaidOrder?: (order: Order) => void;
   /** Selected order ids for "Cobrar Juntas" — empty = single-select mode. */
   selectedUnpaidIds?: Set<number>;
+  /** Explicit select-mode flag; when true, single taps toggle selection. */
+  unpaidSelectMode?: boolean;
+  onToggleUnpaidSelectMode?: () => void;
   onToggleUnpaidSelected?: (order: Order) => void;
   onClearUnpaidSelection?: () => void;
   onCobrarJuntas?: () => void;
@@ -94,6 +97,8 @@ export default function CartPanel({
   deliveryDraft,
   onEditDelivery,
   selectedUnpaidIds,
+  unpaidSelectMode,
+  onToggleUnpaidSelectMode,
   onToggleUnpaidSelected,
   onClearUnpaidSelection,
   onCobrarJuntas,
@@ -102,7 +107,7 @@ export default function CartPanel({
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const pendingTotal = unpaidOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
-  const selectionMode = !!(selectedUnpaidIds && selectedUnpaidIds.size > 0);
+  const selectionMode = !!(unpaidSelectMode || (selectedUnpaidIds && selectedUnpaidIds.size > 0));
   const selectedOrders = selectionMode
     ? unpaidOrders.filter((o) => selectedUnpaidIds!.has(o.id))
     : [];
@@ -173,20 +178,25 @@ export default function CartPanel({
         <div className="border-b border-neutral-800 bg-cockpit-yellow/10">
           <div className="flex items-center justify-between px-4 pt-3 pb-1">
             <span className="text-cockpit-attention-text font-bold text-sm">{t('cart.unpaidOrders')}</span>
-            {selectionMode && onClearUnpaidSelection && (
-              <button
-                onClick={onClearUnpaidSelection}
-                className="text-xs text-neutral-400 hover:text-white font-bold"
-              >
-                {t('cart.clearSelection', { defaultValue: 'Limpiar' })}
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {unpaidOrders.length >= 2 && !selectionMode && onToggleUnpaidSelectMode && (
+                <button
+                  onClick={onToggleUnpaidSelectMode}
+                  className="text-xs px-2 py-1 rounded-md bg-brand-600/20 border border-brand-600/40 text-brand-200 hover:bg-brand-600/30 font-bold"
+                >
+                  {t('cart.selectMultiple', { defaultValue: 'Seleccionar varias' })}
+                </button>
+              )}
+              {selectionMode && onClearUnpaidSelection && (
+                <button
+                  onClick={onClearUnpaidSelection}
+                  className="text-xs text-neutral-400 hover:text-white font-bold"
+                >
+                  {t('cart.cancelSelection', { defaultValue: 'Cancelar' })}
+                </button>
+              )}
+            </div>
           </div>
-          {unpaidOrders.length >= 2 && !selectionMode && onToggleUnpaidSelected && (
-            <p className="px-4 pb-1 text-[11px] text-neutral-400">
-              {t('cart.selectHint', { defaultValue: 'Tip: mantén presionado para cobrar varias juntas' })}
-            </p>
-          )}
           <div className="px-4 pb-3 space-y-2 max-h-48 overflow-y-auto">
             {unpaidOrders.map((order) => {
               const isSelected = selectedUnpaidIds?.has(order.id) || false;

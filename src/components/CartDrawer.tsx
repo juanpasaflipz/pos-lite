@@ -34,6 +34,8 @@ interface CartDrawerProps {
   onToggleUnpaidOrders: () => void;
   onDeleteUnpaidOrder?: (order: Order) => void;
   selectedUnpaidIds?: Set<number>;
+  unpaidSelectMode?: boolean;
+  onToggleUnpaidSelectMode?: () => void;
   onToggleUnpaidSelected?: (order: Order) => void;
   onClearUnpaidSelection?: () => void;
   onCobrarJuntas?: () => void;
@@ -86,6 +88,8 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
   onApplyCartDiscount,
   onApplyLineDiscount,
   selectedUnpaidIds,
+  unpaidSelectMode,
+  onToggleUnpaidSelectMode,
   onToggleUnpaidSelected,
   onClearUnpaidSelection,
   onCobrarJuntas,
@@ -94,7 +98,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const pendingTotal = unpaidOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
-  const selectionMode = !!(selectedUnpaidIds && selectedUnpaidIds.size > 0);
+  const selectionMode = !!(unpaidSelectMode || (selectedUnpaidIds && selectedUnpaidIds.size > 0));
   const selectedOrders = selectionMode ? unpaidOrders.filter((o) => selectedUnpaidIds!.has(o.id)) : [];
   const selectedTotal = selectedOrders.reduce((s, o) => s + Number(o.total || 0), 0);
 
@@ -188,11 +192,21 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
           <div className="border-b border-neutral-800 bg-cockpit-yellow/10">
             <div className="flex items-center justify-between px-3 pt-2 pb-1">
               <span className="text-cockpit-attention-text font-bold text-xs">{t('cart.unpaidOrders')}</span>
-              {selectionMode && onClearUnpaidSelection && (
-                <button onClick={onClearUnpaidSelection} className="text-[11px] text-neutral-400 hover:text-white font-bold">
-                  {t('cart.clearSelection', { defaultValue: 'Limpiar' })}
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {unpaidOrders.length >= 2 && !selectionMode && onToggleUnpaidSelectMode && (
+                  <button
+                    onClick={onToggleUnpaidSelectMode}
+                    className="text-[11px] px-2 py-1 rounded-md bg-brand-600/20 border border-brand-600/40 text-brand-200 hover:bg-brand-600/30 font-bold min-h-[32px]"
+                  >
+                    {t('cart.selectMultiple', { defaultValue: 'Seleccionar varias' })}
+                  </button>
+                )}
+                {selectionMode && onClearUnpaidSelection && (
+                  <button onClick={onClearUnpaidSelection} className="text-[11px] text-neutral-400 hover:text-white font-bold">
+                    {t('cart.cancelSelection', { defaultValue: 'Cancelar' })}
+                  </button>
+                )}
+              </div>
             </div>
             <div className="px-3 pb-2 space-y-1.5 max-h-48 overflow-y-auto">
               {unpaidOrders.map((order) => {
