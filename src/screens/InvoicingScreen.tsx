@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft,
   FileText,
@@ -8,6 +9,8 @@ import {
   XCircle,
   CheckCircle,
   Loader2,
+  ExternalLink,
+  KeyRound,
 } from 'lucide-react';
 import { getCfdiConfig, getCfdiCatalogs } from '../api';
 import type { CfdiConfig, CfdiCatalogs } from '../types';
@@ -18,6 +21,7 @@ import InvoiceListTab from '../components/invoicing/InvoiceListTab';
 type Tab = 'config' | 'issue' | 'list';
 
 export default function InvoicingScreen() {
+  const { t } = useTranslation('admin');
   const [activeTab, setActiveTab] = useState<Tab>('config');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +29,7 @@ export default function InvoicingScreen() {
 
   const [config, setConfig] = useState<CfdiConfig | null>(null);
   const [catalogs, setCatalogs] = useState<CfdiCatalogs | null>(null);
+  const [facturapiConfigured, setFacturapiConfigured] = useState(true);
 
   useEffect(() => {
     fetchInitialData();
@@ -39,6 +44,7 @@ export default function InvoicingScreen() {
         getCfdiCatalogs(),
       ]);
       setConfig(configRes.config);
+      setFacturapiConfigured(configRes.facturapi_configured);
       setCatalogs(catalogsRes);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error loading data');
@@ -101,6 +107,43 @@ export default function InvoicingScreen() {
       </div>
 
       <div className="max-w-7xl mx-auto p-6">
+        {/* Setup banner — merchant hasn't connected a Facturapi key yet.
+            Shown after load resolves and until a resolvable key exists
+            (either their own via Integrations, or the platform env). */}
+        {!loading && !facturapiConfigured && (
+          <div className="bg-brand-500/10 border border-brand-500/30 rounded-lg p-4 mb-6">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl leading-none">🧾</span>
+              <div className="flex-1">
+                <h3 className="text-white font-semibold text-sm mb-1">
+                  {t('invoicing.setupTitle')}
+                </h3>
+                <p className="text-neutral-300 text-sm mb-3">
+                  {t('invoicing.setupDescription')}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <a
+                    href="https://facturapi.io/signup"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white text-xs font-semibold rounded-lg hover:bg-brand-700 transition-colors"
+                  >
+                    <ExternalLink size={14} />
+                    {t('invoicing.setupSignupCta')}
+                  </a>
+                  <Link
+                    to="/admin/integrations"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 text-neutral-200 text-xs font-semibold rounded-lg hover:bg-neutral-700 transition-colors"
+                  >
+                    <KeyRound size={14} />
+                    {t('invoicing.setupConfigureCta')}
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Alerts */}
         {error && (
           <div className="bg-cockpit-red/30 border border-cockpit-red rounded-lg p-4 mb-6 flex items-start gap-3">

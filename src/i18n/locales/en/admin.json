@@ -372,6 +372,10 @@
     "limitReached": "Menu item limit reached ({{limit}}). Upgrade for unlimited items."
   },
   "invoicing": {
+    "setupTitle": "Connect Facturapi to issue CFDIs",
+    "setupDescription": "The POS stamps invoices through Facturapi.io. Create a free account (test mode) and paste your API key in Integrations.",
+    "setupSignupCta": "Sign up at facturapi.io",
+    "setupConfigureCta": "Add API key",
     "configStatus": "Configuration Status",
     "cfdiSubtitle": "CFDI 4.0 — SAT Electronic Invoicing",
     "statusNotConfigured": "Not Configured",

@@ -371,6 +371,10 @@
     "limitReached": "Límite de productos alcanzado ({{limit}}). Actualiza para productos ilimitados."
   },
   "invoicing": {
+    "setupTitle": "Conecta Facturapi para emitir CFDI",
+    "setupDescription": "El POS emite facturas a través de Facturapi.io. Crea una cuenta gratis (modo prueba) y pega tu API key en Integraciones.",
+    "setupSignupCta": "Regístrate en facturapi.io",
+    "setupConfigureCta": "Agregar API key",
     "configStatus": "Estado de Configuración",
     "cfdiSubtitle": "CFDI 4.0 — Facturación Electrónica SAT",
     "statusNotConfigured": "No Configurado",

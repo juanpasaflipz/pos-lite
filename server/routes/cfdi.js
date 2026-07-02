@@ -3,7 +3,6 @@ import multer from 'multer';
 import { run, get, all, getTenantId } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import {
-  isFacturapiConfigured,
   createOrganization,
   uploadCSD,
   testStamp,
@@ -14,6 +13,7 @@ import {
   mapOrderItemsToCFDI,
   generateInvoiceToken,
 } from '../helpers/facturapi.js';
+import { getServiceCredentials } from '../helpers/tenantCredentials.js';
 import { taxRegimes, usoCfdi, formaPago, cancellationMotives } from '../data/sat-catalogs.js';
 import { audit } from '../lib/auditLog.js';
 
@@ -50,9 +50,14 @@ router.get('/config', requireAuth('manage_invoicing'), async (req, res) => {
       csd_expires_in_days = Math.floor(ms / (1000 * 60 * 60 * 24));
       csd_expired = ms <= 0;
     }
+    // Check whether a Facturapi key is actually resolvable for this tenant —
+    // either they pasted one in Integrations (tenant_credentials) or the
+    // platform env has one. This matches resolveClient() so the UI banner
+    // doesn't nag merchants who've already added their own key.
+    const creds = await getServiceCredentials(getTenantId(), 'facturapi', { api_key: 'FACTURAPI_API_KEY' });
     res.json({
       config: config || null,
-      facturapi_configured: isFacturapiConfigured(),
+      facturapi_configured: !!creds.api_key,
       csd_expires_in_days,
       csd_expired,
     });
@@ -76,8 +81,10 @@ router.post('/config', requireAuth('manage_invoicing'), async (req, res) => {
 
     let facturapi_org_id = existing?.facturapi_org_id || null;
 
-    // Create FacturAPI organization if not yet created and API is configured
-    if (!facturapi_org_id && isFacturapiConfigured()) {
+    // Create FacturAPI organization if not yet created and API is configured.
+    // Same resolution logic as GET /config: tenant credential OR platform env.
+    const creds = await getServiceCredentials(getTenantId(), 'facturapi', { api_key: 'FACTURAPI_API_KEY' });
+    if (!facturapi_org_id && creds.api_key) {
       const org = await createOrganization({ legal_name, rfc, tax_regime, postal_code });
       facturapi_org_id = org.id;
     }
