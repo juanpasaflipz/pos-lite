@@ -258,6 +258,8 @@
     "addFirstItem": "Agregar Primer Producto",
     "manageCategories": "Gestionar Categorías",
     "addCategory": "Agregar Categoría",
+    "deleteCategory": "Eliminar Categoría",
+    "confirmDeleteCategory": "¿Eliminar permanentemente la categoría \"{{name}}\"? Esta acción no se puede deshacer.",
     "addMenuItem": "Agregar Producto al Menú",
     "editMenuItem": "Editar Producto del Menú",
     "form": {
@@ -639,6 +641,7 @@
     "createCategory": "Error al crear categoría",
     "updateCategory": "Error al actualizar categoría",
     "toggleCategory": "Error al cambiar estado de categoría",
+    "deleteCategory": "Error al eliminar categoría",
     "reorder": "Error al reordenar",
     "fetchData": "Error al cargar datos",
     "loadPo": "Error al cargar OC",

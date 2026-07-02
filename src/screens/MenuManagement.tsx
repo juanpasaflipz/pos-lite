@@ -12,6 +12,7 @@ import {
   createCategory,
   updateCategory,
   toggleCategory,
+  deleteCategory,
   getModifierGroups,
   getModifierGroupsForItem,
   assignModifierGroupToItem,
@@ -299,6 +300,19 @@ export default function MenuManagement() {
     }
   };
 
+  const handleDeleteCategory = async (cat: MenuCategory) => {
+    if (!window.confirm(t('menu.confirmDeleteCategory', { name: cat.name }))) return;
+    try {
+      setError(null);
+      await deleteCategory(cat.id);
+      await invalidateMenuCache();
+      if (selectedCategory === cat.id) setSelectedCategory(null);
+      await fetchCategories();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('errors.deleteCategory'));
+    }
+  };
+
   const startEditCategory = (cat: MenuCategory) => {
     setEditingCategoryId(cat.id);
     setCategoryFormData({ name: cat.name, sort_order: String(cat.sort_order) });
@@ -421,6 +435,7 @@ export default function MenuManagement() {
             onCreateCategory={handleCreateCategory}
             onUpdateCategory={handleUpdateCategory}
             onToggleCategory={handleToggleCategory}
+            onDeleteCategory={handleDeleteCategory}
             onStartEditCategory={startEditCategory}
             onMoveCategoryOrder={handleMoveCategoryOrder}
           />

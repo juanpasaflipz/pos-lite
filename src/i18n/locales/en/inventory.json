@@ -258,6 +258,8 @@
     "addFirstItem": "Add First Item",
     "manageCategories": "Manage Categories",
     "addCategory": "Add Category",
+    "deleteCategory": "Delete Category",
+    "confirmDeleteCategory": "Permanently delete category \"{{name}}\"? This cannot be undone.",
     "addMenuItem": "Add Menu Item",
     "editMenuItem": "Edit Menu Item",
     "form": {
@@ -639,6 +641,7 @@
     "createCategory": "Failed to create category",
     "updateCategory": "Failed to update category",
     "toggleCategory": "Failed to toggle category",
+    "deleteCategory": "Failed to delete category",
     "reorder": "Failed to reorder",
     "fetchData": "Failed to fetch data",
     "loadPo": "Failed to load PO",

@@ -442,6 +442,10 @@ export async function toggleCategory(id: number): Promise<any> {
   return apiRequest(`/menu/categories/${id}/toggle`, { method: 'PUT' });
 }
 
+export async function deleteCategory(id: number): Promise<any> {
+  return apiRequest(`/menu/categories/${id}`, { method: 'DELETE' });
+}
+
 export async function getMenuItems(categoryId?: string, includeInactive?: boolean): Promise<MenuItem[]> {
   const params = new URLSearchParams();
   if (categoryId) params.set('category_id', categoryId);

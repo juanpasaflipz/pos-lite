@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Edit2, X, Check, ChevronUp, ChevronDown } from 'lucide-react';
+import { Plus, Edit2, X, Check, ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
 import { MenuCategory } from '../../types';
 
 interface CategoryFormData {
@@ -20,6 +20,7 @@ interface CategoryManagementViewProps {
   onCreateCategory: () => void;
   onUpdateCategory: () => void;
   onToggleCategory: (id: number) => void;
+  onDeleteCategory: (cat: MenuCategory) => void;
   onStartEditCategory: (cat: MenuCategory) => void;
   onMoveCategoryOrder: (cat: MenuCategory, direction: 'up' | 'down') => void;
 }
@@ -35,6 +36,7 @@ export default function CategoryManagementView({
   onCreateCategory,
   onUpdateCategory,
   onToggleCategory,
+  onDeleteCategory,
   onStartEditCategory,
   onMoveCategoryOrder,
 }: CategoryManagementViewProps) {
@@ -133,6 +135,13 @@ export default function CategoryManagementView({
                       }`}
                     >
                       {cat.active ? t('menu.active') : t('menu.inactive')}
+                    </button>
+                    <button
+                      onClick={() => onDeleteCategory(cat)}
+                      title={t('menu.deleteCategory')}
+                      className="p-2 text-neutral-400 hover:text-red-400 hover:bg-neutral-700 rounded-lg"
+                    >
+                      <Trash2 size={18} />
                     </button>
                   </div>
                 </div>

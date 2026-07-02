@@ -141,6 +141,57 @@ router.put('/categories/:id/toggle', requireAuth('manage_menu'), async (req, res
   }
 });
 
+// DELETE /api/menu/categories/:id - permanently delete a category
+// Blocks if any menu_items or combo_slots still reference it. Cleans up
+// printer routes and delivery markup rules (pure config) inline.
+router.delete('/categories/:id', requireAuth('manage_menu'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const category = await get('SELECT id, name FROM menu_categories WHERE id = $1', [id]);
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+
+    const itemRow = await get('SELECT COUNT(*)::int AS n FROM menu_items WHERE category_id = $1', [id]);
+    if ((itemRow?.n || 0) > 0) {
+      return res.status(409).json({
+        error: 'category_has_items',
+        message: `This category still has ${itemRow.n} item(s). Move or delete them first.`,
+        item_count: itemRow.n,
+      });
+    }
+
+    const comboRow = await get('SELECT COUNT(*)::int AS n FROM combo_slots WHERE category_id = $1', [id]);
+    if ((comboRow?.n || 0) > 0) {
+      return res.status(409).json({
+        error: 'category_in_combo',
+        message: `This category is used by ${comboRow.n} combo slot(s). Remove those first.`,
+        combo_slot_count: comboRow.n,
+      });
+    }
+
+    await run('DELETE FROM category_printer_routes WHERE category_id = $1', [id]);
+    await run('DELETE FROM delivery_markup_rules WHERE category_id = $1', [id]);
+    await run('DELETE FROM menu_categories WHERE id = $1', [id]);
+
+    audit({
+      tenantId: req.tenant?.id || 'default',
+      actorType: 'employee',
+      actorId: req.headers['x-employee-id'] || 'unknown',
+      action: 'delete',
+      resource: 'menu_category',
+      resourceId: String(id),
+      ip: req.ip,
+    });
+
+    res.json({ message: 'Category deleted', id: parseInt(id) });
+  } catch (error) {
+    console.error('Error deleting category:', error);
+    res.status(500).json({ error: 'Failed to delete category' });
+  }
+});
+
 // GET /api/menu/items/popular - top selling items by order quantity
 router.get('/items/popular', async (req, res) => {
   try {
