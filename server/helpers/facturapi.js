@@ -1,5 +1,12 @@
-import Facturapi from 'facturapi';
+import FacturapiPkg from 'facturapi';
 import crypto from 'crypto';
+
+// Facturapi's CJS build (v4.x) sets both `exports.default = Class` AND named
+// `exports.*` for enums, so Node's ESM→CJS interop resolves the default import
+// to the whole exports object rather than the constructor. Grab .default when
+// present; fall back to the import itself in case the SDK ever ships a real
+// ESM default.
+const Facturapi = FacturapiPkg?.default || FacturapiPkg;
 import { adminSql } from '../db/index.js';
 import { tenantContext } from '../db/index.js';
 import { getServiceCredentials } from './tenantCredentials.js';
