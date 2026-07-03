@@ -77,19 +77,26 @@ export function getFacturapiClient() {
 export async function createOrganization({ legal_name, rfc, tax_regime, postal_code }) {
   const client = await resolveClient();
   try {
-    // FacturAPI splits org creation into two calls: POST /organizations takes
-    // only `name` (a display label), and PUT /organizations/{id}/legal is
-    // where the fiscal identity (legal_name, tax_id, tax_system, address) is
-    // stored. Sending legal_name to /organizations returns
-    // "legal_name is not allowed".
+    // FacturAPI's org setup is two calls:
+    //   1) POST /organizations — only accepts { name } (display label)
+    //   2) PUT /organizations/{id}/legal — takes { name, legal_name,
+    //      tax_system, address }. `tax_id` is NOT accepted here; FacturAPI
+    //      derives the real RFC from the uploaded CSD (SAT-signed cert
+    //      binds identity to RFC). Address requires non-empty street +
+    //      exterior — merchant refines them from the FacturAPI dashboard
+    //      before going live; test mode accepts placeholders.
     const org = await client.organizations.create({ name: legal_name });
     await client.organizations.updateLegal(org.id, {
+      name: legal_name,
       legal_name,
-      tax_id: rfc,
       tax_system: tax_regime,
-      address: { zip: postal_code },
+      address: {
+        street: 'Por definir',
+        exterior: 'S/N',
+        zip: postal_code,
+      },
     });
-    console.log(`[FacturAPI] Organization created + legal set: ${org.id} (${legal_name})`);
+    console.log(`[FacturAPI] Organization created + legal set: ${org.id} (${legal_name}, RFC intent ${rfc})`);
     return org;
   } catch (err) {
     console.error(`[FacturAPI] Failed to create organization for ${rfc}:`, err.message);
