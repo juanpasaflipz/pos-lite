@@ -115,11 +115,10 @@ export async function createOrganization({ legal_name, rfc, tax_regime, postal_c
 export async function uploadCSD(orgId, cerBuffer, keyBuffer, password) {
   const client = await resolveClient();
   try {
-    const result = await client.organizations.uploadCertificate(orgId, {
-      cerFile: cerBuffer,
-      keyFile: keyBuffer,
-      password,
-    });
+    // SDK signature is positional: (orgId, cerBuffer, keyBuffer, password).
+    // Passing an object here made the SDK treat it as a stream — it hit
+    // `.on(...)` on a plain object and threw "t.on is not a function".
+    const result = await client.organizations.uploadCertificate(orgId, cerBuffer, keyBuffer, password);
     console.log(`[FacturAPI] CSD uploaded for org ${orgId}`);
     // FacturAPI's upload response doesn't always include expiry; re-read the
     // org so we can persist csd_valid_until (used for the merchant expiry
