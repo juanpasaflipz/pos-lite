@@ -15,6 +15,10 @@
     "android:apk": "npm run android:sync && JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\" ./android/gradlew -p ./android assembleDebug && echo \"\\nAPK: $(pwd)/android/app/build/outputs/apk/debug/app-debug.apk\"",
     "android:install": "npm run android:apk && adb install -r ./android/app/build/outputs/apk/debug/app-debug.apk",
     "start": "NODE_ENV=production node server/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ci": "vitest run --reporter=verbose",
+    "typecheck": "tsc --noEmit -p .",
     "smoketest:orders": "node scripts/load-test-orders.mjs",
     "smoketest:kds": "node scripts/verify-kds-seen.mjs"
   },
@@ -57,12 +61,16 @@
     "@capacitor/cli": "^7.6.5",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
+    "@types/supertest": "^6.0.3",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.16",
     "concurrently": "^8.2.2",
+    "dotenv-cli": "^7.4.4",
     "postcss": "^8.4.32",
+    "supertest": "^7.2.2",
     "tailwindcss": "^3.4.0",
     "typescript": "^5.3.3",
-    "vite": "^5.0.8"
+    "vite": "^5.0.8",
+    "vitest": "^2.1.9"
   }
 }
