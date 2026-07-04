@@ -16,10 +16,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run build` — builds both POS and kiosk; what Railway runs
 - `npm run build:client` / `npm run build:kiosk` — build either bundle alone
 - `npm run start` — production server (`NODE_ENV=production node server/index.js`)
-- `npx tsc --noEmit -p .` — typecheck (no separate `lint` or `test` script; tsc is the gate)
+- `npm run typecheck` — `tsc --noEmit -p .`
+- `npm test` — Vitest suite (see Testing section)
+- `npm run test:watch` — Vitest in watch mode for iterative work
 - `npm run smoketest:orders` / `smoketest:kds` — load/smoke scripts under `scripts/`
 
-There is no Jest/Vitest suite. Treat typecheck + manual flow verification as the bar before pushing.
+## Testing
+- Framework: **Vitest**. Config: `vitest.config.ts` (single-fork pool — DB tests share the postgres pool and rely on RLS transaction semantics; parallel workers cause contention).
+- DB: real Postgres against a dedicated **Neon test branch** (`br-hidden-hill-ajgpffqg`). **No mocks for the DB** — the whole safety net exists because the RLS boundary is load-bearing, and mocks can't catch that.
+- Env: `.env.test` (gitignored). `tests/setup/env.ts` asserts `DATABASE_URL` contains the test-branch endpoint fragment (`ep-small-credit-ajz9ppry`) before any test runs — refuses to run against anything else.
+- Fixtures: `tests/helpers/db.ts` exposes `createTestTenant()` / `dropTestTenant()` / `asTenant()`. Each test creates one-or-more ephemeral tenants in `beforeAll`, cleans up in `afterAll`. Cleanup is a single-round-trip PLPGSQL loop (~50× faster than prod's `purgeTenant`).
+- CI: `.github/workflows/ci.yml` runs typecheck + full suite on every PR to `master` and every push to `master`. Concurrency group serializes runs against the shared test branch. Secrets: `TEST_DATABASE_URL`, `TEST_PG_APP_USER`, `TEST_PG_APP_PASSWORD`.
+- New tests go in `tests/<domain>.test.ts`. Keep the `beforeAll → dropTestTenant → closePools` shape from existing files; deviations break the single-fork determinism.
 
 ## Deploy
 GitHub → Railway auto-deploy is wired up (`juanpasaflipz/pos-lite`, branch `master`). `git push origin master` triggers a deploy automatically. Verify with `railway deployment list | head -3` and look for `SUCCESS` on the new deployment id.
