@@ -90,13 +90,38 @@ export default function MenuManagement() {
       setLoading(true);
       setError(null);
       const data = await getCategories();
-      setCategories(data);
-      if (data.length > 0 && !selectedCategory) setSelectedCategory(data[0].id);
+      const normalized = await normalizeCategoryOrderIfNeeded(data);
+      setCategories(normalized);
+      if (normalized.length > 0 && !selectedCategory) setSelectedCategory(normalized[0].id);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errors.fetchCategories'));
     } finally {
       setLoading(false);
     }
+  };
+
+  // Rewrite sort_order to a gapped 10, 20, 30… sequence when duplicates or
+  // gaps are found. Guarantees the swap logic below always has room to move.
+  const normalizeCategoryOrderIfNeeded = async (cats: MenuCategory[]): Promise<MenuCategory[]> => {
+    const seen = new Set<number>();
+    let needsNormalize = false;
+    for (const c of cats) {
+      if (seen.has(c.sort_order)) { needsNormalize = true; break; }
+      seen.add(c.sort_order);
+    }
+    if (!needsNormalize) return cats;
+
+    const normalized = cats.map((c, i) => ({ ...c, sort_order: (i + 1) * 10 }));
+    try {
+      await Promise.all(
+        normalized
+          .filter((c, i) => c.sort_order !== cats[i].sort_order)
+          .map(c => updateCategory(c.id, { sort_order: c.sort_order }))
+      );
+    } catch {
+      return cats;
+    }
+    return normalized;
   };
 
   const fetchMenuItems = async (categoryId: number) => {
@@ -319,11 +344,25 @@ export default function MenuManagement() {
   };
 
   const handleMoveCategoryOrder = async (cat: MenuCategory, direction: 'up' | 'down') => {
-    const newOrder = direction === 'up' ? cat.sort_order - 1 : cat.sort_order + 1;
+    const idx = categories.findIndex(c => c.id === cat.id);
+    const neighborIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (neighborIdx < 0 || neighborIdx >= categories.length) return;
+
+    const neighbor = categories[neighborIdx];
+    const previous = categories;
+
+    const swapped = [...categories];
+    swapped[idx] = { ...neighbor, sort_order: cat.sort_order };
+    swapped[neighborIdx] = { ...cat, sort_order: neighbor.sort_order };
+    setCategories(swapped);
+
     try {
-      await updateCategory(cat.id, { sort_order: newOrder });
-      await fetchCategories();
+      await Promise.all([
+        updateCategory(cat.id, { sort_order: neighbor.sort_order }),
+        updateCategory(neighbor.id, { sort_order: cat.sort_order }),
+      ]);
     } catch (err) {
+      setCategories(previous);
       setError(err instanceof Error ? err.message : t('errors.reorder'));
     }
   };
