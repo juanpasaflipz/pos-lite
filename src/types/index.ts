@@ -116,6 +116,8 @@ export interface Order {
   source?: 'pos' | 'uber_eats' | 'uber_direct' | 'rappi' | 'didi_food' | 'qr_order' | 'customer_kiosk';
   order_fulfillment_type?: 'for_here' | 'to_go' | 'delivery' | null;
   loyalty_customer_id?: number | null;
+  loyalty_customer_name?: string | null;
+  loyalty_customer_phone?: string | null;
   customer_name?: string | null;
   delivery_platform?: string | null;
   tracking_url?: string | null;

@@ -5,7 +5,7 @@ import { Clock, Coins } from 'lucide-react';
 import { Order, CfdiInvoice, LoyaltyCustomer } from '../../types';
 import { formatPrice, TAX_LABEL } from '../../utils/currency';
 import { formatDateTime } from '../../utils/dateFormat';
-import { sendSmsReceipt, lookupLoyaltyCustomer, getLoyaltyCustomer } from '../../api';
+import { sendSmsReceipt, lookupLoyaltyCustomer } from '../../api';
 import BrandLogo from '../BrandLogo';
 import CashTipModal from './CashTipModal';
 import { useBranding } from '../../context/BrandingContext';
@@ -44,24 +44,21 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
   // or discovered live as the merchant types a known phone into the SMS form.
   const recognizedCustomer = linkedCustomer || foundCustomer;
 
-  // Hydrate from order.loyalty_customer_id when no linkedCustomer was passed
-  // (e.g. re-sending receipt for a past order from OrdersScreen). Avoids
-  // making the cashier re-type phone+name for a customer already on file.
+  // Hydrate from the inline loyalty fields on the order when no linkedCustomer
+  // was passed (e.g. re-sending receipt for a past order from OrdersScreen).
+  // The order endpoint returns loyalty_customer_name/phone via a LEFT JOIN,
+  // so we don't need a second API call — and this path works for any employee
+  // with pos_access (the by-id lookup requires manage_loyalty and would 403).
   useEffect(() => {
     if (linkedCustomer) return;
-    const customerId = order.loyalty_customer_id;
-    if (!customerId) return;
-    let cancelled = false;
-    getLoyaltyCustomer(customerId)
-      .then((c) => {
-        if (cancelled) return;
-        setFoundCustomer(c);
-        setSmsPhone(c.phone);
-        setSmsName(c.name);
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [order.loyalty_customer_id, linkedCustomer]);
+    const id = order.loyalty_customer_id;
+    const phone = order.loyalty_customer_phone;
+    const name = order.loyalty_customer_name;
+    if (!id || !phone) return;
+    setFoundCustomer({ id, phone, name: name || '', country_code: 'MX' } as LoyaltyCustomer);
+    setSmsPhone(phone);
+    setSmsName(name || '');
+  }, [order.loyalty_customer_id, order.loyalty_customer_phone, order.loyalty_customer_name, linkedCustomer]);
 
   // Debounced phone-to-customer lookup. Triggers once the merchant has typed at
   // least 10 digits; clears on shorter input. Cancels in-flight requests via

@@ -493,9 +493,12 @@ router.get('/:id', async (req, res) => {
       SELECT o.id, o.order_number, o.employee_id, o.status, o.subtotal, o.tax, o.tip, o.total,
              o.payment_intent_id, o.payment_status, o.payment_method, o.source, o.created_at, o.completed_at,
              o.discount_amount, o.discount_type, o.discount_reason, o.discount_authorized_by,
+             o.loyalty_customer_id,
+             lc.name AS loyalty_customer_name, lc.phone AS loyalty_customer_phone,
              e.name as employee_name
       FROM orders o
       JOIN employees e ON o.employee_id = e.id
+      LEFT JOIN loyalty_customers lc ON lc.id = o.loyalty_customer_id
       WHERE o.id = $1
     `, [id]);
 
