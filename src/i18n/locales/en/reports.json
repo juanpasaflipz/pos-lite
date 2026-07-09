@@ -70,6 +70,7 @@
       "totalRevenue": "Total Revenue",
       "netSales": "Net Sales (excl. IVA)",
       "iva": "IVA (16%)",
+      "discounts": "Discounts",
       "orderCount": "Order Count",
       "avgTicket": "Avg Ticket",
       "totalTips": "Total Tips",
@@ -94,7 +95,8 @@
         "anyItem": "Any item",
         "totalItems": "Items sold",
         "uniqueItems": "Unique items",
-        "itemRevenue": "Item revenue",
+        "itemRevenue": "Item value (list price)",
+        "itemRevenueHint": "List price, before discounts",
         "byCategory": "Category Counts",
         "itemDetail": "Item Detail",
         "columns": {

@@ -70,6 +70,7 @@
       "totalRevenue": "Ventas Totales",
       "netSales": "Venta Neta (sin IVA)",
       "iva": "IVA (16%)",
+      "discounts": "Descuentos",
       "orderCount": "Cantidad de Órdenes",
       "avgTicket": "Ticket Promedio",
       "totalTips": "Propinas Totales",
@@ -94,7 +95,8 @@
         "anyItem": "Cualquier producto",
         "totalItems": "Productos vendidos",
         "uniqueItems": "Productos únicos",
-        "itemRevenue": "Ventas de productos",
+        "itemRevenue": "Valor de productos (lista)",
+        "itemRevenueHint": "Precio de lista, antes de descuentos",
         "byCategory": "Conteo por Categoría",
         "itemDetail": "Detalle por Producto",
         "columns": {

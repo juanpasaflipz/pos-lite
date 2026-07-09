@@ -35,12 +35,13 @@ export default function OverviewTab({
   const { t } = useTranslation('reports');
   const hasItemSales = !!itemSales && itemSales.items.length > 0;
   const activeHours = hourlyData.filter(hour => hour.orders > 0 || hour.revenue > 0);
+  const discountTotal = salesData?.discount_total || 0;
 
   return (
     <div className="space-y-6">
       <LaborStrip />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
         <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
           <p className="text-neutral-400 text-sm font-medium">{t('sales.kpi.netSales')}</p>
           <p className="text-3xl font-bold text-brand-500 mt-2">{fmt(salesData?.total_revenue || 0)}</p>
@@ -48,6 +49,12 @@ export default function OverviewTab({
         <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
           <p className="text-neutral-400 text-sm font-medium">{t('sales.kpi.iva')}</p>
           <p className="text-3xl font-bold text-white mt-2">{fmt(salesData?.tax_total || 0)}</p>
+        </div>
+        <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
+          <p className="text-neutral-400 text-sm font-medium">{t('sales.kpi.discounts')}</p>
+          <p className={`text-3xl font-bold mt-2 ${discountTotal > 0 ? 'text-cockpit-attention-text' : 'text-white'}`}>
+            {discountTotal > 0 ? '−' : ''}{fmt(discountTotal)}
+          </p>
         </div>
         <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
           <p className="text-neutral-400 text-sm font-medium">{t('sales.kpi.orderCount')}</p>
@@ -156,6 +163,7 @@ export default function OverviewTab({
           <div className="p-5">
             <p className="text-sm font-medium text-neutral-400">{t('sales.overview.itemSales.itemRevenue')}</p>
             <p className="text-3xl font-bold text-brand-500 mt-2">{fmt(itemSales?.totals.revenue || 0)}</p>
+            <p className="text-xs text-neutral-500 mt-1">{t('sales.overview.itemSales.itemRevenueHint')}</p>
           </div>
         </div>
 

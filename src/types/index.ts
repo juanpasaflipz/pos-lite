@@ -312,6 +312,8 @@ export interface SalesReport {
   avg_ticket: number;
   tip_total: number;
   tax_total?: number;
+  discount_total?: number;
+  discounted_order_count?: number;
   data?: any[];
 }
 
