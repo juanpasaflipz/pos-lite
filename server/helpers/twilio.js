@@ -405,6 +405,24 @@ export async function sendOrderReadyMessage(phone, name, orderNumber, customerId
   return sendSMS(phone, body, customerId, 'order_ready', countryCode);
 }
 
+export async function sendRewardReminderMessage(
+  phone,
+  name,
+  customerId,
+  restaurantName = 'us',
+  countryCode = 'MX',
+) {
+  const firstName = name ? String(name).split(/\s+/)[0] : '';
+  const body = firstSingleSegment([
+    firstName
+      ? `Hola ${firstName}! Tu tarjeta llena en ${restaurantName} te espera. Canjea tu premio en tu proxima visita.`
+      : `Tu tarjeta llena en ${restaurantName} te espera. Canjea tu premio en tu proxima visita.`,
+    `Tu premio en ${restaurantName} sigue disponible. Canjealo pronto.`,
+    `Tu premio en ${restaurantName} sigue disponible.`,
+  ]);
+  return sendSMS(phone, body, customerId, 'reward_reminder', countryCode);
+}
+
 export async function sendReceiptLoyaltyMessage(
   phone,
   orderNumber,
