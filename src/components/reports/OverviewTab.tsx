@@ -53,7 +53,7 @@ export default function OverviewTab({
         <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
           <p className="text-neutral-400 text-sm font-medium">{t('sales.kpi.discounts')}</p>
           <p className={`text-3xl font-bold mt-2 ${discountTotal > 0 ? 'text-cockpit-attention-text' : 'text-white'}`}>
-            {discountTotal > 0 ? '−' : ''}{fmt(discountTotal)}
+            {discountTotal > 0 ? `(${fmt(discountTotal)})` : fmt(discountTotal)}
           </p>
         </div>
         <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
