@@ -200,10 +200,12 @@ router.post('/cash', paymentLimiter, requireAuth('pos_access'), async (req, res)
     const finalTotal = Number(order.total) + tipAmount;
     const changeDue = amount_received > 0 ? Math.max(0, amount_received - finalTotal) : 0;
 
-    // Mark order as paid with cash
+    // Mark order as paid with cash. paid_at is what every sales report uses
+    // as the time-of-truth (COALESCE(paid_at, created_at)); skipping it here
+    // silently drops cash tickets from cash/card breakdowns and hourly views.
     await run(`
       UPDATE orders
-      SET payment_status = 'paid', status = 'active', payment_method = 'cash', tip = $1
+      SET payment_status = 'paid', status = 'active', payment_method = 'cash', tip = $1, paid_at = NOW()
       WHERE id = $2
     `, [tipAmount, order_id]);
 

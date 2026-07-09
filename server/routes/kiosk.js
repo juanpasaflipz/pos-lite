@@ -262,13 +262,16 @@ async function awardKioskOrderStamps(orderId, tenantId) {
   }
 }
 
-async function nextOrderNumber(tenantId, tenantTz) {
+// Bumps the daily counter and returns the next YYYYMMDDNNN order number.
+// Must run against a `sql` handle bound to the same transaction as the
+// subsequent order INSERT — otherwise a failed insert leaves the counter
+// advanced and the number is permanently lost (produces gaps in the daily
+// sequence, e.g. #YYYYMMDD013 that never existed).
+async function nextOrderNumber(sql, tenantId, tenantTz) {
   await ensureCounterTable();
-  // Use tenant-local day so #YYYYMMDDNNN reflects the merchant's calendar
-  // date, not UTC. See notes on insertOrderWithNumber in orders.js.
   const dateStr = tzDate(new Date(), tenantTz);
   const datePrefix = parseInt(dateStr.replace(/-/g, ''), 10) * 1000;
-  const [counter] = await adminSql.unsafe(`
+  const [counter] = await sql.unsafe(`
     INSERT INTO daily_order_counter (tenant_id, date_key, last_seq)
     VALUES ($1, $2::date, 1)
     ON CONFLICT (tenant_id, date_key) DO UPDATE SET last_seq = daily_order_counter.last_seq + 1
@@ -446,10 +449,10 @@ async function buildKioskOrderItems(tenantId, items) {
  * Insert order_items + their order_item_modifiers for a kiosk order.
  * Returns the inserted order_items rows in input order.
  */
-async function insertKioskOrderItems(tenantId, orderId, orderItems) {
+async function insertKioskOrderItems(sql, tenantId, orderId, orderItems) {
   const lines = [];
   for (const item of orderItems) {
-    const [row] = await adminSql`
+    const [row] = await sql`
       INSERT INTO order_items (tenant_id, order_id, menu_item_id, item_name, quantity, unit_price, notes)
       VALUES (${tenantId}, ${orderId}, ${item.menu_item_id}, ${item.item_name}, ${item.quantity}, ${item.unit_price}, ${null})
       RETURNING id
@@ -457,7 +460,7 @@ async function insertKioskOrderItems(tenantId, orderId, orderItems) {
     lines.push({ ...item, order_item_id: row.id });
 
     for (const mod of item.modifiers) {
-      await adminSql`
+      await sql`
         INSERT INTO order_item_modifiers (tenant_id, order_item_id, modifier_id, modifier_name, price_adjustment)
         VALUES (${tenantId}, ${row.id}, ${mod.id}, ${mod.name}, ${mod.price_adjustment})
       `;
@@ -576,24 +579,27 @@ router.post('/orders', verifyKioskToken, async (req, res) => {
 
     const tax = Math.round((total - total / (1 + TAX_RATE)) * 100) / 100;
     const subtotal = Math.round((total - tax) * 100) / 100;
-    const orderNumber = await nextOrderNumber(tenantId, (await getTenant(tenantId))?.timezone);
+    const tenantTz = (await getTenant(tenantId))?.timezone;
     const paymentStatus = 'unpaid';
     const paymentMethod = payment_choice === 'counter_cash' ? null : 'card';
     const fulfillmentType = normalizeKioskFulfillmentType(fulfillment_type);
 
-    const [order] = await adminSql`
-      INSERT INTO orders (
-        tenant_id, order_number, employee_id, status, subtotal, tax, total,
-        payment_status, payment_method, source, loyalty_customer_id, customer_call_name, order_fulfillment_type
-      )
-      VALUES (
-        ${tenantId}, ${orderNumber}, ${employeeId}, 'pending', ${subtotal}, ${tax}, ${total},
-        ${paymentStatus}, ${paymentMethod}, 'customer_kiosk', ${loyaltyCustomerId}, ${callName}, ${fulfillmentType}
-      )
-      RETURNING id, order_number, subtotal, tax, total, payment_status, status, order_fulfillment_type
-    `;
-
-    await insertKioskOrderItems(tenantId, order.id, orderItems);
+    const order = await adminSql.begin(async (sql) => {
+      const orderNumber = await nextOrderNumber(sql, tenantId, tenantTz);
+      const [row] = await sql`
+        INSERT INTO orders (
+          tenant_id, order_number, employee_id, status, subtotal, tax, total,
+          payment_status, payment_method, source, loyalty_customer_id, customer_call_name, order_fulfillment_type
+        )
+        VALUES (
+          ${tenantId}, ${orderNumber}, ${employeeId}, 'pending', ${subtotal}, ${tax}, ${total},
+          ${paymentStatus}, ${paymentMethod}, 'customer_kiosk', ${loyaltyCustomerId}, ${callName}, ${fulfillmentType}
+        )
+        RETURNING id, order_number, subtotal, tax, total, payment_status, status, order_fulfillment_type
+      `;
+      await insertKioskOrderItems(sql, tenantId, row.id, orderItems);
+      return row;
+    });
 
     res.status(201).json({ ...order, source: 'customer_kiosk', items: orderItems });
   } catch (err) {
@@ -636,70 +642,74 @@ router.post('/orders/hold', verifyKioskToken, async (req, res) => {
 
     const tax = Math.round((total - total / (1 + TAX_RATE)) * 100) / 100;
     const subtotal = Math.round((total - tax) * 100) / 100;
-    const orderNumber = await nextOrderNumber(tenantId, (await getTenant(tenantId))?.timezone);
+    const tenantTz = (await getTenant(tenantId))?.timezone;
     const fulfillmentType = normalizeKioskFulfillmentType(fulfillment_type);
 
-    // Supersede any existing held drafts for this customer — only one active hold at a time.
-    // Loyalty: keyed by loyalty_customer_id. Anonymous: keyed by call_name within last 30 min
-    // so a stale "Juan" from yesterday doesn't get wiped by today's "Juan".
-    const supersedeFilter = loyaltyCustomerId
-      ? adminSql`o.loyalty_customer_id = ${loyaltyCustomerId}`
-      : adminSql`o.loyalty_customer_id IS NULL
-                   AND LOWER(o.customer_call_name) = LOWER(${callName})
-                   AND o.created_at > NOW() - INTERVAL '30 minutes'`;
+    const order = await adminSql.begin(async (sql) => {
+      const orderNumber = await nextOrderNumber(sql, tenantId, tenantTz);
 
-    // Never nuke a draft that already has an MP charge in flight or settled.
-    // 2026-06-24: order 6269 was deleted by this supersede after MP had
-    // already approved a $688 charge — the kiosk re-submitted /orders/hold
-    // before the pending_terminal → paid promotion poll fired. The card
-    // cleared but pos-lite had no order to attach it to.
-    const safeToSupersede = adminSql`
-      o.status = 'draft_kiosk'
-        AND o.mp_order_id IS NULL
-        AND o.payment_status NOT IN ('pending_terminal', 'paid')
-    `;
+      // Supersede any existing held drafts for this customer — only one active hold at a time.
+      // Loyalty: keyed by loyalty_customer_id. Anonymous: keyed by call_name within last 30 min
+      // so a stale "Juan" from yesterday doesn't get wiped by today's "Juan".
+      const supersedeFilter = loyaltyCustomerId
+        ? sql`o.loyalty_customer_id = ${loyaltyCustomerId}`
+        : sql`o.loyalty_customer_id IS NULL
+                     AND LOWER(o.customer_call_name) = LOWER(${callName})
+                     AND o.created_at > NOW() - INTERVAL '30 minutes'`;
 
-    await adminSql`
-      DELETE FROM order_item_modifiers
-      WHERE tenant_id = ${tenantId}
-        AND order_item_id IN (
-          SELECT oi.id FROM order_items oi
-          JOIN orders o ON o.id = oi.order_id
-          WHERE o.tenant_id = ${tenantId}
-            AND ${safeToSupersede}
-            AND ${supersedeFilter}
+      // Never nuke a draft that already has an MP charge in flight or settled.
+      // 2026-06-24: order 6269 was deleted by this supersede after MP had
+      // already approved a $688 charge — the kiosk re-submitted /orders/hold
+      // before the pending_terminal → paid promotion poll fired. The card
+      // cleared but pos-lite had no order to attach it to.
+      const safeToSupersede = sql`
+        o.status = 'draft_kiosk'
+          AND o.mp_order_id IS NULL
+          AND o.payment_status NOT IN ('pending_terminal', 'paid')
+      `;
+
+      await sql`
+        DELETE FROM order_item_modifiers
+        WHERE tenant_id = ${tenantId}
+          AND order_item_id IN (
+            SELECT oi.id FROM order_items oi
+            JOIN orders o ON o.id = oi.order_id
+            WHERE o.tenant_id = ${tenantId}
+              AND ${safeToSupersede}
+              AND ${supersedeFilter}
+          )
+      `;
+      await sql`
+        DELETE FROM order_items
+        WHERE tenant_id = ${tenantId}
+          AND order_id IN (
+            SELECT o.id FROM orders o
+            WHERE o.tenant_id = ${tenantId}
+              AND ${safeToSupersede}
+              AND ${supersedeFilter}
+          )
+      `;
+      await sql`
+        DELETE FROM orders o
+        WHERE o.tenant_id = ${tenantId}
+          AND ${safeToSupersede}
+          AND ${supersedeFilter}
+      `;
+
+      const [row] = await sql`
+        INSERT INTO orders (
+          tenant_id, order_number, employee_id, status, subtotal, tax, total,
+          payment_status, source, loyalty_customer_id, customer_call_name, order_fulfillment_type
         )
-    `;
-    await adminSql`
-      DELETE FROM order_items
-      WHERE tenant_id = ${tenantId}
-        AND order_id IN (
-          SELECT o.id FROM orders o
-          WHERE o.tenant_id = ${tenantId}
-            AND ${safeToSupersede}
-            AND ${supersedeFilter}
+        VALUES (
+          ${tenantId}, ${orderNumber}, ${employeeId}, 'draft_kiosk', ${subtotal}, ${tax}, ${total},
+          'unpaid', 'customer_kiosk', ${loyaltyCustomerId}, ${callName}, ${fulfillmentType}
         )
-    `;
-    await adminSql`
-      DELETE FROM orders o
-      WHERE o.tenant_id = ${tenantId}
-        AND ${safeToSupersede}
-        AND ${supersedeFilter}
-    `;
-
-    const [order] = await adminSql`
-      INSERT INTO orders (
-        tenant_id, order_number, employee_id, status, subtotal, tax, total,
-        payment_status, source, loyalty_customer_id, customer_call_name, order_fulfillment_type
-      )
-      VALUES (
-        ${tenantId}, ${orderNumber}, ${employeeId}, 'draft_kiosk', ${subtotal}, ${tax}, ${total},
-        'unpaid', 'customer_kiosk', ${loyaltyCustomerId}, ${callName}, ${fulfillmentType}
-      )
-      RETURNING id, order_number, subtotal, tax, total, status, order_fulfillment_type
-    `;
-
-    await insertKioskOrderItems(tenantId, order.id, orderItems);
+        RETURNING id, order_number, subtotal, tax, total, status, order_fulfillment_type
+      `;
+      await insertKioskOrderItems(sql, tenantId, row.id, orderItems);
+      return row;
+    });
 
     res.status(201).json({ ...order, items: orderItems });
   } catch (err) {
@@ -884,22 +894,25 @@ router.post('/orders/send-to-kitchen', verifyKioskToken, async (req, res) => {
 
     const tax = Math.round((total - total / (1 + TAX_RATE)) * 100) / 100;
     const subtotal = Math.round((total - tax) * 100) / 100;
-    const orderNumber = await nextOrderNumber(tenantId, (await getTenant(tenantId))?.timezone);
+    const tenantTz = (await getTenant(tenantId))?.timezone;
     const fulfillmentType = normalizeKioskFulfillmentType(fulfillment_type);
 
-    const [order] = await adminSql`
-      INSERT INTO orders (
-        tenant_id, order_number, employee_id, status, subtotal, tax, total,
-        payment_status, source, loyalty_customer_id, customer_call_name, order_fulfillment_type
-      )
-      VALUES (
-        ${tenantId}, ${orderNumber}, ${employeeId}, 'draft_kiosk', ${subtotal}, ${tax}, ${total},
-        'unpaid', 'customer_kiosk', ${loyaltyCustomerId}, ${callName}, ${fulfillmentType}
-      )
-      RETURNING id, order_number, subtotal, tax, total, status, payment_status, customer_call_name, order_fulfillment_type
-    `;
-
-    await insertKioskOrderItems(tenantId, order.id, orderItems);
+    const order = await adminSql.begin(async (sql) => {
+      const orderNumber = await nextOrderNumber(sql, tenantId, tenantTz);
+      const [row] = await sql`
+        INSERT INTO orders (
+          tenant_id, order_number, employee_id, status, subtotal, tax, total,
+          payment_status, source, loyalty_customer_id, customer_call_name, order_fulfillment_type
+        )
+        VALUES (
+          ${tenantId}, ${orderNumber}, ${employeeId}, 'draft_kiosk', ${subtotal}, ${tax}, ${total},
+          'unpaid', 'customer_kiosk', ${loyaltyCustomerId}, ${callName}, ${fulfillmentType}
+        )
+        RETURNING id, order_number, subtotal, tax, total, status, payment_status, customer_call_name, order_fulfillment_type
+      `;
+      await insertKioskOrderItems(sql, tenantId, row.id, orderItems);
+      return row;
+    });
 
     res.status(201).json({ ...order, items: orderItems });
   } catch (err) {
@@ -1025,34 +1038,7 @@ router.post('/orders/send-to-delivery', verifyKioskToken, async (req, res) => {
 
     const tax = Math.round((total - total / (1 + TAX_RATE)) * 100) / 100;
     const subtotal = Math.round((total - tax) * 100) / 100;
-    const orderNumber = await nextOrderNumber(tenantId, (await getTenant(tenantId))?.timezone);
-
-    const [order] = await adminSql`
-      INSERT INTO orders (
-        tenant_id, order_number, employee_id, status, subtotal, tax, total,
-        payment_status, source, loyalty_customer_id, customer_call_name, order_fulfillment_type
-      )
-      VALUES (
-        ${tenantId}, ${orderNumber}, ${employeeId}, 'draft_kiosk', ${subtotal}, ${tax}, ${total},
-        'unpaid', 'customer_kiosk', ${loyaltyCustomerId}, ${callName}, 'delivery'
-      )
-      RETURNING id, order_number, subtotal, tax, total, status, payment_status, customer_call_name, order_fulfillment_type
-    `;
-
-    await insertKioskOrderItems(tenantId, order.id, orderItems);
-
-    const [platform] = await adminSql`
-      SELECT id FROM delivery_platforms WHERE tenant_id = ${tenantId} AND name = 'uber_direct'
-    `;
-    let platformId = platform?.id;
-    if (!platformId) {
-      const [created] = await adminSql`
-        INSERT INTO delivery_platforms (tenant_id, name, display_name, commission_percent, active)
-        VALUES (${tenantId}, 'uber_direct', 'Uber Direct', 0, true)
-        RETURNING id
-      `;
-      platformId = created.id;
-    }
+    const tenantTz = (await getTenant(tenantId))?.timezone;
 
     // Stash the dispatch payload so dispatchPendingCourier() can re-hydrate it
     // after the card terminal confirms the payment. Manifest items are derived
@@ -1070,22 +1056,52 @@ router.post('/orders/send-to-delivery', verifyKioskToken, async (req, res) => {
       dropoff_notes: dropoff_notes || null,
     };
 
-    const [deliveryRow] = await adminSql`
-      INSERT INTO delivery_orders (
-        tenant_id, order_id, platform_id, external_order_id, platform_status,
-        delivery_fee, customer_name, delivery_address, pending_dispatch
-      ) VALUES (
-        ${tenantId}, ${order.id}, ${platformId},
-        NULL, 'pending_payment',
-        0, ${callName}, ${dropoff_address},
-        ${pendingDispatch}
-      )
-      RETURNING id
-    `;
+    const order = await adminSql.begin(async (sql) => {
+      const orderNumber = await nextOrderNumber(sql, tenantId, tenantTz);
+      const [row] = await sql`
+        INSERT INTO orders (
+          tenant_id, order_number, employee_id, status, subtotal, tax, total,
+          payment_status, source, loyalty_customer_id, customer_call_name, order_fulfillment_type
+        )
+        VALUES (
+          ${tenantId}, ${orderNumber}, ${employeeId}, 'draft_kiosk', ${subtotal}, ${tax}, ${total},
+          'unpaid', 'customer_kiosk', ${loyaltyCustomerId}, ${callName}, 'delivery'
+        )
+        RETURNING id, order_number, subtotal, tax, total, status, payment_status, customer_call_name, order_fulfillment_type
+      `;
+      await insertKioskOrderItems(sql, tenantId, row.id, orderItems);
 
-    await adminSql`
-      UPDATE orders SET delivery_order_id = ${deliveryRow.id} WHERE id = ${order.id}
-    `;
+      const [platform] = await sql`
+        SELECT id FROM delivery_platforms WHERE tenant_id = ${tenantId} AND name = 'uber_direct'
+      `;
+      let platformId = platform?.id;
+      if (!platformId) {
+        const [created] = await sql`
+          INSERT INTO delivery_platforms (tenant_id, name, display_name, commission_percent, active)
+          VALUES (${tenantId}, 'uber_direct', 'Uber Direct', 0, true)
+          RETURNING id
+        `;
+        platformId = created.id;
+      }
+
+      const [deliveryRow] = await sql`
+        INSERT INTO delivery_orders (
+          tenant_id, order_id, platform_id, external_order_id, platform_status,
+          delivery_fee, customer_name, delivery_address, pending_dispatch
+        ) VALUES (
+          ${tenantId}, ${row.id}, ${platformId},
+          NULL, 'pending_payment',
+          0, ${callName}, ${dropoff_address},
+          ${pendingDispatch}
+        )
+        RETURNING id
+      `;
+
+      await sql`
+        UPDATE orders SET delivery_order_id = ${deliveryRow.id} WHERE id = ${row.id}
+      `;
+      return row;
+    });
 
     // Courier is NOT booked yet. The kiosk routes to /pay-existing where the
     // customer pays by card; the /orders/:id/status poll dispatches the
