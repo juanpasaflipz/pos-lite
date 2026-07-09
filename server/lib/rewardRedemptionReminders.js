@@ -18,6 +18,9 @@ async function sweepOnce() {
     // cards gets at most one reminder per sweep. Take the newest card so the
     // logged reminder's created_at also satisfies the NOT EXISTS check for
     // any older unredeemed cards on future sweeps.
+    // Also LEFT JOIN loyalty_config to pull the tenant's Google review URL
+    // (empty string if unset) so we can append the CTA when it fits single-
+    // segment. Config storage is per-tenant, so join key is (tenant_id, key).
     const candidates = await adminSql`
       SELECT DISTINCT ON (sc.customer_id)
              sc.customer_id,
@@ -26,7 +29,9 @@ async function sweepOnce() {
              lc.name,
              lc.phone,
              lc.country_code,
-             t.name AS restaurant_name
+             t.name AS restaurant_name,
+             (SELECT value FROM loyalty_config
+              WHERE tenant_id = sc.tenant_id AND key = 'google_review_url') AS review_url
       FROM stamp_cards sc
       JOIN loyalty_customers lc ON lc.id = sc.customer_id
       JOIN tenants t ON t.id = sc.tenant_id
@@ -60,6 +65,7 @@ async function sweepOnce() {
             c.customer_id,
             c.restaurant_name || 'us',
             c.country_code || 'MX',
+            c.review_url || null,
           );
           if (sid) sent++;
         });

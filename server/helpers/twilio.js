@@ -411,12 +411,20 @@ export async function sendRewardReminderMessage(
   customerId,
   restaurantName = 'us',
   countryCode = 'MX',
+  reviewUrl = null,
 ) {
   const firstName = name ? String(name).split(/\s+/)[0] : '';
+  // withReviewCta appends " Resena: {url}" only if it fits single-segment.
+  // We try progressively shorter bodies so the review CTA rides along when
+  // possible without ever forcing multi-segment on MX carriers.
   const body = firstSingleSegment([
-    firstName
-      ? `Hola ${firstName}! Tu tarjeta llena en ${restaurantName} te espera. Canjea tu premio en tu proxima visita.`
-      : `Tu tarjeta llena en ${restaurantName} te espera. Canjea tu premio en tu proxima visita.`,
+    withReviewCta(
+      firstName
+        ? `Hola ${firstName}! Tu tarjeta llena en ${restaurantName} te espera. Canjea tu premio en tu proxima visita.`
+        : `Tu tarjeta llena en ${restaurantName} te espera. Canjea tu premio en tu proxima visita.`,
+      reviewUrl,
+    ),
+    withReviewCta(`Tu premio en ${restaurantName} sigue disponible. Canjealo pronto.`, reviewUrl),
     `Tu premio en ${restaurantName} sigue disponible. Canjealo pronto.`,
     `Tu premio en ${restaurantName} sigue disponible.`,
   ]);
