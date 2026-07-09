@@ -135,7 +135,15 @@ export async function findOrCreateCustomer(
 /* ==================== Stamp Operations ==================== */
 
 export async function addStampsForOrder(customerId, orderId, count = null, restaurantName = 'us', options = {}) {
-  const { sendSms = true } = options;
+  // `sendSms` kept as a shortcut for "silence everything" — receipt-flow
+  // enrollment uses it because the receipt SMS is the single loyalty touch.
+  // The per-event flags let POS suppress the routine stamp-earned SMS while
+  // keeping the rare "🎉 tarjeta llena" celebration on.
+  const {
+    sendSms = true,
+    sendStampEarnedSms = sendSms,
+    sendCardCompletedSms = sendSms,
+  } = options;
   // count=null → compute from order total: 1 base stamp + 1 extra per stamp_bonus_threshold spent.
   // Falls back to 1 stamp if the order can't be loaded.
   if (count === null || count === undefined) {
@@ -183,13 +191,15 @@ export async function addStampsForOrder(customerId, orderId, count = null, resta
 
   // Send SMS notifications (non-blocking)
   const smsEnabled = await getConfigValue('sms_enabled', 'true');
-  if (sendSms && customer.sms_opt_in && smsEnabled === 'true') {
+  if (customer.sms_opt_in && smsEnabled === 'true') {
     const reviewUrl = await getConfigValue('google_review_url', '');
     if (cardCompleted) {
-      sendCardCompletedMessage(customer.phone, customer.name, updatedCard.reward_description, customerId, restaurantName, customer.country_code, reviewUrl).catch(() => {});
+      if (sendCardCompletedSms) {
+        sendCardCompletedMessage(customer.phone, customer.name, updatedCard.reward_description, customerId, restaurantName, customer.country_code, reviewUrl).catch(() => {});
+      }
       // Auto-create next card
       await getActiveStampCard(customerId);
-    } else {
+    } else if (sendStampEarnedSms) {
       sendStampEarnedMessage(customer.phone, customer.name, updatedCard.stamps_earned, updatedCard.stamps_required, customerId, restaurantName, customer.country_code, reviewUrl).catch(() => {});
     }
   } else if (cardCompleted) {

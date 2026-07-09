@@ -2216,10 +2216,17 @@ export async function updateLoyaltyCustomer(
   });
 }
 
-export async function addStampsForOrder(customerId: number, orderId: number): Promise<StampResult> {
+export async function addStampsForOrder(
+  customerId: number,
+  orderId: number,
+  options: { suppressStampEarnedSms?: boolean } = {},
+): Promise<StampResult> {
   return apiRequest<StampResult>(`/loyalty/customers/${customerId}/stamps`, {
     method: 'POST',
-    body: JSON.stringify({ order_id: orderId }),
+    body: JSON.stringify({
+      order_id: orderId,
+      suppress_stamp_earned_sms: options.suppressStampEarnedSms || false,
+    }),
   });
 }
 

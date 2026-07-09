@@ -356,7 +356,11 @@ function withReviewCta(body, reviewUrl) {
 // and reward descriptions of ~30 chars are typical worst case.
 
 export async function sendWelcomeMessage(phone, name, referralCode, restaurantName = 'Our', countryCode = 'MX') {
-  const body = `Hola ${name}! Bienvenido a ${restaurantName} Rewards. Gana sellos en cada visita. Tu codigo: ${referralCode}. Compartelo y ambos ganan 2 sellos extra.`;
+  // "STOP para cancelar" appears once, in the welcome message, per MX A2P and
+  // Twilio compliance guidance. STOP replies are auto-honored by Twilio.
+  // Copy trimmed so this stays single-segment even for long name+restaurant
+  // combinations (MX carriers rotate senders on multi-segment sends).
+  const body = `Hola ${name}! Bienvenido a ${restaurantName} Rewards. Tu codigo: ${referralCode}. Compartelo y ambos ganan 2 sellos. STOP para cancelar.`;
   return sendSMS(phone, body, null, 'welcome', countryCode);
 }
 

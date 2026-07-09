@@ -832,7 +832,10 @@ const POSScreen: React.FC = () => {
   const handleLoyaltyStamp = async (order: Order): Promise<Order> => {
     if (!linkedCustomer) return order;
     try {
-      const result = await addStampsForOrder(linkedCustomer.id, order.id);
+      // Suppress the routine stamp-earned SMS — the receipt SMS the cashier
+      // is about to send already mentions stamp progress. Card-completed SMS
+      // still fires from the helper so customers never miss "🎉 tarjeta llena".
+      const result = await addStampsForOrder(linkedCustomer.id, order.id, { suppressStampEarnedSms: true });
       if (result.cardCompleted) {
         addToast(t('loyalty.cardCompleted', { name: linkedCustomer.name }), 'success');
       } else {

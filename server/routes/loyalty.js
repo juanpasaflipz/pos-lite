@@ -245,14 +245,19 @@ router.put('/customers/:id', requireAuth('manage_loyalty'), async (req, res) => 
 // POST /customers/:id/stamps — Add stamp after payment
 router.post('/customers/:id/stamps', requireAuth('pos_access'), requirePlanFeature('loyalty'), async (req, res) => {
   try {
-    const { order_id } = req.body;
+    const { order_id, suppress_stamp_earned_sms = false } = req.body;
     const customerId = parseInt(req.params.id);
 
     const customer = await get('SELECT * FROM loyalty_customers WHERE id = $1', [customerId]);
     if (!customer) return res.status(404).json({ error: 'Customer not found' });
 
-    // count=null → helper computes (1 + floor(total / stamp_bonus_threshold))
-    const result = await addStampsForOrder(customerId, order_id, null, req.tenant?.name || 'Restaurant');
+    // POS caller sets suppress_stamp_earned_sms=true because the receipt SMS
+    // is about to fire and mentions stamp progress — avoids two SMS ~10s apart.
+    // Card-completed SMS still fires unconditionally so the customer never
+    // misses the "🎉 tarjeta llena" moment even if the cashier skips receipt.
+    const result = await addStampsForOrder(customerId, order_id, null, req.tenant?.name || 'Restaurant', {
+      sendStampEarnedSms: !suppress_stamp_earned_sms,
+    });
 
     // Update total_spent from order
     if (order_id) {
