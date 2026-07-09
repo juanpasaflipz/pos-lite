@@ -5,7 +5,7 @@ import { Clock, Coins } from 'lucide-react';
 import { Order, CfdiInvoice, LoyaltyCustomer } from '../../types';
 import { formatPrice, TAX_LABEL } from '../../utils/currency';
 import { formatDateTime } from '../../utils/dateFormat';
-import { sendSmsReceipt, lookupLoyaltyCustomer } from '../../api';
+import { sendSmsReceipt, lookupLoyaltyCustomer, getLoyaltyCustomer } from '../../api';
 import BrandLogo from '../BrandLogo';
 import CashTipModal from './CashTipModal';
 import { useBranding } from '../../context/BrandingContext';
@@ -43,6 +43,25 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
   // The effective customer: either passed in from POSScreen (order-start lookup)
   // or discovered live as the merchant types a known phone into the SMS form.
   const recognizedCustomer = linkedCustomer || foundCustomer;
+
+  // Hydrate from order.loyalty_customer_id when no linkedCustomer was passed
+  // (e.g. re-sending receipt for a past order from OrdersScreen). Avoids
+  // making the cashier re-type phone+name for a customer already on file.
+  useEffect(() => {
+    if (linkedCustomer) return;
+    const customerId = order.loyalty_customer_id;
+    if (!customerId) return;
+    let cancelled = false;
+    getLoyaltyCustomer(customerId)
+      .then((c) => {
+        if (cancelled) return;
+        setFoundCustomer(c);
+        setSmsPhone(c.phone);
+        setSmsName(c.name);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [order.loyalty_customer_id, linkedCustomer]);
 
   // Debounced phone-to-customer lookup. Triggers once the merchant has typed at
   // least 10 digits; clears on shorter input. Cancels in-flight requests via
