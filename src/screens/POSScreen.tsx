@@ -829,8 +829,8 @@ const POSScreen: React.FC = () => {
 
   // ==================== Payment Handlers ====================
 
-  const handleLoyaltyStamp = async (order: Order) => {
-    if (!linkedCustomer) return;
+  const handleLoyaltyStamp = async (order: Order): Promise<Order> => {
+    if (!linkedCustomer) return order;
     try {
       const result = await addStampsForOrder(linkedCustomer.id, order.id);
       if (result.cardCompleted) {
@@ -843,9 +843,16 @@ const POSScreen: React.FC = () => {
       }
     } catch {
       // Non-blocking: payment already succeeded
+      return order;
     }
-    // NOTE: do not clear linkedCustomer here — ReceiptModal still needs it to
-    // prefill the SMS receipt form. Cleared in onClose of the receipt modal.
+    // Re-fetch so callers (ReceiptModal, in particular) see the freshly-written
+    // loyalty_customer_id. Without this, clearCart() races the modal open and
+    // linkedCustomer goes null before the SMS form hydrates.
+    try {
+      return await getOrder(order.id);
+    } catch {
+      return order;
+    }
   };
 
   const buildOrderItems = () => cart.map((item) => ({
@@ -915,8 +922,8 @@ const POSScreen: React.FC = () => {
       try {
         const result = await cashPayment({ order_id: chargingOrder.id, tip, amount_received: amountReceived });
         const paidOrder = await getOrder(chargingOrder.id);
-        await handleLoyaltyStamp(paidOrder);
-        setCompletedOrder(paidOrder);
+        const stampedOrder = await handleLoyaltyStamp(paidOrder);
+        setCompletedOrder(stampedOrder);
         setUnpaidOrders((prev) => prev.filter((o) => o.id !== chargingOrder.id));
         setShowPaymentModal(false);
         setChargingOrder(null);
@@ -951,8 +958,8 @@ const POSScreen: React.FC = () => {
           ? await getOrder(preCreatedOrderId)
           : await createOrderForCheckout();
         const result = await cashPayment({ order_id: order.id, tip, amount_received: amountReceived });
-        const finalOrder: Order = { ...order, tip, total: Number(order.total) + tip, payment_method: 'cash', employee_name: currentEmployee?.name, estimated_ready_minutes: order.estimated_ready_minutes, estimated_ready_range: order.estimated_ready_range };
-        await handleLoyaltyStamp(order);
+        const stampedOrder = await handleLoyaltyStamp(order);
+        const finalOrder: Order = { ...stampedOrder, tip, total: Number(order.total) + tip, payment_method: 'cash', employee_name: currentEmployee?.name, estimated_ready_minutes: order.estimated_ready_minutes, estimated_ready_range: order.estimated_ready_range };
         setCompletedOrder(finalOrder);
         setShowPaymentModal(false);
         setPreCreatedOrderId(null);
@@ -1080,13 +1087,14 @@ const POSScreen: React.FC = () => {
       addToast(t('toast.splitDone'), 'success');
       return;
     }
+    let stampedOrder = order;
     try {
-      await handleLoyaltyStamp(order);
+      stampedOrder = await handleLoyaltyStamp(order);
     } catch {
       // Loyalty stamp failure shouldn't block the receipt.
     }
     const finalOrder: Order = {
-      ...order,
+      ...stampedOrder,
       tip: totalTip,
       total: order.subtotal + order.tax + totalTip,
       payment_method: 'split',
@@ -1584,8 +1592,8 @@ const POSScreen: React.FC = () => {
           onTerminalPaymentSuccess={async (orderId) => {
             try {
               const paidOrder = await getOrder(orderId);
-              await handleLoyaltyStamp(paidOrder);
-              setCompletedOrder(paidOrder);
+              const stampedOrder = await handleLoyaltyStamp(paidOrder);
+              setCompletedOrder(stampedOrder);
               setShowReceiptModal(true);
             } catch {
               // Payment succeeded; receipt fetch is non-blocking.
