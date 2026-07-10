@@ -405,6 +405,34 @@ export async function sendOrderReadyMessage(phone, name, orderNumber, customerId
   return sendSMS(phone, body, customerId, 'order_ready', countryCode);
 }
 
+export async function sendWinbackMessage(
+  phone,
+  name,
+  customerId,
+  restaurantName = 'us',
+  stampsEarned = 0,
+  stampsRequired = 10,
+  countryCode = 'MX',
+) {
+  const firstName = name ? String(name).split(/\s+/)[0] : '';
+  // Progress phrase only if they've earned at least one stamp — "0/10 sellos"
+  // reads awkwardly for a lapsed one-time visitor. No review CTA per design
+  // (winback tone is "we miss you", not "please rate us").
+  const progress = stampsEarned > 0
+    ? ` Tu tarjeta te espera con ${stampsEarned}/${stampsRequired} sellos.`
+    : '';
+  const body = firstSingleSegment([
+    firstName
+      ? `Hola ${firstName}, te extranamos en ${restaurantName}!${progress} Vuelve pronto.`
+      : `Te extranamos en ${restaurantName}!${progress} Vuelve pronto.`,
+    firstName
+      ? `Hola ${firstName}, te extranamos en ${restaurantName}. Vuelve pronto.`
+      : `Te extranamos en ${restaurantName}. Vuelve pronto.`,
+    `Te extranamos en ${restaurantName}.`,
+  ]);
+  return sendSMS(phone, body, customerId, 'winback', countryCode);
+}
+
 export async function sendRewardReminderMessage(
   phone,
   name,

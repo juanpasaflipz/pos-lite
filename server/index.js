@@ -11,6 +11,7 @@ import { initMigrations, runMigrations } from './db/migrate.js';
 import { tenantMiddleware } from './middleware/tenant.js';
 import { startAutoCompleteSweep, stopAutoCompleteSweep } from './lib/autoCompleteReadyOrders.js';
 import { startRewardReminderSweep, stopRewardReminderSweep } from './lib/rewardRedemptionReminders.js';
+import { startWinbackSweep, stopWinbackSweep } from './lib/winbackReminders.js';
 
 // ==================== Route Imports (Lean POS) ====================
 
@@ -319,6 +320,7 @@ async function gracefulShutdown(signal) {
 
   stopAutoCompleteSweep();
   stopRewardReminderSweep();
+  stopWinbackSweep();
 
   await shutdownDb();
   console.log('[Shutdown] Database pools closed');
@@ -351,6 +353,7 @@ process.on('SIGINT', () => shutdownWithTimeout('SIGINT'));
 
     startAutoCompleteSweep();
     startRewardReminderSweep();
+    startWinbackSweep();
   } catch (error) {
     console.error('Failed to initialize:', error);
     process.exit(1);
