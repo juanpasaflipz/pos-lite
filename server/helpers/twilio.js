@@ -421,10 +421,10 @@ export async function sendPostOrderReviewMessage(
   if (!reviewUrl) return null;
   const body = firstSingleSegment([
     firstName
-      ? `Hola ${firstName}, gracias por tu visita a ${restaurantName}! ¿Nos calificas? ${reviewUrl}`
-      : `Gracias por tu visita a ${restaurantName}! ¿Nos calificas? ${reviewUrl}`,
-    `Gracias por tu visita a ${restaurantName}. ¿Nos calificas? ${reviewUrl}`,
-    `Gracias! ¿Nos calificas? ${reviewUrl}`,
+      ? `Hola ${firstName}, gracias por tu visita a ${restaurantName}. Esperamos que hayas disfrutado. ¿Nos compartes tu opinion en Google? ${reviewUrl}`
+      : `Gracias por tu visita a ${restaurantName}. Esperamos que hayas disfrutado. ¿Nos compartes tu opinion en Google? ${reviewUrl}`,
+    `Gracias por tu visita a ${restaurantName}. ¿Nos compartes tu opinion en Google? ${reviewUrl}`,
+    `¿Nos compartes tu opinion en Google? ${reviewUrl}`,
   ]);
   return sendSMS(phone, body, customerId, 'post_order_review', countryCode);
 }
