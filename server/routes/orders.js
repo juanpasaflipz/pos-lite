@@ -310,6 +310,9 @@ router.get('/', async (req, res) => {
 //   - payment_status='pending_terminal' older than 3 minutes → terminal flow
 //     stalled (likely terminal offline or customer walked away); cashier needs
 //     to rescue manually so the order doesn't get orphaned.
+//   - status='cancelled' AND payment_status='failed' within last 30 minutes →
+//     MP terminal denied the charge; customer is likely still at the counter
+//     wanting to pay cash. Cashier claims → rescue path resets state.
 router.get('/kiosk-held', requireAuth('pos_access'), async (req, res) => {
   try {
     const orders = await all(`
@@ -317,6 +320,7 @@ router.get('/kiosk-held', requireAuth('pos_access'), async (req, res) => {
              o.loyalty_customer_id, o.status, o.payment_status,
              CASE
                WHEN o.status = 'draft_kiosk' THEN 'held'
+               WHEN o.status = 'cancelled' AND o.payment_status = 'failed' THEN 'denied_charge'
                ELSE 'stranded_terminal'
              END AS kind,
              COALESCE(c.name, o.customer_call_name) AS customer_name, c.phone AS customer_phone,
@@ -351,6 +355,11 @@ router.get('/kiosk-held', requireAuth('pos_access'), async (req, res) => {
             AND o.payment_status = 'pending_terminal'
             AND o.created_at < NOW() - INTERVAL '3 minutes'
           )
+          OR (
+            o.status = 'cancelled'
+            AND o.payment_status = 'failed'
+            AND o.created_at > NOW() - INTERVAL '30 minutes'
+          )
         )
       ORDER BY o.created_at DESC
       LIMIT 50
@@ -376,6 +385,13 @@ router.get('/kiosk-held', requireAuth('pos_access'), async (req, res) => {
 // on the KDS, and the customer is still expecting their food — we keep the
 // order and just clear the failed terminal state so the cashier can charge
 // fresh (cash or a new swipe).
+//
+// For denied_charge (MP terminal returned failed; kiosk poll flipped the
+// order to payment_status='failed', status='cancelled'): same rescue as
+// stranded_terminal. Before this branch existed, cancelled kiosk orders had
+// no recovery path — the cashier had to hand-key a new ticket while the
+// original stayed stranded, leaking revenue and leaving inventory undeducted
+// (see order 20260709023, 2026-07-09).
 router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
   try {
     const orderId = Number(req.params.id);
@@ -397,8 +413,12 @@ router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
       existing.source === 'customer_kiosk'
       && existing.status === 'pending'
       && existing.payment_status === 'pending_terminal';
+    const isDeniedCharge =
+      existing.source === 'customer_kiosk'
+      && existing.status === 'cancelled'
+      && existing.payment_status === 'failed';
 
-    if (!isHeld && !isStrandedTerminal) {
+    if (!isHeld && !isStrandedTerminal && !isDeniedCharge) {
       return res.status(409).json({ error: 'Order is not claimable from kiosk' });
     }
 
@@ -418,13 +438,18 @@ router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
       return res.json({ id: orderId, status: 'discarded' });
     }
 
+    // Rescue path — resets payment state so the cashier can charge fresh.
+    // For denied_charge we also flip status back from 'cancelled' → 'active'
+    // (the kiosk poll cancelled it when MP said no, but the customer is here
+    // and the order is real).
     await run(
       `UPDATE orders
-       SET payment_status = 'unpaid', payment_method = NULL, employee_id = $1
+       SET payment_status = 'unpaid', payment_method = NULL,
+           status = 'active', employee_id = $1
        WHERE id = $2`,
       [employeeId, orderId],
     );
-    audit(req, 'order.rescued_from_terminal', { order_id: orderId });
+    audit(req, isDeniedCharge ? 'order.rescued_from_denied_charge' : 'order.rescued_from_terminal', { order_id: orderId });
     res.json({ id: orderId, status: 'active' });
   } catch (error) {
     console.error('Error claiming kiosk order:', error);
