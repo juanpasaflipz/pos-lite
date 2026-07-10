@@ -60,6 +60,7 @@ import demoProvisionRoutes from './routes/demo-provision.js';
 import cfdiRoutes from './routes/cfdi.js';
 import cfdiPublicRoutes from './routes/cfdi-public.js';
 import receiptsPublicRoutes from './routes/receipts-public.js';
+import publicReviewRoutes from './routes/public-review.js';
 
 // Customer-facing
 import customerOrderRoutes from './routes/customer-order.js';
@@ -170,6 +171,11 @@ app.use('/api/cfdi-public', cfdiPublicRoutes);
 
 // Public SMS receipt links (token-based, no auth)
 app.use('/api/public/receipts', receiptsPublicRoutes);
+
+// Public Google review redirect ({subdomain}.desktop.kitchen/gr → real
+// Google review URL). Owns the SMS short link so we skip TinyURL's
+// interstitial and iOS's underscore-URL-parsing bug on raw g.page URLs.
+app.use('/', publicReviewRoutes);
 
 // Kiosk bind (cross-tenant PIN search, no tenant header required)
 app.use('/api/kiosk', kioskRoutes);
