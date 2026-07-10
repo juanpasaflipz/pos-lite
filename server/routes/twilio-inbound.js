@@ -105,6 +105,10 @@ function phoneVariants(rawPhone) {
   if (digits.length >= 10) {
     out.add(`+52${digits.slice(-10)}`);
     out.add(`+521${digits.slice(-10)}`);
+    // loyalty_customers stores MX phones as bare 10 digits (see
+    // normalizePhone in helpers/loyalty.js). Add that form so the
+    // loyalty match works when Twilio sends +52-prefixed E.164.
+    out.add(digits.slice(-10));
   }
   return out;
 }
