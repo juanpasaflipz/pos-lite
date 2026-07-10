@@ -373,10 +373,13 @@ export async function sendStampEarnedMessage(phone, name, earned, required, cust
 }
 
 export async function sendCardCompletedMessage(phone, name, reward, customerId, restaurantName = 'us', countryCode = 'MX', reviewUrl = null) {
-  const body = withReviewCta(
-    `${name}, tarjeta llena en ${restaurantName}! Premio: ${reward}. Canjea en tu siguiente visita.`,
-    reviewUrl,
-  );
+  // Review CTA moved off card_completed as of 2026-07-09 — the post-order
+  // review SMS (fires 1h after every completed order) is now the single
+  // review channel. Card-completed stays a pure celebration message so we
+  // don't stack two review asks on the same customer within an hour.
+  // reviewUrl kept in the signature so existing callers don't break.
+  void reviewUrl;
+  const body = `${name}, tarjeta llena en ${restaurantName}! Premio: ${reward}. Canjea en tu siguiente visita.`;
   return sendSMS(phone, body, customerId, 'card_completed', countryCode);
 }
 
@@ -403,6 +406,27 @@ export async function sendOrderReadyMessage(phone, name, orderNumber, customerId
     `Orden #${orderNumber} lista.`,
   ]);
   return sendSMS(phone, body, customerId, 'order_ready', countryCode);
+}
+
+export async function sendPostOrderReviewMessage(
+  phone,
+  name,
+  customerId,
+  restaurantName = 'us',
+  reviewUrl,
+  countryCode = 'MX',
+) {
+  const firstName = name ? String(name).split(/\s+/)[0] : '';
+  // No review URL, no send — caller should guard, but be safe.
+  if (!reviewUrl) return null;
+  const body = firstSingleSegment([
+    firstName
+      ? `Hola ${firstName}, gracias por tu visita a ${restaurantName}! ¿Nos calificas? ${reviewUrl}`
+      : `Gracias por tu visita a ${restaurantName}! ¿Nos calificas? ${reviewUrl}`,
+    `Gracias por tu visita a ${restaurantName}. ¿Nos calificas? ${reviewUrl}`,
+    `Gracias! ¿Nos calificas? ${reviewUrl}`,
+  ]);
+  return sendSMS(phone, body, customerId, 'post_order_review', countryCode);
 }
 
 export async function sendWinbackMessage(
