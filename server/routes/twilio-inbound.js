@@ -271,6 +271,9 @@ router.post('/inbound', async (req, res) => {
     }
     // No pending intent — text replies that aren't a new action just get a hint.
     if (replyKind !== 'unclear') {
+      // Same guard as the new-intent path: if the sender is also a loyalty
+      // customer, silent-ack instead of surfacing voice-ops chatter.
+      if (await isLoyaltyCustomerPhone(fromPhone)) return ack();
       await reply(from, to, 'No hay nada pendiente que confirmar. Manda una nota de voz o texto para registrar merma, compra o conteo.');
       return ack();
     }
@@ -402,6 +405,15 @@ router.post('/inbound', async (req, res) => {
       ]
     );
   });
+
+  // If the reply didn't parse as a real voice-op AND the sender is also a
+  // loyalty customer, silent-ack instead of the "no entendí" prompt. Covers
+  // the case where an owner (registered as both employee AND loyalty customer)
+  // casually replies to a loyalty SMS. Legit voice-ops from the same phone
+  // still work — they set isExecutable=true and skip this branch.
+  if (!isExecutable && (await isLoyaltyCustomerPhone(fromPhone))) {
+    return ack();
+  }
 
   await reply(from, to, summary);
   return ack();
