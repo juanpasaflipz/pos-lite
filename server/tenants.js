@@ -42,7 +42,7 @@ export async function createTenant({ id, name, subdomain, owner_email, owner_pas
   `;
 
   // Seed default role permissions for the new tenant
-  await seedTenantDefaults(id);
+  await seedTenantDefaults(id, subdomain || id);
 
   return getTenant(id);
 }
@@ -75,7 +75,7 @@ export async function listTenants() {
 }
 
 /** Seed default role permissions and loyalty config for a new tenant */
-async function seedTenantDefaults(tenantId) {
+async function seedTenantDefaults(tenantId, subdomain) {
   const allPermissions = [
     'pos_access', 'kitchen_access', 'bar_access', 'view_reports', 'manage_menu',
     'manage_inventory', 'manage_employees', 'manage_printers', 'manage_delivery',
@@ -116,7 +116,8 @@ async function seedTenantDefaults(tenantId) {
     { key: 'referral_bonus_stamps', value: '2', description: 'Bonus stamps for referrer and referee' },
     { key: 'sms_enabled', value: 'true', description: 'Enable SMS notifications for loyalty events' },
     { key: 'stamp_bonus_threshold', value: '400', description: 'Spend amount (per ticket) that earns one extra stamp on top of the base stamp' },
-    { key: 'google_review_url', value: '', description: 'Google review link appended to stamp/reward SMS to drive 5-star reviews' },
+    { key: 'google_review_target', value: '', description: 'Raw Google review link (g.page/... or maps.app.goo.gl/...). Owner pastes this; the public /gr route redirects to it.' },
+    { key: 'google_review_url', value: `https://${subdomain}.desktop.kitchen/gr`, description: 'Auto-generated short URL that appears in review-driving SMS. System-owned; do not edit.' },
   ];
 
   for (const { key, value, description } of loyaltyDefaults) {

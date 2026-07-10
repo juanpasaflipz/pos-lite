@@ -420,7 +420,7 @@
       "stampBonusThreshold": "Umbral para Sello Extra ($)",
       "referralBonusStamps": "Sellos de Bono por Referido",
       "smsNotifications": "Notificaciones SMS",
-      "googleReviewUrl": "Link de Reseña de Google"
+      "googleReviewTarget": "Link de Reseña de Google"
     }
   },
   "menuEngineering": {

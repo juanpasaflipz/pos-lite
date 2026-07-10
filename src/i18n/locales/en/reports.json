@@ -420,7 +420,7 @@
       "stampBonusThreshold": "Bonus Stamp Threshold ($)",
       "referralBonusStamps": "Referral Bonus Stamps",
       "smsNotifications": "SMS Notifications",
-      "googleReviewUrl": "Google Review Link"
+      "googleReviewTarget": "Google Review Link"
     }
   },
   "menuEngineering": {

@@ -701,7 +701,7 @@ function SettingsTab() {
     { key: 'stamp_bonus_threshold', label: t('loyalty.settings.stampBonusThreshold'), type: 'number' as const },
     { key: 'referral_bonus_stamps', label: t('loyalty.settings.referralBonusStamps'), type: 'number' as const },
     { key: 'sms_enabled', label: t('loyalty.settings.smsNotifications'), type: 'toggle' as const },
-    { key: 'google_review_url', label: t('loyalty.settings.googleReviewUrl'), type: 'text' as const },
+    { key: 'google_review_target', label: t('loyalty.settings.googleReviewTarget'), type: 'text' as const },
   ];
 
   return (
