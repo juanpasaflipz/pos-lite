@@ -13,6 +13,7 @@ import { startAutoCompleteSweep, stopAutoCompleteSweep } from './lib/autoComplet
 import { startRewardReminderSweep, stopRewardReminderSweep } from './lib/rewardRedemptionReminders.js';
 import { startWinbackSweep, stopWinbackSweep } from './lib/winbackReminders.js';
 import { startPostOrderReviewSweep, stopPostOrderReviewSweep } from './lib/postOrderReviewReminders.js';
+import { startSentinelSweep, stopSentinelSweep } from './sentinel/sweep.js';
 
 // ==================== Route Imports (Lean POS) ====================
 
@@ -72,6 +73,7 @@ import devicesRoutes from './routes/devices.js';
 
 // AI Agent
 import agentRoutes from './agent/route.js';
+import sentinelRoutes from './sentinel/route.js';
 
 // Twilio inbound (WhatsApp voice ops — platform-level webhook)
 import twilioInboundRoutes from './routes/twilio-inbound.js';
@@ -281,6 +283,7 @@ app.use('/api/cfdi', cfdiRoutes);
 
 // AI Agent
 app.use('/api/agent', agentRoutes);
+app.use('/api/sentinel', sentinelRoutes);
 
 // ==================== SPA Fallback ====================
 
@@ -331,6 +334,7 @@ async function gracefulShutdown(signal) {
   stopRewardReminderSweep();
   stopWinbackSweep();
   stopPostOrderReviewSweep();
+  stopSentinelSweep();
 
   await shutdownDb();
   console.log('[Shutdown] Database pools closed');
@@ -365,6 +369,7 @@ process.on('SIGINT', () => shutdownWithTimeout('SIGINT'));
     startRewardReminderSweep();
     startWinbackSweep();
     startPostOrderReviewSweep();
+    startSentinelSweep();
   } catch (error) {
     console.error('Failed to initialize:', error);
     process.exit(1);

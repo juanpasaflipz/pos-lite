@@ -59,7 +59,7 @@ Brand: kiosk wears Talavera Terracotta (`#A8542A`), driven by CSS variables in `
 ## Migrations
 - `server/db/migrations/NNNN_name.js` — each file exports `version: number`, `name: string`, `async up(sql)`. No down migrations
 - Runs once at server boot (`initMigrations()` + `runMigrations()`). Uses `adminSql` (bypasses RLS) inside `adminSql.begin()` so each migration is atomic
-- Numbering is sequential; current latest is `0071_delivery_pending_dispatch.js`. `MAX(version)` bug was fixed 2026-05-27 — set-difference tracking means renumbered/missing versions are tolerated
+- Numbering is sequential; current latest is `0079_sentinel_incidents.js`. `MAX(version)` bug was fixed 2026-05-27 — set-difference tracking means renumbered/missing versions are tolerated
 
 ## Auth conventions
 - Two auth surfaces: **Employee PIN login** (cashier/kitchen/bar — local POS entry) and **Owner JWT** (admin, billing, super-admin). Both end up as Bearer JWT for `/api/*` calls

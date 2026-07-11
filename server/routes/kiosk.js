@@ -1127,7 +1127,7 @@ router.post('/orders/send-to-delivery', verifyKioskToken, async (req, res) => {
 // the customer has paid by card. Idempotent — if the row's platform_status is
 // no longer 'pending_payment' we just return whatever's already there.
 // Returns { delivery, delivery_error }. Never throws.
-async function dispatchPendingCourier(orderId, tenantId) {
+export async function dispatchPendingCourier(orderId, tenantId) {
   try {
     const [row] = await adminSql`
       SELECT id, platform_status, pending_dispatch, external_order_id, tracking_url,
