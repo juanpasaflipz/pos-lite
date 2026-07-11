@@ -60,7 +60,8 @@ const SERVICE_SCHEMA = {
   facturapi: {
     label: 'FacturAPI (CFDI)',
     fields: [
-      { key: 'api_key', label: 'API Key', secret: true },
+      { key: 'api_key', label: 'User Secret Key (sk_user_…)', secret: true },
+      { key: 'invoice_api_key', label: 'Live/Test Secret Key (sk_live_… or sk_test_…)', secret: true },
     ],
   },
   xai: {

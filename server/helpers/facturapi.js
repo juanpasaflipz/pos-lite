@@ -25,8 +25,8 @@ if (FACTURAPI_API_KEY) {
 // ==================== Client Resolution ====================
 
 /**
- * Resolve the FacturAPI client for the current tenant (via AsyncLocalStorage).
- * Falls back to platform-level key when no tenant context or no tenant key stored.
+ * Resolve the FacturAPI client for user-scoped operations (org management,
+ * CSD upload, testStamp). Requires a `sk_user_...` key.
  */
 async function resolveClient() {
   const tenantId = tenantContext.getStore()?.tenantId;
@@ -40,6 +40,24 @@ async function resolveClient() {
     throw new Error('[FacturAPI] API key not configured. Set FACTURAPI_API_KEY env var or add it in Integrations.');
   }
   return platformClient;
+}
+
+/**
+ * Resolve the FacturAPI client for org-scoped invoice operations
+ * (create/cancel/getFiles). Requires a `sk_test_...` or `sk_live_...` key —
+ * user keys return 401 on /v2/invoices. Falls back to the platform env
+ * FACTURAPI_INVOICE_API_KEY, and finally to the user client for backward
+ * compatibility with tenants that stored an org-level key as `api_key`.
+ */
+async function resolveInvoiceClient() {
+  const tenantId = tenantContext.getStore()?.tenantId;
+  if (tenantId) {
+    const creds = await getServiceCredentials(tenantId, 'facturapi', {
+      invoice_api_key: 'FACTURAPI_INVOICE_API_KEY',
+    });
+    if (creds.invoice_api_key) return new Facturapi(creds.invoice_api_key);
+  }
+  return resolveClient();
 }
 
 // ==================== Client Access ====================
@@ -178,7 +196,7 @@ export async function testStamp(orgId) {
  * @returns {Object} The created invoice object from FacturAPI
  */
 export async function createInvoice(orgId, { receptor, items, forma_pago, metodo_pago, series, folio_number }) {
-  const client = await resolveClient();
+  const client = await resolveInvoiceClient();
 
   const invoiceData = {
     type: 'I', // Ingreso
@@ -216,7 +234,7 @@ export async function createInvoice(orgId, { receptor, items, forma_pago, metodo
  * @returns {Object} Cancellation result from FacturAPI
  */
 export async function cancelInvoice(orgId, invoiceId, motive, substituteUUID) {
-  const client = await resolveClient();
+  const client = await resolveInvoiceClient();
 
   const cancelParams = { motive };
   if (substituteUUID) {
@@ -240,7 +258,7 @@ export async function cancelInvoice(orgId, invoiceId, motive, substituteUUID) {
  * @returns {{ xml_url: string|null, pdf_url: string|null }}
  */
 export async function getInvoiceFiles(orgId, invoiceId) {
-  const client = await resolveClient();
+  const client = await resolveInvoiceClient();
   try {
     const invoice = await client.invoices.retrieve(invoiceId);
     return {
