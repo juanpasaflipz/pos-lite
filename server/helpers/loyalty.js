@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { all, get, run } from '../db/index.js';
 import {
   sendWelcomeMessage,
@@ -13,7 +14,7 @@ export async function generateReferralCode() {
   for (let attempt = 0; attempt < 10; attempt++) {
     let code = 'JB';
     for (let i = 0; i < 4; i++) {
-      code += chars[Math.floor(Math.random() * chars.length)];
+      code += chars[crypto.randomInt(0, chars.length)];
     }
     const existing = await get('SELECT id FROM loyalty_customers WHERE referral_code = $1', [code]);
     if (!existing) return code;

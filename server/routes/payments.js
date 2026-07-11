@@ -669,7 +669,7 @@ router.post('/split/finalize', requireAuth('pos_access'), async (req, res) => {
 });
 
 // GET /api/payments/split/:order_id - get split details (legacy endpoint, kept for read use)
-router.get('/split/:order_id', async (req, res) => {
+router.get('/split/:order_id', requireAuth(), async (req, res) => {
   try {
     const { order_id } = req.params;
     const payments = await all('SELECT * FROM order_payments WHERE order_id = $1', [order_id]);
@@ -846,7 +846,7 @@ router.post('/refund', refundLimiter, requireAuth('process_refunds'), async (req
 });
 
 // GET /api/payments/refunds/:order_id - get refunds for an order
-router.get('/refunds/:order_id', async (req, res) => {
+router.get('/refunds/:order_id', requireAuth(), async (req, res) => {
   try {
     const { order_id } = req.params;
     const refunds = await all(`
@@ -864,7 +864,7 @@ router.get('/refunds/:order_id', async (req, res) => {
 });
 
 // GET /api/payments/refunds - all refunds with date filtering
-router.get('/refunds', async (req, res) => {
+router.get('/refunds', requireAuth(), async (req, res) => {
   try {
     const { start_date, end_date } = req.query;
     let query = `
@@ -1931,7 +1931,7 @@ export async function settlePaymentGroupPaid(groupId, tenantId, { mpOrder = null
 }
 
 // GET /api/payments/:order_id - get payment status
-router.get('/:order_id', async (req, res) => {
+router.get('/:order_id', requireAuth(), async (req, res) => {
   try {
     const { order_id } = req.params;
 
@@ -2192,10 +2192,11 @@ export async function mpWebhook(req, res) {
       if (mapped === 'paid') {
         await markTerminalOrderPaid(ord.id, ord.tenant_id, { mpOrder, mpAccessToken: accessToken });
       } else if (mapped === 'failed') {
+        // adminSql bypasses RLS — the explicit tenant_id predicate is the only isolation guard here
         await adminSql`
           UPDATE orders
           SET payment_status = 'failed'
-          WHERE id = ${ord.id}
+          WHERE id = ${ord.id} AND tenant_id = ${ord.tenant_id}
         `;
       }
     }
@@ -2264,10 +2265,11 @@ export async function conektaWebhook(req, res) {
     if (type === 'charge.paid' || type === 'order.paid') {
       if (ord.payment_status === 'paid') return; // already processed
 
+      // adminSql bypasses RLS — the explicit tenant_id predicate is the only isolation guard here
       await adminSql`
         UPDATE orders
         SET payment_status = 'paid', status = 'active', paid_at = NOW()
-        WHERE id = ${ord.id}
+        WHERE id = ${ord.id} AND tenant_id = ${ord.tenant_id}
       `;
 
       // Deduct inventory (fire-and-forget since we're outside tenant context)
@@ -2276,7 +2278,7 @@ export async function conektaWebhook(req, res) {
         const items = await adminSql`
           SELECT oi.menu_item_id, oi.quantity
           FROM order_items oi
-          WHERE oi.order_id = ${ord.id}
+          WHERE oi.order_id = ${ord.id} AND oi.tenant_id = ${ord.tenant_id}
         `;
         for (const item of items) {
           await adminSql`
@@ -2304,7 +2306,7 @@ export async function conektaWebhook(req, res) {
       await adminSql`
         UPDATE orders
         SET payment_status = 'expired'
-        WHERE id = ${ord.id}
+        WHERE id = ${ord.id} AND tenant_id = ${ord.tenant_id}
       `;
     }
   } catch (error) {

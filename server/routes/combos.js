@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { all, get, run, getTenantId } from '../db/index.js';
+import { requireAuth } from '../middleware/auth.js';
 import { checkLimit, planUpgradeError } from '../planLimits.js';
 
 const router = Router();
@@ -59,7 +60,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/combos - create combo
-router.post('/', async (req, res) => {
+router.post('/', requireAuth('manage_menu'), async (req, res) => {
   try {
     const { name, description, combo_price, slots = [] } = req.body;
     if (!name || combo_price === undefined) return res.status(400).json({ error: 'Missing name or combo_price' });
@@ -95,7 +96,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /api/combos/:id - update combo
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAuth('manage_menu'), async (req, res) => {
   try {
     const { id } = req.params;
     const { name, description, combo_price, active } = req.body;
@@ -123,7 +124,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/combos/:id - hard delete combo and its slots
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAuth('manage_menu'), async (req, res) => {
   try {
     const { id } = req.params;
     const existing = await get('SELECT id FROM combo_definitions WHERE id = $1', [id]);

@@ -45,7 +45,9 @@ export async function processGetnetWebhook(event) {
     WHERE id = ${txn.id}
   `;
 
-  // Update the order based on status
+  // Update the order based on status.
+  // adminSql bypasses RLS — the explicit tenant_id predicate (from the
+  // getnet_transactions row we just resolved) is the only isolation guard here.
   if (normalizedStatus === 'approved') {
     await adminSql`
       UPDATE orders
@@ -54,7 +56,7 @@ export async function processGetnetWebhook(event) {
           payment_method = 'getnet_card',
           getnet_authorization_code = ${authorization_code || null},
           paid_at = NOW()
-      WHERE id = ${txn.order_id}
+      WHERE id = ${txn.order_id} AND tenant_id = ${txn.tenant_id}
     `;
 
     // Record platform fee
@@ -70,7 +72,7 @@ export async function processGetnetWebhook(event) {
       const items = await adminSql`
         SELECT oi.menu_item_id, oi.quantity
         FROM order_items oi
-        WHERE oi.order_id = ${txn.order_id}
+        WHERE oi.order_id = ${txn.order_id} AND oi.tenant_id = ${txn.tenant_id}
       `;
       for (const item of items) {
         await adminSql`
@@ -96,7 +98,7 @@ export async function processGetnetWebhook(event) {
     await adminSql`
       UPDATE orders
       SET payment_status = 'failed'
-      WHERE id = ${txn.order_id}
+      WHERE id = ${txn.order_id} AND tenant_id = ${txn.tenant_id}
     `;
   }
 }

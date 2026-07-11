@@ -40,7 +40,7 @@ export function requireAuth(permission) {
     }
 
     const employee = await get(
-      'SELECT id, name, role, active FROM employees WHERE id = $1 AND tenant_id = $2',
+      'SELECT id, name, role, active, pin_changed_at FROM employees WHERE id = $1 AND tenant_id = $2',
       [decoded.employeeId, currentTenant]
     );
 
@@ -50,6 +50,17 @@ export function requireAuth(permission) {
 
     if (!employee.active) {
       return res.status(401).json({ error: 'Employee account is inactive' });
+    }
+
+    // Session invalidation on PIN change: reject tokens issued before the PIN
+    // was last changed. `decoded.iat` is in seconds (floored); pin_changed_at
+    // is a fractional-second timestamp. Add a 1s grace so a login within the
+    // same clock second as a PIN change isn't invalidated by rounding.
+    if (employee.pin_changed_at && decoded.iat) {
+      const pinChangedMs = new Date(employee.pin_changed_at).getTime();
+      if ((decoded.iat + 1) * 1000 <= pinChangedMs) {
+        return res.status(401).json({ error: 'Session expired — please sign in again' });
+      }
     }
 
     req.employee = employee;

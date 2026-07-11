@@ -87,7 +87,7 @@ const managerApproveLimiter = rateLimit({
 const router = Router();
 
 // GET /api/employees - list employees
-router.get('/', async (req, res) => {
+router.get('/', requireAuth(), async (req, res) => {
   try {
     const employees = await all(`
       SELECT id, name, role, active, created_at
@@ -103,7 +103,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/employees - create employee
-router.post('/', async (req, res) => {
+router.post('/', requireAuth('manage_employees'), async (req, res) => {
   try {
     const { name, pin, role = 'cashier' } = req.body;
 
@@ -128,8 +128,8 @@ router.post('/', async (req, res) => {
 
     const tid = getTenantId();
     const result = await run(`
-      INSERT INTO employees (tenant_id, name, pin, role, active)
-      VALUES ($1, $2, $3, $4, true)
+      INSERT INTO employees (tenant_id, name, pin, role, active, pin_changed_at)
+      VALUES ($1, $2, $3, $4, true, NOW())
     `, [tid, name, hashedPin, role]);
 
     audit({
@@ -450,7 +450,7 @@ router.put('/permissions/:role', requireAuth('manage_permissions'), async (req, 
 });
 
 // PUT /api/employees/:id - update employee
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAuth('manage_employees'), async (req, res) => {
   try {
     const { id } = req.params;
     const { name, pin, role } = req.body;
@@ -471,6 +471,9 @@ router.put('/:id', async (req, res) => {
       const hashedPin = await bcrypt.hash(pin, BCRYPT_ROUNDS);
       updates.push(`pin = $${values.length + 1}`);
       values.push(hashedPin);
+      // Stamp the change so existing JWTs for this employee are invalidated
+      // (see server/middleware/auth.js). NOW() takes no positional param.
+      updates.push('pin_changed_at = NOW()');
     }
     if (role !== undefined) {
       const validRoles = ['admin', 'cashier', 'manager', 'kitchen', 'bar'];
@@ -511,7 +514,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // PUT /api/employees/:id/toggle - toggle active
-router.put('/:id/toggle', async (req, res) => {
+router.put('/:id/toggle', requireAuth('manage_employees'), async (req, res) => {
   try {
     const { id } = req.params;
 

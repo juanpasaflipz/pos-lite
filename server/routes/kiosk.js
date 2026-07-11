@@ -49,12 +49,17 @@ function normalizeKioskFulfillmentType(value) {
     : 'to_go';
 }
 
+// Binding a kiosk device is a rare, one-time setup action, so the limit can be
+// aggressive. /bind does a cross-tenant PIN search over admin/manager PINs, so a
+// loose limit is a cross-tenant brute-force surface. 8 attempts / 15 min per IP
+// keeps a 4-digit space at ~300+ hours to exhaust while never inconveniencing a
+// legitimate one-off setup.
 const bindLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 10,
+  windowMs: 15 * 60 * 1000,
+  max: 8,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many bind attempts. Try again in a minute.' },
+  message: { error: 'Too many bind attempts. Try again later.' },
 });
 
 // POST /api/kiosk/bind

@@ -21,7 +21,34 @@ export class SyncEngine {
   /** Start auto-sync on 60s interval */
   start() {
     if (this.intervalId) return;
+    // Recover any orders orphaned in 'syncing' by a crash/reload mid-request,
+    // then run an immediate pass so recovered orders don't wait a full interval.
+    void this.recoverStuckSyncingOrders().then(() => this.syncPendingOrders());
     this.intervalId = setInterval(() => this.syncPendingOrders(), 60_000);
+  }
+
+  /**
+   * Reset orders stranded in 'syncing' back to 'sync_failed' so the normal
+   * backoff/retry loop picks them up. `syncSingleOrder` flips a row to
+   * 'syncing' *before* the network call; if the app crashes or reloads before
+   * that call resolves, the row is stuck (the sync loop only queries
+   * 'pending_sync'/'sync_failed'). Server-side dedup on `offline_temp_id`
+   * makes re-sending safe even if the original request had actually landed.
+   */
+  async recoverStuckSyncingOrders(): Promise<number> {
+    const stuck = await offlineDb.offlineOrders
+      .where('status')
+      .equals('syncing')
+      .toArray();
+
+    for (const order of stuck) {
+      await offlineDb.offlineOrders.update(order.id!, {
+        status: 'sync_failed',
+        syncError: 'Recovered from interrupted sync',
+      });
+    }
+
+    return stuck.length;
   }
 
   stop() {
