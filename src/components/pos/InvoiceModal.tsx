@@ -38,6 +38,7 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onInvoiceIs
   const [regimenFiscal, setRegimenFiscal] = useState('');
   const [codigoPostal, setCodigoPostal] = useState('');
   const [usoCfdi, setUsoCfdi] = useState('G03');
+  const [email, setEmail] = useState('');
 
   // Catalogs
   const [taxRegimes, setTaxRegimes] = useState<SatCatalogItem[]>(FALLBACK_TAX_REGIMES);
@@ -69,6 +70,9 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onInvoiceIs
         order_id: order.id,
       };
 
+      const emailTrimmed = email.trim();
+      if (emailTrimmed) payload.email = emailTrimmed;
+
       if (publicoGeneral) {
         payload.publico_general = true;
       } else {
@@ -98,7 +102,7 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onInvoiceIs
       setErrorMessage(err?.message || t('invoice.errorGeneric'));
       setModalState('error');
     }
-  }, [order.id, publicoGeneral, rfc, razonSocial, regimenFiscal, codigoPostal, usoCfdi, onInvoiceIssued, t]);
+  }, [order.id, publicoGeneral, rfc, razonSocial, regimenFiscal, codigoPostal, usoCfdi, email, onInvoiceIssued, t]);
 
   const handleCopyLink = useCallback(async () => {
     if (!invoiceTokenUrl) return;
@@ -119,12 +123,15 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onInvoiceIs
     }
   }, [invoiceTokenUrl]);
 
-  const isFormValid = publicoGeneral || (
+  const emailTrimmed = email.trim();
+  const emailValid = emailTrimmed === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed);
+
+  const isFormValid = emailValid && (publicoGeneral || (
     rfc.trim().length >= 12 &&
     razonSocial.trim().length > 0 &&
     regimenFiscal.length > 0 &&
     codigoPostal.trim().length === 5
-  );
+  ));
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -178,6 +185,19 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onInvoiceIs
               </div>
               <span className="text-white text-sm font-medium">{t('invoice.generalPublic')}</span>
             </label>
+
+            {/* Email (optional, auto-sends CFDI on stamp) */}
+            <div>
+              <label className="block text-xs font-medium text-neutral-400 mb-1">{t('invoice.email')}</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={t('invoice.emailPlaceholder')}
+                autoComplete="email"
+                className="w-full px-3 py-2 bg-neutral-800 border border-neutral-600 rounded-lg text-white placeholder-neutral-500 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
 
             {/* Customer fields (shown when not publico general) */}
             {!publicoGeneral && (
@@ -302,6 +322,12 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onInvoiceIs
                 <span className="text-neutral-400">{t('invoice.total')}</span>
                 <span className="text-white font-bold">{formatPrice(issuedInvoice.total)}</span>
               </div>
+              {issuedInvoice.receptor_email && (
+                <div className="flex justify-between">
+                  <span className="text-neutral-400">{t('invoice.sentTo')}</span>
+                  <span className="text-white font-medium break-all">{issuedInvoice.receptor_email}</span>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

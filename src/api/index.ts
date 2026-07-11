@@ -2706,6 +2706,7 @@ export async function issueCfdiInvoice(data: {
   order_id: number;
   receptor?: { rfc: string; name: string; tax_regime: string; postal_code: string; uso_cfdi?: string };
   publico_general?: boolean;
+  email?: string;
 }): Promise<CfdiInvoice> {
   return apiRequest<CfdiInvoice>('/cfdi/invoices', {
     method: 'POST',

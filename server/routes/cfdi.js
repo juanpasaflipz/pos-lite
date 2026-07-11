@@ -9,6 +9,7 @@ import {
   createInvoice,
   cancelInvoice,
   getInvoiceFiles,
+  sendInvoiceEmail,
   mapPaymentToFormaPago,
   mapOrderItemsToCFDI,
   generateInvoiceToken,
@@ -189,7 +190,7 @@ router.post('/config/test', requireAuth('manage_invoicing'), async (req, res) =>
 // POST /api/cfdi/invoices — issue a CFDI for an order
 router.post('/invoices', requireAuth('manage_invoicing'), async (req, res) => {
   try {
-    const { order_id, receptor, publico_general } = req.body;
+    const { order_id, receptor, publico_general, email } = req.body;
 
     if (!order_id) {
       return res.status(400).json({ error: 'order_id is required' });
@@ -256,6 +257,12 @@ router.post('/invoices', requireAuth('manage_invoicing'), async (req, res) => {
       return res.status(400).json({ error: 'Invalid RFC format' });
     }
 
+    // Normalize and lightly validate the recipient email (optional).
+    const emailNormalized = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    if (emailNormalized && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNormalized)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
     // Map order items to CFDI format
     const cfdiItems = mapOrderItemsToCFDI(items);
     const formaPago = mapPaymentToFormaPago(order.payment_method);
@@ -295,13 +302,13 @@ router.post('/invoices', requireAuth('manage_invoicing'), async (req, res) => {
       result = await run(`
         INSERT INTO cfdi_invoices (
           tenant_id, order_id, facturapi_invoice_id, uuid_fiscal, series, folio,
-          receptor_rfc, receptor_name, receptor_tax_regime, receptor_postal_code, receptor_uso_cfdi,
+          receptor_rfc, receptor_name, receptor_tax_regime, receptor_postal_code, receptor_uso_cfdi, receptor_email,
           subtotal, tax_total, total, forma_pago, metodo_pago,
           xml_url, pdf_url, requested_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
       `, [
         tid, order_id, invoice.id, invoice.uuid, invoice.series, invoice.folio_number,
-        receptorData.rfc, receptorData.name, receptorData.tax_regime, receptorData.postal_code, receptorData.uso_cfdi,
+        receptorData.rfc, receptorData.name, receptorData.tax_regime, receptorData.postal_code, receptorData.uso_cfdi, emailNormalized || null,
         order.subtotal, order.tax, order.total, formaPago, 'PUE',
         invoice.xml_url || null, invoice.pdf_url || null, 'staff',
       ]);
@@ -332,9 +339,16 @@ router.post('/invoices', requireAuth('manage_invoicing'), async (req, res) => {
         receptor_rfc: receptorData.rfc,
         total: order.total,
         publico_general: !!publico_general,
+        receptor_email: emailNormalized || null,
       },
       ip: req.ip,
     });
+
+    // Fire-and-forget email delivery. Facturapi failures are logged but do
+    // NOT roll back the stamp (invoice is already saved; merchant can resend).
+    if (emailNormalized) {
+      sendInvoiceEmail(invoice.id, emailNormalized).catch(() => {});
+    }
 
     res.json(saved);
   } catch (err) {

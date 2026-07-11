@@ -258,6 +258,26 @@ export async function cancelInvoice(orgId, invoiceId, motive, substituteUUID) {
  * @param {string} invoiceId - FacturAPI invoice ID
  * @returns {{ xml_url: string|null, pdf_url: string|null }}
  */
+/**
+ * Sends the stamped invoice (XML + PDF) to the recipient's email via
+ * Facturapi. Fire-and-forget from the caller's perspective — errors are
+ * logged but do NOT roll back the stamp, since the invoice is already
+ * saved and the merchant can resend manually.
+ * @param {string} invoiceId - FacturAPI invoice ID
+ * @param {string} email - Recipient address (Facturapi accepts one or many)
+ */
+export async function sendInvoiceEmail(invoiceId, email) {
+  const client = await resolveInvoiceClient();
+  try {
+    await client.invoices.sendByEmail(invoiceId, { email });
+    console.log(`[FacturAPI] Invoice ${invoiceId} emailed to ${email}`);
+    return { success: true };
+  } catch (err) {
+    console.error(`[FacturAPI] Failed to email invoice ${invoiceId} to ${email}:`, err.message);
+    return { success: false, error: err.message };
+  }
+}
+
 export async function getInvoiceFiles(orgId, invoiceId) {
   const client = await resolveInvoiceClient();
   try {

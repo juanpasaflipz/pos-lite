@@ -1157,6 +1157,7 @@ export interface CfdiInvoice {
   folio: string;
   receptor_rfc: string;
   receptor_name: string;
+  receptor_email: string | null;
   receptor_uso_cfdi: string;
   subtotal: number;
   tax_total: number;
