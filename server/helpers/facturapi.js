@@ -216,7 +216,7 @@ export async function createInvoice(orgId, { receptor, items, forma_pago, metodo
   if (folio_number != null) invoiceData.folio_number = folio_number;
 
   try {
-    const invoice = await client.invoices.create(invoiceData, { organizationId: orgId });
+    const invoice = await client.invoices.create(invoiceData);
     console.log(`[FacturAPI] Invoice created: ${invoice.id} (org: ${orgId})`);
     return invoice;
   } catch (err) {
