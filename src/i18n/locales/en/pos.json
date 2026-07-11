@@ -523,7 +523,14 @@
     "linkCopied": "Link copied",
     "errorTitle": "Error issuing invoice",
     "errorGeneric": "Error issuing invoice. Please try again.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "resendTitle": "Resend invoice by email",
+    "resendSend": "Send",
+    "resendSendByEmail": "Send by email",
+    "resendCorrect": "Correct / resend email",
+    "resending": "Sending...",
+    "resentTo": "Resent to {{email}}",
+    "resendError": "Could not resend email."
   },
   "oxxo": {
     "title": "OXXO Payment",

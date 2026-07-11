@@ -432,6 +432,8 @@
     "downloadPdf": "Download PDF",
     "cancelInvoice": "Cancel invoice",
     "invoiceCancelled": "Invoice cancelled successfully",
+    "resendEmail": "Resend by email",
+    "emailResent": "Invoice resent by email",
     "errorLoadingInvoices": "Error loading invoices",
     "errorCancellingInvoice": "Error cancelling invoice",
     "showing": "Showing {{from}} - {{to}} of {{total}} invoices",

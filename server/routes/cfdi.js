@@ -466,6 +466,55 @@ router.get('/invoices/:id/pdf', requireAuth('manage_invoicing'), async (req, res
   }
 });
 
+// POST /api/cfdi/invoices/:id/resend-email — resend the stamped invoice to
+// a (possibly corrected) address. Updates receptor_email on success so the
+// row always reflects the last-known-good destination.
+router.post('/invoices/:id/resend-email', requireAuth('manage_invoicing'), async (req, res) => {
+  try {
+    const { email } = req.body;
+    const normalized = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    if (!normalized || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    const invoice = await get(
+      'SELECT id, facturapi_invoice_id, status FROM cfdi_invoices WHERE id = $1',
+      [req.params.id]
+    );
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+    if (invoice.status !== 'valid') {
+      return res.status(400).json({ error: 'Cannot resend a cancelled invoice' });
+    }
+
+    const result = await sendInvoiceEmail(invoice.facturapi_invoice_id, normalized);
+    if (!result.success) {
+      return res.status(502).json({ error: result.error || 'Email send failed at Facturapi' });
+    }
+
+    await run(
+      'UPDATE cfdi_invoices SET receptor_email = $1 WHERE id = $2',
+      [normalized, invoice.id]
+    );
+
+    audit({
+      tenantId: getTenantId(),
+      actorType: 'employee',
+      actorId: req.employee?.id ? String(req.employee.id) : null,
+      action: 'resend_email',
+      resource: 'cfdi_invoices',
+      resourceId: String(invoice.id),
+      details: { email: normalized },
+      ip: req.ip,
+    });
+
+    const updated = await get('SELECT * FROM cfdi_invoices WHERE id = $1', [invoice.id]);
+    res.json(updated);
+  } catch (err) {
+    console.error('[CFDI] Error resending invoice email:', err.message);
+    res.status(500).json({ error: 'Failed to resend invoice email' });
+  }
+});
+
 // ==================== Cancellation ====================
 
 // POST /api/cfdi/invoices/:id/cancel

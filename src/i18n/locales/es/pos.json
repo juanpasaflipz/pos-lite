@@ -523,7 +523,14 @@
     "linkCopied": "Enlace copiado",
     "errorTitle": "Error al emitir factura",
     "errorGeneric": "Error al emitir factura. Intenta de nuevo.",
-    "retry": "Reintentar"
+    "retry": "Reintentar",
+    "resendTitle": "Reenviar factura por correo",
+    "resendSend": "Enviar",
+    "resendSendByEmail": "Enviar por correo",
+    "resendCorrect": "Corregir / reenviar correo",
+    "resending": "Enviando...",
+    "resentTo": "Reenviada a {{email}}",
+    "resendError": "No se pudo reenviar el correo."
   },
   "oxxo": {
     "title": "Pago en OXXO",

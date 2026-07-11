@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Loader2,
   Eye,
+  Mail,
 } from 'lucide-react';
 import { getCfdiInvoices, cancelCfdiInvoice } from '../../api';
 import type { CfdiInvoice, CfdiCatalogs } from '../../types';
@@ -17,6 +18,9 @@ import { formatPrice } from '../../utils/currency';
 
 const CancellationModal = lazy(
   () => import('../cfdi/CancellationModal')
+);
+const ResendEmailModal = lazy(
+  () => import('../cfdi/ResendEmailModal')
 );
 
 function InvoiceStatusBadge({ status, t }: { status: CfdiInvoice['status']; t: (key: string) => string }) {
@@ -74,6 +78,7 @@ export default function InvoiceListTab({ catalogs, onError, onSuccess }: Invoice
   const [invoicePage, setInvoicePage] = useState(1);
   const [invoiceTotal, setInvoiceTotal] = useState(0);
   const [cancellingInvoice, setCancellingInvoice] = useState<CfdiInvoice | null>(null);
+  const [resendingInvoice, setResendingInvoice] = useState<CfdiInvoice | null>(null);
 
   const fetchInvoices = async () => {
     try {
@@ -251,6 +256,15 @@ export default function InvoiceListTab({ catalogs, onError, onSuccess }: Invoice
                         )}
                         {inv.status === 'valid' && (
                           <button
+                            onClick={() => setResendingInvoice(inv)}
+                            title={t('invoicing.resendEmail')}
+                            className="p-2 hover:bg-neutral-700 rounded-lg transition-colors text-neutral-400 hover:text-white"
+                          >
+                            <Mail size={16} />
+                          </button>
+                        )}
+                        {inv.status === 'valid' && (
+                          <button
                             onClick={() => setCancellingInvoice(inv)}
                             title={t('invoicing.cancelInvoice')}
                             className="p-2 hover:bg-cockpit-red/30 rounded-lg transition-colors text-neutral-400 hover:text-cockpit-out-text/90"
@@ -299,6 +313,26 @@ export default function InvoiceListTab({ catalogs, onError, onSuccess }: Invoice
           </div>
         )}
       </div>
+
+      {/* Resend Email Modal */}
+      {resendingInvoice && (
+        <Suspense
+          fallback={
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+              <Loader2 size={32} className="animate-spin text-brand-500" />
+            </div>
+          }
+        >
+          <ResendEmailModal
+            invoice={resendingInvoice}
+            onClose={() => setResendingInvoice(null)}
+            onResent={(updated) => {
+              setInvoices((prev) => prev.map((inv) => (inv.id === updated.id ? updated : inv)));
+              onSuccess(t('invoicing.emailResent'));
+            }}
+          />
+        </Suspense>
+      )}
 
       {/* Cancellation Modal */}
       {cancellingInvoice && catalogs && (

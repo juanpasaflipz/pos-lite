@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, FileText, Download, Copy, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { X, FileText, Download, Copy, Check, AlertCircle, Loader2, Mail } from 'lucide-react';
 import { Order, CfdiInvoice, SatCatalogItem, CfdiCatalogs } from '../../types';
 import { issueCfdiInvoice, getCfdiCatalogs, getInvoiceToken } from '../../api';
 import { formatPrice } from '../../utils/currency';
+
+const ResendEmailModal = lazy(() => import('../cfdi/ResendEmailModal'));
 
 interface InvoiceModalProps {
   order: Order;
@@ -49,6 +51,7 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onInvoiceIs
   const [invoiceTokenUrl, setInvoiceTokenUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [copied, setCopied] = useState(false);
+  const [showResend, setShowResend] = useState(false);
 
   useEffect(() => {
     getCfdiCatalogs()
@@ -364,6 +367,15 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onInvoiceIs
                 </button>
               )}
 
+              {/* Resend by email */}
+              <button
+                onClick={() => setShowResend(true)}
+                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg font-bold text-sm bg-neutral-800 hover:bg-neutral-700 text-white border border-neutral-600 transition-colors"
+              >
+                <Mail className="w-4 h-4" />
+                {issuedInvoice.receptor_email ? t('invoice.resendCorrect') : t('invoice.resendSendByEmail')}
+              </button>
+
               {/* Close */}
               <button
                 onClick={onClose}
@@ -373,6 +385,17 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onInvoiceIs
               </button>
             </div>
           </div>
+        )}
+
+        {/* Resend email modal */}
+        {showResend && issuedInvoice && (
+          <Suspense fallback={null}>
+            <ResendEmailModal
+              invoice={issuedInvoice}
+              onClose={() => setShowResend(false)}
+              onResent={(updated) => setIssuedInvoice(updated)}
+            />
+          </Suspense>
         )}
 
         {/* Error State */}

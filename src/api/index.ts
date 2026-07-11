@@ -2714,6 +2714,13 @@ export async function issueCfdiInvoice(data: {
   });
 }
 
+export async function resendCfdiInvoiceEmail(invoiceId: number, email: string): Promise<CfdiInvoice> {
+  return apiRequest<CfdiInvoice>(`/cfdi/invoices/${invoiceId}/resend-email`, {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
 export async function getCfdiInvoices(params?: {
   page?: number;
   limit?: number;

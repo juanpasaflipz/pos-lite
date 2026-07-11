@@ -431,6 +431,8 @@
     "downloadPdf": "Descargar PDF",
     "cancelInvoice": "Cancelar factura",
     "invoiceCancelled": "Factura cancelada exitosamente",
+    "resendEmail": "Reenviar por correo",
+    "emailResent": "Factura reenviada por correo",
     "errorLoadingInvoices": "Error al cargar facturas",
     "errorCancellingInvoice": "Error al cancelar factura",
     "showing": "Mostrando {{from}} - {{to}} de {{total}} facturas",
