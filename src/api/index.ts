@@ -3877,6 +3877,58 @@ export async function linkExpenseToInventory(
   });
 }
 
+export interface MenuImageUploadResult {
+  uuid: string;
+  image_url: string;
+  variants: { thumb: string; card: string; hero: string };
+  width: number | null;
+  height: number | null;
+  storage: 'r2' | 'disk';
+}
+
+// Upload a menu item photo. Server resizes to webp variants and returns their
+// public URLs; `image_url` (the card variant) is what gets saved on the item.
+export async function uploadMenuImage(file: File): Promise<MenuImageUploadResult> {
+  const formData = new FormData();
+  formData.append('image', file);
+  const base = FALLBACK_URLS.length ? await resolveBaseUrl() : activeBaseUrl;
+  const headers: Record<string, string> = {};
+  if (currentEmployeeToken) headers['Authorization'] = `Bearer ${currentEmployeeToken}`;
+  if (!isCapacitor && window.location.hostname === 'localhost') {
+    const tenantId = localStorage.getItem('tenant_id');
+    if (tenantId) headers['X-Tenant-ID'] = tenantId;
+  }
+  const response = await fetch(`${base}/uploads/menu-image`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error((err as Record<string, string>).error || 'Failed to upload image');
+  }
+  return response.json();
+}
+
+// Delete all variants of a previously uploaded menu photo. Tenant-scoped server-side.
+export async function deleteMenuImage(tenantId: string, uuid: string): Promise<void> {
+  await apiRequest(
+    `/uploads/${encodeURIComponent(tenantId)}/menu/${encodeURIComponent(uuid)}`,
+    { method: 'DELETE' },
+  );
+}
+
+// Pull the {tenantId, uuid} out of a stored menu-image URL so we can clean up
+// the old variants when a photo is replaced/removed. Matches both backends:
+//   disk: /uploads/<tenant>/menu/<uuid>/card.webp
+//   R2:   https://img.desktop.kitchen/<tenant>/menu/<uuid>/card.webp
+// Returns null for externally-pasted URLs (nothing of ours to delete).
+export function extractMenuPhotoRef(url: string | null | undefined): { tenantId: string; uuid: string } | null {
+  if (!url) return null;
+  const m = url.match(/\/([^/]+)\/menu\/([a-f0-9-]{16,})\//i);
+  return m ? { tenantId: m[1], uuid: m[2] } : null;
+}
+
 export async function uploadReceipt(file: File): Promise<{ image_url: string }> {
   const formData = new FormData();
   formData.append('receipt', file);

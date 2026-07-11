@@ -42,6 +42,7 @@ import deliveryIntelRoutes from './routes/delivery-intelligence.js';
 import uberDirectRoutes from './routes/uber-direct.js';
 import getnetRoutes from './routes/getnet.js';
 import getnetWebhook from './routes/getnetWebhook.js';
+import uploadsRoutes from './routes/uploads.js';
 
 // Auth & Account
 import authRoutes from './routes/auth.js';
@@ -239,6 +240,7 @@ app.use('/api/customer-order', customerOrderRoutes);
 app.use('/api/menu-board', menuBoardRoutes);
 
 // Core POS
+app.use('/api/uploads', uploadsRoutes);
 app.use('/api/menu', menuRoutes);
 app.use('/api/orders', ordersRoutes);
 app.use('/api/payments', paymentsRoutes);

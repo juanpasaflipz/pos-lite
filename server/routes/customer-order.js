@@ -126,7 +126,7 @@ router.get('/menu', async (req, res) => {
           name: row.name,
           price: row.price,
           description: row.description,
-          imageUrl: row.show_image ? row.image_url : null,
+          image_url: row.show_image ? row.image_url : null,
         });
       }
 
@@ -165,7 +165,7 @@ router.get('/menu', async (req, res) => {
           name: item.name,
           price: item.price,
           description: item.description,
-          imageUrl: item.image_url,
+          image_url: item.image_url,
         });
       }
     }

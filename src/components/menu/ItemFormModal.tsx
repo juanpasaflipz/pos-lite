@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Check, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { X, Check, SlidersHorizontal, Trash2, Upload, Loader2 } from 'lucide-react';
 import { MenuCategory, ModifierGroup } from '../../types';
+import { FEATURES } from '../../lib/features';
+import { uploadMenuImage, deleteMenuImage, extractMenuPhotoRef } from '../../api';
 
 interface FormData {
   name: string;
@@ -49,6 +51,47 @@ export default function ItemFormModal({
 }: ItemFormModalProps) {
   const { t } = useTranslation('inventory');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Best-effort removal of the previously stored photo — only our own uploads
+  // (externally-pasted URLs return null and are left alone). Non-critical: a
+  // failed cleanup just leaves an orphaned object, never blocks the save.
+  const cleanupPrevious = async (prevUrl: string | null | undefined) => {
+    const ref = extractMenuPhotoRef(prevUrl);
+    if (ref) {
+      try {
+        await deleteMenuImage(ref.tenantId, ref.uuid);
+      } catch {
+        /* orphan cleanup is non-critical */
+      }
+    }
+  };
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (e.target) e.target.value = ''; // allow re-selecting the same file
+    if (!file) return;
+    setUploadError(null);
+    setUploading(true);
+    const previous = formData.image_url;
+    try {
+      const result = await uploadMenuImage(file);
+      onFormData({ ...formData, image_url: result.image_url });
+      void cleanupPrevious(previous);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : t('menu.form.uploadError'));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    const previous = formData.image_url;
+    onFormData({ ...formData, image_url: '' });
+    void cleanupPrevious(previous);
+  };
 
   if (!modalMode) return null;
 
@@ -145,25 +188,64 @@ export default function ItemFormModal({
 
           <div>
             <label className="block text-sm font-medium text-neutral-300 mb-2">
-              {t('menu.form.imageUrl')}
+              {t('menu.form.photo')}
             </label>
-            <input
-              type="url"
-              value={formData.image_url}
-              onChange={(e) => onFormData({ ...formData, image_url: e.target.value })}
-              placeholder={t('menu.form.imageUrlPlaceholder')}
-              className="w-full px-4 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-brand-600"
-            />
+
             {formData.image_url && (
-              <div className="mt-2 rounded-lg overflow-hidden border border-neutral-700 h-32 bg-neutral-800">
+              <div className="mb-2 relative rounded-lg overflow-hidden border border-neutral-700 h-32 bg-neutral-800">
                 <img
                   src={formData.image_url}
                   alt="Preview"
                   className="w-full h-full object-cover"
                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                 />
+                <button
+                  type="button"
+                  onClick={handleRemovePhoto}
+                  className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-full p-1.5"
+                  aria-label={t('menu.form.removePhoto')}
+                >
+                  <Trash2 size={16} />
+                </button>
               </div>
             )}
+
+            {FEATURES.menuPhotos && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileSelected}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="w-full px-4 py-2 border border-neutral-700 rounded-lg text-neutral-300 hover:bg-neutral-800 transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2 min-h-[44px]"
+                >
+                  {uploading ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+                  {uploading
+                    ? t('menu.form.uploading')
+                    : formData.image_url
+                      ? t('menu.form.replacePhoto')
+                      : t('menu.form.uploadPhoto')}
+                </button>
+                {uploadError && <p className="text-brand-400 text-sm mt-1">{uploadError}</p>}
+              </>
+            )}
+
+            <label className="block text-xs font-medium text-neutral-500 mt-3 mb-1">
+              {t('menu.form.orPasteUrl')}
+            </label>
+            <input
+              type="url"
+              value={formData.image_url}
+              onChange={(e) => onFormData({ ...formData, image_url: e.target.value })}
+              placeholder={t('menu.form.imageUrlPlaceholder')}
+              className="w-full px-4 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-brand-600 text-sm"
+            />
           </div>
 
           <div>

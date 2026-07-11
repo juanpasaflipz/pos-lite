@@ -290,7 +290,7 @@ router.get('/items/:id', async (req, res) => {
 // POST /api/menu/items - create item (admin)
 router.post('/items', requireAuth('manage_menu'), async (req, res) => {
   try {
-    const { category_id, name, price, description, image_url, sort_order, prep_time_minutes, active } = req.body;
+    const { category_id, name, price, description, image_url, sort_order, prep_time_minutes, active, image_width, image_height } = req.body;
 
     if (!category_id || !name || price === undefined) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -314,10 +314,14 @@ router.post('/items', requireAuth('manage_menu'), async (req, res) => {
       ? await get('SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM menu_items WHERE category_id = $1', [category_id])
       : null;
     const resolvedSortOrder = explicitSortOrder ?? ((Number(maxSort?.max_sort) || 0) + 1);
+    // Stamp uploader/time only when a photo is actually attached.
+    const imageUploadedAt = image_url ? new Date().toISOString() : null;
+    const imageUploadedBy = image_url ? (req.employee?.id ?? null) : null;
     const result = await run(`
-      INSERT INTO menu_items (tenant_id, category_id, name, price, description, image_url, sort_order, active, prep_time_minutes)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-    `, [tid, category_id, name, price, description || null, image_url || null, resolvedSortOrder, isActive, prep_time_minutes || 5]);
+      INSERT INTO menu_items (tenant_id, category_id, name, price, description, image_url, sort_order, active, prep_time_minutes, image_width, image_height, image_uploaded_at, image_uploaded_by)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+    `, [tid, category_id, name, price, description || null, image_url || null, resolvedSortOrder, isActive, prep_time_minutes || 5,
+        image_width == null ? null : Number(image_width), image_height == null ? null : Number(image_height), imageUploadedAt, imageUploadedBy]);
 
     audit({
       tenantId: req.tenant?.id || 'default',
@@ -348,7 +352,7 @@ router.post('/items', requireAuth('manage_menu'), async (req, res) => {
 router.put('/items/:id', requireAuth('manage_menu'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { category_id, name, price, description, image_url, sort_order, prep_time_minutes, active } = req.body;
+    const { category_id, name, price, description, image_url, sort_order, prep_time_minutes, active, image_width, image_height } = req.body;
 
     // Check if item exists
     const item = await get('SELECT id FROM menu_items WHERE id = $1', [id]);
@@ -378,6 +382,20 @@ router.put('/items/:id', requireAuth('manage_menu'), async (req, res) => {
     if (image_url !== undefined) {
       updates.push(`image_url = $${values.length + 1}`);
       values.push(image_url);
+      // Re-stamp the uploader/time when a photo is set or replaced; clear both
+      // when the photo is removed (image_url set to null/empty).
+      updates.push(`image_uploaded_at = $${values.length + 1}`);
+      values.push(image_url ? new Date().toISOString() : null);
+      updates.push(`image_uploaded_by = $${values.length + 1}`);
+      values.push(image_url ? (req.employee?.id ?? null) : null);
+    }
+    if (image_width !== undefined) {
+      updates.push(`image_width = $${values.length + 1}`);
+      values.push(image_width === null ? null : Number(image_width));
+    }
+    if (image_height !== undefined) {
+      updates.push(`image_height = $${values.length + 1}`);
+      values.push(image_height === null ? null : Number(image_height));
     }
     if (sort_order !== undefined) {
       updates.push(`sort_order = $${values.length + 1}`);

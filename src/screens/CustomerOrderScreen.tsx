@@ -26,7 +26,7 @@ interface MenuItemData {
   name: string;
   price: number;
   description?: string;
-  imageUrl?: string | null;
+  image_url?: string | null;
 }
 
 interface CategoryData {
@@ -755,9 +755,9 @@ export default function CustomerOrderScreen() {
                   onClick={() => openItem(item)}
                   className="w-full bg-neutral-900 border border-neutral-800 rounded-xl p-4 flex gap-4 text-left hover:border-neutral-700 transition-colors active:scale-[0.98]"
                 >
-                  {item.imageUrl && (
+                  {item.image_url && (
                     <img
-                      src={item.imageUrl}
+                      src={item.image_url}
                       alt={item.name}
                       className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
                     />
@@ -821,9 +821,9 @@ export default function CustomerOrderScreen() {
 
             {/* Modal body */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {selectedItem.imageUrl && (
+              {selectedItem.image_url && (
                 <img
-                  src={selectedItem.imageUrl}
+                  src={selectedItem.image_url}
                   alt={selectedItem.name}
                   className="w-full h-48 object-cover rounded-xl"
                 />
