@@ -146,7 +146,7 @@ export async function testStamp(orgId) {
   try {
     const client = await resolveClient();
     const org = await client.organizations.retrieve(orgId);
-    if (org.certificate && org.certificate.is_valid) {
+    if (org.certificate && org.certificate.has_certificate) {
       return { success: true, expires_at: org.certificate.expires_at };
     }
     return { success: false, error: 'CSD not valid or not uploaded' };
