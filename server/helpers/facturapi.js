@@ -195,7 +195,7 @@ export async function testStamp(orgId) {
  * @param {number} [params.folio_number] - Folio number
  * @returns {Object} The created invoice object from FacturAPI
  */
-export async function createInvoice(orgId, { receptor, items, forma_pago, metodo_pago, series, folio_number, informacion_global }) {
+export async function createInvoice(orgId, { receptor, items, forma_pago, metodo_pago, series, folio_number, global: globalInfo }) {
   const client = await resolveInvoiceClient();
 
   const invoiceData = {
@@ -214,7 +214,7 @@ export async function createInvoice(orgId, { receptor, items, forma_pago, metodo
 
   if (series) invoiceData.series = series;
   if (folio_number != null) invoiceData.folio_number = folio_number;
-  if (informacion_global) invoiceData.informacion_global = informacion_global;
+  if (globalInfo) invoiceData.global = globalInfo;
 
   try {
     const invoice = await client.invoices.create(invoiceData);

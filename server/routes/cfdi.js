@@ -260,13 +260,15 @@ router.post('/invoices', requireAuth('manage_invoicing'), async (req, res) => {
     const cfdiItems = mapOrderItemsToCFDI(items);
     const formaPago = mapPaymentToFormaPago(order.payment_method);
 
-    // CFDI 4.0 requires informacion_global for Público en General (XAXX)
+    // CFDI 4.0 requires a `global` node for Público en General (XAXX)
     // invoices. Per-order XAXX is treated as a daily aggregation of one sale.
-    let informacion_global = null;
+    // Facturapi's SDK expects string enum values ('day', 'week', ...), not
+    // SAT numeric codes ('01', '02', ...).
+    let global = null;
     if (publico_general) {
       const now = new Date();
-      informacion_global = {
-        periodicity: '01', // 01 = diario
+      global = {
+        periodicity: 'day',
         months: String(now.getMonth() + 1).padStart(2, '0'),
         year: now.getFullYear(),
       };
@@ -279,7 +281,7 @@ router.post('/invoices', requireAuth('manage_invoicing'), async (req, res) => {
       forma_pago: formaPago,
       metodo_pago: 'PUE',
       series: config.invoice_series,
-      informacion_global,
+      global,
     });
 
     // Save invoice record. Partial unique index (mig 0074) will 23505 if
