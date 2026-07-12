@@ -9,11 +9,14 @@ import {
   createInvoice,
   cancelInvoice,
   getInvoiceFiles,
+  getInvoiceXml,
   sendInvoiceEmail,
   mapPaymentToFormaPago,
-  mapOrderItemsToCFDI,
   generateInvoiceToken,
 } from '../helpers/facturapi.js';
+import { buildGenericInvoicePayload, verifyStampedTotal, extractCfdiTotals } from '../helpers/cfdiConcept.js';
+import { validateReceptor, normalizeEmail } from '../helpers/cfdiValidation.js';
+import { fromCents } from '../helpers/money.js';
 import { getServiceCredentials } from '../helpers/tenantCredentials.js';
 import { taxRegimes, usoCfdi, formaPago, cancellationMotives } from '../data/sat-catalogs.js';
 import { audit } from '../lib/auditLog.js';
@@ -208,7 +211,10 @@ router.post('/invoices', requireAuth('manage_invoicing'), async (req, res) => {
       return res.status(400).json({ error: 'This order already has an invoice' });
     }
 
-    // Fetch order with items
+    // Fetch order. We no longer read order_items — the CFDI is a single
+    // generic concept ("Consumo de alimentos y bebidas") built from
+    // order.total. The items check below is kept as a sanity gate against
+    // stamping an empty ticket.
     const order = await get(`
       SELECT id, order_number, subtotal, tax, total, payment_method, payment_status
       FROM orders WHERE id = $1
@@ -222,12 +228,15 @@ router.post('/invoices', requireAuth('manage_invoicing'), async (req, res) => {
       return res.status(400).json({ error: 'Order must be paid before invoicing' });
     }
 
-    const items = await all('SELECT * FROM order_items WHERE order_id = $1', [order_id]);
-    if (items.length === 0) {
+    const itemCount = await get('SELECT COUNT(*)::int AS n FROM order_items WHERE order_id = $1', [order_id]);
+    if (!itemCount || itemCount.n === 0) {
       return res.status(400).json({ error: 'Order has no items' });
     }
 
-    // Build receptor data
+    // Build + validate receptor data. Público-en-general short-circuits the
+    // validator with the SAT-mandated XAXX fixture; regular customers go
+    // through validateReceptor() which handles RFC shape, 5-digit zip, name
+    // normalization, and uso_cfdi default.
     let receptorData;
     if (publico_general) {
       receptorData = {
@@ -238,33 +247,16 @@ router.post('/invoices', requireAuth('manage_invoicing'), async (req, res) => {
         uso_cfdi: 'S01',
       };
     } else {
-      if (!receptor || !receptor.rfc || !receptor.name || !receptor.tax_regime || !receptor.postal_code) {
-        return res.status(400).json({ error: 'Receptor RFC, name, tax regime, and postal code are required' });
-      }
-      receptorData = {
-        rfc: receptor.rfc.toUpperCase().trim(),
-        name: receptor.name.toUpperCase().trim(),
-        tax_regime: receptor.tax_regime,
-        postal_code: receptor.postal_code,
-        uso_cfdi: receptor.uso_cfdi || config.default_uso_cfdi || 'G03',
-      };
-    }
-
-    // Validate RFC format
-    const rfcRegex = /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/i;
-    const specialRFCs = ['XAXX010101000', 'XEXX010101000'];
-    if (!specialRFCs.includes(receptorData.rfc) && !rfcRegex.test(receptorData.rfc)) {
-      return res.status(400).json({ error: 'Invalid RFC format' });
+      const v = validateReceptor(receptor, { defaultUsoCfdi: config.default_uso_cfdi || 'G03' });
+      if (!v.ok) return res.status(400).json({ error: v.error });
+      receptorData = v.receptor;
     }
 
     // Normalize and lightly validate the recipient email (optional).
-    const emailNormalized = typeof email === 'string' ? email.trim().toLowerCase() : '';
-    if (emailNormalized && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNormalized)) {
-      return res.status(400).json({ error: 'Invalid email format' });
-    }
+    const emailResult = normalizeEmail(email);
+    if (!emailResult.ok) return res.status(400).json({ error: emailResult.error });
+    const emailNormalized = emailResult.email;
 
-    // Map order items to CFDI format
-    const cfdiItems = mapOrderItemsToCFDI(items);
     const formaPago = mapPaymentToFormaPago(order.payment_method);
 
     // CFDI 4.0 requires a `global` node for Público en General (XAXX)
@@ -281,22 +273,151 @@ router.post('/invoices', requireAuth('manage_invoicing'), async (req, res) => {
       };
     }
 
-    // Create invoice via FacturAPI
+    // Build the generic-concept payload. Pure function — subtotal/IVA are
+    // computed locally in cents so subtotal + iva === order.total exactly.
+    const { payload, subtotalCents, taxCents, totalCents } = buildGenericInvoicePayload({
+      order,
+      receptor: receptorData,
+      config,
+      formaPago,
+      metodoPago: 'PUE',
+      global,
+    });
+
+    // Stamp via FacturAPI.
     const invoice = await createInvoice(config.facturapi_org_id, {
       receptor: receptorData,
-      items: cfdiItems,
-      forma_pago: formaPago,
-      metodo_pago: 'PUE',
+      items: payload.items,
+      forma_pago: payload.payment_form,
+      metodo_pago: payload.payment_method,
       series: config.invoice_series,
       global,
     });
+
+    // Post-stamp verification: Facturapi recomputes IVA from the subtotal we
+    // sent. If their rounding disagrees with ours by even 1 cent, the
+    // stamped Total won't equal what the customer paid — we cannot deliver
+    // that document.
+    //
+    // Persist FIRST, cancel SECOND: the CFDI already exists at the SAT. If
+    // we tried cancel-first and the cancel failed (network hiccup, provider
+    // error), we'd have a live fiscal document with no local trace — the
+    // partial unique index couldn't see it, and a retry would double-stamp.
+    // Persisting with status='stamped_mismatch' means the index blocks
+    // reissue until the orphan is cancelled (either by the inline cancel
+    // below, or by a reconciler / admin). Values persisted are the RESPONSE
+    // subtotal/tax/total — those reflect what's actually on the SAT stamp.
+    const tid = getTenantId();
+    const check = verifyStampedTotal(invoice, totalCents);
+    if (!check.ok) {
+      console.error(
+        `[CFDI] STAMPED TOTAL MISMATCH order=${order_id} facturapi=${invoice.id} ` +
+        `expected_cents=${check.expected} actual_cents=${check.actual} delta=${check.deltaCents}`
+      );
+
+      const stampedTotalCents = Number.isFinite(check.actual) ? check.actual : null;
+      try {
+        await run(`
+          INSERT INTO cfdi_invoices (
+            tenant_id, order_id, facturapi_invoice_id, uuid_fiscal, series, folio,
+            receptor_rfc, receptor_name, receptor_tax_regime, receptor_postal_code, receptor_uso_cfdi, receptor_email,
+            subtotal, tax_total, total, forma_pago, metodo_pago,
+            xml_url, pdf_url, requested_by, status, provider_response
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, 'stamped_mismatch', $21::jsonb)
+        `, [
+          tid, order_id, invoice.id, invoice.uuid || null, invoice.series || null, invoice.folio_number || null,
+          receptorData.rfc, receptorData.name, receptorData.tax_regime, receptorData.postal_code, receptorData.uso_cfdi, emailNormalized || null,
+          invoice.subtotal ?? null, invoice.taxes_transferred ?? invoice.total_taxes ?? null,
+          stampedTotalCents != null ? fromCents(stampedTotalCents) : null,
+          formaPago, 'PUE',
+          invoice.xml_url || null, invoice.pdf_url || null, 'staff', JSON.stringify(invoice),
+        ]);
+      } catch (mismatchInsertErr) {
+        // Even if the row can't be persisted (23505 race, or hard DB error),
+        // we still want to try to cancel the orphan and surface the alert.
+        console.error(`[CFDI] Failed to persist mismatch row for orphan ${invoice.id}:`, mismatchInsertErr.message);
+      }
+
+      let cancelled = false;
+      try {
+        // SAT motive '02' = comprobantes con errores sin relación.
+        await cancelInvoice(config.facturapi_org_id, invoice.id, '02');
+        cancelled = true;
+        await run(
+          `UPDATE cfdi_invoices SET status = 'cancelled', cancellation_reason = 'total_mismatch_auto_cancelled', cancelled_at = NOW()
+           WHERE facturapi_invoice_id = $1`,
+          [invoice.id],
+        );
+      } catch (cancelErr) {
+        console.error(`[CFDI] Failed to auto-cancel mismatch invoice ${invoice.id}:`, cancelErr.message);
+      }
+
+      audit({
+        tenantId: tid,
+        actorType: 'employee',
+        actorId: req.employee?.id ? String(req.employee.id) : null,
+        action: 'stamp_mismatch',
+        resource: 'cfdi_invoices',
+        resourceId: invoice.id,
+        details: {
+          order_id,
+          expected_total_cents: check.expected,
+          actual_total_cents: check.actual,
+          delta_cents: check.deltaCents,
+          facturapi_invoice_id: invoice.id,
+          uuid_fiscal: invoice.uuid || null,
+          auto_cancelled: cancelled,
+        },
+        ip: req.ip,
+      });
+      return res.status(502).json({
+        error: cancelled
+          ? 'Invoice total mismatch — invoice was cancelled at Facturapi. Please retry.'
+          : 'Invoice total mismatch — orphaned stamp requires manual cancellation. Please contact support.',
+      });
+    }
+
+    // Pull the stamped XML and extract SAT-authoritative SubTotal + IVA.
+    // Facturapi's response doesn't surface its internal back-split, but
+    // the XML carries the 2-decimal display values that appear on the
+    // printed invoice and that the SAT records. Persisting those means
+    // our cfdi_invoices row mirrors the legal document exactly — no
+    // ±1-cent drift between our DB and IVA declarations.
+    //
+    // Fetch failure is non-fatal: the stamp is valid, we just fall back
+    // to the advisory local split for persistence. Logged so recurring
+    // fetch problems surface in Sentinel.
+    let stampedSubtotalCents = subtotalCents;
+    let stampedTaxCents = taxCents;
+    let extractSource = 'local_advisory';
+    try {
+      const xml = await getInvoiceXml(invoice.id);
+      const stamped = extractCfdiTotals(xml);
+      if (stamped) {
+        if (stamped.totalCents !== totalCents) {
+          console.warn(
+            `[CFDI] XML total (${stamped.totalCents}c) disagrees with response total (${totalCents}c) for ${invoice.id} — persisting XML values`,
+          );
+        }
+        stampedSubtotalCents = stamped.subtotalCents;
+        stampedTaxCents = stamped.taxCents;
+        extractSource = 'xml';
+      } else {
+        console.warn(`[CFDI] Could not parse SubTotal/Total from XML for ${invoice.id}; falling back to advisory split`);
+      }
+    } catch (xmlErr) {
+      console.warn(`[CFDI] XML fetch failed for ${invoice.id}: ${xmlErr.message}; falling back to advisory split`);
+    }
 
     // Save invoice record. Partial unique index (mig 0074) will 23505 if
     // another request already inserted a live invoice for this order — the
     // CFDI was still stamped at FacturAPI, so we surface a 409 rather than a
     // 500 so the UI can render "already invoiced" instead of "try again"
     // (which would double-stamp).
-    const tid = getTenantId();
+    //
+    // subtotal/tax_total = SAT-authoritative XML values when available,
+    // advisory local split as fallback. total = ticket total (verified
+    // equal to response total and, when XML available, to XML total).
     let result;
     try {
       result = await run(`
@@ -304,13 +425,13 @@ router.post('/invoices', requireAuth('manage_invoicing'), async (req, res) => {
           tenant_id, order_id, facturapi_invoice_id, uuid_fiscal, series, folio,
           receptor_rfc, receptor_name, receptor_tax_regime, receptor_postal_code, receptor_uso_cfdi, receptor_email,
           subtotal, tax_total, total, forma_pago, metodo_pago,
-          xml_url, pdf_url, requested_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+          xml_url, pdf_url, requested_by, provider_response
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21::jsonb)
       `, [
         tid, order_id, invoice.id, invoice.uuid, invoice.series, invoice.folio_number,
         receptorData.rfc, receptorData.name, receptorData.tax_regime, receptorData.postal_code, receptorData.uso_cfdi, emailNormalized || null,
-        order.subtotal, order.tax, order.total, formaPago, 'PUE',
-        invoice.xml_url || null, invoice.pdf_url || null, 'staff',
+        fromCents(stampedSubtotalCents), fromCents(stampedTaxCents), fromCents(totalCents), formaPago, 'PUE',
+        invoice.xml_url || null, invoice.pdf_url || null, 'staff', JSON.stringify(invoice),
       ]);
     } catch (insertErr) {
       if (insertErr.code === PG_UNIQUE_VIOLATION) {
@@ -337,7 +458,10 @@ router.post('/invoices', requireAuth('manage_invoicing'), async (req, res) => {
         facturapi_invoice_id: invoice.id,
         uuid_fiscal: invoice.uuid,
         receptor_rfc: receptorData.rfc,
-        total: order.total,
+        subtotal_cents: stampedSubtotalCents,
+        tax_cents: stampedTaxCents,
+        total_cents: totalCents,
+        extract_source: extractSource,
         publico_general: !!publico_general,
         receptor_email: emailNormalized || null,
       },

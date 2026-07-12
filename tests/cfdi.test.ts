@@ -29,6 +29,10 @@ import {
 } from './helpers/db.js';
 // @ts-ignore
 import { adminSql, get, run } from '../server/db/index.js';
+// @ts-ignore
+import { buildGenericInvoicePayload } from '../server/helpers/cfdiConcept.js';
+// @ts-ignore
+import { fromCents, toCents } from '../server/helpers/money.js';
 
 let tenant: TestTenant;
 let employeeId: number;
@@ -86,6 +90,148 @@ describe('unique-active partial index (migration 0074)', () => {
 
     // A substitute invoice for the same order should now insert cleanly.
     await expect(insertInvoice({ facturapi_invoice_id: 'fapi_substitute' })).resolves.not.toThrow();
+  });
+});
+
+describe('generic-concept flow — computed cents round-trip through cfdi_invoices', () => {
+  it('a row built from the generic-concept builder inserts + blocks reissue', async () => {
+    // Prove the schema accepts values produced by buildGenericInvoicePayload
+    // (cents-derived NUMERIC(12,2) subtotal/tax/total) AND that the unique-
+    // active partial index still blocks a second live invoice for the same
+    // order — the generic-concept switch didn't weaken the double-stamp
+    // safety net.
+    const built = buildGenericInvoicePayload({
+      order: { total: 100.01 }, // adversarial: forces drift reconciliation
+      receptor: {
+        rfc: 'XAXX010101000',
+        name: 'PUBLICO EN GENERAL',
+        tax_regime: '616',
+        postal_code: '01000',
+        uso_cfdi: 'S01',
+      },
+      config: { invoice_series: 'DK' },
+      formaPago: '01',
+    });
+    // Free the order slot: earlier tests leave a 'valid' substitute row on
+    // this orderId. The partial unique index would fail our first insert
+    // otherwise. Cancelling all extant valid rows for this order is the
+    // same operation a real cancel-then-reissue flow would perform.
+    await adminSql`
+      UPDATE cfdi_invoices SET status = 'cancelled', cancelled_at = NOW()
+      WHERE order_id = ${orderId} AND status = 'valid'
+    `;
+
+    // Insert with generic-concept values.
+    await asTenant(tenant.id, () =>
+      run(
+        `INSERT INTO cfdi_invoices
+           (order_id, facturapi_invoice_id, receptor_rfc, receptor_name,
+            subtotal, tax_total, total, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'valid')`,
+        [
+          orderId,
+          'fapi_generic_' + randomUUID(),
+          'XAXX010101000',
+          'PUBLICO EN GENERAL',
+          fromCents(built.subtotalCents),
+          fromCents(built.taxCents),
+          fromCents(built.totalCents),
+        ],
+      ),
+    );
+
+    // Second live invoice for same order → partial unique index kicks in.
+    await expect(
+      asTenant(tenant.id, () =>
+        run(
+          `INSERT INTO cfdi_invoices
+             (order_id, facturapi_invoice_id, receptor_rfc, receptor_name,
+              subtotal, tax_total, total, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'valid')`,
+          [
+            orderId,
+            'fapi_generic_dup_' + randomUUID(),
+            'XAXX010101000',
+            'PUBLICO EN GENERAL',
+            fromCents(built.subtotalCents),
+            fromCents(built.taxCents),
+            fromCents(built.totalCents),
+          ],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: '23505' });
+
+    // Persisted row's total must equal the ticket total to the cent —
+    // the invariant the generic-concept design exists to enforce. Compare
+    // in CENTS: the whole reason this module exists is that
+    // 86.22 + 13.79 !== 100.01 in floating point.
+    const row = await asTenant(tenant.id, () =>
+      get(
+        `SELECT subtotal::text AS subtotal, tax_total::text AS tax_total, total::text AS total
+         FROM cfdi_invoices WHERE order_id = $1 AND status = 'valid'`,
+        [orderId],
+      ),
+    );
+    expect(toCents(row.total)).toBe(10001);
+    expect(toCents(row.subtotal) + toCents(row.tax_total)).toBe(toCents(row.total));
+  });
+
+  it('mismatch orphan row (status=stamped_mismatch) blocks reissue, then unblocks after cancel', async () => {
+    // Simulate the mismatch branch: Facturapi stamped a CFDI, our verify
+    // caught a total divergence, we persisted a row with status='stamped_
+    // mismatch' + provider_response, and the inline cancel FAILED (network
+    // hiccup). The partial unique index treats non-cancelled rows as active,
+    // so a customer retry MUST be blocked until an admin/reconciler
+    // cancels the orphan.
+    await adminSql`
+      UPDATE cfdi_invoices SET status = 'cancelled', cancelled_at = NOW()
+      WHERE order_id = ${orderId} AND status <> 'cancelled'
+    `;
+
+    // Persist the orphan.
+    const orphanId = 'fapi_orphan_' + randomUUID();
+    await asTenant(tenant.id, () =>
+      run(
+        `INSERT INTO cfdi_invoices
+           (order_id, facturapi_invoice_id, receptor_rfc, receptor_name,
+            subtotal, tax_total, total, status)
+         VALUES ($1, $2, 'XAXX010101000', 'PUBLICO EN GENERAL',
+                 86.22, 13.79, 100.01, 'stamped_mismatch')`,
+        [orderId, orphanId],
+      ),
+    );
+
+    // Retry attempt: partial unique index sees status <> 'cancelled' and
+    // blocks the second insert. This is the guarantee the user flagged as
+    // load-bearing — without the persisted row, this retry would succeed
+    // and double-stamp at the SAT.
+    await expect(
+      asTenant(tenant.id, () =>
+        run(
+          `INSERT INTO cfdi_invoices
+             (order_id, facturapi_invoice_id, receptor_rfc, receptor_name, status)
+           VALUES ($1, 'fapi_retry_after_orphan', 'XAXX010101000', 'PUBLICO EN GENERAL', 'valid')`,
+          [orderId],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: '23505' });
+
+    // Admin/reconciler cancels the orphan → status='cancelled' →
+    // partial index frees → reissue now succeeds.
+    await adminSql`
+      UPDATE cfdi_invoices SET status = 'cancelled', cancellation_reason = 'total_mismatch_auto_cancelled', cancelled_at = NOW()
+      WHERE facturapi_invoice_id = ${orphanId}
+    `;
+    await expect(
+      asTenant(tenant.id, () =>
+        run(
+          `INSERT INTO cfdi_invoices
+             (order_id, facturapi_invoice_id, receptor_rfc, receptor_name, status)
+           VALUES ($1, 'fapi_reissue_after_cancel', 'XAXX010101000', 'PUBLICO EN GENERAL', 'valid')`,
+          [orderId],
+        ),
+      ),
+    ).resolves.not.toThrow();
   });
 });
 

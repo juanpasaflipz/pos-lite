@@ -188,7 +188,7 @@ export async function testStamp(orgId) {
  * @param {string} params.receptor.tax_regime - Regimen fiscal del receptor
  * @param {string} params.receptor.postal_code - Codigo postal del receptor
  * @param {string} [params.receptor.uso_cfdi='G03'] - Uso del CFDI
- * @param {Array} params.items - Pre-mapped CFDI line items (use mapOrderItemsToCFDI)
+ * @param {Array} params.items - Pre-mapped CFDI line items (typically from buildGenericInvoicePayload)
  * @param {string} params.forma_pago - SAT forma de pago code (use mapPaymentToFormaPago)
  * @param {string} [params.metodo_pago='PUE'] - SAT metodo de pago
  * @param {string} [params.series] - Invoice series
@@ -278,6 +278,28 @@ export async function sendInvoiceEmail(invoiceId, email) {
   }
 }
 
+/**
+ * Downloads the stamped CFDI 4.0 XML for an invoice and returns it as a
+ * UTF-8 string. Used by the route layer to extract authoritative SubTotal
+ * / TotalImpuestosTrasladados directly from the SAT-facing document (see
+ * helpers/cfdiConcept.js `extractCfdiTotals`).
+ *
+ * Facturapi's SDK returns a Readable stream. We concat + decode here so
+ * callers get a plain string and don't have to touch stream plumbing.
+ *
+ * @param {string} invoiceId - FacturAPI invoice ID.
+ * @returns {Promise<string>} XML content.
+ */
+export async function getInvoiceXml(invoiceId) {
+  const client = await resolveInvoiceClient();
+  const stream = await client.invoices.downloadXml(invoiceId);
+  const chunks = [];
+  for await (const chunk of stream) {
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 export async function getInvoiceFiles(orgId, invoiceId) {
   const client = await resolveInvoiceClient();
   try {
@@ -311,6 +333,14 @@ export function mapPaymentToFormaPago(paymentMethod) {
 /**
  * Maps POS order items to FacturAPI CFDI 4.0 line items.
  * Prices in the POS include IVA, so we extract the pre-tax price.
+ *
+ * @deprecated Not used by the standard invoicing flow. Restaurant CFDIs
+ *   are now issued as a single "Consumo de alimentos y bebidas" generic
+ *   concept via helpers/cfdiConcept.js — see the spec discussion for why
+ *   itemization is the wrong default (IEPS handling, drift, receipt-vs-
+ *   invoice-total mismatches). Kept because Desktop Kitchen plans an
+ *   "itemized invoice" toggle for corporate clients that require detail;
+ *   when that ships, this mapper is its foundation.
  *
  * @param {Array} orderItems - Order items from the database
  * @param {number} [taxRate=0.16] - IVA tax rate (16% default for Mexico)
