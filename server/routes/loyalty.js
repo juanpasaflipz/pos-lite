@@ -255,17 +255,11 @@ router.post('/customers/:id/stamps', requireAuth('pos_access'), requirePlanFeatu
     // is about to fire and mentions stamp progress — avoids two SMS ~10s apart.
     // Card-completed SMS still fires unconditionally so the customer never
     // misses the "🎉 tarjeta llena" moment even if the cashier skips receipt.
+    // total_spent is now rolled up inside addStampsForOrder so every caller
+    // (kiosk, POS auto-stamp, this route) increments it consistently.
     const result = await addStampsForOrder(customerId, order_id, null, req.tenant?.name || 'Restaurant', {
       sendStampEarnedSms: !suppress_stamp_earned_sms,
     });
-
-    // Update total_spent from order
-    if (order_id) {
-      const order = await get('SELECT total FROM orders WHERE id = $1', [order_id]);
-      if (order) {
-        await run('UPDATE loyalty_customers SET total_spent = total_spent + $1 WHERE id = $2', [order.total, customerId]);
-      }
-    }
 
     res.json(result);
   } catch (err) {

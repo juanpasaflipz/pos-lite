@@ -145,16 +145,20 @@ export async function addStampsForOrder(customerId, orderId, count = null, resta
     sendStampEarnedSms = sendSms,
     sendCardCompletedSms = sendSms,
   } = options;
+  // Load the order once so we can (a) compute count when the caller passes
+  // null and (b) roll the order total into loyalty_customers.total_spent
+  // below. Previously total_spent was updated only inside the /customers/:id/stamp
+  // route, so kiosk + POS auto-stamp paths left it at 0 forever.
+  let orderTotal = 0;
+  if (orderId) {
+    const order = await get('SELECT total FROM orders WHERE id = $1', [orderId]);
+    orderTotal = Number(order?.total) || 0;
+  }
   // count=null → compute from order total: 1 base stamp + 1 extra per stamp_bonus_threshold spent.
   // Falls back to 1 stamp if the order can't be loaded.
   if (count === null || count === undefined) {
-    let total = 0;
-    if (orderId) {
-      const order = await get('SELECT total FROM orders WHERE id = $1', [orderId]);
-      total = Number(order?.total) || 0;
-    }
     const threshold = parseFloat(await getConfigValue('stamp_bonus_threshold', '400')) || 400;
-    count = 1 + Math.floor(total / threshold);
+    count = 1 + Math.floor(orderTotal / threshold);
   }
   count = Math.max(1, parseInt(count, 10) || 1);
 
@@ -177,10 +181,17 @@ export async function addStampsForOrder(customerId, orderId, count = null, resta
     [card.id, orderId, count]
   );
 
-  // Update customer totals
+  // Update customer totals — stamps + order count + spend + last_visit in one
+  // write. total_spent rolls up the order total so the Loyalty y CRM "Gastado"
+  // column stays accurate regardless of which caller granted the stamp.
   await run(
-    `UPDATE loyalty_customers SET stamps_earned = stamps_earned + $1, orders_count = orders_count + 1, last_visit = NOW() WHERE id = $2`,
-    [count, customerId]
+    `UPDATE loyalty_customers
+       SET stamps_earned = stamps_earned + $1,
+           orders_count  = orders_count + 1,
+           total_spent   = total_spent + $2,
+           last_visit    = NOW()
+     WHERE id = $3`,
+    [count, orderTotal, customerId]
   );
 
   // Link order to customer
