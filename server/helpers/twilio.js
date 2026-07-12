@@ -59,11 +59,15 @@ async function resolveTwilio() {
  * Format a phone number to E.164 for WhatsApp delivery. WhatsApp uses the
  * customer's real country code (+1 for US, +52 for MX — no mobile prefix
  * "+521" gymnastics, that's an SMS-only Twilio quirk). Falls back to MX.
+ *
+ * Always strips and re-normalizes — never trust a leading `+` to mean the
+ * number is already in the correct format. A customer stored as
+ * `+522281246837` (missing MX mobile prefix) would otherwise pass through
+ * unchanged and hit a landline.
  */
-function toE164(phone, countryCode = 'MX') {
-  const raw = String(phone || '');
-  if (raw.startsWith('+')) return raw;
-  const digits = raw.replace(/\D/g, '');
+export function toE164(phone, countryCode = 'MX') {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
   const cc = (countryCode || 'MX').toUpperCase();
 
   if (cc === 'US' || cc === 'CA') {
@@ -86,11 +90,15 @@ function senderAddress(sender) {
 /**
  * E.164 formatter for **SMS** delivery. MX mobile numbers require the "+521"
  * mobile prefix on the Twilio SMS network (unlike WhatsApp, which uses "+52").
+ *
+ * Always strips and re-normalizes — never trust a leading `+` to mean the
+ * number is already in the correct format. A number stored as `+522281246837`
+ * (missing the mobile "1") would otherwise pass through and hit an MX
+ * landline, which drops the SMS with carrier error 30008.
  */
-function toE164SMS(phone, countryCode = 'MX') {
-  const raw = String(phone || '');
-  if (raw.startsWith('+')) return raw;
-  const digits = raw.replace(/\D/g, '');
+export function toE164SMS(phone, countryCode = 'MX') {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
   const cc = (countryCode || 'MX').toUpperCase();
 
   if (cc === 'US' || cc === 'CA') {
@@ -135,11 +143,36 @@ function firstSingleSegment(candidates) {
  * messageType so each delivery is logged to loyalty_messages for tracking.
  * Returns the Twilio message SID on success, or null on failure / missing config.
  */
+// Twilio's public WhatsApp sandbox number. Cannot send SMS at all — if a
+// tenant leaves this in `twilio.phone_number` after WA sandbox testing, we
+// must refuse to use it as an SMS sender (Twilio rejects with error 21660).
+export const TWILIO_WA_SANDBOX_NUMBER = '+14155238886';
+
+export function isValidSmsSender(sender) {
+  if (!sender) return false;
+  if (sender.startsWith('whatsapp:')) return false;
+  if (sender === TWILIO_WA_SANDBOX_NUMBER) return false;
+  return true;
+}
+
 export async function sendSMS(to, body, customerId = null, messageType = 'general', countryCode = 'MX') {
   const { sid, token, sender } = await resolveTwilio();
   if (!sid || !token || !sender || !body) return null;
 
-  const from = sender.startsWith('whatsapp:') ? sender.replace(/^whatsapp:/, '') : sender;
+  if (!isValidSmsSender(sender)) {
+    console.error(
+      `[Twilio] refusing to send SMS ${messageType}: sender "${sender}" is not a valid SMS number (WhatsApp-only or sandbox).`,
+    );
+    if (customerId) {
+      await run(
+        `INSERT INTO loyalty_messages (customer_id, message_type, twilio_sid, status) VALUES ($1, $2, $3, $4)`,
+        [customerId, messageType, null, 'failed'],
+      );
+    }
+    return null;
+  }
+
+  const from = sender;
   const e164 = toE164SMS(to, countryCode);
   const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
   const auth = Buffer.from(`${sid}:${token}`).toString('base64');
@@ -257,8 +290,15 @@ export async function sendWhatsAppTemplate(to, messageType, variables, customerI
 export async function sendSMSReply(to, body, { from, sid, token } = {}) {
   const accountSid = sid || PLATFORM_SID;
   const authToken = token || PLATFORM_TOKEN;
-  const sender = (from || PLATFORM_PHONE || '').replace(/^whatsapp:/, '');
+  const sender = from || PLATFORM_PHONE;
   if (!accountSid || !authToken || !sender || !body) return null;
+
+  if (!isValidSmsSender(sender)) {
+    console.error(
+      `[Twilio] refusing to send SMS reply: sender "${sender}" is not a valid SMS number (WhatsApp-only or sandbox).`,
+    );
+    return null;
+  }
 
   const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
   const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');

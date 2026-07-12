@@ -89,6 +89,14 @@ async function sweepOnce() {
 
 export function startWinbackSweep() {
   if (timer) return;
+  // Local dev typically points at prod Neon; without this gate a `npm run dev`
+  // boot would fire real winback SMS to real customers from whatever
+  // TWILIO_PHONE_NUMBER the laptop happens to have. Explicit override for
+  // intentional local SMS testing.
+  if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_BACKGROUND_SMS !== 'true') {
+    console.log('[Winback] sweep disabled (NODE_ENV != production; set ENABLE_BACKGROUND_SMS=true to override)');
+    return;
+  }
   // Delay first sweep 60s so we don't overlap with reward-reminder + boot work.
   const bootDelay = setTimeout(sweepOnce, 60_000);
   bootDelay.unref?.();

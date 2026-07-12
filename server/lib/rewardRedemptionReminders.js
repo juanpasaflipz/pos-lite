@@ -87,6 +87,13 @@ async function sweepOnce() {
 
 export function startRewardReminderSweep() {
   if (timer) return;
+  // Local dev typically points at prod Neon; without this gate a `npm run dev`
+  // boot would fire real reward-reminder SMS to real customers. Explicit
+  // override for intentional local SMS testing.
+  if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_BACKGROUND_SMS !== 'true') {
+    console.log('[RewardReminder] sweep disabled (NODE_ENV != production; set ENABLE_BACKGROUND_SMS=true to override)');
+    return;
+  }
   // Delay first sweep to avoid competing with server boot / migration work.
   const bootDelay = setTimeout(sweepOnce, 30_000);
   bootDelay.unref?.();

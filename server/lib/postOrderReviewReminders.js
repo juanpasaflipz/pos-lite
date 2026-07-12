@@ -100,6 +100,13 @@ async function sweepOnce() {
 
 export function startPostOrderReviewSweep() {
   if (timer) return;
+  // Local dev typically points at prod Neon; without this gate a `npm run dev`
+  // boot would fire real review-request SMS to real customers. Explicit
+  // override for intentional local SMS testing.
+  if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_BACKGROUND_SMS !== 'true') {
+    console.log('[PostOrderReview] sweep disabled (NODE_ENV != production; set ENABLE_BACKGROUND_SMS=true to override)');
+    return;
+  }
   // Delay first sweep 90s so we don't overlap with other startup jobs.
   const bootDelay = setTimeout(sweepOnce, 90_000);
   bootDelay.unref?.();
