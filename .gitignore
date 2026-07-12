@@ -34,3 +34,4 @@ android/app/src/main/assets/capacitor.plugins.json
 *.jks
 key.properties
 android/keystore.properties
+cfdi-live-key.backup
