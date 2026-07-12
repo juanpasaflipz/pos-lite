@@ -111,6 +111,14 @@ export function startSentinelSweep() {
     console.log('[Sentinel] disabled via SENTINEL_ENABLED=off');
     return;
   }
+  // Local `npm run dev` connects to the same prod Neon DATABASE_URL. Without
+  // this gate, a laptop-side boot would detect real prod incidents and fire
+  // real notifications from the developer's misconfigured Twilio/Slack
+  // credentials. Explicit override for intentional local sweep testing.
+  if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_BACKGROUND_SMS !== 'true') {
+    console.log('[Sentinel] sweep disabled (NODE_ENV != production; set ENABLE_BACKGROUND_SMS=true to override)');
+    return;
+  }
   if (timer) return;
   sweepOnce().catch((err) => console.error('[Sentinel] initial sweep failed:', err.message));
   timer = setInterval(() => {
