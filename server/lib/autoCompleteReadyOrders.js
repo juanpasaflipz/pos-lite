@@ -32,6 +32,17 @@ async function sweepOnce() {
 }
 
 export function startAutoCompleteSweep() {
+  // Same NODE_ENV gate as the other background sweeps: local `npm run dev`
+  // shares prod's DATABASE_URL, so an ungated laptop boot would run
+  // `UPDATE orders SET status='completed'` against real prod rows. The mutation
+  // is idempotent and paid-orders-only (so prod's own copy converges a minute
+  // later), which is why it slipped through — but a laptop silently editing
+  // prod state still violates the "no side effects from dev" invariant that
+  // .env.example now documents.
+  if (process.env.NODE_ENV !== 'production' && process.env.AUTO_COMPLETE_ENABLED !== 'on') {
+    console.log('[AutoComplete] sweep disabled (NODE_ENV != production; set AUTO_COMPLETE_ENABLED=on to override)');
+    return;
+  }
   if (timer) return;
   sweepOnce();
   timer = setInterval(sweepOnce, SWEEP_INTERVAL_MS);
