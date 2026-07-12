@@ -107,16 +107,18 @@ export async function sweepOnce({ triage = true } = {}) {
 }
 
 export function startSentinelSweep() {
+  // SENTINEL_ENABLED tri-state: 'off' = kill switch anywhere, 'on' = force
+  // anywhere (intentional local sweep testing), unset = prod-only default.
+  // Deliberately separate from ENABLE_BACKGROUND_SMS so debugging SMS sweeps
+  // locally does NOT drag the sentinel in with it (and vice versa) — that
+  // coupling is exactly the "laptop hits prod Neon" hazard this gate exists
+  // to prevent.
   if (process.env.SENTINEL_ENABLED === 'off') {
     console.log('[Sentinel] disabled via SENTINEL_ENABLED=off');
     return;
   }
-  // Local `npm run dev` connects to the same prod Neon DATABASE_URL. Without
-  // this gate, a laptop-side boot would detect real prod incidents and fire
-  // real notifications from the developer's misconfigured Twilio/Slack
-  // credentials. Explicit override for intentional local sweep testing.
-  if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_BACKGROUND_SMS !== 'true') {
-    console.log('[Sentinel] sweep disabled (NODE_ENV != production; set ENABLE_BACKGROUND_SMS=true to override)');
+  if (process.env.NODE_ENV !== 'production' && process.env.SENTINEL_ENABLED !== 'on') {
+    console.log('[Sentinel] sweep disabled (NODE_ENV != production; set SENTINEL_ENABLED=on to override)');
     return;
   }
   if (timer) return;
