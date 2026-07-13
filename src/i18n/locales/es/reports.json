@@ -426,7 +426,12 @@
       "googleReviewTarget": "Link de Reseña de Google",
       "storeLatitude": "Latitud del Local (geocerca Wallet)",
       "storeLongitude": "Longitud del Local (geocerca Wallet)",
-      "walletLocationMessage": "Mensaje en Pantalla de Bloqueo (Wallet)"
+      "walletLocationMessage": "Mensaje en Pantalla de Bloqueo (Wallet)",
+      "walletBgColor": "Color de la Tarjeta Wallet (hex, ej. #A8542A)",
+      "walletLabelStamps": "Etiqueta Wallet: Sellos",
+      "walletLabelReward": "Etiqueta Wallet: Recompensa",
+      "walletLabelCustomer": "Etiqueta Wallet: Cliente",
+      "walletBackText": "Texto al Reverso de la Tarjeta Wallet"
     }
   },
   "menuEngineering": {

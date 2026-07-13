@@ -13,8 +13,20 @@ import {
   updateLoyaltyConfig,
 } from '../helpers/loyalty.js';
 import { getPlanLimits, requirePlanFeature } from '../planLimits.js';
+import { refreshTenantPasses } from '../helpers/wallet/passSync.js';
 
 const router = Router();
+
+// Config keys that are rendered onto wallet passes — a change to any of them
+// should repaint every issued card, not wait for the customer's next stamp.
+function affectsWalletPasses(key) {
+  return (
+    key.startsWith('wallet_') ||
+    key.startsWith('store_') ||
+    key === 'reward_description' ||
+    key === 'stamps_required'
+  );
+}
 
 /* ==================== Customer Endpoints ==================== */
 
@@ -419,6 +431,11 @@ router.put('/config', requireAuth('manage_loyalty'), requirePlanFeature('loyalty
     if (!key || value === undefined) return res.status(400).json({ error: 'Key and value are required' });
 
     await updateLoyaltyConfig(key, String(value));
+
+    // Repaint issued wallet passes when the change is visible on the card
+    // (non-blocking, same fire-and-forget contract as SMS).
+    if (affectsWalletPasses(key)) refreshTenantPasses();
+
     res.json(await getLoyaltyConfig());
   } catch (err) {
     console.error(err);

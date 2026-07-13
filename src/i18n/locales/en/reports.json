@@ -426,7 +426,12 @@
       "googleReviewTarget": "Google Review Link",
       "storeLatitude": "Store Latitude (Wallet geofence)",
       "storeLongitude": "Store Longitude (Wallet geofence)",
-      "walletLocationMessage": "Wallet Lock-Screen Message"
+      "walletLocationMessage": "Wallet Lock-Screen Message",
+      "walletBgColor": "Wallet Card Color (hex, e.g. #A8542A)",
+      "walletLabelStamps": "Wallet Label: Stamps",
+      "walletLabelReward": "Wallet Label: Reward",
+      "walletLabelCustomer": "Wallet Label: Customer",
+      "walletBackText": "Wallet Card Back Text"
     }
   },
   "menuEngineering": {

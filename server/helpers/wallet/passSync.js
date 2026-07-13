@@ -31,6 +31,23 @@ export function schedulePassUpdate(customerId) {
   });
 }
 
+/**
+ * Refresh EVERY pass of the current tenant — used after wallet-related
+ * loyalty_config changes (colors, labels, geofence, reward text) so existing
+ * cards pick up the new look without waiting for the next stamp.
+ * Captures the tenant from AsyncLocalStorage; call from request context only.
+ */
+export function refreshTenantPasses() {
+  const tenantId = getTenantId();
+  if (!tenantId) return;
+
+  setImmediate(() => {
+    syncAllTenantPasses(tenantId).catch((err) => {
+      console.error('[PassSync] tenant refresh failed:', err.message);
+    });
+  });
+}
+
 async function syncCustomerPasses(tenantId, customerId) {
   // Webhook-context fallback: resolve the tenant from the customer row.
   if (!tenantId) {
@@ -50,10 +67,25 @@ async function syncCustomerPasses(tenantId, customerId) {
   `;
   if (passes.length === 0) return;
 
-  if (!isAppleWalletConfigured()) return;
+  const applePassIds = passes.filter((p) => p.platform === 'apple').map((p) => p.id);
+  await pushToRegistrations(tenantId, applePassIds);
+}
+
+async function syncAllTenantPasses(tenantId) {
+  const passes = await adminSql`
+    UPDATE wallet_passes
+    SET updated_at = NOW()
+    WHERE tenant_id = ${tenantId} AND revoked = false
+    RETURNING id, platform
+  `;
+  if (passes.length === 0) return;
 
   const applePassIds = passes.filter((p) => p.platform === 'apple').map((p) => p.id);
-  if (applePassIds.length === 0) return;
+  await pushToRegistrations(tenantId, applePassIds);
+}
+
+async function pushToRegistrations(tenantId, applePassIds) {
+  if (!isAppleWalletConfigured() || applePassIds.length === 0) return;
 
   const registrations = await adminSql`
     SELECT id, push_token FROM wallet_registrations

@@ -752,11 +752,17 @@ function SettingsTab() {
     { key: 'referral_bonus_stamps', label: t('loyalty.settings.referralBonusStamps'), type: 'number' as const },
     { key: 'sms_enabled', label: t('loyalty.settings.smsNotifications'), type: 'toggle' as const },
     { key: 'google_review_target', label: t('loyalty.settings.googleReviewTarget'), type: 'text' as const },
-    // Wallet pass geofence: optional keys — render with empty fallback so the
-    // fields appear even before the tenant has saved a value.
+    // Wallet pass keys: optional — render with empty fallback so the fields
+    // appear even before the tenant has saved a value. Saving any of these
+    // repaints all issued passes automatically (server-side push).
     { key: 'store_latitude', label: t('loyalty.settings.storeLatitude'), type: 'text' as const, optional: true },
     { key: 'store_longitude', label: t('loyalty.settings.storeLongitude'), type: 'text' as const, optional: true },
     { key: 'wallet_location_message', label: t('loyalty.settings.walletLocationMessage'), type: 'text' as const, optional: true },
+    { key: 'wallet_bg_color', label: t('loyalty.settings.walletBgColor'), type: 'text' as const, optional: true },
+    { key: 'wallet_label_stamps', label: t('loyalty.settings.walletLabelStamps'), type: 'text' as const, optional: true },
+    { key: 'wallet_label_reward', label: t('loyalty.settings.walletLabelReward'), type: 'text' as const, optional: true },
+    { key: 'wallet_label_customer', label: t('loyalty.settings.walletLabelCustomer'), type: 'text' as const, optional: true },
+    { key: 'wallet_back_text', label: t('loyalty.settings.walletBackText'), type: 'text' as const, optional: true },
   ];
 
   return (
