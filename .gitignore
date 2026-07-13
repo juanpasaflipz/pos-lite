@@ -45,3 +45,18 @@ signerKey.pem
 wwdr.pem
 p12pass.txt
 wallet-env.txt
+
+# Editor / machine-local
+.vscode/
+.history/
+
+# Local scratch dirs
+_to_delete/
+mnt/
+
+# Audit-agent outputs (scratch reports written by system-auditor + specialists)
+audits/SYSTEM_AUDIT.md
+audits/raw/
+
+# One-off / experimental scripts
+scripts/test-agent-tool-choice.mjs
