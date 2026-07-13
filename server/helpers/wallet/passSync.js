@@ -14,6 +14,7 @@
 import { adminSql, getTenantId } from '../../db/index.js';
 import { isAppleWalletConfigured } from './applePass.js';
 import { pushPassUpdate } from './appleApns.js';
+import { isGoogleWalletConfigured, updateLoyaltyObjectBalance } from './googleWallet.js';
 
 /**
  * Mark the customer's passes stale and nudge registered Apple devices to
@@ -69,6 +70,9 @@ async function syncCustomerPasses(tenantId, customerId) {
 
   const applePassIds = passes.filter((p) => p.platform === 'apple').map((p) => p.id);
   await pushToRegistrations(tenantId, applePassIds);
+
+  const googlePassIds = passes.filter((p) => p.platform === 'google').map((p) => p.id);
+  await syncGoogleBalances(tenantId, googlePassIds);
 }
 
 async function syncAllTenantPasses(tenantId) {
@@ -82,6 +86,37 @@ async function syncAllTenantPasses(tenantId) {
 
   const applePassIds = passes.filter((p) => p.platform === 'apple').map((p) => p.id);
   await pushToRegistrations(tenantId, applePassIds);
+
+  const googlePassIds = passes.filter((p) => p.platform === 'google').map((p) => p.id);
+  await syncGoogleBalances(tenantId, googlePassIds);
+}
+
+/**
+ * Google has no device push — we PATCH the LoyaltyObject's balance and
+ * Google refreshes the rendered card itself. Best-effort per pass.
+ */
+async function syncGoogleBalances(tenantId, googlePassIds) {
+  if (!isGoogleWalletConfigured() || googlePassIds.length === 0) return;
+
+  const rows = await adminSql`
+    SELECT wp.serial_number, sc.stamps_earned, sc.stamps_required
+    FROM wallet_passes wp
+    JOIN loyalty_customers lc ON lc.id = wp.customer_id
+    LEFT JOIN LATERAL (
+      SELECT stamps_earned, stamps_required FROM stamp_cards
+      WHERE customer_id = lc.id AND completed = false
+      ORDER BY id DESC LIMIT 1
+    ) sc ON true
+    WHERE wp.tenant_id = ${tenantId} AND wp.id IN ${adminSql(googlePassIds)}
+  `;
+
+  for (const row of rows) {
+    if (row.stamps_required == null) continue; // no active card yet — nothing to show
+    await updateLoyaltyObjectBalance(
+      row.serial_number,
+      `${row.stamps_earned} / ${row.stamps_required}`
+    ).catch(() => {});
+  }
 }
 
 async function pushToRegistrations(tenantId, applePassIds) {

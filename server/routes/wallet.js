@@ -13,7 +13,7 @@
  */
 
 import { Router } from 'express';
-import { get, all, run } from '../db/index.js';
+import { get, all, run, getTenantId } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePlanFeature } from '../planLimits.js';
 import { getActiveStampCard, getLoyaltyConfig } from '../helpers/loyalty.js';
@@ -22,7 +22,13 @@ import {
   isAppleWalletConfigured,
   getPassTypeId,
 } from '../helpers/wallet/applePass.js';
-import { ensureApplePass } from '../helpers/wallet/enroll.js';
+import { ensureApplePass, ensureGooglePass } from '../helpers/wallet/enroll.js';
+import {
+  isGoogleWalletConfigured,
+  ensureLoyaltyClass,
+  ensureLoyaltyObject,
+  saveLinkFor,
+} from '../helpers/wallet/googleWallet.js';
 
 const router = Router();
 
@@ -66,7 +72,7 @@ async function sendPkpass(res, ctx) {
 
 // GET /api/wallet/status — lets the UI show/hide wallet features
 router.get('/status', requireAuth('pos_access'), (_req, res) => {
-  res.json({ apple: isAppleWalletConfigured(), google: false });
+  res.json({ apple: isAppleWalletConfigured(), google: isGoogleWalletConfigured() });
 });
 
 // POST /api/wallet/enroll { customer_id } → { enroll_url, serial_number, created }
@@ -113,12 +119,44 @@ router.get('/p/:enrollToken', async (req, res) => {
 
     const ua = req.headers['user-agent'] || '';
     const isIOS = /iPhone|iPad|iPod/i.test(ua);
+    const isAndroid = /Android/i.test(ua);
+    const googleReady = isGoogleWalletConfigured();
 
-    if (isIOS || req.query.format === 'pkpass') {
+    // Android tap on the Google button (or direct Android arrival when only
+    // Google is configured): mirror state into Google's API and bounce to
+    // the signed Save-to-Wallet link.
+    if (googleReady && req.query.platform === 'google') {
+      const { pass: gpass } = await ensureGooglePass(ctx.customer.id);
+      const tenantId = getTenantId();
+      const classId = await ensureLoyaltyClass({
+        tenantId,
+        tenant: ctx.tenant,
+        config: ctx.config,
+        host: ctx.host,
+      });
+      await ensureLoyaltyObject({
+        pass: gpass,
+        customer: ctx.customer,
+        card: ctx.card,
+        config: ctx.config,
+        classId,
+      });
+      return res.redirect(saveLinkFor(gpass.serial_number));
+    }
+
+    if (isAppleWalletConfigured() && (req.query.format === 'pkpass' || (isIOS && !isAndroid))) {
       return await sendPkpass(res, ctx);
     }
 
     const restaurantName = req.tenant?.name || 'Desktop Kitchen';
+    const appleButton = isAppleWalletConfigured()
+      ? `<a class="btn" href="?format=pkpass">Agregar a Apple Wallet</a>`
+      : '';
+    const googleButton = googleReady
+      ? `<a class="btn" href="?platform=google">Agregar a Google Wallet</a>`
+      : `<p style="font-size:13px;margin-top:32px">¿Android? Google Wallet estará disponible muy pronto.<br>
+<span style="color:#737373">Android support (Google Wallet) coming soon.</span></p>`;
+
     res.set('Content-Type', 'text/html; charset=utf-8').send(`<!doctype html>
 <html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -133,10 +171,8 @@ router.get('/p/:enrollToken', async (req, res) => {
   p{color:#a3a3a3;max-width:420px;line-height:1.5}
 </style></head><body>
 <h1>${restaurantName}</h1>
-<p>Agrega tu tarjeta de lealtad a Apple Wallet. Se actualiza sola con cada compra.</p>
-<a class="btn" href="?format=pkpass">Agregar a Apple Wallet</a>
-<p style="font-size:13px;margin-top:32px">¿Android? Google Wallet estará disponible muy pronto.<br>
-<span style="color:#737373">Android support (Google Wallet) coming soon.</span></p>
+<p>Agrega tu tarjeta de lealtad a tu teléfono. Se actualiza sola con cada compra.</p>
+${isAndroid ? googleButton + appleButton : appleButton + googleButton}
 </body></html>`);
   } catch (err) {
     console.error('[Wallet] download error:', err);

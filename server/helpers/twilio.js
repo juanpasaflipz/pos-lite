@@ -395,12 +395,16 @@ function withReviewCta(body, reviewUrl) {
 // Budget: 160 chars after variable substitution. Restaurant names of ~20 chars
 // and reward descriptions of ~30 chars are typical worst case.
 
-export async function sendWelcomeMessage(phone, name, referralCode, restaurantName = 'Our', countryCode = 'MX') {
+export async function sendWelcomeMessage(phone, name, referralCode, restaurantName = 'Our', countryCode = 'MX', walletUrl = null) {
   // "STOP para cancelar" appears once, in the welcome message, per MX A2P and
   // Twilio compliance guidance. STOP replies are auto-honored by Twilio.
-  // Copy trimmed so this stays single-segment even for long name+restaurant
-  // combinations (MX carriers rotate senders on multi-segment sends).
-  const body = `Hola ${name}! Bienvenido a ${restaurantName} Rewards. Tu codigo: ${referralCode}. Compartelo y ambos ganan 2 sellos. STOP para cancelar.`;
+  // Copy trimmed so the no-wallet variant stays single-segment even for long
+  // name+restaurant combinations (MX carriers rotate senders on multi-segment
+  // sends). With walletUrl the message goes to 2 segments — an accepted
+  // trade-off: the wallet card replaces future SMS nudges, so the welcome is
+  // the one message where the link earns its extra segment.
+  const wallet = walletUrl ? ` Tu tarjeta digital: ${walletUrl}` : '';
+  const body = `Hola ${name}! Bienvenido a ${restaurantName} Rewards. Tu codigo: ${referralCode}. Compartelo y ambos ganan 2 sellos.${wallet} STOP para cancelar.`;
   return sendSMS(phone, body, null, 'welcome', countryCode);
 }
 

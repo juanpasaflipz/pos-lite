@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { UserPlus, Search, X, Gift, Phone, User } from 'lucide-react';
 import type { LoyaltyCustomer } from '../types';
-import { lookupLoyaltyCustomer, createLoyaltyCustomer, searchLoyaltyCustomersByName } from '../api';
+import { lookupLoyaltyCustomer, lookupLoyaltyCustomerByPass, createLoyaltyCustomer, searchLoyaltyCustomersByName } from '../api';
 import { formatPhone } from '../utils/phone';
 
 interface Props {
@@ -39,6 +39,10 @@ export default function CustomerLookupModal({ onCustomerLinked, onClose }: Props
   const digits = phone.replace(/\D/g, '');
   const phoneValid = digits.length >= 10;
   const nameValid = nameQuery.trim().length >= 2;
+  // Wallet-pass QR scanned into the phone field (keyboard-wedge scanners type
+  // the payload + Enter). The pass barcode encodes "dk-loyalty:<serial>".
+  const scanValue = phone.trim();
+  const isPassScan = scanValue.toLowerCase().startsWith('dk-loyalty:');
 
   const switchMode = (next: Mode) => {
     if (next === mode) return;
@@ -59,19 +63,27 @@ export default function CustomerLookupModal({ onCustomerLinked, onClose }: Props
   };
 
   const handleSearch = async () => {
-    if (!phoneValid || busy) {
-      if (!phoneValid) setError(t('customerLookup.enterDigits'));
+    if (busy) return;
+    if (!isPassScan && !phoneValid) {
+      setError(t('customerLookup.enterDigits'));
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const customer = await lookupLoyaltyCustomer(digits, country);
+      const customer = isPassScan
+        ? await lookupLoyaltyCustomerByPass(scanValue)
+        : await lookupLoyaltyCustomer(digits, country);
       setFoundCustomer(customer);
       setPhase('found');
     } catch (err: any) {
       const msg = err?.message ?? '';
-      if (/not found/i.test(msg) || /\b404\b/.test(msg)) {
+      if (isPassScan) {
+        // A scanned pass that doesn't resolve is NOT a new customer — the
+        // pass is revoked/foreign. Clear the field for a phone retry.
+        setPhone('');
+        setError(t('customerLookup.passScanNotFound'));
+      } else if (/not found/i.test(msg) || /\b404\b/.test(msg)) {
         // Auto-flip to new-customer flow so cashier can register in one step.
         setMode('new');
         setPhase('register');
@@ -299,7 +311,7 @@ export default function CustomerLookupModal({ onCustomerLinked, onClose }: Props
           {mode === 'existing' && phase === 'search' && searchBy === 'phone' && (
             <button
               onClick={handleSearch}
-              disabled={!phoneValid || busy}
+              disabled={(!phoneValid && !isPassScan) || busy}
               className="w-full flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 disabled:bg-neutral-700 disabled:text-neutral-500 text-white font-bold py-3 rounded-lg min-h-[44px] transition-colors"
             >
               <Search size={18} />

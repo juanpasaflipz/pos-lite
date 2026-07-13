@@ -185,83 +185,6 @@
   },
   "splitPayment": {
     "title": "Dividir Pago",
-    "orderTotal": "Total de Orden: {{amount}}",
-    "splitType": "Tipo de División",
-    "equalSplit": "División Igual",
-    "customSplit": "Montos Personalizados",
-    "numberOfSplits": "Número de Divisiones",
-    "split": "División {{number}}",
-    "method": "Método",
-    "amount": "Monto",
-    "tip": "Propina",
-    "remaining": "Restante: {{amount}}",
-    "allocated": "Asignado: {{amount}}",
-    "processSplit": "Procesar Pago Dividido",
-    "totalMustMatch": "Los montos deben sumar el total de la orden",
-    "addSplit": "Agregar División",
-    "removeSplit": "Quitar"
-  },
-  "customerLookup": {
-    "title": "Buscar Cliente",
-    "searchPlaceholder": "Buscar por nombre o teléfono...",
-    "newCustomer": "Nuevo Cliente",
-    "name": "Nombre",
-    "phone": "Teléfono",
-    "email": "Correo",
-    "smsOptIn": "Recibir SMS",
-    "createCustomer": "Crear Cliente",
-    "stamps": "{{earned}}/{{required}} sellos",
-    "member": "Miembro desde {{date}}",
-    "selectCustomer": "Seleccionar",
-    "noCustomers": "No se encontraron clientes",
-    "creating": "Creando..."
-  },
-  "refund": {
-    "title": "Reembolso Orden #{{number}}",
-    "orderTotal": "Total de Orden: {{amount}}",
-    "refundAmount": "Monto a Reembolsar",
-    "fullRefund": "Reembolso Total",
-    "partialRefund": "Reembolso Parcial",
-    "reason": "Razón",
-    "selectReason": "Selecciona una razón",
-    "reasons": {
-      "customerRequest": "Solicitud del Cliente",
-      "wrongOrder": "Orden Incorrecta",
-      "foodQuality": "Problema de Calidad",
-      "longWait": "Tiempo de Espera Largo",
-      "duplicate": "Orden Duplicada",
-      "other": "Otro"
-    },
-    "notes": "Notas Adicionales",
-    "notesPlaceholder": "Notas opcionales sobre este reembolso...",
-    "processRefund": "Procesar Reembolso",
-    "processing": "Procesando...",
-    "confirmMessage": "¿Estás seguro de reembolsar {{amount}}?"
-  },
-  "modifier": {
-    "loadingModifiers": "Cargando modificadores...",
-    "required": "Obligatorio",
-    "optional": "Opcional",
-    "upTo": "hasta {{max}}",
-    "specialInstructions": "Instrucciones Especiales",
-    "instructionsPlaceholder": "Ej: Sin cebolla, extra salsa...",
-    "addToOrder": "Agregar a la Orden — {{price}}",
-    "cancel": "Cancelar"
-  },
-  "comboBuilder": {
-    "title": "Armar un Combo",
-    "loadingCombos": "Cargando combos...",
-    "noCombos": "No hay combos disponibles",
-    "step": "Paso {{number}}",
-    "youSave": "¡Ahorras {{amount}}!",
-    "individual": "Individual",
-    "comboLabel": "Combo",
-    "addCombo": "Agregar Combo — {{price}}",
-    "backToCombos": "Volver a Combos",
-    "cancel": "Cancelar"
-  },
-  "splitPayment": {
-    "title": "Dividir Pago",
     "total": "Total: {{amount}}",
     "howToSplit": "¿Cómo deseas dividir?",
     "splitEvenly": "Dividir Parejo",
@@ -351,7 +274,8 @@
     "nameTooShort": "Escribe al menos 2 letras",
     "noNameMatch": "Sin clientes con ese nombre",
     "nameResultsCount": "{{count}} resultados — elige uno",
-    "searchAgain": "Buscar otra vez"
+    "searchAgain": "Buscar otra vez",
+    "passScanNotFound": "Esa tarjeta digital no coincide con ningún cliente. Busca por teléfono."
   },
   "refund": {
     "title": "Reembolso",
@@ -384,6 +308,28 @@
     "refundFailed": "Error al reembolsar",
     "failedToLoad": "Error al cargar la orden",
     "close": "Cerrar"
+  },
+  "modifier": {
+    "loadingModifiers": "Cargando modificadores...",
+    "required": "Obligatorio",
+    "optional": "Opcional",
+    "upTo": "hasta {{max}}",
+    "specialInstructions": "Instrucciones Especiales",
+    "instructionsPlaceholder": "Ej: Sin cebolla, extra salsa...",
+    "addToOrder": "Agregar a la Orden — {{price}}",
+    "cancel": "Cancelar"
+  },
+  "comboBuilder": {
+    "title": "Armar un Combo",
+    "loadingCombos": "Cargando combos...",
+    "noCombos": "No hay combos disponibles",
+    "step": "Paso {{number}}",
+    "youSave": "¡Ahorras {{amount}}!",
+    "individual": "Individual",
+    "comboLabel": "Combo",
+    "addCombo": "Agregar Combo — {{price}}",
+    "backToCombos": "Volver a Combos",
+    "cancel": "Cancelar"
   },
   "suggestion": {
     "save": "Ahorra {{amount}}",

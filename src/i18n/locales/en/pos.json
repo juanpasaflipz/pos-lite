@@ -185,83 +185,6 @@
   },
   "splitPayment": {
     "title": "Split Payment",
-    "orderTotal": "Order Total: {{amount}}",
-    "splitType": "Split Type",
-    "equalSplit": "Equal Split",
-    "customSplit": "Custom Amounts",
-    "numberOfSplits": "Number of Splits",
-    "split": "Split {{number}}",
-    "method": "Method",
-    "amount": "Amount",
-    "tip": "Tip",
-    "remaining": "Remaining: {{amount}}",
-    "allocated": "Allocated: {{amount}}",
-    "processSplit": "Process Split Payment",
-    "totalMustMatch": "Split amounts must equal the order total",
-    "addSplit": "Add Split",
-    "removeSplit": "Remove"
-  },
-  "customerLookup": {
-    "title": "Customer Lookup",
-    "searchPlaceholder": "Search by name or phone...",
-    "newCustomer": "New Customer",
-    "name": "Name",
-    "phone": "Phone",
-    "email": "Email",
-    "smsOptIn": "SMS opt-in",
-    "createCustomer": "Create Customer",
-    "stamps": "{{earned}}/{{required}} stamps",
-    "member": "Member since {{date}}",
-    "selectCustomer": "Select",
-    "noCustomers": "No customers found",
-    "creating": "Creating..."
-  },
-  "refund": {
-    "title": "Refund Order #{{number}}",
-    "orderTotal": "Order Total: {{amount}}",
-    "refundAmount": "Refund Amount",
-    "fullRefund": "Full Refund",
-    "partialRefund": "Partial Refund",
-    "reason": "Reason",
-    "selectReason": "Select a reason",
-    "reasons": {
-      "customerRequest": "Customer Request",
-      "wrongOrder": "Wrong Order",
-      "foodQuality": "Food Quality Issue",
-      "longWait": "Long Wait Time",
-      "duplicate": "Duplicate Order",
-      "other": "Other"
-    },
-    "notes": "Additional Notes",
-    "notesPlaceholder": "Optional notes about this refund...",
-    "processRefund": "Process Refund",
-    "processing": "Processing...",
-    "confirmMessage": "Are you sure you want to refund {{amount}}?"
-  },
-  "modifier": {
-    "loadingModifiers": "Loading modifiers...",
-    "required": "Required",
-    "optional": "Optional",
-    "upTo": "up to {{max}}",
-    "specialInstructions": "Special Instructions",
-    "instructionsPlaceholder": "e.g., No onions, extra sauce...",
-    "addToOrder": "Add to Order — {{price}}",
-    "cancel": "Cancel"
-  },
-  "comboBuilder": {
-    "title": "Build a Combo",
-    "loadingCombos": "Loading combos...",
-    "noCombos": "No combos available",
-    "step": "Step {{number}}",
-    "youSave": "You save {{amount}}!",
-    "individual": "Individual",
-    "comboLabel": "Combo",
-    "addCombo": "Add Combo — {{price}}",
-    "backToCombos": "Back to Combos",
-    "cancel": "Cancel"
-  },
-  "splitPayment": {
-    "title": "Split Payment",
     "total": "Total: {{amount}}",
     "howToSplit": "How would you like to split?",
     "splitEvenly": "Split Evenly",
@@ -351,7 +274,8 @@
     "nameTooShort": "Type at least 2 letters",
     "noNameMatch": "No customer found with that name",
     "nameResultsCount": "{{count}} matches — pick one",
-    "searchAgain": "Search again"
+    "searchAgain": "Search again",
+    "passScanNotFound": "That wallet card didn't match a customer. Try phone lookup."
   },
   "refund": {
     "title": "Refund Order",
@@ -384,6 +308,28 @@
     "refundFailed": "Refund failed",
     "failedToLoad": "Failed to load order",
     "close": "Close"
+  },
+  "modifier": {
+    "loadingModifiers": "Loading modifiers...",
+    "required": "Required",
+    "optional": "Optional",
+    "upTo": "up to {{max}}",
+    "specialInstructions": "Special Instructions",
+    "instructionsPlaceholder": "e.g., No onions, extra sauce...",
+    "addToOrder": "Add to Order — {{price}}",
+    "cancel": "Cancel"
+  },
+  "comboBuilder": {
+    "title": "Build a Combo",
+    "loadingCombos": "Loading combos...",
+    "noCombos": "No combos available",
+    "step": "Step {{number}}",
+    "youSave": "You save {{amount}}!",
+    "individual": "Individual",
+    "comboLabel": "Combo",
+    "addCombo": "Add Combo — {{price}}",
+    "backToCombos": "Back to Combos",
+    "cancel": "Cancel"
   },
   "suggestion": {
     "save": "Save {{amount}}",

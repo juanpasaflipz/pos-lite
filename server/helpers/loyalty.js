@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { all, get, run } from '../db/index.js';
+import { all, get, run, getTenantId } from '../db/index.js';
 import {
   sendWelcomeMessage,
   sendStampEarnedMessage,
@@ -7,6 +7,32 @@ import {
   sendReferralSuccessMessage,
 } from './twilio.js';
 import { schedulePassUpdate } from './wallet/passSync.js';
+import { ensureApplePass } from './wallet/enroll.js';
+import { isAppleWalletConfigured } from './wallet/applePass.js';
+import { isGoogleWalletConfigured } from './wallet/googleWallet.js';
+import { getTenant } from '../tenants.js';
+
+/**
+ * Wallet enroll link for SMS. The capability URL must live on the tenant's
+ * subdomain (that's how the pass download resolves tenant + RLS), so it's
+ * built from the tenant record, not from any request host. Best-effort:
+ * returns null when wallet isn't configured or anything fails.
+ */
+async function buildWalletLink(customerId) {
+  try {
+    if (!isAppleWalletConfigured() && !isGoogleWalletConfigured()) return null;
+    const tenantId = getTenantId();
+    if (!tenantId) return null;
+    const tenant = await getTenant(tenantId);
+    if (!tenant?.subdomain) return null;
+    // The Apple row carries the enroll token; its landing page serves both
+    // platforms (Apple button + Google save link).
+    const { pass } = await ensureApplePass(customerId);
+    return `https://${tenant.subdomain}.desktop.kitchen/api/wallet/p/${pass.enroll_token}`;
+  } catch {
+    return null;
+  }
+}
 
 /* ==================== Helpers ==================== */
 
@@ -128,7 +154,8 @@ export async function findOrCreateCustomer(
   // Send welcome SMS (non-blocking)
   const smsEnabled = await getConfigValue('sms_enabled', 'true');
   if (sendWelcomeSms && customer.sms_opt_in && smsEnabled === 'true') {
-    sendWelcomeMessage(normalized, name, referralCode, restaurantName, cc).catch(() => {});
+    const walletUrl = await buildWalletLink(customer.id);
+    sendWelcomeMessage(normalized, name, referralCode, restaurantName, cc, walletUrl).catch(() => {});
   }
 
   return { customer: await get('SELECT * FROM loyalty_customers WHERE id = $1', [customer.id]), created: true };

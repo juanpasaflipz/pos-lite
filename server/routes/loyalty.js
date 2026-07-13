@@ -152,6 +152,35 @@ router.get('/customers/phone/:phone', requireAuth('pos_access'), async (req, res
   }
 });
 
+// GET /customers/by-pass/:serial — resolve a scanned wallet-pass QR to its
+// customer (POS register scan). Accepts the raw scan payload
+// "dk-loyalty:<serial>" or the bare serial. Same response shape as the
+// phone lookup so the POS link-customer flow is interchangeable.
+router.get('/customers/by-pass/:serial', requireAuth('pos_access'), async (req, res) => {
+  try {
+    const raw = String(req.params.serial || '').trim();
+    const serial = raw.toLowerCase().startsWith('dk-loyalty:')
+      ? raw.slice('dk-loyalty:'.length)
+      : raw;
+    if (!serial) return res.status(400).json({ error: 'Serial required' });
+
+    const pass = await get(
+      `SELECT customer_id FROM wallet_passes WHERE serial_number = $1 AND revoked = false`,
+      [serial]
+    );
+    if (!pass) return res.status(404).json({ error: 'Customer not found' });
+
+    const customer = await get('SELECT * FROM loyalty_customers WHERE id = $1', [pass.customer_id]);
+    if (!customer) return res.status(404).json({ error: 'Customer not found' });
+
+    const activeCard = await getActiveStampCard(customer.id);
+    res.json({ ...customer, activeCard });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /customers/:id — Detail + stamp cards + events
 // Registered after /customers/search and /customers/phone/:phone so the
 // literal segments win over the :id param.
