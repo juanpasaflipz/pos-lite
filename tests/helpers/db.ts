@@ -50,8 +50,16 @@ export async function createTestTenant(label = 'suite'): Promise<TestTenant> {
  * Prod uses `purgeTenant()` which does 3 sequential passes across ~50 tables
  * (one round-trip each) to survive background writers. Tests don't have
  * those schedulers, so we condense everything into one round-trip: a
- * PLPGSQL DO block that catches FK-violation per table (via a savepoint
- * sub-block) and does one mop-up pass. ~50× faster than the prod path.
+ * PLPGSQL DO block that repeats FK-tolerant delete passes (savepoint
+ * sub-block per table) until a pass completes with zero FK blocks, up to a
+ * bounded number of passes. ~50× faster than the prod path.
+ *
+ * Why passes-until-convergence and not the old fixed two passes: the table
+ * list comes from an UNORDERED information_schema aggregate, so a chain like
+ * menu_categories ← menu_items ← order_items ← order_payment_items (depth 3)
+ * only cleans up if the catalog happens to return children early. Adding
+ * tables (e.g. migration 0081's wallet_passes) reshuffled that order and the
+ * two-pass version started failing in afterAll. Convergence is order-proof.
  */
 export async function dropTestTenant(tenantId: string): Promise<void> {
   // Guard: tenantId is our own generated string ("test_<label>_<uuid>"); the
@@ -66,6 +74,8 @@ export async function dropTestTenant(tenantId: string): Promise<void> {
     DECLARE
       t text;
       tables text[];
+      blocked int := 0;
+      pass int;
       target_tenant text := '${tenantId}';
     BEGIN
       SELECT array_agg(c.table_name)
@@ -79,19 +89,26 @@ export async function dropTestTenant(tenantId: string): Promise<void> {
 
       IF tables IS NULL THEN RETURN; END IF;
 
-      -- First pass. FK-blocked rows raise; savepoint sub-block swallows them.
-      FOREACH t IN ARRAY tables LOOP
-        BEGIN
-          EXECUTE format('DELETE FROM %I WHERE tenant_id = $1', t) USING target_tenant;
-        EXCEPTION WHEN foreign_key_violation THEN
-          NULL;
-        END;
+      -- FK-tolerant passes until convergence. Each pass peels one layer of
+      -- the FK graph (leaves first), so N passes handle chains N deep; 6
+      -- comfortably covers the deepest real chain (depth 3-4) with headroom.
+      FOR pass IN 1..6 LOOP
+        blocked := 0;
+        FOREACH t IN ARRAY tables LOOP
+          BEGIN
+            EXECUTE format('DELETE FROM %I WHERE tenant_id = $1', t) USING target_tenant;
+          EXCEPTION WHEN foreign_key_violation THEN
+            blocked := blocked + 1;
+          END;
+        END LOOP;
+        EXIT WHEN blocked = 0;
       END LOOP;
 
-      -- Mop-up. Children cleared, parents now unblocked.
-      FOREACH t IN ARRAY tables LOOP
-        EXECUTE format('DELETE FROM %I WHERE tenant_id = $1', t) USING target_tenant;
-      END LOOP;
+      -- Strictness preserved: if the graph didn't converge, fail loudly
+      -- rather than leave orphaned fixture rows on the test branch.
+      IF blocked > 0 THEN
+        RAISE EXCEPTION 'dropTestTenant: % table(s) still FK-blocked after 6 passes for tenant %', blocked, target_tenant;
+      END IF;
     END $$;
   `);
 

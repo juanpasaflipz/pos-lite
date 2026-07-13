@@ -3,8 +3,9 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft, Heart, Users, BarChart3, Gift, Settings,
-  Search, Plus, Phone, ChevronDown, ChevronUp, Pencil, Save,
+  Search, Plus, Phone, ChevronDown, ChevronUp, Pencil, Save, Wallet,
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   getLoyaltyCustomers,
   getLoyaltyCustomer,
@@ -14,6 +15,8 @@ import {
   updateLoyaltyConfig as updateConfigAPI,
   updateLoyaltyCustomer,
   addManualStamps,
+  getWalletStatus,
+  enrollWalletPass,
 } from '../api';
 import { LoyaltyCustomer, LoyaltyAnalytics, LoyaltyConfig, StampCard } from '../types';
 import { formatPrice } from '../utils/currency';
@@ -98,6 +101,15 @@ function CustomersTab() {
   const [editForm, setEditForm] = useState<{ name: string; phone: string; country_code: string; orders_count: string; total_spent: string; stamps_earned: string } | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [walletAvailable, setWalletAvailable] = useState(false);
+  const [walletUrl, setWalletUrl] = useState<string | null>(null);
+  const [walletLoading, setWalletLoading] = useState(false);
+
+  useEffect(() => {
+    getWalletStatus()
+      .then((s) => setWalletAvailable(s.apple || s.google))
+      .catch(() => setWalletAvailable(false));
+  }, []);
 
   const fetchCustomers = async (s?: string, p?: number) => {
     setLoading(true);
@@ -128,6 +140,7 @@ function CustomersTab() {
   };
 
   const toggleExpand = async (id: number) => {
+    setWalletUrl(null);
     if (expandedId === id) {
       setExpandedId(null);
       setExpandedDetail(null);
@@ -210,6 +223,18 @@ function CustomersTab() {
       }
     } catch {
       // ignore
+    }
+  };
+
+  const handleShowWalletQR = async (customerId: number) => {
+    setWalletLoading(true);
+    try {
+      const result = await enrollWalletPass(customerId);
+      setWalletUrl(result.enroll_url);
+    } catch {
+      // ignore — button stays visible for retry
+    } finally {
+      setWalletLoading(false);
     }
   };
 
@@ -446,6 +471,31 @@ function CustomersTab() {
                                 </div>
                               ))}
                             </div>
+                          </div>
+                        )}
+
+                        {/* Wallet pass enrollment */}
+                        {walletAvailable && (
+                          <div className="mt-4">
+                            <p className="text-xs text-neutral-400 mb-2">{t('loyalty.customers.detail.walletPass')}</p>
+                            {walletUrl ? (
+                              <div className="flex items-center gap-4">
+                                <div className="bg-white p-3 rounded-lg inline-block">
+                                  <QRCodeSVG value={walletUrl} size={140} />
+                                </div>
+                                <p className="text-neutral-400 text-xs max-w-[200px]">
+                                  {t('loyalty.customers.detail.walletScanHint')}
+                                </p>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleShowWalletQR(c.id); }}
+                                disabled={walletLoading}
+                                className="flex items-center gap-2 px-4 py-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-white text-sm font-bold rounded-lg transition-colors disabled:opacity-50"
+                              >
+                                <Wallet size={14} /> {t('loyalty.customers.detail.walletShowQr')}
+                              </button>
+                            )}
                           </div>
                         )}
 
@@ -702,12 +752,17 @@ function SettingsTab() {
     { key: 'referral_bonus_stamps', label: t('loyalty.settings.referralBonusStamps'), type: 'number' as const },
     { key: 'sms_enabled', label: t('loyalty.settings.smsNotifications'), type: 'toggle' as const },
     { key: 'google_review_target', label: t('loyalty.settings.googleReviewTarget'), type: 'text' as const },
+    // Wallet pass geofence: optional keys — render with empty fallback so the
+    // fields appear even before the tenant has saved a value.
+    { key: 'store_latitude', label: t('loyalty.settings.storeLatitude'), type: 'text' as const, optional: true },
+    { key: 'store_longitude', label: t('loyalty.settings.storeLongitude'), type: 'text' as const, optional: true },
+    { key: 'wallet_location_message', label: t('loyalty.settings.walletLocationMessage'), type: 'text' as const, optional: true },
   ];
 
   return (
     <div className="max-w-2xl space-y-4">
       {settings.map((s) => {
-        const entry = config[s.key];
+        const entry = config[s.key] || ((s as any).optional ? { value: '', description: undefined } : null);
         if (!entry) return null;
         return (
           <div key={s.key} className="bg-neutral-900 p-5 rounded-lg border border-neutral-800">

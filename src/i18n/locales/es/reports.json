@@ -383,7 +383,10 @@
         "active": "Activa",
         "recentActivity": "Actividad Reciente",
         "stamps": "sellos",
-        "stamp": "sello"
+        "stamp": "sello",
+        "walletPass": "Tarjeta Digital (Wallet)",
+        "walletShowQr": "Mostrar QR de Wallet",
+        "walletScanHint": "El cliente la escanea con la cámara de su teléfono para agregar la tarjeta a Apple Wallet."
       }
     },
     "analytics": {
@@ -420,7 +423,10 @@
       "stampBonusThreshold": "Umbral para Sello Extra ($)",
       "referralBonusStamps": "Sellos de Bono por Referido",
       "smsNotifications": "Notificaciones SMS",
-      "googleReviewTarget": "Link de Reseña de Google"
+      "googleReviewTarget": "Link de Reseña de Google",
+      "storeLatitude": "Latitud del Local (geocerca Wallet)",
+      "storeLongitude": "Longitud del Local (geocerca Wallet)",
+      "walletLocationMessage": "Mensaje en Pantalla de Bloqueo (Wallet)"
     }
   },
   "menuEngineering": {

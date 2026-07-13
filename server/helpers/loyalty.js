@@ -6,6 +6,7 @@ import {
   sendCardCompletedMessage,
   sendReferralSuccessMessage,
 } from './twilio.js';
+import { schedulePassUpdate } from './wallet/passSync.js';
 
 /* ==================== Helpers ==================== */
 
@@ -219,6 +220,9 @@ export async function addStampsForOrder(customerId, orderId, count = null, resta
     await getActiveStampCard(customerId);
   }
 
+  // Refresh wallet passes (non-blocking, like SMS)
+  schedulePassUpdate(customerId);
+
   return {
     stampCard: await get('SELECT * FROM stamp_cards WHERE id = $1', [card.id]),
     cardCompleted,
@@ -254,6 +258,9 @@ export async function addBonusStamps(customerId, count, eventType = 'manual') {
   if (cardCompleted) {
     await getActiveStampCard(customerId); // auto-create next card
   }
+
+  // Refresh wallet passes (non-blocking, like SMS)
+  schedulePassUpdate(customerId);
 
   return await get('SELECT * FROM stamp_cards WHERE id = $1', [card.id]);
 }
@@ -309,6 +316,9 @@ export async function redeemReward(stampCardId) {
     `UPDATE stamp_cards SET redeemed = true, redeemed_at = NOW() WHERE id = $1`,
     [stampCardId]
   );
+
+  // Refresh wallet passes (non-blocking, like SMS)
+  schedulePassUpdate(card.customer_id);
 
   return await get('SELECT * FROM stamp_cards WHERE id = $1', [stampCardId]);
 }

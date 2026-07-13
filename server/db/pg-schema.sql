@@ -598,6 +598,31 @@ CREATE TABLE IF NOT EXISTS loyalty_config (
   PRIMARY KEY(tenant_id, key)
 );
 
+-- Wallet Passes (Apple/Google Wallet display layer for loyalty)
+CREATE TABLE IF NOT EXISTS wallet_passes (
+  id SERIAL PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
+  customer_id INTEGER NOT NULL REFERENCES loyalty_customers(id),
+  platform TEXT NOT NULL CHECK (platform IN ('apple', 'google')),
+  serial_number TEXT NOT NULL UNIQUE,
+  auth_token TEXT NOT NULL,
+  enroll_token TEXT UNIQUE,
+  revoked BOOLEAN DEFAULT false,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(tenant_id, customer_id, platform)
+);
+
+CREATE TABLE IF NOT EXISTS wallet_registrations (
+  id SERIAL PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
+  pass_id INTEGER NOT NULL REFERENCES wallet_passes(id) ON DELETE CASCADE,
+  device_library_id TEXT NOT NULL,
+  push_token TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(pass_id, device_library_id)
+);
+
 -- Order Templates
 CREATE TABLE IF NOT EXISTS order_templates (
   id SERIAL PRIMARY KEY,
@@ -782,6 +807,11 @@ CREATE INDEX IF NOT EXISTS idx_stamp_cards_tenant ON stamp_cards(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_stamp_cards_customer ON stamp_cards(tenant_id, customer_id);
 CREATE INDEX IF NOT EXISTS idx_stamp_events_tenant ON stamp_events(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_loyalty_messages_tenant ON loyalty_messages(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_wallet_passes_tenant ON wallet_passes(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_wallet_passes_customer ON wallet_passes(tenant_id, customer_id);
+CREATE INDEX IF NOT EXISTS idx_wallet_passes_enroll_token ON wallet_passes(enroll_token) WHERE enroll_token IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_wallet_registrations_tenant ON wallet_registrations(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_wallet_registrations_device ON wallet_registrations(device_library_id);
 CREATE INDEX IF NOT EXISTS idx_order_templates_tenant ON order_templates(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_orders_payment_status ON orders(tenant_id, payment_status, paid_at);
 CREATE INDEX IF NOT EXISTS idx_waste_log_tenant ON waste_log(tenant_id, created_at DESC);
@@ -815,7 +845,8 @@ BEGIN
       'inventory_counts', 'shrinkage_alerts', 'vendors', 'vendor_items',
       'purchase_orders', 'purchase_order_items', 'financial_targets', 'financial_actuals',
       'loyalty_customers', 'stamp_cards', 'stamp_events', 'referral_events',
-      'loyalty_messages', 'loyalty_config', 'order_templates',
+      'loyalty_messages', 'loyalty_config', 'wallet_passes', 'wallet_registrations',
+      'order_templates',
       'waste_log', 'cfdi_config', 'cfdi_invoices', 'tenant_credentials', 'expenses'
     ])
   LOOP

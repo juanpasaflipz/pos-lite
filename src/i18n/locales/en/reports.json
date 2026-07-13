@@ -383,7 +383,10 @@
         "active": "Active",
         "recentActivity": "Recent Activity",
         "stamps": "stamps",
-        "stamp": "stamp"
+        "stamp": "stamp",
+        "walletPass": "Digital Wallet Card",
+        "walletShowQr": "Show Wallet QR",
+        "walletScanHint": "Have the customer scan this with their phone camera to add the card to Apple Wallet."
       }
     },
     "analytics": {
@@ -420,7 +423,10 @@
       "stampBonusThreshold": "Bonus Stamp Threshold ($)",
       "referralBonusStamps": "Referral Bonus Stamps",
       "smsNotifications": "SMS Notifications",
-      "googleReviewTarget": "Google Review Link"
+      "googleReviewTarget": "Google Review Link",
+      "storeLatitude": "Store Latitude (Wallet geofence)",
+      "storeLongitude": "Store Longitude (Wallet geofence)",
+      "walletLocationMessage": "Wallet Lock-Screen Message"
     }
   },
   "menuEngineering": {

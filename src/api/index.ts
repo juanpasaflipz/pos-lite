@@ -2264,6 +2264,30 @@ export async function updateLoyaltyConfig(key: string, value: string): Promise<L
   });
 }
 
+/* ==================== Wallet Pass Endpoints ==================== */
+
+export interface WalletStatus {
+  apple: boolean;
+  google: boolean;
+}
+
+export interface WalletEnrollResult {
+  created: boolean;
+  serial_number: string;
+  enroll_url: string;
+}
+
+export async function getWalletStatus(): Promise<WalletStatus> {
+  return apiRequest<WalletStatus>('/wallet/status');
+}
+
+export async function enrollWalletPass(customerId: number): Promise<WalletEnrollResult> {
+  return apiRequest<WalletEnrollResult>('/wallet/enroll', {
+    method: 'POST',
+    body: JSON.stringify({ customer_id: customerId }),
+  });
+}
+
 /* ==================== Order Template Endpoints ==================== */
 
 export async function getOrderTemplates(): Promise<OrderTemplate[]> {

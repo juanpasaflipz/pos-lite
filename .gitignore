@@ -35,3 +35,13 @@ android/app/src/main/assets/capacitor.plugins.json
 key.properties
 android/keystore.properties
 cfdi-live-key.backup
+
+# Wallet pass cert material — never commit
+*.p12
+*.cer
+*.certSigningRequest
+signerCert.pem
+signerKey.pem
+wwdr.pem
+p12pass.txt
+wallet-env.txt

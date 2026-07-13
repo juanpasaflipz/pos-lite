@@ -36,6 +36,7 @@ import expensesRoutes from './routes/expenses.js';
 import recurringExpensesRoutes from './routes/recurring-expenses.js';
 import purchaseOrdersRoutes from './routes/purchase-orders.js';
 import loyaltyRoutes from './routes/loyalty.js';
+import walletRoutes from './routes/wallet.js';
 
 // Delivery
 import deliveryRoutes from './routes/delivery.js';
@@ -261,6 +262,10 @@ app.use('/api/expenses', expensesRoutes);
 app.use('/api/recurring-expenses', recurringExpensesRoutes);
 app.use('/api/purchase-orders', purchaseOrdersRoutes);
 app.use('/api/loyalty', loyaltyRoutes);
+// Wallet passes: staff enroll + public capability URLs + Apple PassKit web
+// service callbacks (Apple calls the tenant subdomain, so tenant middleware
+// and RLS scope these automatically).
+app.use('/api/wallet', walletRoutes);
 
 // Delivery
 app.use('/api/delivery', deliveryRoutes);
