@@ -124,7 +124,12 @@ async function resolveTenantLogo(logoUrl, host) {
 
     let raw;
     if (logoUrl.startsWith('/uploads/')) {
-      raw = fs.readFileSync(path.join(UPLOADS_DIR, path.basename(logoUrl)));
+      // Key may be nested (e.g. <tenant>/branding/logo-x.png) — keep the full
+      // relative path, but never let it escape the uploads root.
+      const key = logoUrl.slice('/uploads/'.length).split('?')[0];
+      const filePath = path.join(UPLOADS_DIR, key);
+      if (!path.resolve(filePath).startsWith(path.resolve(UPLOADS_DIR) + path.sep)) return null;
+      raw = fs.readFileSync(filePath);
     } else {
       const url = logoUrl.startsWith('http') ? logoUrl : `https://${host}${logoUrl}`;
       const res = await fetch(url, { signal: AbortSignal.timeout(4000) });

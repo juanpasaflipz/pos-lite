@@ -12,6 +12,10 @@ import { isGetnetConfigured } from '../services/getnet/auth.js';
 import { getClipAuthHeader } from '../services/clip.js';
 import { getDisplayMenuSettings, setDisplayMenuSettings } from '../lib/displayMenu.js';
 import { get as dbGet } from '../db/index.js';
+import { putObject, deletePrefix } from '../lib/storage.js';
+import { refreshTenantPasses } from '../helpers/wallet/passSync.js';
+import crypto from 'crypto';
+import sharp from 'sharp';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.join(__dirname, '../../data/uploads');
@@ -43,6 +47,44 @@ const upload = multer({
     }
   },
 });
+
+// Logo uploads go through lib/storage.js (R2 when configured, disk fallback)
+// so they survive redeploys — Railway's local filesystem is ephemeral, which
+// is how tenant logos used to silently vanish. Memory storage: the buffer is
+// normalized by sharp and pushed to the storage backend, never written to
+// the ephemeral disk directly.
+const logoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  },
+});
+
+function safeSeg(s) {
+  return String(s).replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+/**
+ * Normalize any uploaded logo to PNG (≤1024px) and store it durably.
+ * Returns the public URL (absolute on R2, /uploads/<key> on disk fallback).
+ */
+async function storeLogo(tenantSegment, buffer) {
+  const png = await sharp(buffer)
+    .resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true })
+    .png()
+    .toBuffer();
+  const prefix = `${safeSeg(tenantSegment)}/branding/`;
+  // Best-effort cleanup of prior logos under this tenant's branding prefix.
+  try { await deletePrefix(prefix); } catch {}
+  return putObject(`${prefix}logo-${crypto.randomUUID()}.png`, png, 'image/png');
+}
 
 const router = Router();
 
@@ -304,7 +346,7 @@ router.put('/display-menu', requireAuth('manage_branding'), async (req, res) => 
  * Accepts multipart form with 'logo' file field
  */
 router.post('/logo', requireAuth('manage_branding'), (req, res) => {
-  upload.single('logo')(req, res, async (err) => {
+  logoUpload.single('logo')(req, res, async (err) => {
     if (err) {
       if (err instanceof multer.MulterError) {
         if (err.code === 'LIMIT_FILE_SIZE') {
@@ -320,18 +362,12 @@ router.post('/logo', requireAuth('manage_branding'), (req, res) => {
     }
 
     try {
-      const logoUrl = `/uploads/${req.file.filename}`;
       const tenantId = req.tenant?.id;
 
       if (!tenantId) {
         // Default/single-tenant mode — use branding.json
         const existing = readLocalBranding();
-
-        // Delete previous uploaded logo
-        if (existing.logoUrl && existing.logoUrl.startsWith('/uploads/')) {
-          const oldPath = path.join(uploadsDir, path.basename(existing.logoUrl));
-          try { fs.unlinkSync(oldPath); } catch {}
-        }
+        const logoUrl = await storeLogo('default', req.file.buffer);
 
         existing.logoUrl = logoUrl;
         writeLocalBranding(existing);
@@ -351,14 +387,20 @@ router.post('/logo', requireAuth('manage_branding'), (req, res) => {
 
       const existing = tenant.branding_json ? JSON.parse(tenant.branding_json) : {};
 
-      // Delete previous uploaded logo
-      if (existing.logoUrl && existing.logoUrl.startsWith('/uploads/')) {
+      // Legacy cleanup: pre-storage.js logos lived as loose files on the
+      // ephemeral disk — remove if one is still around locally.
+      if (existing.logoUrl && existing.logoUrl.startsWith('/uploads/') && !existing.logoUrl.includes('/branding/')) {
         const oldPath = path.join(uploadsDir, path.basename(existing.logoUrl));
         try { fs.unlinkSync(oldPath); } catch {}
       }
 
+      const logoUrl = await storeLogo(tenantId, req.file.buffer);
+
       existing.logoUrl = logoUrl;
       await updateTenant(tenantId, { branding_json: JSON.stringify(existing) });
+
+      // The logo is rendered onto wallet passes — repaint issued cards.
+      refreshTenantPasses();
 
       res.json({
         logoUrl,
