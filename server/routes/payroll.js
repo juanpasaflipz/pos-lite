@@ -258,7 +258,7 @@ router.get('/forecast', requireAuth('manage_payroll'), async (req, res) => {
 
     const rows = await all(`
       SELECT
-        ss.employee_id,
+        e.id AS employee_id,
         e.name AS employee_name,
         e.role AS employee_role,
         e.pay_type,

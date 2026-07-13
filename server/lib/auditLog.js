@@ -16,7 +16,7 @@ import { adminSql } from '../db/index.js';
 export function audit({ tenantId, actorType, actorId, action, resource, resourceId, details, ip }) {
   adminSql`
     INSERT INTO audit_log (tenant_id, actor_type, actor_id, action, resource, resource_id, details, ip_address)
-    VALUES (${tenantId}, ${actorType}, ${actorId || null}, ${action}, ${resource}, ${resourceId || null}, ${details ? JSON.stringify(details) : null}::jsonb, ${ip || null})
+    VALUES (${tenantId}, ${actorType}, ${actorId || null}, ${action}, ${resource}, ${resourceId || null}, ${details ? adminSql.json(details) : null}, ${ip || null})
   `.catch(err => {
     console.error('[Audit] Failed to write audit log:', err.message);
   });

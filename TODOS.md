@@ -596,3 +596,8 @@ is the single truth for deferred work.
   Why: today a parsed receipt that's forgotten just expires silently — the owner
   has no signal until they notice the missing expense days later. Trigger:
   Juanberto's pilot reports a second forgotten confirmation.
+
+## Known bugs (non-blocking) — logged 2026-07-11
+
+- ~~**Payroll forecast SQL error:** `column "ss.employee_id" must appear in the GROUP BY clause` — `GET /api/payroll/forecast` (`server/routes/payroll.js` ~line 261).~~ **FIXED 2026-07-13** — `ss.employee_id` → `e.id AS employee_id` in the SELECT; `tests/payroll.test.ts` added to guard the GROUP BY invariant against future regressions. (Repeating-error-log sensor for the sentinel would have caught this — still a candidate for Phase 2.)
+- ~~**auditLog.js JSONB double-encode:** `server/lib/auditLog.js:19` uses `${JSON.stringify(x)}::jsonb`.~~ **FIXED 2026-07-13** — switched to `adminSql.json(details)`, matching the sentinel-write pattern.
