@@ -14,6 +14,8 @@ import {
   getActiveStampCard,
   addStampsForOrder,
 } from '../helpers/loyalty.js';
+import { isAppleWalletConfigured } from '../helpers/wallet/applePass.js';
+import { ensureApplePass } from '../helpers/wallet/enroll.js';
 import {
   buildTasteProfile,
   getRepeatOrder,
@@ -1777,6 +1779,56 @@ router.post('/identify', verifyKioskToken, async (req, res) => {
   } catch (err) {
     console.error('[kiosk/identify] error', err);
     res.status(500).json({ error: 'No se pudo identificar al cliente' });
+  }
+});
+
+// POST /api/kiosk/wallet-enroll — Apple Wallet pass QR for the identified
+// customer, shown on the order-confirmation screen.
+//
+// Body: { customer_token } (the JWT issued by /identify)
+// Returns { available:false } when the platform has no Apple cert configured,
+// else { available:true, enroll_url } — a capability URL the customer scans
+// with their phone camera.
+//
+// enroll_url is built from the TENANT's subdomain, not req.get('host'):
+// kiosks talk to the platform host (VITE_API_BASE=pos.desktop.kitchen), but
+// the pass download must resolve tenant + RLS via the tenant's own subdomain.
+router.post('/wallet-enroll', verifyKioskToken, async (req, res) => {
+  const tenantId = req.kioskTenantId;
+  try {
+    if (!isAppleWalletConfigured()) {
+      return res.json({ available: false });
+    }
+
+    const customerId = verifyCustomerToken(req.body?.customer_token, tenantId);
+    if (!customerId) {
+      return res.status(401).json({ error: 'Sesión de cliente inválida' });
+    }
+
+    const tenant = await getTenant(tenantId);
+    const host = tenant?.subdomain
+      ? `${tenant.subdomain}.desktop.kitchen`
+      : req.get('host');
+
+    const { pass, registered } = await withTenant(tenantId, async () => {
+      const result = await ensureApplePass(customerId);
+      // If any device already holds this pass, the kiosk skips the QR —
+      // repeat customers shouldn't be nagged to re-add a card they carry.
+      const reg = await get(
+        'SELECT COUNT(*)::int AS n FROM wallet_registrations WHERE pass_id = $1',
+        [result.pass.id]
+      );
+      return { ...result, registered: (reg?.n || 0) > 0 };
+    });
+
+    res.json({
+      available: true,
+      registered,
+      enroll_url: `https://${host}/api/wallet/p/${pass.enroll_token}`,
+    });
+  } catch (err) {
+    console.error('[kiosk/wallet-enroll] error', err);
+    res.status(500).json({ error: 'No se pudo generar la tarjeta digital' });
   }
 });
 

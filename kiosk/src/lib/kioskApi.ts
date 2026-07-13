@@ -537,6 +537,33 @@ export interface SuggestionEvent {
   reason?: string;
 }
 
+/* ==================== Wallet pass enrollment ==================== */
+
+export interface WalletEnrollResult {
+  available: boolean;
+  /** true when a device already holds this customer's pass — skip the QR. */
+  registered?: boolean;
+  enroll_url?: string;
+}
+
+// Apple Wallet QR for the identified customer, shown on the confirmation
+// screen. Returns { available:false } when the platform has no pass cert
+// configured — the kiosk simply hides the panel.
+export async function fetchWalletEnroll(
+  auth: AuthHeaders,
+  customerToken: string,
+): Promise<WalletEnrollResult> {
+  const res = await authedFetch(auth, `${API_BASE}/api/kiosk/wallet-enroll`, {
+    method: 'POST',
+    body: JSON.stringify({ customer_token: customerToken }),
+  });
+  if (!res.ok) {
+    // Best-effort UX: any failure just means "don't show the QR".
+    return { available: false };
+  }
+  return res.json();
+}
+
 // Fire-and-forget telemetry — never throws, never blocks the order flow.
 export function logSuggestionEvents(
   auth: AuthHeaders,

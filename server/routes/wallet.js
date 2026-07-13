@@ -13,7 +13,6 @@
  */
 
 import { Router } from 'express';
-import crypto from 'crypto';
 import { get, all, run } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePlanFeature } from '../planLimits.js';
@@ -23,6 +22,7 @@ import {
   isAppleWalletConfigured,
   getPassTypeId,
 } from '../helpers/wallet/applePass.js';
+import { ensureApplePass } from '../helpers/wallet/enroll.js';
 
 const router = Router();
 
@@ -82,28 +82,7 @@ router.post('/enroll', requireAuth('pos_access'), requirePlanFeature('loyalty'),
     const customer = await get('SELECT id FROM loyalty_customers WHERE id = $1', [customerId]);
     if (!customer) return res.status(404).json({ error: 'Customer not found' });
 
-    let pass = await get(
-      `SELECT * FROM wallet_passes WHERE customer_id = $1 AND platform = 'apple' AND revoked = false`,
-      [customerId]
-    );
-
-    let created = false;
-    if (!pass) {
-      const serial = crypto.randomUUID();
-      const authToken = crypto.randomBytes(24).toString('hex'); // spec: >= 16 chars
-      const enrollToken = crypto.randomBytes(16).toString('base64url');
-      const { lastInsertRowid } = await run(
-        `INSERT INTO wallet_passes (customer_id, platform, serial_number, auth_token, enroll_token)
-         VALUES ($1, 'apple', $2, $3, $4)`,
-        [customerId, serial, authToken, enrollToken]
-      );
-      pass = await get('SELECT * FROM wallet_passes WHERE id = $1', [lastInsertRowid]);
-      created = true;
-    } else if (!pass.enroll_token) {
-      const enrollToken = crypto.randomBytes(16).toString('base64url');
-      await run('UPDATE wallet_passes SET enroll_token = $1 WHERE id = $2', [enrollToken, pass.id]);
-      pass.enroll_token = enrollToken;
-    }
+    const { pass, created } = await ensureApplePass(customerId);
 
     res.status(created ? 201 : 200).json({
       created,
