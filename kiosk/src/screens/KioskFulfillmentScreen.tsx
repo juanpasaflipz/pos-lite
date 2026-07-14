@@ -12,10 +12,9 @@ const KioskFulfillmentScreen: React.FC = () => {
 
   const choose = (type: KioskFulfillmentType) => {
     setFulfillmentType(type);
-    // Para Aquí: name-first identify, then send-to-kitchen (eat → pay later).
-    // Para Llevar: keeps the existing phone-first welcome with skip-to-menu
-    // (pay-upfront grab-and-go).
-    navigate(type === 'for_here' ? '/identify' : '/welcome');
+    // Both Para Aquí and Para Llevar: name-only identify → menu. Loyalty phone
+    // enrollment is deferred to the post-payment QR on the confirmation screen.
+    navigate('/identify');
   };
 
   return (

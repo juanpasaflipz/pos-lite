@@ -74,7 +74,7 @@ const KioskHoldConfirmationScreen: React.FC = () => {
   useEffect(() => {
     if (!state?.orderId) return;
     if (session?.customerToken) return; // identified path already offers wallet QR
-    if (mode !== 'paid' && mode !== 'kitchen') return;
+    if (mode !== 'paid' && mode !== 'kitchen' && mode !== 'cash-counter') return;
     if (!tenantId || !kioskToken) return;
     let cancelled = false;
     fetchLoyaltyJoinUrl({ tenantId, kioskToken }, state.orderId)
