@@ -42,6 +42,7 @@ const DisplayMenuScreen = React.lazy(() => import('./screens/DisplayMenuScreen')
 const InvoicingScreen = React.lazy(() => import('./screens/InvoicingScreen').then(m => ({ default: m.default || (() => <div>Invoicing</div>) })));
 const PublicInvoiceScreen = React.lazy(() => import('./screens/PublicInvoiceScreen').then(m => ({ default: m.default || (() => <div>Invoice</div>) })));
 const PublicReceiptScreen = React.lazy(() => import('./screens/PublicReceiptScreen').then(m => ({ default: m.default || (() => <div>Receipt</div>) })));
+const LoyaltyJoinScreen = React.lazy(() => import('./screens/LoyaltyJoinScreen').then(m => ({ default: m.default || (() => <div>Loyalty Join</div>) })));
 const ResetPasswordScreen = React.lazy(() => import('./screens/ResetPasswordScreen').then(m => ({ default: m.default || (() => <div>Reset Password</div>) })));
 const AccountScreen = React.lazy(() => import('./screens/AccountScreen').then(m => ({ default: m.default || (() => <div>Account</div>) })));
 const IntegrationsScreen = React.lazy(() => import('./screens/IntegrationsScreen').then(m => ({ default: m.default || (() => <div>Integrations</div>) })));
@@ -198,6 +199,7 @@ const TenantRoutes: React.FC = () => {
       <Route path="/menu-board" element={<MenuBoardScreen />} />
       <Route path="/invoice/:token" element={<PublicInvoiceScreen />} />
       <Route path="/r/:token" element={<PublicReceiptScreen />} />
+      <Route path="/loyalty/join/:token" element={<LoyaltyJoinScreen />} />
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to={currentEmployee ? landingForRole(currentEmployee.role) : '/'} replace />} />

@@ -8,7 +8,6 @@ import AttractScreen from './screens/AttractScreen';
 import BindDeviceScreen from './screens/BindDeviceScreen';
 import AdminBindScreen from './screens/AdminBindScreen';
 import KioskWelcomeScreen from './screens/KioskWelcomeScreen';
-import KioskHomeScreen from './screens/KioskHomeScreen';
 import KioskIdentifyScreen from './screens/KioskIdentifyScreen';
 import KioskFulfillmentScreen from './screens/KioskFulfillmentScreen';
 import KioskDeliveryAddressScreen from './screens/KioskDeliveryAddressScreen';
@@ -34,7 +33,6 @@ const Routed: React.FC = () => {
   return (
     <Routes>
       <Route path="/" element={<AttractScreen />} />
-      <Route path="/home" element={<KioskHomeScreen />} />
       <Route path="/fulfillment" element={<KioskFulfillmentScreen />} />
       <Route path="/delivery-address" element={<KioskDeliveryAddressScreen />} />
       <Route path="/welcome" element={<KioskWelcomeScreen />} />

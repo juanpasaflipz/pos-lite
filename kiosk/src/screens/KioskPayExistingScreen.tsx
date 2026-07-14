@@ -149,7 +149,7 @@ const KioskPayExistingScreen: React.FC = () => {
       <header className="px-6 py-4 border-b border-neutral-800 flex items-center justify-between">
         <button
           disabled={!!busy}
-          onClick={() => navigate('/home')}
+          onClick={() => navigate('/')}
           className="h-16 px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 disabled:opacity-50 text-lg font-bold touch-manipulation inline-flex items-center gap-2"
         >
           <ArrowLeft className="h-6 w-6" />

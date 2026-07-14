@@ -546,6 +546,28 @@ export interface WalletEnrollResult {
   enroll_url?: string;
 }
 
+// Post-payment loyalty-join QR for an un-identified (or already-identified)
+// customer. Returns a public URL that anyone with a phone can scan to enroll,
+// have this order's stamps credited to them, and download a wallet pass —
+// idempotent server-side so double-scans don't double-credit.
+export async function fetchLoyaltyJoinUrl(
+  auth: AuthHeaders,
+  orderId: number,
+): Promise<string | null> {
+  try {
+    const res = await authedFetch(
+      auth,
+      `${API_BASE}/api/kiosk/orders/${orderId}/loyalty-join-url`,
+      { method: 'POST' },
+    );
+    if (!res.ok) return null;
+    const body = await res.json();
+    return body?.join_url || null;
+  } catch {
+    return null;
+  }
+}
+
 // Apple Wallet QR for the identified customer, shown on the confirmation
 // screen. Returns { available:false } when the platform has no pass cert
 // configured — the kiosk simply hides the panel.

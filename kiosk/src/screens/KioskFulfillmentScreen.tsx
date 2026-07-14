@@ -1,22 +1,17 @@
 import React from 'react';
-import { ShoppingBag, Truck, Utensils } from 'lucide-react';
+import { ShoppingBag, Utensils } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useKioskCart, type KioskFulfillmentType } from '../context/KioskCartContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
 
 const KioskFulfillmentScreen: React.FC = () => {
   const navigate = useNavigate();
-  const { setFulfillmentType, setDelivery } = useKioskCart();
+  const { setFulfillmentType } = useKioskCart();
 
   useIdleTimer(() => navigate('/'), 60_000);
 
   const choose = (type: KioskFulfillmentType) => {
     setFulfillmentType(type);
-    if (type === 'delivery') {
-      setDelivery(null);
-      navigate('/delivery-address');
-      return;
-    }
     // Para Aquí: name-first identify, then send-to-kitchen (eat → pay later).
     // Para Llevar: keeps the existing phone-first welcome with skip-to-menu
     // (pay-upfront grab-and-go).
@@ -30,7 +25,7 @@ const KioskFulfillmentScreen: React.FC = () => {
           ¿Como quieres tu orden?
         </h1>
 
-        <div className="grid grid-cols-3 gap-6 w-full max-w-6xl">
+        <div className="grid grid-cols-2 gap-6 w-full max-w-4xl">
           <button
             onClick={() => choose('for_here')}
             className="min-h-[360px] rounded-lg bg-brand-600 active:bg-brand-700 text-white touch-manipulation flex flex-col items-center justify-center gap-7 px-6"
@@ -45,14 +40,6 @@ const KioskFulfillmentScreen: React.FC = () => {
           >
             <ShoppingBag className="h-24 w-24" />
             <span className="text-4xl xl:text-5xl font-black leading-none text-center">Para llevar</span>
-          </button>
-
-          <button
-            onClick={() => choose('delivery')}
-            className="min-h-[360px] rounded-lg bg-cockpit-green active:bg-cockpit-green/80 text-white touch-manipulation flex flex-col items-center justify-center gap-7 px-6"
-          >
-            <Truck className="h-24 w-24" />
-            <span className="text-4xl xl:text-5xl font-black leading-none text-center">A domicilio</span>
           </button>
         </div>
       </main>

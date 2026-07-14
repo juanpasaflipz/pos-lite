@@ -2869,6 +2869,55 @@ export async function issueCfdiPublicInvoice(token: string, data: {
   return res.json();
 }
 
+/* ==================== Loyalty Join (post-order QR, no auth) ==================== */
+
+export interface LoyaltyJoinInfo {
+  tenant_name: string;
+  order_number: string;
+  order_total: number;
+  already_linked: boolean;
+}
+
+export async function verifyLoyaltyJoin(token: string): Promise<LoyaltyJoinInfo> {
+  const base = FALLBACK_URLS.length ? await resolveBaseUrl() : activeBaseUrl;
+  const res = await fetch(`${base}/loyalty-join/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'No se pudo verificar el enlace');
+  }
+  return res.json();
+}
+
+export interface LoyaltyJoinEnrollResult {
+  first_name: string;
+  stamps_earned: number;
+  stamps_required: number;
+  card_completed: boolean;
+  wallet_url: string | null;
+}
+
+export async function enrollLoyaltyJoin(
+  token: string,
+  phone: string,
+  smsOptIn: boolean,
+): Promise<LoyaltyJoinEnrollResult> {
+  const base = FALLBACK_URLS.length ? await resolveBaseUrl() : activeBaseUrl;
+  const res = await fetch(`${base}/loyalty-join/enroll`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, phone, country_code: 'MX', sms_opt_in: smsOptIn }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'No pudimos registrarte');
+  }
+  return res.json();
+}
+
 /* ==================== Mercado Pago Point Endpoints ==================== */
 
 export async function getMpConnectUrl(): Promise<{ auth_url: string }> {

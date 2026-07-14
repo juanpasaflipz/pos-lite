@@ -64,6 +64,7 @@ import cfdiRoutes from './routes/cfdi.js';
 import cfdiPublicRoutes from './routes/cfdi-public.js';
 import receiptsPublicRoutes from './routes/receipts-public.js';
 import publicReviewRoutes from './routes/public-review.js';
+import loyaltyJoinPublicRoutes from './routes/loyalty-join-public.js';
 
 // Customer-facing
 import customerOrderRoutes from './routes/customer-order.js';
@@ -175,6 +176,9 @@ app.use('/api/cfdi-public', cfdiPublicRoutes);
 
 // Public SMS receipt links (token-based, no auth)
 app.use('/api/public/receipts', receiptsPublicRoutes);
+
+// Public post-order loyalty enrollment (kiosk QR self-service, token-based)
+app.use('/api/loyalty-join', loyaltyJoinPublicRoutes);
 
 // Public Google review redirect ({subdomain}.desktop.kitchen/gr → real
 // Google review URL). Owns the SMS short link so we skip TinyURL's

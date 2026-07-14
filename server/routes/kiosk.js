@@ -1782,6 +1782,39 @@ router.post('/identify', verifyKioskToken, async (req, res) => {
   }
 });
 
+// POST /api/kiosk/orders/:orderId/loyalty-join-url — mints a signed public
+// URL the kiosk embeds in a post-payment QR. Anyone with the URL can enroll
+// their phone against this order (idempotent — see loyalty-join-public.js).
+// Used on the confirmation screen for un-identified customers.
+router.post('/orders/:orderId/loyalty-join-url', verifyKioskToken, async (req, res) => {
+  const tenantId = req.kioskTenantId;
+  const orderId = Number(req.params.orderId);
+  if (!Number.isFinite(orderId)) {
+    return res.status(400).json({ error: 'orderId inválido' });
+  }
+  try {
+    const [order] = await adminSql`
+      SELECT id FROM orders WHERE id = ${orderId} AND tenant_id = ${tenantId} LIMIT 1
+    `;
+    if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
+
+    const token = jwt.sign(
+      { type: 'loyalty_join', tenantId, orderId },
+      JWT_SECRET,
+      { expiresIn: '7d' },
+    );
+
+    const tenant = await getTenant(tenantId);
+    const host = tenant?.subdomain
+      ? `${tenant.subdomain}.desktop.kitchen`
+      : req.get('host');
+    res.json({ join_url: `https://${host}/#/loyalty/join/${token}` });
+  } catch (err) {
+    console.error('[kiosk/loyalty-join-url] error', err);
+    res.status(500).json({ error: 'No se pudo generar el enlace' });
+  }
+});
+
 // POST /api/kiosk/wallet-enroll — Apple Wallet pass QR for the identified
 // customer, shown on the order-confirmation screen.
 //

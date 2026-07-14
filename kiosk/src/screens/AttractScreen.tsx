@@ -34,7 +34,7 @@ const AttractScreen: React.FC = () => {
   return (
     <div className="relative h-full w-full">
       <button
-        onClick={() => navigate('/home')}
+        onClick={() => navigate('/fulfillment')}
         className="h-full w-full bg-brand-700 flex flex-col items-center justify-center text-white touch-manipulation px-8"
       >
         {tenantName && (

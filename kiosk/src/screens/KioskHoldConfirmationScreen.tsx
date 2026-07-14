@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, Plus, Store, Utensils, Wallet } from 'lucide-react';
+import { CheckCircle2, Gift, Plus, Store, Utensils, Wallet } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useKioskCart } from '../context/KioskCartContext';
 import { useKioskCustomer } from '../context/KioskCustomerContext';
 import { useKioskBinding } from '../context/KioskBindingContext';
-import { fetchWalletEnroll } from '../lib/kioskApi';
+import { fetchLoyaltyJoinUrl, fetchWalletEnroll } from '../lib/kioskApi';
 
 type ConfirmMode = 'hold' | 'kitchen' | 'appended' | 'paid' | 'cash-counter';
 
@@ -35,8 +35,9 @@ const KioskHoldConfirmationScreen: React.FC = () => {
   const location = useLocation();
   const { clearCart } = useKioskCart();
   const { session, clearSession } = useKioskCustomer();
-  const { tenantId, kioskToken } = useKioskBinding();
+  const { tenantId, tenantName, kioskToken } = useKioskBinding();
   const [walletUrl, setWalletUrl] = useState<string | null>(null);
+  const [joinUrl, setJoinUrl] = useState<string | null>(null);
 
   const state = (location.state as HoldState | null) || null;
   const validModes = new Set<ConfirmMode>(['hold', 'kitchen', 'appended', 'paid', 'cash-counter']);
@@ -60,8 +61,27 @@ const KioskHoldConfirmationScreen: React.FC = () => {
       .then((r) => {
         if (cancelled || !r.available || r.registered || !r.enroll_url) return;
         setWalletUrl(r.enroll_url);
-        // Scanning a QR takes longer than reading "thanks" — give them time.
         setSeconds((s) => Math.max(s, 40));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Un-identified customer with a paid order → offer the loyalty-join QR.
+  // The public page handles both "already enrolled" (link + credit) and "new"
+  // (enroll + credit) in one form, so we don't need to know upfront.
+  useEffect(() => {
+    if (!state?.orderId) return;
+    if (session?.customerToken) return; // identified path already offers wallet QR
+    if (mode !== 'paid' && mode !== 'kitchen') return;
+    if (!tenantId || !kioskToken) return;
+    let cancelled = false;
+    fetchLoyaltyJoinUrl({ tenantId, kioskToken }, state.orderId)
+      .then((url) => {
+        if (cancelled || !url) return;
+        setJoinUrl(url);
+        setSeconds((s) => Math.max(s, 45));
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -180,6 +200,26 @@ const KioskHoldConfirmationScreen: React.FC = () => {
             </p>
             <p className="text-neutral-500 text-sm font-bold mt-2">
               Se actualiza sola con cada compra.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {joinUrl && !walletUrl && (
+        <div className="mt-8 rounded-2xl bg-neutral-900 border border-neutral-800 p-6 max-w-xl w-full flex items-center gap-6 text-left">
+          <div className="bg-white rounded-xl p-3 shrink-0">
+            <QRCodeSVG value={joinUrl} size={148} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xl font-black inline-flex items-center gap-2">
+              <Gift className="h-6 w-6 text-brand-300 shrink-0" />
+              ¿Ya estás en el programa de lealtad{tenantName ? ` de ${tenantName}` : ''}?
+            </p>
+            <p className="text-neutral-300 font-bold mt-2">
+              Escanea con la cámara de tu teléfono. Sumamos los sellos de esta compra y te damos tu tarjeta digital.
+            </p>
+            <p className="text-neutral-500 text-sm font-bold mt-2">
+              Ya seas cliente o nuevo, funciona igual.
             </p>
           </div>
         </div>
