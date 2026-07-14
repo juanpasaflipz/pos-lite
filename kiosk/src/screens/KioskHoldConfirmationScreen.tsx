@@ -183,9 +183,9 @@ const KioskHoldConfirmationScreen: React.FC = () => {
       )}
 
       {walletUrl && (
-        <div className="mt-8 rounded-2xl bg-neutral-900 border border-neutral-800 p-6 max-w-xl w-full flex items-center gap-6 text-left">
+        <div className="mt-8 rounded-2xl bg-neutral-900 border border-neutral-800 p-6 max-w-2xl w-full flex items-center gap-6 text-left">
           <div className="bg-white rounded-xl p-3 shrink-0">
-            <QRCodeSVG value={walletUrl} size={148} />
+            <QRCodeSVG value={walletUrl} size={240} level="M" />
           </div>
           <div className="min-w-0">
             <p className="text-xl font-black inline-flex items-center gap-2">
@@ -206,9 +206,9 @@ const KioskHoldConfirmationScreen: React.FC = () => {
       )}
 
       {joinUrl && !walletUrl && (
-        <div className="mt-8 rounded-2xl bg-neutral-900 border border-neutral-800 p-6 max-w-xl w-full flex items-center gap-6 text-left">
+        <div className="mt-8 rounded-2xl bg-neutral-900 border border-neutral-800 p-6 max-w-2xl w-full flex items-center gap-6 text-left">
           <div className="bg-white rounded-xl p-3 shrink-0">
-            <QRCodeSVG value={joinUrl} size={148} />
+            <QRCodeSVG value={joinUrl} size={240} level="M" />
           </div>
           <div className="min-w-0">
             <p className="text-xl font-black inline-flex items-center gap-2">
