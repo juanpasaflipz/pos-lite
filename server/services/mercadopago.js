@@ -137,6 +137,47 @@ export async function getTerminals(accessToken) {
 }
 
 /**
+ * List ALL Point devices on the account regardless of operating mode.
+ * Used for terminal setup: new devices ship in STANDALONE mode and are
+ * invisible to getTerminals() until switched to PDV.
+ */
+export async function getAllDevices(accessToken) {
+  const res = await fetch(`${MP}/point/integration-api/devices`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`MP getAllDevices failed: ${res.status} ${text}`);
+  }
+
+  const data = await res.json();
+  return data.devices || [];
+}
+
+/**
+ * Switch a Point device's operating mode ('PDV' = integrated, 'STANDALONE').
+ * The device must be restarted afterwards for the change to take effect.
+ */
+export async function setDeviceOperatingMode(accessToken, deviceId, operatingMode) {
+  const res = await fetch(`${MP}/point/integration-api/devices/${deviceId}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ operating_mode: operatingMode }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`MP setDeviceOperatingMode failed: ${res.status} ${text}`);
+  }
+
+  return res.json();
+}
+
+/**
  * Create a Point order and push it to the terminal.
  */
 export async function createPointOrder(accessToken, { amount, externalRef, terminalId }) {

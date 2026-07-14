@@ -6,7 +6,7 @@ import {
   Check, AlertCircle, Crown, Smartphone, Wifi, WifiOff, X, Loader2,
   Landmark, Shield, FileText, Download, ShieldOff,
 } from 'lucide-react';
-import { getAccount, updateAccount, changePassword, createCheckoutSession, createPortalSession, getMpConnectUrl, getMpTerminals, setMpDefaultTerminal as apiSetMpDefaultTerminal, validatePromoCode, getBankConnections, getBankAccounts, syncBankConnection, deleteBankConnection, getFinancingConsent, deleteFinancingConsent, exportFinancingData, getFinancingConsentTerms, type BankConnection, type BankAccount } from '../api';
+import { getAccount, updateAccount, changePassword, createCheckoutSession, createPortalSession, getMpConnectUrl, getMpTerminals, setMpDefaultTerminal as apiSetMpDefaultTerminal, getMpDevices, setMpDeviceOperatingMode, validatePromoCode, getBankConnections, getBankAccounts, syncBankConnection, deleteBankConnection, getFinancingConsent, deleteFinancingConsent, exportFinancingData, getFinancingConsentTerms, type BankConnection, type BankAccount } from '../api';
 import { usePlan } from '../context/PlanContext';
 import BankConnectionCard from '../components/banking/BankConnectionCard';
 import ConnectBankButton from '../components/banking/ConnectBankButton';
@@ -104,6 +104,47 @@ export default function AccountScreen() {
   const [mpTerminalsLoading, setMpTerminalsLoading] = useState(false);
   const [mpDefaultTerminal, setMpDefaultTerminal] = useState<string>('');
   const [mpSaved, setMpSaved] = useState(false);
+
+  // MP device setup (activate new terminals into PDV/integrated mode)
+  const [mpDevices, setMpDevices] = useState<Array<{ id: string; external_pos_id: string; operating_mode: string }>>([]);
+  const [mpDevicesVisible, setMpDevicesVisible] = useState(false);
+  const [mpDevicesLoading, setMpDevicesLoading] = useState(false);
+  const [mpActivatingId, setMpActivatingId] = useState<string | null>(null);
+  const [mpActivatedId, setMpActivatedId] = useState<string | null>(null);
+  const [mpDeviceError, setMpDeviceError] = useState('');
+
+  const loadMpDevices = async () => {
+    setMpDevicesLoading(true);
+    setMpDeviceError('');
+    try {
+      const res = await getMpDevices();
+      setMpDevices(res.devices);
+      setMpDevicesVisible(true);
+    } catch {
+      setMpDeviceError(t('account.mpDevicesLoadFailed'));
+    }
+    setMpDevicesLoading(false);
+  };
+
+  const activateMpDevice = async (deviceId: string) => {
+    setMpActivatingId(deviceId);
+    setMpDeviceError('');
+    try {
+      await setMpDeviceOperatingMode(deviceId, 'PDV');
+      setMpActivatedId(deviceId);
+      setMpDevices(prev => prev.map(d => (d.id === deviceId ? { ...d, operating_mode: 'PDV' } : d)));
+      // Refresh the PDV terminal list so the picker/default dropdown see it
+      try {
+        const res = await getMpTerminals();
+        setMpTerminals(res.terminals);
+      } catch {
+        // ignore
+      }
+    } catch {
+      setMpDeviceError(t('account.mpActivateFailed'));
+    }
+    setMpActivatingId(null);
+  };
 
   // Banking
   const [bankConnections, setBankConnections] = useState<BankConnection[]>([]);
@@ -707,6 +748,72 @@ export default function AccountScreen() {
                           <p className="text-cockpit-in-text text-xs mt-1 flex items-center gap-1">
                             <Check size={12} /> {t('account.saved')}
                           </p>
+                        )}
+                      </div>
+
+                      {/* New terminal setup: list ALL devices (incl. standalone) and
+                          activate them into integrated (PDV) mode from here. */}
+                      <div>
+                        {!mpDevicesVisible ? (
+                          <button
+                            onClick={loadMpDevices}
+                            disabled={mpDevicesLoading}
+                            className="text-sm text-[#009ee3] font-semibold hover:text-[#33b1e8] transition-colors disabled:opacity-50"
+                          >
+                            {mpDevicesLoading ? '...' : t('account.mpSetupNewTerminal')}
+                          </button>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="block text-neutral-400 text-sm">{t('account.mpAllDevices')}</label>
+                              <button
+                                onClick={loadMpDevices}
+                                disabled={mpDevicesLoading}
+                                className="text-xs text-neutral-400 hover:text-neutral-200 transition-colors disabled:opacity-50"
+                              >
+                                {mpDevicesLoading ? '...' : t('account.refresh')}
+                              </button>
+                            </div>
+                            {mpDevices.length === 0 && !mpDevicesLoading && (
+                              <p className="text-neutral-500 text-sm">{t('account.mpNoDevices')}</p>
+                            )}
+                            {mpDevices.map(device => (
+                              <div
+                                key={device.id}
+                                className="flex items-center justify-between gap-3 bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2"
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-white text-sm font-medium truncate">
+                                    {device.external_pos_id || device.id}
+                                  </p>
+                                  <p className={`text-xs ${device.operating_mode === 'PDV' ? 'text-green-400' : 'text-amber-400'}`}>
+                                    {device.operating_mode === 'PDV'
+                                      ? t('account.mpModeIntegrated')
+                                      : t('account.mpModeStandalone')}
+                                  </p>
+                                </div>
+                                {device.operating_mode !== 'PDV' ? (
+                                  <button
+                                    onClick={() => activateMpDevice(device.id)}
+                                    disabled={mpActivatingId !== null}
+                                    className="shrink-0 px-3 py-2 bg-[#009ee3] text-white text-xs font-bold rounded-lg hover:bg-[#0082c0] transition-colors disabled:opacity-50"
+                                  >
+                                    {mpActivatingId === device.id ? '...' : t('account.mpActivateForPos')}
+                                  </button>
+                                ) : (
+                                  <Check size={16} className="shrink-0 text-green-400" />
+                                )}
+                              </div>
+                            ))}
+                            {mpActivatedId && (
+                              <p className="text-teal-400 text-xs flex items-center gap-1">
+                                <Check size={12} /> {t('account.mpActivatedRestart')}
+                              </p>
+                            )}
+                            {mpDeviceError && (
+                              <p className="text-red-400 text-xs">{mpDeviceError}</p>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>

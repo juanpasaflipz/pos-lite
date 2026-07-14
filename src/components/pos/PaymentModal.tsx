@@ -2,9 +2,25 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatPrice } from '../../utils/currency';
 import { usePlan } from '../../context/PlanContext';
-import { mpCharge, mpCancelCharge, clipCharge, clipCancelCharge, getPaymentStatus } from '../../api';
+import { mpCharge, mpCancelCharge, clipCharge, clipCancelCharge, getPaymentStatus, getMpTerminals, getMpStatus } from '../../api';
 
 type TerminalProvider = 'mp' | 'clip';
+
+// Per-workstation MP Point terminal binding. Stored in localStorage so each
+// PC/register keeps its own nearest terminal, independent of the tenant default.
+const MP_TERMINAL_STORAGE_KEY = 'dk_mp_terminal_id';
+
+interface MpTerminal {
+  id: string;
+  external_pos_id: string;
+  operating_mode: string;
+}
+
+function terminalDisplayName(term: MpTerminal): string {
+  if (term.external_pos_id) return term.external_pos_id;
+  const parts = term.id.split('__');
+  return parts[parts.length - 1] || term.id;
+}
 
 export interface PaymentModalProps {
   orderTotal: number;
@@ -54,6 +70,48 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   const [terminalProvider, setTerminalProvider] = useState<TerminalProvider | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Per-workstation MP terminal binding + failover
+  const [terminals, setTerminals] = useState<MpTerminal[]>([]);
+  const [boundTerminalId, setBoundTerminalId] = useState<string>(
+    () => localStorage.getItem(MP_TERMINAL_STORAGE_KEY) || ''
+  );
+  const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
+  const [failoverAvailable, setFailoverAvailable] = useState(false);
+  const [failoverBusy, setFailoverBusy] = useState(false);
+  const failoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!isMpConnected || !orderId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [{ terminals: list }, status] = await Promise.all([getMpTerminals(), getMpStatus()]);
+        if (cancelled) return;
+        setTerminals(list);
+        setBoundTerminalId(prev => {
+          if (prev && list.some(term => term.id === prev)) return prev;
+          const fallback =
+            (status.mp_default_terminal_id && list.some(term => term.id === status.mp_default_terminal_id)
+              ? status.mp_default_terminal_id
+              : list[0]?.id) || '';
+          return fallback;
+        });
+      } catch {
+        // Non-fatal: charge falls back to the tenant default terminal server-side
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isMpConnected, orderId]);
+
+  const handleTerminalSelect = (termId: string) => {
+    setBoundTerminalId(termId);
+    localStorage.setItem(MP_TERMINAL_STORAGE_KEY, termId);
+  };
+
+  const otherTerminal = terminals.find(
+    term => term.id !== (activeTerminalId || boundTerminalId)
+  ) || null;
+
   const handleTipSelect = (percentage: number) => {
     const tipAmount = Math.round((orderTotal * percentage) / 100 * 100) / 100;
     setTip(tipAmount);
@@ -76,6 +134,19 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   const receivedNum = parseFloat(amountReceived) || 0;
   const changeDue = Math.max(0, receivedNum - finalTotal);
 
+  const stopFailoverTimer = useCallback(() => {
+    if (failoverTimerRef.current) clearTimeout(failoverTimerRef.current);
+    failoverTimerRef.current = null;
+  }, []);
+
+  // 20s of no response from the bound terminal surfaces the one-tap
+  // "send to the other terminal" retry (charge stays pending until resolved).
+  const startFailoverTimer = useCallback(() => {
+    stopFailoverTimer();
+    setFailoverAvailable(false);
+    failoverTimerRef.current = setTimeout(() => setFailoverAvailable(true), 20000);
+  }, [stopFailoverTimer]);
+
   // Poll for terminal payment completion
   const startPolling = useCallback((oid: number) => {
     if (pollRef.current) clearInterval(pollRef.current);
@@ -85,6 +156,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         if (status.payment_status === 'paid') {
           if (pollRef.current) clearInterval(pollRef.current);
           pollRef.current = null;
+          stopFailoverTimer();
+          setFailoverAvailable(false);
           setTerminalSuccess(true);
           setTimeout(() => {
             if (onTerminalPaymentSuccess) {
@@ -95,30 +168,36 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         } else if (status.payment_status === 'failed') {
           if (pollRef.current) clearInterval(pollRef.current);
           pollRef.current = null;
+          stopFailoverTimer();
           setTerminalPending(false);
           setTerminalError(t('payment.terminalDeclined'));
+          setFailoverAvailable(true);
         }
       } catch {
         // Keep polling on network errors
       }
     }, 2000);
-  }, [onTerminalPaymentSuccess, onCancel]);
+  }, [onTerminalPaymentSuccess, onCancel, stopFailoverTimer, t]);
 
   // Cleanup polling on unmount
   useEffect(() => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
+      if (failoverTimerRef.current) clearTimeout(failoverTimerRef.current);
     };
   }, []);
 
-  const handleTerminalPayment = async (provider: TerminalProvider) => {
+  const handleTerminalPayment = async (provider: TerminalProvider, terminalId?: string) => {
     if (!orderId) return;
     setTerminalProvider(provider);
     setTerminalPending(true);
     setTerminalError('');
+    const targetTerminal = terminalId || boundTerminalId || undefined;
     try {
       if (provider === 'mp') {
-        await mpCharge(orderId, undefined, tip);
+        const result = await mpCharge(orderId, targetTerminal, tip);
+        setActiveTerminalId(result.terminal_id || targetTerminal || null);
+        startFailoverTimer();
       } else {
         await clipCharge(orderId);
       }
@@ -128,16 +207,19 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
       setTerminalPending(false);
       setTerminalProvider(null);
       setTerminalError(err instanceof Error ? err.message : t('payment.terminalSendError'));
+      // On MP send failure, offer the other terminal right away
+      if (provider === 'mp') setFailoverAvailable(true);
     }
   };
 
   const handleCancelTerminal = async () => {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = null;
+    stopFailoverTimer();
     if (terminalOrderId && terminalProvider) {
       try {
         if (terminalProvider === 'mp') {
-          await mpCancelCharge(terminalOrderId);
+          await mpCancelCharge(terminalOrderId, activeTerminalId || undefined);
         } else {
           await clipCancelCharge(terminalOrderId);
         }
@@ -148,7 +230,53 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     setTerminalPending(false);
     setTerminalOrderId(null);
     setTerminalProvider(null);
+    setActiveTerminalId(null);
     setTerminalError('');
+    setFailoverAvailable(false);
+  };
+
+  // One-tap failover: cancel the pending intent on the unresponsive MP terminal
+  // (never leave two live intents), then re-send to the other terminal.
+  const handleFailover = async () => {
+    if (!orderId || !otherTerminal || failoverBusy) return;
+    setFailoverBusy(true);
+    try {
+      if (terminalPending && terminalOrderId) {
+        // Race guard: if the customer already paid on the original terminal, let the poller finish it.
+        try {
+          const status = await getPaymentStatus(terminalOrderId);
+          if (status.payment_status === 'paid') {
+            setFailoverAvailable(false);
+            return;
+          }
+        } catch {
+          // Status check failed — proceed with cancel, which is itself guarded
+        }
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = null;
+        stopFailoverTimer();
+        try {
+          await mpCancelCharge(orderId, activeTerminalId || undefined);
+        } catch {
+          const recheck = await getPaymentStatus(orderId).catch(() => null);
+          if (recheck?.payment_status === 'paid') {
+            startPolling(orderId);
+            setFailoverAvailable(false);
+            return;
+          }
+          setTerminalError(t('payment.terminalSendError'));
+          setTerminalPending(false);
+          return;
+        }
+      }
+      setTerminalError('');
+      await handleTerminalPayment('mp', otherTerminal.id);
+    } catch (err) {
+      setTerminalPending(false);
+      setTerminalError(err instanceof Error ? err.message : t('payment.terminalSendError'));
+    } finally {
+      setFailoverBusy(false);
+    }
   };
 
   return (
@@ -306,6 +434,20 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
               <p className="text-neutral-400 text-sm">
                 {t('payment.terminalReaderPrompt')}
               </p>
+              {failoverAvailable && otherTerminal && terminalProvider === 'mp' && (
+                <div className="pt-2 border-t border-[#009ee3]/20 space-y-2">
+                  <p className="text-neutral-400 text-sm">{t('payment.terminalNotResponding')}</p>
+                  <button
+                    onClick={handleFailover}
+                    disabled={failoverBusy}
+                    className="w-full py-3 bg-[#009ee3] text-white font-bold rounded-lg hover:bg-[#0082c0] disabled:bg-neutral-700 disabled:text-neutral-400 transition-all touch-manipulation"
+                  >
+                    {failoverBusy
+                      ? t('payment.processing')
+                      : t('payment.sendToOtherTerminal', { name: terminalDisplayName(otherTerminal) })}
+                  </button>
+                </div>
+              )}
               <button
                 onClick={handleCancelTerminal}
                 className="text-cockpit-out-text text-sm font-semibold hover:text-cockpit-out-text/90 transition-colors"
@@ -316,7 +458,20 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
           )}
 
           {terminalError && (
-            <p className="text-cockpit-out-text text-sm text-center font-medium">{terminalError}</p>
+            <div className="space-y-2">
+              <p className="text-cockpit-out-text text-sm text-center font-medium">{terminalError}</p>
+              {!terminalPending && failoverAvailable && otherTerminal && (
+                <button
+                  onClick={handleFailover}
+                  disabled={failoverBusy}
+                  className="w-full py-3 bg-[#009ee3] text-white font-bold rounded-lg hover:bg-[#0082c0] disabled:bg-neutral-700 disabled:text-neutral-400 transition-all touch-manipulation"
+                >
+                  {failoverBusy
+                    ? t('payment.processing')
+                    : t('payment.sendToOtherTerminal', { name: terminalDisplayName(otherTerminal) })}
+                </button>
+              )}
+            </div>
           )}
 
           {/* Payment Buttons */}
@@ -324,14 +479,35 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
             <div className="space-y-3">
               {/* Mercado Pago Terminal — only for Pro+ with MP connected */}
               {isMpConnected && orderId && (
-                <button
-                  onClick={() => handleTerminalPayment('mp')}
-                  disabled={isProcessing || !isOnline}
-                  className="w-full py-4 bg-[#009ee3] text-white text-xl font-bold rounded-lg hover:bg-[#0082c0] disabled:bg-neutral-700 disabled:text-neutral-400 transition-all touch-manipulation"
-                  title={!isOnline ? t('offline.cardUnavailable') : undefined}
-                >
-                  {!isOnline ? t('offline.cardUnavailable') : t('payment.sendToMPTerminal')}
-                </button>
+                <div className="space-y-2">
+                  {/* Per-workstation terminal binding — remembered on this device */}
+                  {terminals.length > 1 && (
+                    <div className="flex items-center gap-2">
+                      <label className="text-neutral-400 text-sm whitespace-nowrap">
+                        {t('payment.terminalLabel')}
+                      </label>
+                      <select
+                        value={boundTerminalId}
+                        onChange={(e) => handleTerminalSelect(e.target.value)}
+                        className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg py-2 px-3 text-sm text-white focus:outline-none focus:border-[#009ee3]"
+                      >
+                        {terminals.map(term => (
+                          <option key={term.id} value={term.id}>
+                            {terminalDisplayName(term)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => handleTerminalPayment('mp')}
+                    disabled={isProcessing || !isOnline}
+                    className="w-full py-4 bg-[#009ee3] text-white text-xl font-bold rounded-lg hover:bg-[#0082c0] disabled:bg-neutral-700 disabled:text-neutral-400 transition-all touch-manipulation"
+                    title={!isOnline ? t('offline.cardUnavailable') : undefined}
+                  >
+                    {!isOnline ? t('offline.cardUnavailable') : t('payment.sendToMPTerminal')}
+                  </button>
+                </div>
               )}
               {/* Clip Terminal — only when Clip credentials are configured */}
               {isClipConfigured && orderId && (

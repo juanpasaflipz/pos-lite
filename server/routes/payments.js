@@ -11,6 +11,8 @@ import { getTenant } from '../tenants.js';
 import {
   ensureFreshToken,
   getTerminals as mpGetTerminals,
+  getAllDevices as mpGetAllDevices,
+  setDeviceOperatingMode as mpSetDeviceOperatingMode,
   createPointOrder,
   getPointOrder,
   mapPointOrderStatus,
@@ -1306,6 +1308,48 @@ router.get('/mp/terminals', requireAuth('pos_access'), requirePro, async (req, r
   }
 });
 
+// GET /api/payments/mp/devices — list ALL Point devices (any operating mode).
+// Used during terminal setup: new devices ship in STANDALONE mode and don't
+// appear in /mp/terminals until activated.
+router.get('/mp/devices', requireAuth('pos_access'), requirePro, async (req, res) => {
+  try {
+    const tenant = await getTenant(req.tenant.id);
+    if (!tenant?.mp_access_token) {
+      return res.status(400).json({ error: 'Mercado Pago not connected' });
+    }
+    const accessToken = await ensureFreshToken(tenant, adminSql);
+    const devices = await mpGetAllDevices(accessToken);
+    res.json({ devices });
+  } catch (error) {
+    console.error('MP getAllDevices error:', error);
+    res.status(500).json({ error: 'Failed to fetch devices' });
+  }
+});
+
+// POST /api/payments/mp/devices/operating-mode — switch a device between
+// STANDALONE and PDV (integrated) mode. The terminal must be restarted
+// afterwards for the change to take effect.
+router.post('/mp/devices/operating-mode', requireAuth('pos_access'), requirePro, async (req, res) => {
+  try {
+    const { device_id, operating_mode = 'PDV' } = req.body;
+    if (!device_id) return res.status(400).json({ error: 'Missing device_id' });
+    if (!['PDV', 'STANDALONE'].includes(operating_mode)) {
+      return res.status(400).json({ error: 'Invalid operating_mode' });
+    }
+
+    const tenant = await getTenant(req.tenant.id);
+    if (!tenant?.mp_access_token) {
+      return res.status(400).json({ error: 'Mercado Pago not connected' });
+    }
+    const accessToken = await ensureFreshToken(tenant, adminSql);
+    const result = await mpSetDeviceOperatingMode(accessToken, device_id, operating_mode);
+    res.json({ success: true, operating_mode: result?.operating_mode || operating_mode });
+  } catch (error) {
+    console.error('MP setDeviceOperatingMode error:', error);
+    res.status(500).json({ error: 'Failed to update device operating mode' });
+  }
+});
+
 // POST /api/payments/mp/terminals/default — set default terminal
 router.post('/mp/terminals/default', requireAuth('pos_access'), requirePro, async (req, res) => {
   try {
@@ -1391,7 +1435,7 @@ router.post('/mp/charge', requireAuth('pos_access'), requirePro, async (req, res
       [mpOrder.id, tipAmount, termId, order.id]
     );
 
-    res.json({ success: true, mp_order_id: mpOrder.id, payment_intent_id: mpOrder.id });
+    res.json({ success: true, mp_order_id: mpOrder.id, payment_intent_id: mpOrder.id, terminal_id: termId });
   } catch (error) {
     console.error('MP charge error:', error);
     const { status, payload } = parseMpError(error);
@@ -1402,7 +1446,7 @@ router.post('/mp/charge', requireAuth('pos_access'), requirePro, async (req, res
 // POST /api/payments/mp/cancel — cancel a pending terminal payment
 router.post('/mp/cancel', requireAuth('pos_access'), requirePro, async (req, res) => {
   try {
-    const { order_id } = req.body;
+    const { order_id, terminal_id } = req.body;
     if (!order_id) return res.status(400).json({ error: 'Missing order_id' });
 
     const order = await get('SELECT id, mp_order_id, payment_status FROM orders WHERE id = $1', [order_id]);
@@ -1417,13 +1461,12 @@ router.post('/mp/cancel', requireAuth('pos_access'), requirePro, async (req, res
     }
 
     const accessToken = await ensureFreshToken(tenant, adminSql);
-    const termId = tenant.mp_default_terminal_id;
+    // Cancel on the terminal the charge was actually sent to — per-workstation
+    // bindings mean it is not necessarily the tenant default.
+    const termId = terminal_id || tenant.mp_default_terminal_id;
 
-    // Race guard: before we cancel + null mp_order_id, ask MP one more time
-    // whether the terminal payment already cleared. Common scenario: cashier
-    // taps Cancelar at the exact moment the customer's card clears — without
-    // this guard we'd void the recovery key and the order ends up "paid on
-    // the terminal" but "unpaid in our DB" with no automatic way back.
+    // Race guard: if the customer's card cleared just as the cashier tapped
+    // Cancel, void here would strand the payment (paid at terminal, unpaid in DB).
     if (order.mp_order_id) {
       try {
         const mpOrder = await getPointOrder(accessToken, order.mp_order_id, termId);
@@ -1435,7 +1478,6 @@ router.post('/mp/cancel', requireAuth('pos_access'), requirePro, async (req, res
           return res.json({ success: true, cancelled: false, paid: true });
         }
       } catch (pollErr) {
-        // Non-blocking — if MP is unreachable we still let the cashier cancel.
         console.warn('MP cancel pre-poll failed (continuing with cancel):', pollErr.message);
       }
     }

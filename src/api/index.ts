@@ -2936,6 +2936,20 @@ export async function getMpTerminals(): Promise<{ terminals: Array<{ id: string;
   return apiRequest('/payments/mp/terminals');
 }
 
+export async function getMpDevices(): Promise<{ devices: Array<{ id: string; external_pos_id: string; operating_mode: string }> }> {
+  return apiRequest('/payments/mp/devices');
+}
+
+export async function setMpDeviceOperatingMode(
+  device_id: string,
+  operating_mode: 'PDV' | 'STANDALONE' = 'PDV'
+): Promise<{ success: boolean; operating_mode: string }> {
+  return apiRequest('/payments/mp/devices/operating-mode', {
+    method: 'POST',
+    body: JSON.stringify({ device_id, operating_mode }),
+  });
+}
+
 export async function setMpDefaultTerminal(terminal_id: string): Promise<{ success: boolean }> {
   return apiRequest('/payments/mp/terminals/default', {
     method: 'POST',
@@ -2943,17 +2957,17 @@ export async function setMpDefaultTerminal(terminal_id: string): Promise<{ succe
   });
 }
 
-export async function mpCharge(order_id: number, terminal_id?: string, tip: number = 0): Promise<{ success: boolean; mp_order_id: string; payment_intent_id: string }> {
+export async function mpCharge(order_id: number, terminal_id?: string, tip: number = 0): Promise<{ success: boolean; mp_order_id: string; payment_intent_id: string; terminal_id: string }> {
   return apiRequest('/payments/mp/charge', {
     method: 'POST',
     body: JSON.stringify({ order_id, terminal_id, tip }),
   });
 }
 
-export async function mpCancelCharge(order_id: number): Promise<{ success: boolean }> {
+export async function mpCancelCharge(order_id: number, terminal_id?: string): Promise<{ success: boolean }> {
   return apiRequest('/payments/mp/cancel', {
     method: 'POST',
-    body: JSON.stringify({ order_id }),
+    body: JSON.stringify({ order_id, terminal_id }),
   });
 }
 
