@@ -14,7 +14,7 @@ const KioskIdentifyScreen: React.FC = () => {
 
   const [name, setName] = useState('');
 
-  useIdleTimer(() => navigate('/'), 120_000);
+  const { warning } = useIdleTimer(() => navigate('/'), 120_000);
 
   const onSubmitName = () => {
     const trimmed = name.trim();
@@ -51,6 +51,7 @@ const KioskIdentifyScreen: React.FC = () => {
       >
         Continuar
       </button>
+      {warning}
     </div>
   );
 };

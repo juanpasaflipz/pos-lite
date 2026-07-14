@@ -68,7 +68,7 @@ const KioskMenuScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [modifierItem, setModifierItem] = useState<KioskMenuItem | null>(null);
   const [flashItemId, setFlashItemId] = useState<number | null>(null);
-  useIdleTimer(() => navigate('/'), 120_000);
+  const { warning } = useIdleTimer(() => navigate('/'), 120_000);
 
   const auth = useMemo(
     () => (tenantId && kioskToken ? { tenantId, kioskToken } : null),
@@ -349,6 +349,7 @@ const KioskMenuScreen: React.FC = () => {
           onConfirm={confirmModifierAdd}
         />
       )}
+      {warning}
     </div>
   );
 };

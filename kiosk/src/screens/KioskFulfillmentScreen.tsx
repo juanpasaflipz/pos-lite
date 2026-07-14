@@ -8,7 +8,7 @@ const KioskFulfillmentScreen: React.FC = () => {
   const navigate = useNavigate();
   const { setFulfillmentType } = useKioskCart();
 
-  useIdleTimer(() => navigate('/'), 60_000);
+  const { warning } = useIdleTimer(() => navigate('/'), 60_000);
 
   const choose = (type: KioskFulfillmentType) => {
     setFulfillmentType(type);
@@ -42,6 +42,7 @@ const KioskFulfillmentScreen: React.FC = () => {
           </button>
         </div>
       </main>
+      {warning}
     </div>
   );
 };

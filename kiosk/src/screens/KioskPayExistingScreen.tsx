@@ -52,7 +52,7 @@ const KioskPayExistingScreen: React.FC = () => {
 
   // Stretch idle timeout while a terminal charge is in flight — customer is
   // standing there with their card, not idle.
-  useIdleTimer(() => navigate('/'), busy ? 300_000 : 120_000);
+  const { warning } = useIdleTimer(() => navigate('/'), busy ? 300_000 : 120_000);
 
   useEffect(() => {
     if (!state) {
@@ -273,6 +273,7 @@ const KioskPayExistingScreen: React.FC = () => {
           </div>
         </aside>
       </main>
+      {warning}
     </div>
   );
 };
