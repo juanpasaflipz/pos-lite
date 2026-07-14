@@ -28,7 +28,6 @@ targets:
           UIColorName: LaunchBackground
         UIStatusBarHidden: true
         UIViewControllerBasedStatusBarAppearance: false
-        UIRequiresFullScreen: true
         UISupportedInterfaceOrientations~ipad:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown
