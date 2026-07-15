@@ -355,22 +355,6 @@ export async function cancelPointOrder(accessToken, terminalId, paymentIntentId)
   }
 }
 
-/**
- * List ALL Point devices on the account (PDV + STANDALONE).
- * Used by recovery to know every device a stuck intent could live on.
- */
-export async function getAllDevices(accessToken) {
-  const res = await fetch(`${MP}/point/integration-api/devices`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`MP getAllDevices failed: ${res.status} ${text}`);
-  }
-  const data = await res.json();
-  return data.devices || [];
-}
-
 // MP error 2205 = "There is already a queued intent for the device".
 // Match on either the code or the message — MP has been known to vary the format.
 export function isQueueStuckError(err) {
