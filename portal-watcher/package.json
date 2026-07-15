@@ -1,0 +1,14 @@
+{
+  "name": "pos-lite-portal-watcher",
+  "private": true,
+  "type": "module",
+  "description": "Scrapes Didi/Rappi merchant portals and ingests orders into pos-lite",
+  "scripts": {
+    "start": "node watcher.js",
+    "login": "node watcher.js --login",
+    "debug": "node watcher.js --debug"
+  },
+  "dependencies": {
+    "playwright": "^1.45.0"
+  }
+}

@@ -544,7 +544,23 @@
     "active": "Activa",
     "inactive": "Inactiva",
     "noPrinters": "No hay impresoras configuradas",
-    "routingHint": "Asigna cada categoría del menú a una impresora para el ruteo de tickets."
+    "routingHint": "Asigna cada categoría del menú a una impresora para el ruteo de tickets.",
+    "bridge": {
+      "title": "Puente de Impresión",
+      "notConfigured": "Sin configurar",
+      "online": "Conectado",
+      "offline": "Sin conexión",
+      "lastSeen": "Última señal",
+      "generateToken": "Generar token",
+      "rotateConfirm": "Ya existe un token. Generar uno nuevo desconecta el puente actual hasta actualizar su config.json. ¿Continuar?",
+      "testPrint": "Impresión de prueba",
+      "testSent": "¡Enviado!",
+      "queued": "En cola",
+      "printed24h": "Impresos (24h)",
+      "errors24h": "Errores (24h)",
+      "tokenOnce": "Este token se muestra UNA sola vez. Cópialo ahora.",
+      "tokenHint": "Pégalo en el config.json del print-bridge en la Mac de cocina (ver print-bridge/README.md)."
+    }
   },
   "recipe": {
     "title": "Gestión de Recetas",

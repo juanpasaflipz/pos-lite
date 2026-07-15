@@ -311,6 +311,26 @@ CREATE TABLE IF NOT EXISTS category_printer_routes (
   PRIMARY KEY(category_id, printer_id)
 );
 
+-- Print jobs — queue consumed by the on-site print bridge (see /print-bridge)
+CREATE TABLE IF NOT EXISTS print_jobs (
+  id SERIAL PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
+  order_id INTEGER REFERENCES orders(id) ON DELETE SET NULL,
+  printer_id INTEGER REFERENCES printers(id) ON DELETE SET NULL,
+  job_type TEXT NOT NULL DEFAULT 'kitchen',
+  source TEXT,
+  payload JSONB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  claimed_by TEXT,
+  claimed_at TIMESTAMPTZ,
+  printed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_print_jobs_tenant_status ON print_jobs(tenant_id, status, id);
+
 -- Delivery
 CREATE TABLE IF NOT EXISTS delivery_platforms (
   id SERIAL PRIMARY KEY,
@@ -837,7 +857,7 @@ BEGIN
       'inventory_items', 'menu_item_ingredients',
       'modifier_groups', 'modifiers', 'menu_item_modifier_groups', 'order_item_modifiers',
       'combo_definitions', 'combo_slots', 'order_payments', 'order_payment_items',
-      'printers', 'category_printer_routes',
+      'printers', 'category_printer_routes', 'print_jobs',
       'delivery_platforms', 'delivery_orders', 'delivery_markup_rules',
       'virtual_brands', 'virtual_brand_items',
       'display_assets',

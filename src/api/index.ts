@@ -1671,6 +1671,33 @@ export async function updateCategoryPrinterRoute(categoryId: number, printerId: 
   });
 }
 
+/* ==================== Print Bridge (on-site agent) ==================== */
+
+export interface PrintBridgeStatus {
+  configured: boolean;
+  online: boolean;
+  last_seen: string | null;
+  queued: number;
+  printing: number;
+  done_24h: number;
+  errors_24h: number;
+}
+
+export async function getPrintBridgeStatus(): Promise<PrintBridgeStatus> {
+  return apiRequest<PrintBridgeStatus>('/print-jobs/bridge-status');
+}
+
+export async function generatePrintAgentToken(): Promise<{ token: string }> {
+  return apiRequest<{ token: string }>('/print-jobs/agent-token', { method: 'POST' });
+}
+
+export async function sendTestPrint(printerId: number | null): Promise<{ job_id: number }> {
+  return apiRequest<{ job_id: number }>('/print-jobs/test', {
+    method: 'POST',
+    body: JSON.stringify({ printer_id: printerId }),
+  });
+}
+
 /* ==================== Delivery Endpoints ==================== */
 
 export async function getDeliveryPlatforms(): Promise<DeliveryPlatform[]> {

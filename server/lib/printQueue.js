@@ -1,0 +1,124 @@
+/**
+ * Print queue helper — enqueues ESC/POS kitchen tickets into print_jobs.
+ *
+ * The cloud server can't reach the restaurant's LAN printer directly, so
+ * jobs are queued here and a small print-bridge agent running on-site
+ * (see /print-bridge) polls, claims and prints them.
+ *
+ * MUST be called inside tenant context (any /api route) — uses the
+ * tenant-scoped db helpers so RLS applies.
+ */
+
+import { all, get, run, getTenantId } from '../db/index.js';
+import { buildKitchenTicket, buildTestTicket } from './escpos.js';
+
+/**
+ * Pick the target printer for a kitchen ticket.
+ * Preference: active 'kitchen' printer → any active printer → null (bridge default).
+ */
+async function pickKitchenPrinter() {
+  const kitchen = await get(
+    "SELECT id FROM printers WHERE active = true AND printer_type = 'kitchen' ORDER BY id LIMIT 1"
+  );
+  if (kitchen) return kitchen.id;
+  const any = await get('SELECT id FROM printers WHERE active = true ORDER BY id LIMIT 1');
+  return any?.id || null;
+}
+
+/**
+ * Enqueue a kitchen ticket for an order that already exists in the DB.
+ * Loads order + items (+ delivery info if present), renders ESC/POS, inserts a job.
+ *
+ * Never throws — printing must not break order ingestion. Returns the job id or null.
+ *
+ * @param {number} orderId
+ * @param {object} [opts]
+ * @param {string} [opts.source]   — override source label (defaults to orders.source)
+ * @param {string} [opts.jobType]  — default 'kitchen'
+ */
+export async function enqueueKitchenTicket(orderId, opts = {}) {
+  try {
+    const order = await get('SELECT * FROM orders WHERE id = $1', [orderId]);
+    if (!order) {
+      console.warn(`[PrintQueue] Order ${orderId} not found — skipping ticket`);
+      return null;
+    }
+
+    const items = await all(`
+      SELECT oi.item_name, oi.quantity, oi.notes,
+             COALESCE(
+               (SELECT json_agg(oim.modifier_name)
+                FROM order_item_modifiers oim
+                WHERE oim.order_item_id = oi.id),
+               '[]'::json
+             ) AS modifiers
+      FROM order_items oi
+      WHERE oi.order_id = $1
+      ORDER BY oi.id
+    `, [orderId]);
+
+    let delivery = null;
+    if (order.delivery_order_id) {
+      delivery = await get(`
+        SELECT d.external_order_id, d.customer_name, d.delivery_address, p.name AS platform_name
+        FROM delivery_orders d
+        LEFT JOIN delivery_platforms p ON p.id = d.platform_id
+        WHERE d.id = $1
+      `, [order.delivery_order_id]);
+    }
+
+    const ticket = {
+      source: opts.source || delivery?.platform_name || order.source || 'pos',
+      orderNumber: order.order_number,
+      externalId: delivery?.external_order_id || null,
+      customerName: delivery?.customer_name || null,
+      deliveryAddress: delivery?.delivery_address || null,
+      createdAt: order.created_at,
+      items: items.map(i => ({
+        name: i.item_name,
+        quantity: Number(i.quantity) || 1,
+        notes: i.notes || null,
+        modifiers: Array.isArray(i.modifiers) ? i.modifiers : [],
+      })),
+    };
+
+    const data = buildKitchenTicket(ticket).toString('base64');
+    const printerId = await pickKitchenPrinter();
+
+    const result = await run(`
+      INSERT INTO print_jobs (tenant_id, order_id, printer_id, job_type, source, payload)
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `, [
+      getTenantId(),
+      orderId,
+      printerId,
+      opts.jobType || 'kitchen',
+      ticket.source,
+      JSON.stringify({ format: 'escpos', encoding: 'base64', data, ticket }),
+    ]);
+
+    console.log(`[PrintQueue] Enqueued kitchen ticket job ${result.lastInsertRowid} for order ${orderId} (${ticket.source})`);
+    return result.lastInsertRowid;
+  } catch (err) {
+    console.error(`[PrintQueue] Failed to enqueue ticket for order ${orderId}:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Enqueue a test ticket (from the Printer Management screen).
+ * @param {number|null} printerId
+ * @param {string} [printerName]
+ */
+export async function enqueueTestTicket(printerId = null, printerName = '') {
+  const data = buildTestTicket({ printerName }).toString('base64');
+  const result = await run(`
+    INSERT INTO print_jobs (tenant_id, printer_id, job_type, source, payload)
+    VALUES ($1, $2, 'test', 'test', $3)
+  `, [
+    getTenantId(),
+    printerId,
+    JSON.stringify({ format: 'escpos', encoding: 'base64', data, ticket: { test: true } }),
+  ]);
+  return result.lastInsertRowid;
+}

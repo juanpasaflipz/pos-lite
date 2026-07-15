@@ -1,0 +1,6 @@
+{
+  "server_url": "https://SUBDOMINIO.desktop.kitchen",
+  "agent_token": "pb_MISMO_TOKEN_QUE_EL_PRINT_BRIDGE",
+  "poll_ms": 20000,
+  "platforms": ["didi_food", "rappi"]
+}

@@ -544,7 +544,23 @@
     "active": "Active",
     "inactive": "Inactive",
     "noPrinters": "No printers configured",
-    "routingHint": "Assign each menu category to a printer for ticket routing."
+    "routingHint": "Assign each menu category to a printer for ticket routing.",
+    "bridge": {
+      "title": "Print Bridge",
+      "notConfigured": "Not configured",
+      "online": "Connected",
+      "offline": "Offline",
+      "lastSeen": "Last seen",
+      "generateToken": "Generate token",
+      "rotateConfirm": "A token already exists. Generating a new one disconnects the current bridge until its config.json is updated. Continue?",
+      "testPrint": "Test print",
+      "testSent": "Sent!",
+      "queued": "Queued",
+      "printed24h": "Printed (24h)",
+      "errors24h": "Errors (24h)",
+      "tokenOnce": "This token is shown ONCE. Copy it now.",
+      "tokenHint": "Paste it into the print-bridge config.json on the kitchen Mac (see print-bridge/README.md)."
+    }
   },
   "recipe": {
     "title": "Recipe Management",

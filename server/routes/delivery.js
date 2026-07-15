@@ -25,6 +25,8 @@ import {
   confirmOrder as confirmDidiOrder,
   cancelDidiOrder,
 } from '../services/didi-food.js';
+import { enqueueKitchenTicket } from '../lib/printQueue.js';
+import { requireAgentToken } from '../middleware/agentAuth.js';
 
 const router = Router();
 const TAX_RATE = 0.16; // 16% IVA (Mexico) — prices include tax
@@ -517,6 +519,9 @@ async function processUberOrder(tenantId, externalOrderId, rawWebhookData) {
     deliveryResult.lastInsertRowid, orderId,
   ]);
 
+  // Kitchen ticket → print bridge (never blocks order ingestion)
+  await enqueueKitchenTicket(orderId, { source: 'uber_eats' });
+
   // Auto-accept on Uber Eats
   try {
     await acceptUberOrder(token, externalOrderId, {
@@ -745,6 +750,9 @@ async function processRappiOrder(tenantId, payload, rawWebhookData) {
   await run('UPDATE orders SET delivery_order_id = $1 WHERE id = $2', [
     deliveryResult.lastInsertRowid, orderId,
   ]);
+
+  // Kitchen ticket → print bridge (never blocks order ingestion)
+  await enqueueKitchenTicket(orderId, { source: 'rappi' });
 
   // Auto-accept on Rappi (must happen within 6 minutes)
   try {
@@ -989,6 +997,9 @@ async function processDidiOrder(tenantId, payload, rawWebhookData) {
     deliveryResult.lastInsertRowid, orderId,
   ]);
 
+  // Kitchen ticket → print bridge (never blocks order ingestion)
+  await enqueueKitchenTicket(orderId, { source: 'didi_food' });
+
   // Auto-confirm on DiDi Food
   try {
     const token = await getDidiToken(tenantId);
@@ -1009,6 +1020,120 @@ async function processDidiOrder(tenantId, payload, rawWebhookData) {
     total,
   };
 }
+
+// ==================== Generic Ingest (portal watcher / manual) ====================
+
+/**
+ * POST /api/delivery/ingest — create a delivery order WITHOUT platform API credentials.
+ *
+ * Used by the on-site portal watcher (reads the DiDi/Rappi merchant portals in a
+ * browser and pushes new orders here) or any other out-of-band source.
+ * Auth: X-Agent-Token (same token as the print bridge).
+ *
+ * Body: {
+ *   platform: 'didi_food' | 'rappi' | 'uber_eats',
+ *   external_order_id: string,
+ *   customer_name?: string,
+ *   delivery_address?: string,
+ *   items: [{ name, quantity?, unit_price?, notes? }],
+ *   total?: number,
+ *   raw?: object
+ * }
+ *
+ * Idempotent on (external_order_id): re-posting the same order is a no-op.
+ */
+router.post('/ingest', requireAgentToken(), async (req, res) => {
+  try {
+    const { platform, external_order_id, customer_name, delivery_address, items, total, raw } = req.body || {};
+
+    if (!platform || !external_order_id) {
+      return res.status(400).json({ error: 'platform and external_order_id are required' });
+    }
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'items array is required' });
+    }
+
+    const existing = await get(
+      'SELECT id, order_id FROM delivery_orders WHERE external_order_id = $1',
+      [String(external_order_id)]
+    );
+    if (existing) {
+      return res.json({ success: true, duplicate: true, delivery_order_id: existing.id, order_id: existing.order_id });
+    }
+
+    const platformRow = await ensurePlatform(platform);
+    const employee = await findSystemEmployee();
+    if (!employee) {
+      return res.status(500).json({ error: 'No active employee found to attribute delivery order' });
+    }
+
+    const orderItems = [];
+    let itemsTotal = 0;
+    for (const it of items) {
+      const quantity = Number(it.quantity) || 1;
+      const localItem = await matchMenuItem(it.name, it.sku);
+      const unitPrice = Number(it.unit_price) > 0
+        ? Number(it.unit_price)
+        : (Number(localItem?.price) || 0);
+      orderItems.push({
+        menu_item_id: localItem?.id || null,
+        item_name: localItem?.name || String(it.name || 'Artículo'),
+        quantity,
+        unit_price: unitPrice,
+        notes: it.notes || null,
+      });
+      itemsTotal += unitPrice * quantity;
+    }
+
+    const orderTotal = itemsTotal > 0 ? itemsTotal : (Number(total) || 0);
+    const tax = Math.round((orderTotal - orderTotal / (1 + TAX_RATE)) * 100) / 100;
+    const subtotal = Math.round((orderTotal - tax) * 100) / 100;
+    const orderNumber = await generateOrderNumber();
+
+    const tid = getTenantId();
+    const orderResult = await run(`
+      INSERT INTO orders (tenant_id, order_number, employee_id, status, subtotal, tax, total, payment_status, payment_method, source)
+      VALUES ($1, $2, $3, 'confirmed', $4, $5, $6, 'paid', $7, $7)
+    `, [tid, orderNumber, employee.id, subtotal, tax, orderTotal, platform]);
+    const orderId = orderResult.lastInsertRowid;
+
+    for (const item of orderItems) {
+      await run(`
+        INSERT INTO order_items (tenant_id, order_id, menu_item_id, item_name, quantity, unit_price, notes)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `, [tid, orderId, item.menu_item_id, item.item_name, item.quantity, item.unit_price, item.notes]);
+    }
+
+    const commission = orderTotal * (platformRow.commission_percent / 100);
+    const deliveryResult = await run(`
+      INSERT INTO delivery_orders (tenant_id, order_id, platform_id, external_order_id, platform_status, delivery_fee, platform_commission, customer_name, delivery_address, raw_webhook_data)
+      VALUES ($1, $2, $3, $4, 'received', 0, $5, $6, $7, $8)
+    `, [
+      tid, orderId, platformRow.id, String(external_order_id),
+      commission, customer_name || null, delivery_address || null,
+      raw ? JSON.stringify(raw) : null,
+    ]);
+
+    await run('UPDATE orders SET delivery_order_id = $1 WHERE id = $2', [
+      deliveryResult.lastInsertRowid, orderId,
+    ]);
+
+    await enqueueKitchenTicket(orderId, { source: platform });
+
+    console.log(`[Ingest] ${platform} order ${external_order_id} → internal order ${orderId}`);
+    res.status(201).json({
+      success: true,
+      order_id: orderId,
+      order_number: orderNumber,
+      delivery_order_id: deliveryResult.lastInsertRowid,
+      items_count: orderItems.length,
+      total: orderTotal,
+    });
+  } catch (error) {
+    console.error('[Ingest] Error:', error);
+    res.status(500).json({ error: 'Failed to ingest delivery order' });
+  }
+});
 
 // POST /api/delivery/webhook/didi - DiDi Food webhook
 router.post('/webhook/didi', async (req, res) => {

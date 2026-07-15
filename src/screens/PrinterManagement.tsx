@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Plus, Printer as PrinterIcon } from 'lucide-react';
+import { ArrowLeft, Plus, Printer as PrinterIcon, Wifi, WifiOff, KeyRound, FileCheck } from 'lucide-react';
 import {
   getPrinters,
   createPrinter,
@@ -9,6 +9,10 @@ import {
   getCategoryPrinterRoutes,
   updateCategoryPrinterRoute,
   getCategories,
+  getPrintBridgeStatus,
+  generatePrintAgentToken,
+  sendTestPrint,
+  PrintBridgeStatus,
 } from '../api';
 import { Printer, MenuCategory } from '../types';
 import BrandLogo from '../components/BrandLogo';
@@ -24,10 +28,45 @@ export default function PrinterManagement() {
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState('receipt');
   const [newAddress, setNewAddress] = useState('');
+  const [bridge, setBridge] = useState<PrintBridgeStatus | null>(null);
+  const [newToken, setNewToken] = useState<string | null>(null);
+  const [testSent, setTestSent] = useState(false);
 
   useEffect(() => {
     fetchData();
+    fetchBridge();
+    const interval = setInterval(fetchBridge, 15000);
+    return () => clearInterval(interval);
   }, []);
+
+  const fetchBridge = async () => {
+    try {
+      setBridge(await getPrintBridgeStatus());
+    } catch (err) {
+      console.error('Failed to load bridge status:', err);
+    }
+  };
+
+  const handleGenerateToken = async () => {
+    if (bridge?.configured && !window.confirm(t('printers.bridge.rotateConfirm'))) return;
+    try {
+      const { token } = await generatePrintAgentToken();
+      setNewToken(token);
+      fetchBridge();
+    } catch (err) {
+      console.error('Failed to generate token:', err);
+    }
+  };
+
+  const handleTestPrint = async () => {
+    try {
+      await sendTestPrint(null);
+      setTestSent(true);
+      setTimeout(() => setTestSent(false), 4000);
+    } catch (err) {
+      console.error('Failed to send test print:', err);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -106,6 +145,77 @@ export default function PrinterManagement() {
           </div>
         ) : (
           <>
+            {/* Print Bridge Section */}
+            <div>
+              <h2 className="text-xl font-bold text-white mb-4">{t('printers.bridge.title')}</h2>
+              <div className="bg-neutral-900 rounded-lg border border-neutral-800 p-4 space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex items-center gap-3">
+                    {bridge?.online ? (
+                      <Wifi size={24} className="text-green-400" />
+                    ) : (
+                      <WifiOff size={24} className="text-neutral-500" />
+                    )}
+                    <div>
+                      <p className="font-bold text-white">
+                        {!bridge?.configured
+                          ? t('printers.bridge.notConfigured')
+                          : bridge.online
+                            ? t('printers.bridge.online')
+                            : t('printers.bridge.offline')}
+                      </p>
+                      {bridge?.last_seen && (
+                        <p className="text-sm text-neutral-400">
+                          {t('printers.bridge.lastSeen')}: {new Date(bridge.last_seen).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleGenerateToken}
+                      className="flex items-center gap-2 px-4 py-2 bg-neutral-800 text-white rounded-lg font-medium hover:bg-neutral-700 transition-colors min-h-[40px]"
+                    >
+                      <KeyRound size={18} /> {t('printers.bridge.generateToken')}
+                    </button>
+                    <button
+                      onClick={handleTestPrint}
+                      disabled={!bridge?.configured}
+                      className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg font-medium hover:bg-brand-700 transition-colors disabled:opacity-40 min-h-[40px]"
+                    >
+                      <FileCheck size={18} /> {testSent ? t('printers.bridge.testSent') : t('printers.bridge.testPrint')}
+                    </button>
+                  </div>
+                </div>
+
+                {bridge?.configured && (
+                  <div className="flex gap-4 text-sm text-neutral-400 flex-wrap">
+                    <span>{t('printers.bridge.queued')}: <span className="text-white font-medium">{bridge.queued}</span></span>
+                    <span>{t('printers.bridge.printed24h')}: <span className="text-white font-medium">{bridge.done_24h}</span></span>
+                    {bridge.errors_24h > 0 && (
+                      <span className="text-red-400">{t('printers.bridge.errors24h')}: {bridge.errors_24h}</span>
+                    )}
+                  </div>
+                )}
+
+                {newToken && (
+                  <div className="bg-neutral-800 rounded-lg p-3 space-y-2">
+                    <p className="text-sm text-amber-400 font-medium">{t('printers.bridge.tokenOnce')}</p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-sm text-green-300 break-all select-all">{newToken}</code>
+                      <button
+                        onClick={() => navigator.clipboard?.writeText(newToken)}
+                        className="px-3 py-2 bg-neutral-700 text-white rounded-lg text-sm font-medium hover:bg-neutral-600 min-h-[40px]"
+                      >
+                        {t('common:buttons.copy', 'Copy')}
+                      </button>
+                    </div>
+                    <p className="text-xs text-neutral-500">{t('printers.bridge.tokenHint')}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Printers Section */}
             <div>
               <h2 className="text-xl font-bold text-white mb-4">{t('printers.printers')}</h2>

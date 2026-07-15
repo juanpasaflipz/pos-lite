@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { all, get, run, getTenantId } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getPlanLimits, requirePlanFeature } from '../planLimits.js';
+import { enqueueKitchenTicket } from '../lib/printQueue.js';
 
 const router = Router();
 
@@ -127,7 +128,9 @@ router.post('/print-ticket', async (req, res) => {
       printerGroups[printerId].push(item);
     }
 
-    res.json({ order, printerGroups });
+    const jobId = await enqueueKitchenTicket(order_id);
+
+    res.json({ order, printerGroups, print_job_id: jobId });
   } catch (error) {
     console.error('Error generating ticket:', error);
     res.status(500).json({ error: 'Failed to generate ticket' });

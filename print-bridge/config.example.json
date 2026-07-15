@@ -1,0 +1,9 @@
+{
+  "server_url": "https://SUBDOMINIO.desktop.kitchen",
+  "agent_token": "pb_PEGAR_TOKEN_AQUI",
+  "agent_id": "macmini-cocina",
+  "poll_ms": 3000,
+  "printers": {
+    "default": "192.168.1.200:9100"
+  }
+}
