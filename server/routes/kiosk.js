@@ -1466,9 +1466,13 @@ router.get('/mp/terminals', verifyKioskToken, async (req, res) => {
     if (!tenant?.mp_access_token) return res.status(400).json({ error: 'Mercado Pago not connected' });
     const accessToken = await ensureFreshToken(tenant, adminSql);
     const terminals = await mpGetTerminals(accessToken);
+    // Kiosks prefer the kiosk-scoped default (customer-side terminal) and only
+    // fall back to the tenant-wide default (usually the counter terminal) when
+    // no kiosk-scoped default is set.
+    const kioskDefault = tenant.mp_default_kiosk_terminal_id || tenant.mp_default_terminal_id || null;
     res.json({
       terminals,
-      default_terminal_id: tenant.mp_default_terminal_id || null,
+      default_terminal_id: kioskDefault,
     });
   } catch (err) {
     console.error('[kiosk/mp/terminals] error', err);
@@ -1496,7 +1500,7 @@ router.post('/orders/:id/mp-charge', verifyKioskToken, async (req, res) => {
     if (!tenant?.mp_access_token) return res.status(400).json({ error: 'Mercado Pago not connected' });
 
     const requested = typeof req.body?.terminal_id === 'string' ? req.body.terminal_id.trim() : '';
-    const termId = requested || tenant.mp_default_terminal_id;
+    const termId = requested || tenant.mp_default_kiosk_terminal_id || tenant.mp_default_terminal_id;
     if (!termId) return res.status(400).json({ error: 'No terminal selected' });
 
     const lock = await findActiveTerminalLock(tenantId, {

@@ -2984,6 +2984,7 @@ export async function getMpStatus(): Promise<{
   connected: boolean;
   mp_user_id: string | null;
   mp_default_terminal_id: string | null;
+  mp_default_kiosk_terminal_id: string | null;
 }> {
   return apiRequest('/payments/mp/status');
 }
@@ -3008,6 +3009,13 @@ export async function setMpDeviceOperatingMode(
 
 export async function setMpDefaultTerminal(terminal_id: string): Promise<{ success: boolean }> {
   return apiRequest('/payments/mp/terminals/default', {
+    method: 'POST',
+    body: JSON.stringify({ terminal_id }),
+  });
+}
+
+export async function setMpDefaultKioskTerminal(terminal_id: string | null): Promise<{ success: boolean }> {
+  return apiRequest('/payments/mp/terminals/kiosk-default', {
     method: 'POST',
     body: JSON.stringify({ terminal_id }),
   });

@@ -30,6 +30,7 @@ router.get('/', requireOwner, async (req, res) => {
       created_at: tenant.created_at,
       mp_user_id: tenant.mp_user_id || null,
       mp_default_terminal_id: tenant.mp_default_terminal_id || null,
+      mp_default_kiosk_terminal_id: tenant.mp_default_kiosk_terminal_id || null,
       usage: {
         employees: { current: Number(usage.employee_count), limit: limits.employees },
         menu_items: { current: Number(usage.menu_item_count), limit: limits.menuItems },

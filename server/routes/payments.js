@@ -1173,7 +1173,8 @@ router.post('/mp/devices/operating-mode', requireAuth('pos_access'), requirePro,
   }
 });
 
-// POST /api/payments/mp/terminals/default — set default terminal
+// POST /api/payments/mp/terminals/default — set default terminal (POS side).
+// Used by AccountScreen for the counter/register terminal.
 router.post('/mp/terminals/default', requireAuth('pos_access'), requirePro, async (req, res) => {
   try {
     const { terminal_id } = req.body;
@@ -1183,6 +1184,22 @@ router.post('/mp/terminals/default', requireAuth('pos_access'), requirePro, asyn
   } catch (error) {
     console.error('MP setDefaultTerminal error:', error);
     res.status(500).json({ error: 'Failed to set default terminal' });
+  }
+});
+
+// POST /api/payments/mp/terminals/kiosk-default — set kiosk-side default terminal.
+// Distinct from the POS default so unpaired kiosk devices land on the
+// customer-side terminal instead of the counter one. Accepts terminal_id: ''
+// (or null) to clear back to the POS default fallback.
+router.post('/mp/terminals/kiosk-default', requireAuth('pos_access'), requirePro, async (req, res) => {
+  try {
+    const raw = req.body?.terminal_id;
+    const terminal_id = typeof raw === 'string' && raw.trim() ? raw.trim() : null;
+    await adminSql`UPDATE tenants SET mp_default_kiosk_terminal_id = ${terminal_id} WHERE id = ${req.tenant.id}`;
+    res.json({ success: true });
+  } catch (error) {
+    console.error('MP setKioskDefaultTerminal error:', error);
+    res.status(500).json({ error: 'Failed to set kiosk default terminal' });
   }
 });
 
@@ -1333,6 +1350,7 @@ router.get('/mp/status', requireAuth('pos_access'), async (req, res) => {
       connected: !!tenant?.mp_user_id,
       mp_user_id: tenant?.mp_user_id || null,
       mp_default_terminal_id: tenant?.mp_default_terminal_id || null,
+      mp_default_kiosk_terminal_id: tenant?.mp_default_kiosk_terminal_id || null,
     });
   } catch (error) {
     console.error('MP status error:', error);
