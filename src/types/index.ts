@@ -130,11 +130,6 @@ export interface Order {
   ready_at?: string;
   estimated_ready_minutes?: number;
   estimated_ready_range?: { low: number; high: number };
-  conekta_order_id?: string;
-  oxxo_reference?: string;
-  oxxo_barcode_url?: string;
-  spei_clabe?: string;
-  async_payment_expires_at?: string;
   getnet_payment_id?: string;
   getnet_authorization_code?: string;
   items?: OrderItem[];

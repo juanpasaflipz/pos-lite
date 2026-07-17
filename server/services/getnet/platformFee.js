@@ -10,7 +10,6 @@ const PLATFORM_FEE_RATES = {
 const PROCESSOR_RATES = {
   getnet: 0.018,   // ~1.8%
   stripe: 0.036,   // ~3.6%
-  conekta: 0.034,  // ~3.4%
 };
 
 /**

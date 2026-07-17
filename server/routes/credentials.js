@@ -21,14 +21,6 @@ const SERVICE_SCHEMA = {
       { key: 'webhook_secret', label: 'Webhook Secret (whsec_...)', secret: true },
     ],
   },
-  conekta: {
-    label: 'Conekta',
-    fields: [
-      { key: 'private_key', label: 'Private API Key (key_...)', secret: true },
-      { key: 'public_key', label: 'Public API Key (key_...)', secret: false },
-      { key: 'webhook_public_key', label: 'Webhook Public Key (PEM)', secret: true },
-    ],
-  },
   getnet: {
     label: 'Getnet (Santander)',
     fields: [

@@ -26,8 +26,6 @@ export interface PaymentModalProps {
   orderTotal: number;
   orderId?: number;
   onCashPayment: (tip: number, amountReceived: number) => void;
-  onOxxoPayment?: (tip: number) => void;
-  onSpeiPayment?: (tip: number) => void;
   onGetnetPayment?: (tip: number) => void;
   onTerminalPaymentSuccess?: (orderId: number) => void;
   /** When provided, renders a "Dividir cuenta" entry that hands off to the split flow. */
@@ -35,7 +33,6 @@ export interface PaymentModalProps {
   onCancel: () => void;
   isProcessing: boolean;
   isOnline: boolean;
-  conektaConfigured?: boolean;
   getnetEnabled?: boolean;
 }
 
@@ -43,15 +40,12 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   orderTotal,
   orderId,
   onCashPayment,
-  onOxxoPayment,
-  onSpeiPayment,
   onGetnetPayment,
   onTerminalPaymentSuccess,
   onSplitPayment,
   onCancel,
   isProcessing,
   isOnline,
-  conektaConfigured,
   getnetEnabled,
 }) => {
   const { t } = useTranslation('pos');
@@ -545,25 +539,6 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                   className="w-full py-4 bg-cockpit-red text-white text-xl font-bold rounded-lg hover:bg-cockpit-red/90 disabled:bg-neutral-700 disabled:text-neutral-400 transition-all touch-manipulation"
                 >
                   {isProcessing ? t('payment.processing') : t('payment.payWithGetnet')}
-                </button>
-              )}
-              {/* Conekta OXXO + SPEI — only when Conekta is configured */}
-              {conektaConfigured && onOxxoPayment && (
-                <button
-                  onClick={() => onOxxoPayment(tip)}
-                  disabled={isProcessing || !isOnline}
-                  className="w-full py-4 bg-cockpit-yellow text-neutral-900 text-xl font-bold rounded-lg hover:bg-cockpit-yellow/90 disabled:bg-neutral-700 disabled:text-neutral-400 transition-all touch-manipulation"
-                >
-                  {isProcessing ? t('payment.processing') : t('payment.payAtOxxo')}
-                </button>
-              )}
-              {conektaConfigured && onSpeiPayment && (
-                <button
-                  onClick={() => onSpeiPayment(tip)}
-                  disabled={isProcessing || !isOnline}
-                  className="w-full py-4 bg-cockpit-blue text-white text-xl font-bold rounded-lg hover:bg-cockpit-blue/90 disabled:bg-neutral-700 disabled:text-neutral-400 transition-all touch-manipulation"
-                >
-                  {isProcessing ? t('payment.processing') : t('payment.speiTransfer')}
                 </button>
               )}
               {/* Split-the-bill — only when the caller wires it (existing-order Cobrar). */}

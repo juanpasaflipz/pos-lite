@@ -3100,54 +3100,6 @@ export async function clipCancelCharge(order_id: number): Promise<{ success: boo
   });
 }
 
-/* ==================== Conekta Payments ==================== */
-
-export async function conektaOxxoPayment(data: { order_id: number; tip?: number }): Promise<{
-  success: boolean;
-  reference: string;
-  barcode_url: string;
-  expires_at: string;
-  conekta_order_id: string;
-  amount: number;
-}> {
-  return apiRequest('/payments/conekta/oxxo', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-}
-
-export async function conektaSpeiPayment(data: { order_id: number; tip?: number }): Promise<{
-  success: boolean;
-  clabe: string;
-  bank: string;
-  expires_at: string;
-  conekta_order_id: string;
-  amount: number;
-}> {
-  return apiRequest('/payments/conekta/spei', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-}
-
-export async function conektaCardPayment(data: { order_id: number; token_id: string; tip?: number }): Promise<{
-  success: boolean;
-  payment_status: string;
-  conekta_order_id: string;
-}> {
-  return apiRequest('/payments/conekta/card', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-}
-
-export async function getConektaPaymentStatus(orderId: number): Promise<{
-  payment_status: string;
-  conekta_status?: string;
-}> {
-  return apiRequest(`/payments/conekta/status/${orderId}`);
-}
-
 /* ==================== Getnet Payments ==================== */
 
 export async function getGetnetStatus(): Promise<{

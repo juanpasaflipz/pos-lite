@@ -301,7 +301,7 @@ export default function OrdersScreen() {
   };
 
   // Charging happens inside POSScreen because that's where the full payment
-  // flow lives (Conekta, MP terminal, cash drawer, etc.). We pass the order id
+  // flow lives (MP terminal, cash drawer, etc.). We pass the order id
   // via router state — POSScreen reads it on mount.
   const handleCharge = (order: Order) => {
     navigate('/pos', { state: { chargeOrderId: order.id } });

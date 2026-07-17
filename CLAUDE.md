@@ -68,7 +68,8 @@ Brand: kiosk wears Talavera Terracotta (`#A8542A`), driven by CSS variables in `
 - OAuth `redirect_uri` must be derived from `req.get('host')`, not from `process.env.BASE_URL` (which is hardcoded to the platform subdomain). Each tenant whitelists their own subdomain callback URL in their own third-party app config
 
 ## Payment integrations
-- Current: Stripe (global), Conekta (Mexico), Mercado Pago Point (LATAM), Getnet scaffolding (Santander, dormant)
+- Current: Stripe (global), Mercado Pago Point (LATAM), Getnet scaffolding (Santander, dormant)
+- Removed: Conekta (dropped 2026-07-16 — never used by a real tenant; `orders.conekta_order_id` / `refunds.conekta_refund_id` columns kept for historical rows; refunds on legacy Conekta orders return 400 and must go through the Conekta dashboard)
 - Per-tenant credentials stored in `tenant_credentials` table (see `server/routes/credentials.js`)
 - Platform env vars (`MP_CLIENT_ID` etc.) act as fallback when tenant has no per-tenant creds
 - **Webhooks are per-tenant config** — merchants register webhook URLs in their own processor's dashboard. Don't depend on webhooks for correctness; always implement a live-pull fallback in the status-polling endpoint (see `server/routes/payments.js` MP status pull for the pattern)
@@ -110,3 +111,10 @@ Brand: kiosk wears Talavera Terracotta (`#A8542A`), driven by CSS variables in `
 - Auth middleware: `server/middleware/auth.js`
 - Kiosk API surface (client): `kiosk/src/lib/kioskApi.ts`
 - Kiosk routes (server): `server/routes/kiosk.js`
+
+## Agent handoff (multi-agent coordination)
+Multiple Claude agents work this project: Claude Code sessions in this repo, and a Cowork cloud session (Claude desktop app) with file-bridge access to the same folder. Coordination happens through `HANDOFF.md` (repo root):
+- **At session start**: read `HANDOFF.md` (repo root) for open items addressed to you.
+- **Before finishing**: append a dated entry if the other agent needs to know something (state changes, warnings, requests). Newest entries on top. Prune resolved items.
+- Clone geography: this repo (`~/Developer/pos-lite`) is canonical. `~/Developer/dk-lite/pos-lite` and `pos-lite-lane-b` are separate clones used by Cowork lanes — they may be stale; never copy files between clones, use git.
+- The Cowork agent's sandbox cannot delete files or reach the network from the Mac; it may leave `.git/*.lock` strays in `_to_delete/` — safe to empty that folder.

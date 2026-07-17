@@ -11,13 +11,13 @@
 //      POST could flip an order to paid and deduct inventory.
 //      (server/routes/getnetWebhook.js)
 //
-//   2. TENANT FILTER (C3 / audits/raw/neon-leaks.md) — the MP, Conekta, and
-//      Getnet webhooks write to `orders` via adminSql, which connects as the
+//   2. TENANT FILTER (C3 / audits/raw/neon-leaks.md) — the MP and Getnet
+//      webhooks write to `orders` via adminSql, which connects as the
 //      table owner and BYPASSES row-level security. The explicit
 //      `AND tenant_id = <resolved tenant>` predicate is therefore the ONLY
 //      isolation guard left on those writes. This mirrors that UPDATE shape and
 //      proves the predicate is load-bearing: a wrong tenant_id touches 0 rows.
-//      (server/routes/payments.js mpWebhook/conektaWebhook,
+//      (server/routes/payments.js mpWebhook,
 //       server/services/getnet/webhook.js)
 
 import express from 'express';
@@ -129,7 +129,7 @@ describe('C3: webhook order writes are tenant-scoped (adminSql bypasses RLS)', (
     });
   }
 
-  // Mirrors the paid-path UPDATE now used by the MP / Conekta / Getnet webhooks:
+  // Mirrors the paid-path UPDATE now used by the MP / Getnet webhooks:
   //   UPDATE orders SET payment_status='paid', status='active', paid_at=NOW()
   //   WHERE id = <order> AND tenant_id = <resolved tenant>
   // Duplicated here intentionally: if a future edit drops the tenant_id

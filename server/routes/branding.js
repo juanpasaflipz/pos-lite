@@ -7,7 +7,6 @@ import { requireOwner } from '../middleware/ownerAuth.js';
 import { requireAuth } from '../middleware/auth.js';
 import { updateTenant, getTenant } from '../tenants.js';
 import { getPlanLimits, planUpgradeError } from '../planLimits.js';
-import { isConektaConfigured } from '../conekta.js';
 import { isGetnetConfigured } from '../services/getnet/auth.js';
 import { getClipAuthHeader } from '../services/clip.js';
 import { getDisplayMenuSettings, setDisplayMenuSettings } from '../lib/displayMenu.js';
@@ -124,13 +123,9 @@ router.get('/', async (req, res) => {
   const branding = tenant.branding || {};
   const plan = tenant.plan || 'free';
 
-  let conektaConfigured = false;
   let getnetConfigured = false;
   let clipConfigured = false;
   let weekStartDow = 1; // Monday default — Reports presets and labor strip anchor here
-  try {
-    conektaConfigured = await isConektaConfigured(tenant.id);
-  } catch { /* non-blocking */ }
   try {
     getnetConfigured = await isGetnetConfigured(tenant.id);
   } catch { /* non-blocking */ }
@@ -155,7 +150,6 @@ router.get('/', async (req, res) => {
     ownerEmail: tenant.owner_email || null,
     mpUserId: tenant.mp_user_id || null,
     mpDefaultTerminalId: tenant.mp_default_terminal_id || null,
-    conektaConfigured,
     getnetConfigured,
     getnetEnabled: !!tenant.getnet_enabled,
     clipConfigured,

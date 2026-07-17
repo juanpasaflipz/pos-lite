@@ -14,8 +14,6 @@ import {
   getTodayOrderCount,
   getMyCashSummary,
   deleteOrder,
-  conektaOxxoPayment,
-  conektaSpeiPayment,
   getnetTokenize,
   getnetCharge,
   bookUberDirect,
@@ -38,8 +36,6 @@ import DiscountModal from '../components/pos/DiscountModal';
 import PaymentModal from '../components/pos/PaymentModal';
 import PayTogetherModal from '../components/pos/PayTogetherModal';
 import PayTogetherReceiptModal from '../components/pos/PayTogetherReceiptModal';
-import OxxoReferenceModal from '../components/pos/OxxoReferenceModal';
-import SpeiReferenceModal from '../components/pos/SpeiReferenceModal';
 import ReceiptModal from '../components/pos/ReceiptModal';
 import { formatPrice, TAX_RATE, TAX_LABEL } from '../utils/currency';
 import { useAISuggestions } from '../hooks/useAISuggestions';
@@ -92,7 +88,7 @@ const POSScreen: React.FC = () => {
   const { isOnline, pendingSyncCount } = useNetworkStatus();
   const { isTablet, isPortrait } = useDeviceType();
   const showDrawerCart = isTablet && isPortrait;
-  const { plan, ownerEmail, isMpConnected, isConektaConfigured, isGetnetEnabled } = usePlan();
+  const { plan, ownerEmail, isMpConnected, isGetnetEnabled } = usePlan();
 
   // State Management
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -150,10 +146,6 @@ const POSScreen: React.FC = () => {
 
   // Pre-created order for terminal payments (MP Point)
   const [preCreatedOrderId, setPreCreatedOrderId] = useState<number | null>(null);
-
-  // Conekta async payment results
-  const [oxxoResult, setOxxoResult] = useState<{ reference: string; barcode_url: string; amount: number; expires_at: string } | null>(null);
-  const [speiResult, setSpeiResult] = useState<{ clabe: string; bank: string; amount: number; expires_at: string } | null>(null);
 
   // Unpaid orders (for Cobrar flow)
   const [unpaidOrders, setUnpaidOrders] = useState<Order[]>([]);
@@ -904,7 +896,7 @@ const POSScreen: React.FC = () => {
   };
 
   const openPaymentModal = async () => {
-    if ((isMpConnected || isConektaConfigured) && cart.length > 0) {
+    if (isMpConnected && cart.length > 0) {
       try {
         const order = await createOrderForCheckout();
         setPreCreatedOrderId(order.id);
@@ -953,10 +945,9 @@ const POSScreen: React.FC = () => {
         clearCart();
         addToast(t('offline.orderSaved', { number: offlineOrder.offlineOrderNumber }), 'success');
       } else {
-        // Reuse the order openPaymentModal pre-created for the MP/Conekta
-        // terminal flow — otherwise Cobrar → Cash on a terminal-enabled
-        // tenant orphans the pre-created order and creates a duplicate.
-        // Matches the pattern in handleOxxoPayment / handleSpeiPayment.
+        // Reuse the order openPaymentModal pre-created for the MP terminal
+        // flow — otherwise Cobrar → Cash on a terminal-enabled tenant
+        // orphans the pre-created order and creates a duplicate.
         const order = preCreatedOrderId
           ? await getOrder(preCreatedOrderId)
           : await createOrderForCheckout();
@@ -973,64 +964,6 @@ const POSScreen: React.FC = () => {
       }
     } catch (error) {
       addToast(error instanceof Error ? error.message : t('toast.cashFailed'), 'error');
-    } finally {
-      setIsProcessingPayment(false);
-    }
-  };
-
-  const handleOxxoPayment = async (tip: number) => {
-    if (cart.length === 0 && !preCreatedOrderId) { addToast(t('toast.cartEmpty'), 'error'); return; }
-    setIsProcessingPayment(true);
-    try {
-      const orderId = preCreatedOrderId || (await createOrderForCheckout()).id;
-      const result = await conektaOxxoPayment({ order_id: orderId, tip });
-      setOxxoResult({
-        reference: result.reference,
-        barcode_url: result.barcode_url,
-        amount: result.amount,
-        expires_at: result.expires_at,
-      });
-      setShowPaymentModal(false);
-      setPreCreatedOrderId(null);
-      if (chargingOrder) {
-        setUnpaidOrders((prev) => prev.filter((o) => o.id !== chargingOrder.id));
-        setChargingOrder(null);
-      } else {
-        clearCart();
-      }
-      bumpOrders();
-      addToast(t('toast.oxxoGenerated'), 'success');
-    } catch (error) {
-      addToast(error instanceof Error ? error.message : t('toast.oxxoFailed'), 'error');
-    } finally {
-      setIsProcessingPayment(false);
-    }
-  };
-
-  const handleSpeiPayment = async (tip: number) => {
-    if (cart.length === 0 && !preCreatedOrderId) { addToast(t('toast.cartEmpty'), 'error'); return; }
-    setIsProcessingPayment(true);
-    try {
-      const orderId = preCreatedOrderId || (await createOrderForCheckout()).id;
-      const result = await conektaSpeiPayment({ order_id: orderId, tip });
-      setSpeiResult({
-        clabe: result.clabe,
-        bank: result.bank,
-        amount: result.amount,
-        expires_at: result.expires_at,
-      });
-      setShowPaymentModal(false);
-      setPreCreatedOrderId(null);
-      if (chargingOrder) {
-        setUnpaidOrders((prev) => prev.filter((o) => o.id !== chargingOrder.id));
-        setChargingOrder(null);
-      } else {
-        clearCart();
-      }
-      bumpOrders();
-      addToast(t('toast.speiGenerated'), 'success');
-    } catch (error) {
-      addToast(error instanceof Error ? error.message : t('toast.speiFailed'), 'error');
     } finally {
       setIsProcessingPayment(false);
     }
@@ -1589,8 +1522,6 @@ const POSScreen: React.FC = () => {
           orderTotal={chargingOrder ? Number(chargingOrder.total) : total}
           orderId={preCreatedOrderId ?? undefined}
           onCashPayment={handleCashPayment}
-          onOxxoPayment={handleOxxoPayment}
-          onSpeiPayment={handleSpeiPayment}
           onGetnetPayment={handleGetnetPayment}
           onTerminalPaymentSuccess={async (orderId) => {
             try {
@@ -1628,7 +1559,6 @@ const POSScreen: React.FC = () => {
           }}
           isProcessing={isProcessingPayment}
           isOnline={isOnline}
-          conektaConfigured={isConektaConfigured}
           getnetEnabled={isGetnetEnabled}
         />
       )}
@@ -1639,26 +1569,6 @@ const POSScreen: React.FC = () => {
           linkedCustomer={linkedCustomer}
           onClose={() => { setShowReceiptModal(false); setCompletedOrder(null); setLinkedCustomer(null); }}
           onPrint={() => { window.print(); }}
-        />
-      )}
-
-      {oxxoResult && (
-        <OxxoReferenceModal
-          reference={oxxoResult.reference}
-          barcodeUrl={oxxoResult.barcode_url}
-          amount={oxxoResult.amount}
-          expiresAt={oxxoResult.expires_at}
-          onClose={() => setOxxoResult(null)}
-        />
-      )}
-
-      {speiResult && (
-        <SpeiReferenceModal
-          clabe={speiResult.clabe}
-          bank={speiResult.bank}
-          amount={speiResult.amount}
-          expiresAt={speiResult.expires_at}
-          onClose={() => setSpeiResult(null)}
         />
       )}
 

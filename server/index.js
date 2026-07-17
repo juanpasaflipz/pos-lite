@@ -20,7 +20,7 @@ import { startSentinelSweep, stopSentinelSweep } from './sentinel/sweep.js';
 // Core
 import menuRoutes from './routes/menu.js';
 import ordersRoutes from './routes/orders.js';
-import paymentsRoutes, { mpOAuthCallback, mpWebhook, conektaWebhook } from './routes/payments.js';
+import paymentsRoutes, { mpOAuthCallback, mpWebhook } from './routes/payments.js';
 import paymentGroupsRoutes from './routes/payment-groups.js';
 import inventoryRoutes from './routes/inventory.js';
 import employeesRoutes from './routes/employees.js';
@@ -114,14 +114,13 @@ app.use(cors({
 // Stripe webhook needs raw body (before express.json)
 app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), stripeWebhook);
 
-// Capture raw body for webhook signature verification (delivery + Conekta)
+// Capture raw body for webhook signature verification (delivery webhooks)
 app.use(express.json({
   limit: '2mb',
   verify: (req, _res, buf) => {
     if (
       req.url?.startsWith('/api/delivery/webhook') ||
-      req.url?.startsWith('/api/uber-direct/webhook') ||
-      req.url?.startsWith('/api/payments/conekta/webhook')
+      req.url?.startsWith('/api/uber-direct/webhook')
     ) {
       req.rawBody = buf;
     }
@@ -192,7 +191,6 @@ app.use('/api/kiosk', kioskRoutes);
 // Payment webhooks (before tenant middleware — cross-tenant)
 app.get('/api/payments/mp/callback', mpOAuthCallback);
 app.post('/api/payments/mp/webhook', mpWebhook);
-app.post('/api/payments/conekta/webhook', conektaWebhook);
 app.use('/webhooks/getnet', getnetWebhook);
 
 // Twilio inbound (WhatsApp voice ops — uses urlencoded body, no tenant)
