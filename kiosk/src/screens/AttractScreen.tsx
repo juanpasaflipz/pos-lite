@@ -54,8 +54,10 @@ const AttractScreen: React.FC = () => {
         type="button"
         aria-label="Admin"
         onClick={onAdminTap}
-        className="absolute top-0 right-0 w-24 h-24 opacity-0"
-      />
+        className="absolute top-0 right-0 w-48 h-48 flex items-start justify-end p-3"
+      >
+        <span className="block w-2 h-2 rounded-full bg-white/30" aria-hidden="true" />
+      </button>
     </div>
   );
 };
