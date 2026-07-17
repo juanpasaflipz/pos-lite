@@ -436,8 +436,8 @@ router.post('/split/charge-card', paymentLimiter, requireAuth('pos_access'), req
     }
 
     const accessToken = await ensureFreshToken(tenant, adminSql);
-    const termId = terminal_id || tenant.mp_default_terminal_id;
-    if (!termId) return res.status(400).json({ error: 'No terminal selected' });
+    const termId = terminal_id;
+    if (!termId) return res.status(400).json({ error: 'Pair this workstation to a terminal first', code: 'terminal_unpaired' });
 
     const lock = await findActiveTerminalLock(req.tenant.id, { excludeOrderId: split.order_id });
     if (lock) return res.status(409).json(terminalBusyResponse(lock));
@@ -1219,8 +1219,8 @@ router.post('/mp/charge', requireAuth('pos_access'), requirePro, async (req, res
     }
 
     const accessToken = await ensureFreshToken(tenant, adminSql);
-    const termId = terminal_id || tenant.mp_default_terminal_id;
-    if (!termId) return res.status(400).json({ error: 'No terminal selected' });
+    const termId = terminal_id;
+    if (!termId) return res.status(400).json({ error: 'Pair this workstation to a terminal first', code: 'terminal_unpaired' });
 
     const lock = await findActiveTerminalLock(req.tenant.id, {
       excludeOrderId: order.id,
@@ -1604,8 +1604,8 @@ router.post('/pay-together', paymentLimiter, requireAuth('pos_access'), async (r
       return res.status(400).json({ error: 'Mercado Pago not connected' });
     }
     const accessToken = await ensureFreshToken(tenant, adminSql);
-    const termId = mp_terminal_id || tenant.mp_default_terminal_id;
-    if (!termId) return res.status(400).json({ error: 'No terminal selected' });
+    const termId = mp_terminal_id;
+    if (!termId) return res.status(400).json({ error: 'Pair this workstation to a terminal first', code: 'terminal_unpaired' });
 
     if (combinedCharge < MP_POINT_MIN_AMOUNT) {
       return res.status(400).json({

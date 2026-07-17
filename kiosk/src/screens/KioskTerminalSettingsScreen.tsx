@@ -21,7 +21,6 @@ const KioskTerminalSettingsScreen: React.FC = () => {
   } = useKioskBinding();
 
   const [terminals, setTerminals] = useState<KioskMpTerminal[]>([]);
-  const [defaultTerminalId, setDefaultTerminalId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,7 +31,6 @@ const KioskTerminalSettingsScreen: React.FC = () => {
     try {
       const data = await listKioskMpTerminals({ tenantId, kioskToken });
       setTerminals(data.terminals);
-      setDefaultTerminalId(data.default_terminal_id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cargar la lista');
     } finally {
@@ -76,10 +74,10 @@ const KioskTerminalSettingsScreen: React.FC = () => {
 
       <main className="flex-1 overflow-y-auto px-6 py-6 max-w-3xl w-full mx-auto">
         <p className="text-base text-neutral-400 mb-2">
-          {tenantName ? `Conectado a ${tenantName}.` : null} Cada iPad puede usar su propia terminal MP Point.
+          {tenantName ? `Conectado a ${tenantName}.` : null} Cada iPad debe vincularse a su terminal MP Point más cercana.
         </p>
         <p className="text-base text-neutral-400 mb-6">
-          Si no eliges una aquí, este kiosko cobra en la terminal predeterminada de la cuenta.
+          Sin terminal vinculada este kiosko no puede cobrar — elige una abajo.
         </p>
 
         {error && (
@@ -105,15 +103,8 @@ const KioskTerminalSettingsScreen: React.FC = () => {
               </button>
             </div>
           ) : (
-            <div className="text-lg text-neutral-400">
-              Usando la terminal predeterminada de la cuenta
-              {defaultTerminalId ? (
-                <span className="block text-xs font-mono mt-1 text-neutral-600">{defaultTerminalId}</span>
-              ) : (
-                <span className="block text-xs mt-1 text-cockpit-yellow">
-                  (no hay terminal predeterminada — configúrala en el POS)
-                </span>
-              )}
+            <div className="text-lg text-cockpit-yellow">
+              Sin terminal vinculada — este kiosko no puede cobrar hasta que elijas una.
             </div>
           )}
         </div>

@@ -6,7 +6,7 @@ import {
   Check, AlertCircle, Crown, Smartphone, Wifi, WifiOff, X, Loader2,
   Landmark, Shield, FileText, Download, ShieldOff,
 } from 'lucide-react';
-import { getAccount, updateAccount, changePassword, createCheckoutSession, createPortalSession, getMpConnectUrl, getMpTerminals, setMpDefaultTerminal as apiSetMpDefaultTerminal, setMpDefaultKioskTerminal as apiSetMpDefaultKioskTerminal, getMpDevices, setMpDeviceOperatingMode, validatePromoCode, getBankConnections, getBankAccounts, syncBankConnection, deleteBankConnection, getFinancingConsent, deleteFinancingConsent, exportFinancingData, getFinancingConsentTerms, type BankConnection, type BankAccount } from '../api';
+import { getAccount, updateAccount, changePassword, createCheckoutSession, createPortalSession, getMpConnectUrl, getMpTerminals, setMpDefaultTerminal as apiSetMpDefaultTerminal, getMpDevices, setMpDeviceOperatingMode, validatePromoCode, getBankConnections, getBankAccounts, syncBankConnection, deleteBankConnection, getFinancingConsent, deleteFinancingConsent, exportFinancingData, getFinancingConsentTerms, type BankConnection, type BankAccount } from '../api';
 import { usePlan } from '../context/PlanContext';
 import BankConnectionCard from '../components/banking/BankConnectionCard';
 import ConnectBankButton from '../components/banking/ConnectBankButton';
@@ -103,9 +103,7 @@ export default function AccountScreen() {
   const [mpTerminals, setMpTerminals] = useState<Array<{ id: string; external_pos_id: string }>>([]);
   const [mpTerminalsLoading, setMpTerminalsLoading] = useState(false);
   const [mpDefaultTerminal, setMpDefaultTerminal] = useState<string>('');
-  const [mpDefaultKioskTerminal, setMpDefaultKioskTerminal] = useState<string>('');
   const [mpSaved, setMpSaved] = useState(false);
-  const [mpKioskSaved, setMpKioskSaved] = useState(false);
 
   // MP device setup (activate new terminals into PDV/integrated mode)
   const [mpDevices, setMpDevices] = useState<Array<{ id: string; external_pos_id: string; operating_mode: string }>>([]);
@@ -747,41 +745,6 @@ export default function AccountScreen() {
                           </button>
                         </div>
                         {mpSaved && (
-                          <p className="text-cockpit-in-text text-xs mt-1 flex items-center gap-1">
-                            <Check size={12} /> {t('account.saved')}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Kiosk-side default: when set, unpaired kiosk devices fall
-                          back to this terminal instead of the POS default above.
-                          Empty = use the POS default (previous behavior). */}
-                      <div>
-                        <label className="block text-neutral-400 text-sm mb-1.5">{t('account.defaultKioskTerminal')}</label>
-                        <select
-                          value={mpDefaultKioskTerminal || (account as any).mp_default_kiosk_terminal_id || ''}
-                          onChange={async (e) => {
-                            const termId = e.target.value;
-                            setMpDefaultKioskTerminal(termId);
-                            try {
-                              await apiSetMpDefaultKioskTerminal(termId || null);
-                              setMpKioskSaved(true);
-                              setTimeout(() => setMpKioskSaved(false), 2000);
-                            } catch {
-                              // ignore
-                            }
-                          }}
-                          className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500"
-                        >
-                          <option value="">{t('account.usePosDefaultForKiosks')}</option>
-                          {mpTerminals.map(t => (
-                            <option key={t.id} value={t.id}>
-                              {t.external_pos_id || t.id}
-                            </option>
-                          ))}
-                        </select>
-                        <p className="text-neutral-500 text-xs mt-1">{t('account.defaultKioskTerminalHelp')}</p>
-                        {mpKioskSaved && (
                           <p className="text-cockpit-in-text text-xs mt-1 flex items-center gap-1">
                             <Check size={12} /> {t('account.saved')}
                           </p>
