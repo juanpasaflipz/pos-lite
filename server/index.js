@@ -57,6 +57,7 @@ import onboardingRoutes from './routes/onboarding.js';
 // Billing & Admin
 import billingRoutes, { stripeWebhook, promoValidateHandler } from './routes/billing.js';
 import adminRoutes from './routes/admin.js';
+import orgRoutes from './routes/org.js';
 import demoDataRoutes from './routes/demo-data.js';
 import demoProvisionRoutes from './routes/demo-provision.js';
 
@@ -184,6 +185,10 @@ app.use('/api/loyalty-join', loyaltyJoinPublicRoutes);
 // Google review URL). Owns the SMS short link so we skip TinyURL's
 // interstitial and iOS's underscore-URL-parsing bug on raw g.page URLs.
 app.use('/', publicReviewRoutes);
+
+// Corporate dashboard (cross-tenant by design — org JWT auth, admin pool,
+// read-only aggregates scoped by tenants.org_id; see routes/org.js)
+app.use('/api/org', orgRoutes);
 
 // Kiosk bind (cross-tenant PIN search, no tenant header required)
 app.use('/api/kiosk', kioskRoutes);

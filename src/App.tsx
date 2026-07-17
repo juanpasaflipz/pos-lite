@@ -52,6 +52,8 @@ const RecipeManagementScreen = React.lazy(() => import('./screens/RecipeManageme
 const OwnerCockpitScreen = React.lazy(() => import('./screens/OwnerCockpitScreen').then(m => ({ default: m.default || (() => <div>Cockpit</div>) })));
 const OrdersScreen = React.lazy(() => import('./screens/OrdersScreen').then(m => ({ default: m.default || (() => <div>Orders</div>) })));
 const SuperAdmin = React.lazy(() => import('./screens/SuperAdmin').then(m => ({ default: m.default })));
+const OrgDashboard = React.lazy(() => import('./screens/OrgDashboard').then(m => ({ default: m.default })));
+const QRMenuScreen = React.lazy(() => import('./screens/QRMenuScreen').then(m => ({ default: m.default || (() => <div>QR Menu</div>) })));
 const KitchenPairScreen = React.lazy(() => import('./screens/KitchenPairScreen').then(m => ({ default: m.default || (() => <div>Pair</div>) })));
 const DevicesScreen = React.lazy(() => import('./screens/DevicesScreen').then(m => ({ default: m.default || (() => <div>Devices</div>) })));
 
@@ -187,6 +189,7 @@ const TenantRoutes: React.FC = () => {
       <Route path="/admin/expenses" element={<ProtectedRoute element={<ExpensesScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/branding" element={<ProtectedRoute element={<BrandingSettingsScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/display-menu" element={<ProtectedRoute element={<DisplayMenuScreen />} requiredRole={['manager', 'admin']} />} />
+      <Route path="/admin/qr-menu" element={<ProtectedRoute element={<QRMenuScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/invoicing" element={<ProtectedRoute element={<InvoicingScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/integrations" element={<ProtectedRoute element={<IntegrationsScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/devices" element={<ProtectedRoute element={<DevicesScreen />} requiredRole={['manager', 'admin']} />} />
@@ -194,6 +197,9 @@ const TenantRoutes: React.FC = () => {
 
       {/* Super Admin (platform owner only — gated by ADMIN_SECRET) */}
       <Route path="/super-admin" element={<SuperAdmin />} />
+
+      {/* Corporate dashboard (multi-store orgs — own JWT login, see routes/org.js) */}
+      <Route path="/org" element={<OrgDashboard />} />
 
       {/* Public */}
       <Route path="/order" element={<CustomerOrderScreen />} />
@@ -219,6 +225,7 @@ const AGENT_FAB_HIDDEN_PATHS = [
   '/order', '/menu-board',
   '/invoice/', '/r/', '/loyalty/join/',
   '/kitchen', '/kitchen-pair',
+  '/org', '/super-admin',
 ];
 
 const AgentFAB: React.FC = () => {

@@ -1,0 +1,52 @@
+{
+  "verifying": "Verificando...",
+  "loading": "Cargando...",
+  "noData": "Sin datos",
+  "login": {
+    "title": "Panel Corporativo",
+    "subtitle": "Todas tus sucursales en una sola pantalla",
+    "email": "Correo",
+    "password": "Contraseña",
+    "signIn": "Entrar",
+    "signingIn": "Entrando..."
+  },
+  "header": {
+    "subtitle": "{{count}} sucursales activas",
+    "signOut": "Salir"
+  },
+  "kpi": {
+    "todayRevenue": "Ventas de hoy",
+    "vsYesterday": "Ayer: {{value}}",
+    "todayOrders": "Órdenes de hoy",
+    "monthRevenue": "Ventas 30 días",
+    "weekRevenue": "Últimos 7 días: {{value}}",
+    "avgTicket": "Ticket promedio",
+    "orders30d": "{{count}} órdenes en 30 días"
+  },
+  "chart": {
+    "title": "Ventas diarias — toda la cadena (30 días)",
+    "revenue": "Ventas",
+    "orders": "Órdenes"
+  },
+  "topItems": {
+    "title": "Más vendidos (30 días)"
+  },
+  "stores": {
+    "title": "Sucursales ({{count}})",
+    "search": "Buscar sucursal...",
+    "sort": {
+      "today": "Ventas de hoy",
+      "week": "Ventas 7 días",
+      "month": "Ventas 30 días",
+      "ticket": "Ticket promedio"
+    },
+    "col": {
+      "store": "Sucursal",
+      "today": "Hoy",
+      "orders": "Órdenes hoy",
+      "week": "7 días",
+      "month": "30 días",
+      "ticket": "Ticket prom."
+    }
+  }
+}

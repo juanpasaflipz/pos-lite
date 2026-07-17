@@ -1,0 +1,11 @@
+{
+  "title": "Menú QR",
+  "subtitle": "Genera e imprime los códigos QR de tus mesas",
+  "tables": "Mesas",
+  "includeTakeaway": "Incluir QR para llevar",
+  "print": "Imprimir",
+  "empty": "Agrega al menos una mesa o activa el QR para llevar",
+  "takeaway": "Para llevar",
+  "table": "Mesa {{number}}",
+  "scanToOrder": "Escanea para ver el menú y ordenar"
+}

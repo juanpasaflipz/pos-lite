@@ -1,0 +1,52 @@
+{
+  "verifying": "Verifying...",
+  "loading": "Loading...",
+  "noData": "No data",
+  "login": {
+    "title": "Corporate Dashboard",
+    "subtitle": "All your locations on one screen",
+    "email": "Email",
+    "password": "Password",
+    "signIn": "Sign in",
+    "signingIn": "Signing in..."
+  },
+  "header": {
+    "subtitle": "{{count}} active locations",
+    "signOut": "Sign out"
+  },
+  "kpi": {
+    "todayRevenue": "Today's sales",
+    "vsYesterday": "Yesterday: {{value}}",
+    "todayOrders": "Today's orders",
+    "monthRevenue": "Sales — 30 days",
+    "weekRevenue": "Last 7 days: {{value}}",
+    "avgTicket": "Average ticket",
+    "orders30d": "{{count}} orders in 30 days"
+  },
+  "chart": {
+    "title": "Daily sales — whole chain (30 days)",
+    "revenue": "Sales",
+    "orders": "Orders"
+  },
+  "topItems": {
+    "title": "Best sellers (30 days)"
+  },
+  "stores": {
+    "title": "Locations ({{count}})",
+    "search": "Search location...",
+    "sort": {
+      "today": "Today's sales",
+      "week": "7-day sales",
+      "month": "30-day sales",
+      "ticket": "Average ticket"
+    },
+    "col": {
+      "store": "Location",
+      "today": "Today",
+      "orders": "Orders today",
+      "week": "7 days",
+      "month": "30 days",
+      "ticket": "Avg ticket"
+    }
+  }
+}

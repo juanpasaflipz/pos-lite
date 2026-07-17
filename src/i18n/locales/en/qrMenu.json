@@ -1,0 +1,11 @@
+{
+  "title": "QR Menu",
+  "subtitle": "Generate and print your table QR codes",
+  "tables": "Tables",
+  "includeTakeaway": "Include takeaway QR",
+  "print": "Print",
+  "empty": "Add at least one table or enable the takeaway QR",
+  "takeaway": "Takeaway",
+  "table": "Table {{number}}",
+  "scanToOrder": "Scan to see the menu and order"
+}

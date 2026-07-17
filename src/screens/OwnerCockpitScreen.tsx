@@ -25,6 +25,7 @@ import {
   Truck,
   Trash2,
   Receipt,
+  QrCode,
 } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 import { useAuth } from '../context/AuthContext';
@@ -46,6 +47,7 @@ const IN_CARDS: CockpitCard[] = [
   { to: '/admin/reports?tab=overview', icon: <TrendingUp size={32} />, label: 'Sales', hint: 'Daily revenue', intensity: 'primary' },
   { to: '/admin/menu', icon: <UtensilsCrossed size={28} />, label: 'Menu', hint: 'Items & prices', intensity: 'secondary' },
   { to: '/admin/loyalty', icon: <Heart size={28} />, label: 'Loyalty', hint: 'Repeat customers', intensity: 'secondary' },
+  { to: '/admin/qr-menu', icon: <QrCode size={28} />, label: 'QR Menu', hint: 'Table QR codes', intensity: 'secondary' },
   { to: '/admin/delivery', icon: <Truck size={28} />, label: 'Delivery', hint: 'Rappi, Uber, DiDi', intensity: 'secondary' },
   { to: '/admin/reports?tab=engineering', icon: <BarChart3 size={28} />, label: 'Menu Performance', hint: 'Top sellers', intensity: 'secondary' },
 ];

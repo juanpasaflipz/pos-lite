@@ -12,6 +12,8 @@ import enReports from './locales/en/reports.json';
 import enFinancing from './locales/en/financing.json';
 import enSettlement from './locales/en/settlement.json';
 import enSuperAdmin from './locales/en/superAdmin.json';
+import enOrg from './locales/en/org.json';
+import enQrMenu from './locales/en/qrMenu.json';
 
 // ES namespaces
 import esCommon from './locales/es/common.json';
@@ -23,6 +25,8 @@ import esReports from './locales/es/reports.json';
 import esFinancing from './locales/es/financing.json';
 import esSettlement from './locales/es/settlement.json';
 import esSuperAdmin from './locales/es/superAdmin.json';
+import esOrg from './locales/es/org.json';
+import esQrMenu from './locales/es/qrMenu.json';
 
 const resources = {
   en: {
@@ -35,6 +39,8 @@ const resources = {
     financing: enFinancing,
     settlement: enSettlement,
     superAdmin: enSuperAdmin,
+    org: enOrg,
+    qrMenu: enQrMenu,
   },
   es: {
     common: esCommon,
@@ -46,6 +52,8 @@ const resources = {
     financing: esFinancing,
     settlement: esSettlement,
     superAdmin: esSuperAdmin,
+    org: esOrg,
+    qrMenu: esQrMenu,
   },
 };
 
@@ -56,7 +64,7 @@ i18n
     resources,
     fallbackLng: 'en',
     defaultNS: 'common',
-    ns: ['common', 'pos', 'kitchen', 'admin', 'inventory', 'reports', 'financing', 'settlement', 'superAdmin'],
+    ns: ['common', 'pos', 'kitchen', 'admin', 'inventory', 'reports', 'financing', 'settlement', 'superAdmin', 'org', 'qrMenu'],
     interpolation: {
       escapeValue: false,
     },
