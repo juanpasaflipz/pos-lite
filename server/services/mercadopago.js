@@ -4,6 +4,7 @@
  */
 
 import { getServiceCredentials } from '../helpers/tenantCredentials.js';
+import { fetchWithTimeout } from '../lib/http.js';
 
 const MP = 'https://api.mercadopago.com';
 
@@ -74,7 +75,7 @@ export async function ensureFreshToken(tenant, adminSql) {
     client_secret: 'MP_CLIENT_SECRET',
   });
 
-  const res = await fetch(`${MP}/oauth/token`, {
+  const res = await fetchWithTimeout(`${MP}/oauth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -114,7 +115,7 @@ export async function ensureFreshToken(tenant, adminSql) {
  * List Point terminals in PDV (integrated) mode.
  */
 export async function getTerminals(accessToken) {
-  const res = await fetch(`${MP}/terminals/v1/list?limit=50&offset=0`, {
+  const res = await fetchWithTimeout(`${MP}/terminals/v1/list?limit=50&offset=0`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 
@@ -124,7 +125,7 @@ export async function getTerminals(accessToken) {
   }
 
   // Fallback for accounts still exposed only through the legacy Point API.
-  const legacy = await fetch(`${MP}/point/integration-api/devices`, {
+  const legacy = await fetchWithTimeout(`${MP}/point/integration-api/devices`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!legacy.ok) {
@@ -142,7 +143,7 @@ export async function getTerminals(accessToken) {
  * invisible to getTerminals() until switched to PDV.
  */
 export async function getAllDevices(accessToken) {
-  const res = await fetch(`${MP}/point/integration-api/devices`, {
+  const res = await fetchWithTimeout(`${MP}/point/integration-api/devices`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 
@@ -160,7 +161,7 @@ export async function getAllDevices(accessToken) {
  * The device must be restarted afterwards for the change to take effect.
  */
 export async function setDeviceOperatingMode(accessToken, deviceId, operatingMode) {
-  const res = await fetch(`${MP}/point/integration-api/devices/${deviceId}`, {
+  const res = await fetchWithTimeout(`${MP}/point/integration-api/devices/${deviceId}`, {
     method: 'PATCH',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -182,7 +183,7 @@ export async function setDeviceOperatingMode(accessToken, deviceId, operatingMod
  */
 export async function createPointOrder(accessToken, { amount, externalRef, terminalId }) {
   const amountString = Number(amount).toFixed(2);
-  const res = await fetch(`${MP}/v1/orders`, {
+  const res = await fetchWithTimeout(`${MP}/v1/orders`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -219,7 +220,7 @@ export async function createPointOrder(accessToken, { amount, externalRef, termi
 
 export async function getPointOrder(accessToken, orderId, terminalId = null) {
   if (String(orderId).startsWith('ORD')) {
-    const res = await fetch(`${MP}/v1/orders/${orderId}`, {
+    const res = await fetchWithTimeout(`${MP}/v1/orders/${orderId}`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
@@ -238,7 +239,7 @@ export async function getPointOrder(accessToken, orderId, terminalId = null) {
     throw new Error('Missing terminal_id for legacy MP payment intent lookup');
   }
 
-  const res = await fetch(`${MP}/point/integration-api/devices/${terminalId}/payment-intents/${orderId}`, {
+  const res = await fetchWithTimeout(`${MP}/point/integration-api/devices/${terminalId}/payment-intents/${orderId}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 
@@ -256,7 +257,7 @@ export async function getPointOrder(accessToken, orderId, terminalId = null) {
  * (MP populates fees on the payment object, not always on the order).
  */
 export async function getPayment(accessToken, paymentId) {
-  const res = await fetch(`${MP}/v1/payments/${paymentId}`, {
+  const res = await fetchWithTimeout(`${MP}/v1/payments/${paymentId}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) {
@@ -327,7 +328,7 @@ export function mapPointOrderStatus(order) {
  */
 export async function cancelPointOrder(accessToken, terminalId, paymentIntentId) {
   if (String(paymentIntentId).startsWith('ORD')) {
-    const res = await fetch(`${MP}/v1/orders/${paymentIntentId}/cancel`, {
+    const res = await fetchWithTimeout(`${MP}/v1/orders/${paymentIntentId}/cancel`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -344,7 +345,7 @@ export async function cancelPointOrder(accessToken, terminalId, paymentIntentId)
     return;
   }
 
-  const res = await fetch(`${MP}/point/integration-api/devices/${terminalId}/payment-intents/${paymentIntentId}`, {
+  const res = await fetchWithTimeout(`${MP}/point/integration-api/devices/${terminalId}/payment-intents/${paymentIntentId}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -403,7 +404,7 @@ export async function recoverStuckQueue(accessToken, { tenantId, sql }) {
 
     for (const device of devices) {
       try {
-        const res = await fetch(
+        const res = await fetchWithTimeout(
           `${MP}/point/integration-api/devices/${device}/payment-intents/${order.mp_order_id}`,
           { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } }
         );

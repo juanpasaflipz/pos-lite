@@ -7,7 +7,7 @@ import { enqueueKitchenTicket } from '../lib/printQueue.js';
 const router = Router();
 
 // GET /api/printers - list all printers
-router.get('/', async (req, res) => {
+router.get('/', requireAuth('manage_printers'), async (req, res) => {
   try {
     const printers = await all('SELECT * FROM printers ORDER BY name');
     res.json(printers);
@@ -64,7 +64,7 @@ router.put('/:id', requireAuth('manage_printers'), requirePlanFeature('printers'
 });
 
 // GET /api/printers/routes - get category -> printer routing
-router.get('/routes', async (req, res) => {
+router.get('/routes', requireAuth('manage_printers'), async (req, res) => {
   try {
     const routes = await all(`
       SELECT cpr.category_id, cpr.printer_id, mc.name as category_name, p.name as printer_name
@@ -101,7 +101,7 @@ router.put('/routes', requireAuth('manage_printers'), requirePlanFeature('printe
 });
 
 // POST /api/printers/print-ticket - generate ticket data grouped by printer
-router.post('/print-ticket', async (req, res) => {
+router.post('/print-ticket', requireAuth('pos_access'), async (req, res) => {
   try {
     const { order_id } = req.body;
     if (!order_id) return res.status(400).json({ error: 'order_id is required' });

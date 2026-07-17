@@ -16,6 +16,7 @@ import {
 } from '../helpers/loyalty.js';
 import { isAppleWalletConfigured } from '../helpers/wallet/applePass.js';
 import { ensureApplePass } from '../helpers/wallet/enroll.js';
+import { ensureCounterTable } from '../lib/orderCounter.js';
 import {
   buildTasteProfile,
   getRepeatOrder,
@@ -144,17 +145,6 @@ function verifyKioskToken(req, res, next) {
   } catch {
     res.status(401).json({ error: 'Invalid or expired kiosk token' });
   }
-}
-
-async function ensureCounterTable() {
-  await adminSql.unsafe(`
-    CREATE TABLE IF NOT EXISTS daily_order_counter (
-      tenant_id TEXT NOT NULL,
-      date_key DATE NOT NULL,
-      last_seq INT NOT NULL DEFAULT 0,
-      PRIMARY KEY (tenant_id, date_key)
-    )
-  `);
 }
 
 // ==================== Customer suggestions / loyalty ====================

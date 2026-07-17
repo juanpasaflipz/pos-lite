@@ -4,6 +4,7 @@ import {
   Routes,
   Route,
   Navigate,
+  useLocation,
 } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -209,14 +210,28 @@ const TenantRoutes: React.FC = () => {
 
 /* ==================== Agent FAB ==================== */
 
+// Routes where the admin AI Co-Pilot FAB must NEVER appear — customer-facing
+// (kiosk order, menu board, public invoice/receipt, loyalty-join QR landing)
+// and the shared kitchen display / login flows. Everything else that renders
+// after a manager/admin login is fair game.
+const AGENT_FAB_HIDDEN_PATHS = [
+  '/', '/onboarding', '/reset-password',
+  '/order', '/menu-board',
+  '/invoice/', '/r/', '/loyalty/join/',
+  '/kitchen', '/kitchen-pair',
+];
+
 const AgentFAB: React.FC = () => {
   const { currentEmployee } = useAuth();
   const { isFeatureLocked } = usePlan();
+  const location = useLocation();
   const [agentOpen, setAgentOpen] = useState(false);
 
   // Only show for managers and admins on desktop, and only for Pro users
   if (!currentEmployee || !['manager', 'admin'].includes(currentEmployee.role)) return null;
   if (isFeatureLocked('ai')) return null;
+  const path = location.pathname || '/';
+  if (AGENT_FAB_HIDDEN_PATHS.some(p => p === '/' ? path === '/' : path.startsWith(p))) return null;
 
   return (
     <>

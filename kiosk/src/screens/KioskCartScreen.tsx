@@ -241,15 +241,15 @@ const KioskCartScreen: React.FC = () => {
           <span className="inline-flex items-center gap-3">
             {isDelivery ? <Truck className="h-7 w-7" /> : <Utensils className="h-7 w-7" />}
             {holding
-              ? (isDelivery ? 'Pidiendo repartidor…' : 'Enviando a la cocina…')
-              : (isDelivery ? 'Pedir y pagar' : 'Enviar a la cocina')}
+              ? (isDelivery ? 'Pidiendo repartidor…' : 'Un momento…')
+              : (isDelivery ? 'Pedir y pagar' : 'Continuar a pagar')}
           </span>
           <span>{money.format(total + (isDelivery ? (delivery?.quoteFee || 0) : 0))}</span>
         </button>
         <p className="text-center text-sm text-neutral-500 font-bold">
           {isDelivery
             ? 'Cobramos en la terminal. Llega un repartidor de Uber con tu pedido.'
-            : 'Te llamamos por tu nombre cuando esté lista. Pagas en la terminal.'}
+            : 'Pagas en la terminal — luego enviamos tu orden a la cocina.'}
         </p>
       </footer>
 

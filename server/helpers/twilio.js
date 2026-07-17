@@ -1,6 +1,7 @@
 import { run } from '../db/index.js';
 import { tenantContext } from '../db/index.js';
 import { getServiceCredentials } from './tenantCredentials.js';
+import { fetchWithTimeout } from '../lib/http.js';
 
 // Platform-level defaults (used as fallbacks)
 const PLATFORM_SID = process.env.TWILIO_ACCOUNT_SID;
@@ -185,7 +186,7 @@ export async function sendSMS(to, body, customerId = null, messageType = 'genera
   const params = new URLSearchParams({ To: e164, From: from, Body: cleanBody });
 
   try {
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${auth}`,
@@ -250,7 +251,7 @@ export async function sendWhatsAppTemplate(to, messageType, variables, customerI
   }
 
   try {
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${auth}`,
@@ -309,7 +310,7 @@ export async function sendSMSReply(to, body, { from, sid, token } = {}) {
   const params = new URLSearchParams({ To: to, From: sender, Body: cleanBody });
 
   try {
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${auth}`,
@@ -351,7 +352,7 @@ export async function sendWhatsAppText(to, body, { from, sid, token } = {}) {
   const params = new URLSearchParams({ To: toAddr, From: fromAddr, Body: String(body) });
 
   try {
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${auth}`,

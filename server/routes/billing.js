@@ -249,6 +249,24 @@ export async function stripeWebhook(req, res) {
     return res.status(400).json({ error: 'Invalid signature' });
   }
 
+  // Event-ID idempotency — Stripe retries webhooks and a replayed
+  // subscription.deleted would overwrite subscription_cancelled_at + re-fire
+  // the downgrade side effects. First insert wins; retries skip the switch.
+  try {
+    const inserted = await adminSql`
+      INSERT INTO stripe_webhook_events (event_id, event_type)
+      VALUES (${event.id}, ${event.type})
+      ON CONFLICT (event_id) DO NOTHING
+      RETURNING event_id
+    `;
+    if (inserted.length === 0) {
+      return res.json({ received: true, duplicate: true });
+    }
+  } catch (err) {
+    console.error('[Billing] Webhook idempotency check failed:', err.message);
+    // Fall through — better to double-process than drop a real event.
+  }
+
   async function findTenantByCustomer(customerId) {
     const rows = await adminSql`SELECT * FROM tenants WHERE stripe_customer_id = ${customerId}`;
     return rows[0] || undefined;

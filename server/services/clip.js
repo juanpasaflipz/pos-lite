@@ -17,6 +17,7 @@
  */
 
 import { getServiceCredentials } from '../helpers/tenantCredentials.js';
+import { fetchWithTimeout } from '../lib/http.js';
 
 const CLIP_PINPAD = 'https://api.payclip.io/f2f/pinpad/v1';
 const CLIP_API = 'https://api.payclip.com';
@@ -64,7 +65,7 @@ export async function createPinPadPayment(authHeader, { amount, externalRef, ter
     external_reference: externalRef,
   };
 
-  const res = await fetch(`${CLIP_PINPAD}/payment`, {
+  const res = await fetchWithTimeout(`${CLIP_PINPAD}/payment`, {
     method: 'POST',
     headers: {
       Authorization: authHeader,
@@ -91,7 +92,7 @@ export async function createPinPadPayment(authHeader, { amount, externalRef, ter
  * @returns {Promise<{ status: string, raw: object } | null>} null on 404
  */
 export async function getPaymentStatus(authHeader, paymentId) {
-  const res = await fetch(`${CLIP_API}/payments/${encodeURIComponent(paymentId)}`, {
+  const res = await fetchWithTimeout(`${CLIP_API}/payments/${encodeURIComponent(paymentId)}`, {
     headers: {
       Authorization: authHeader,
       Accept: 'application/json',
@@ -117,7 +118,7 @@ export async function getPaymentStatus(authHeader, paymentId) {
  * returns 404/405 we swallow and let the live-pull resolve to ERROR.
  */
 export async function cancelPinPadPayment(authHeader, paymentId) {
-  const res = await fetch(`${CLIP_PINPAD}/payment/${encodeURIComponent(paymentId)}`, {
+  const res = await fetchWithTimeout(`${CLIP_PINPAD}/payment/${encodeURIComponent(paymentId)}`, {
     method: 'DELETE',
     headers: { Authorization: authHeader },
   });

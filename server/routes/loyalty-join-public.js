@@ -112,7 +112,7 @@ router.post('/enroll', async (req, res) => {
     const tenant = tenants[0];
 
     const orderRows = await adminSql`
-      SELECT id, loyalty_customer_id, customer_call_name FROM orders
+      SELECT id, loyalty_customer_id, customer_call_name, payment_status FROM orders
       WHERE id = ${decoded.orderId} AND tenant_id = ${decoded.tenantId}
       LIMIT 1
     `;
@@ -120,6 +120,11 @@ router.post('/enroll', async (req, res) => {
       return res.status(404).json({ error: 'Orden no encontrada' });
     }
     const order = orderRows[0];
+    // Kiosk QR is rendered pre-payment in cash-counter mode; without this
+    // gate a customer could enroll, collect stamps, and walk out unpaid.
+    // Stamps only credit on paid orders — the wallet pass + enrollment still
+    // happen so the customer isn't sent away empty-handed.
+    const orderIsPaid = order.payment_status === 'paid' || order.payment_status === 'completed';
 
     const result = await withTenant(decoded.tenantId, async () => {
       const { customer } = await findOrCreateCustomer(
@@ -135,13 +140,15 @@ router.post('/enroll', async (req, res) => {
       );
 
       // addStampsForOrder is a no-op if stamp_events already has this order,
-      // so double-scans don't double-credit.
+      // so double-scans don't double-credit. Also skipped when the order is
+      // still unpaid — otherwise a customer could stamp themselves in cash-
+      // counter mode and walk out without paying.
       const already = await get(
         'SELECT 1 FROM stamp_events WHERE order_id = $1 LIMIT 1',
         [order.id],
       );
       let stampOutcome = null;
-      if (!already) {
+      if (!already && orderIsPaid) {
         stampOutcome = await addStampsForOrder(
           customer.id,
           order.id,
@@ -175,6 +182,7 @@ router.post('/enroll', async (req, res) => {
         stamps_earned: card.stamps_earned,
         stamps_required: card.stamps_required,
         card_completed: !!stampOutcome?.cardCompleted,
+        stamp_credit_pending: !orderIsPaid,
         wallet_url: walletUrl,
       };
     });

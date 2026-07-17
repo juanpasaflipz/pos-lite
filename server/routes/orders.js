@@ -10,6 +10,7 @@ import { audit } from '../lib/auditLog.js';
 import { sendReceiptMessage, sendReceiptLoyaltyMessage, sendOrderReadyMessage } from '../helpers/twilio.js';
 import { findOrCreateCustomer, addStampsForOrder, getConfigValue } from '../helpers/loyalty.js';
 import { tzDate } from '../lib/tz.js';
+import { ensureCounterTable } from '../lib/orderCounter.js';
 
 const router = Router();
 
@@ -121,26 +122,6 @@ async function estimatePrepTime(conn, itemMenuIds, tenantId) {
   const high = totalMinutes + 2;
 
   return { low, high, estimate: totalMinutes };
-}
-
-/**
- * Ensure the daily_order_counter table exists (idempotent).
- * Uses adminSql because app_user can't CREATE TABLE.
- */
-let counterTableReady = false;
-async function ensureCounterTable() {
-  if (counterTableReady) return;
-  await adminSql.unsafe(`
-    CREATE TABLE IF NOT EXISTS daily_order_counter (
-      tenant_id TEXT NOT NULL,
-      date_key DATE NOT NULL,
-      last_seq INT NOT NULL DEFAULT 0,
-      PRIMARY KEY (tenant_id, date_key)
-    )
-  `);
-  // Grant access to app_user for the counter table
-  await adminSql.unsafe(`GRANT SELECT, INSERT, UPDATE ON daily_order_counter TO app_user`).catch(() => {});
-  counterTableReady = true;
 }
 
 /**

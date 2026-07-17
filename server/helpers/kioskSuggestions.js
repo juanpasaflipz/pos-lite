@@ -20,6 +20,7 @@
  */
 
 import { get, all } from '../db/index.js';
+import { fetchWithTimeout } from '../lib/http.js';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const PAID = "('paid','completed')";
@@ -420,7 +421,7 @@ Devuelve exactamente esta estructura:
 }`;
 
   try {
-    const response = await fetch(ANTHROPIC_API_URL, {
+    const response = await fetchWithTimeout(ANTHROPIC_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -433,7 +434,7 @@ Devuelve exactamente esta estructura:
         system,
         messages: [{ role: 'user', content: user }],
       }),
-    });
+    }, 6000);
     if (!response.ok) {
       console.error(
         '[kiosk/suggest] Claude API error',

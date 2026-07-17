@@ -193,8 +193,10 @@ export async function holdKioskOrder(
   return res.json();
 }
 
-// Dine-in pre-pay: fires the order to the kitchen with payment_status='unpaid'.
-// The customer eats first, then comes back via Pagar mi cuenta to pay.
+// Kiosk pay-first flow: creates the order as status='draft_kiosk' (KDS blind).
+// The kitchen ticket only fires after payment succeeds and the poller / cashier
+// promotes the draft to 'active'. Endpoint name is legacy — the actual send-
+// to-kitchen moment lives in markKioskOrderPaid() / claim.
 export interface KioskSendToKitchenResponse {
   id: number;
   order_number: string | number;

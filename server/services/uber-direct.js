@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { getServiceCredentials } from '../helpers/tenantCredentials.js';
+import { fetchWithTimeout } from '../lib/http.js';
 
 const UBER_API = 'https://api.uber.com';
 const UBER_AUTH = 'https://login.uber.com';
@@ -46,7 +47,7 @@ export async function getAccessToken(tenantId) {
     throw new Error('Uber Direct credentials not configured');
   }
 
-  const res = await fetch(`${UBER_AUTH}/oauth/v2/token`, {
+  const res = await fetchWithTimeout(`${UBER_AUTH}/oauth/v2/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -91,7 +92,7 @@ export async function getWebhookSigningKey(tenantId) {
 }
 
 async function uberCall(token, method, path, body) {
-  const res = await fetch(`${UBER_API}${path}`, {
+  const res = await fetchWithTimeout(`${UBER_API}${path}`, {
     method,
     headers: {
       Authorization: `Bearer ${token}`,

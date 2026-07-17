@@ -1,6 +1,12 @@
 import crypto from 'crypto';
 import { adminSql } from '../db/index.js';
 
+// In-process liveness throttle: the print-bridge polls /claim every ~3s,
+// which is ~28.8k UPSERTs/day/tenant against tenant_credentials for a
+// value that a 15s status screen reads. Only write when >30s stale.
+const LIVENESS_THROTTLE_MS = 30_000;
+const _lastLivenessWrite = new Map(); // tenantId -> ts
+
 /**
  * Auth middleware for on-site agents (print bridge, portal watcher).
  *
@@ -39,13 +45,20 @@ export function requireAgentToken() {
         return res.status(401).json({ error: 'Invalid agent token' });
       }
 
-      // Track liveness (best-effort, never blocks the request)
-      adminSql`
-        INSERT INTO tenant_credentials (tenant_id, service, key, value)
-        VALUES (${tenantId}, 'print_agent', 'last_seen', ${new Date().toISOString()})
-        ON CONFLICT (tenant_id, service, key)
-        DO UPDATE SET value = EXCLUDED.value
-      `.catch(() => {});
+      // Track liveness (best-effort, never blocks the request). Throttled
+      // to LIVENESS_THROTTLE_MS so a 3s claim poll doesn't rewrite the row
+      // hundreds of times per minute.
+      const now = Date.now();
+      const last = _lastLivenessWrite.get(tenantId) || 0;
+      if (now - last > LIVENESS_THROTTLE_MS) {
+        _lastLivenessWrite.set(tenantId, now);
+        adminSql`
+          INSERT INTO tenant_credentials (tenant_id, service, key, value)
+          VALUES (${tenantId}, 'print_agent', 'last_seen', ${new Date().toISOString()})
+          ON CONFLICT (tenant_id, service, key)
+          DO UPDATE SET value = EXCLUDED.value
+        `.catch(() => {});
+      }
 
       next();
     } catch (err) {

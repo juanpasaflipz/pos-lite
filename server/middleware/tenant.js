@@ -20,9 +20,18 @@ export async function tenantMiddleware(req, res, next) {
   let tenant = null;
 
   try {
-    // 1. Explicit header
+    // 1. Explicit header — dev: unrestricted; production: requires ADMIN_SECRET.
+    // Without this gate, an anonymous caller on the platform domain could
+    // impersonate any tenant by setting X-Tenant-ID, which combined with
+    // unauthenticated routes turns into cross-tenant reach.
     const headerTenantId = req.headers['x-tenant-id'];
     if (headerTenantId) {
+      if (process.env.NODE_ENV === 'production') {
+        const provided = req.headers['x-admin-secret'];
+        if (!process.env.ADMIN_SECRET || provided !== process.env.ADMIN_SECRET) {
+          return res.status(403).json({ error: 'X-Tenant-ID header requires admin secret in production' });
+        }
+      }
       tenant = await getTenant(headerTenantId);
       if (!tenant) return res.status(404).json({ error: `Tenant '${headerTenantId}' not found` });
       if (!tenant.active) return res.status(403).json({ error: 'Tenant account is inactive' });
