@@ -1,5 +1,22 @@
+import jwt from 'jsonwebtoken';
 import { tenantContext, tenantSql } from '../db/index.js';
 import { getTenant, getTenantBySubdomain } from '../tenants.js';
+import { JWT_SECRET } from '../lib/constants.js';
+
+// A valid kiosk JWT already proves the caller is bound to that specific tenant,
+// so it can stand in for ADMIN_SECRET when authorizing an X-Tenant-ID header
+// on the platform domain. Kiosks live on pos.desktop.kitchen (no tenant
+// subdomain), so header-based tenant resolution is the only path they have.
+function hasValidKioskTokenForTenant(req, tenantId) {
+  const header = req.headers.authorization || '';
+  if (!header.startsWith('Bearer ')) return false;
+  try {
+    const decoded = jwt.verify(header.slice(7), JWT_SECRET);
+    return decoded?.type === 'kiosk' && decoded?.tenantId === tenantId;
+  } catch {
+    return false;
+  }
+}
 
 // Subdomains that belong to the platform itself and should NOT be resolved as tenants.
 const RESERVED_SUBDOMAINS = new Set([
@@ -28,7 +45,9 @@ export async function tenantMiddleware(req, res, next) {
     if (headerTenantId) {
       if (process.env.NODE_ENV === 'production') {
         const provided = req.headers['x-admin-secret'];
-        if (!process.env.ADMIN_SECRET || provided !== process.env.ADMIN_SECRET) {
+        const adminOk = process.env.ADMIN_SECRET && provided === process.env.ADMIN_SECRET;
+        const kioskOk = hasValidKioskTokenForTenant(req, headerTenantId);
+        if (!adminOk && !kioskOk) {
           return res.status(403).json({ error: 'X-Tenant-ID header requires admin secret in production' });
         }
       }
