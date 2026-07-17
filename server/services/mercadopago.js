@@ -141,27 +141,69 @@ export async function getTerminals(accessToken) {
  * List ALL Point devices on the account regardless of operating mode.
  * Used for terminal setup: new devices ship in STANDALONE mode and are
  * invisible to getTerminals() until switched to PDV.
+ *
+ * Uses the new terminals API first so the setup list reflects the same
+ * source of truth as getTerminals(); falls back to the legacy Point API.
  */
 export async function getAllDevices(accessToken) {
-  const res = await fetchWithTimeout(`${MP}/point/integration-api/devices`, {
+  const res = await fetchWithTimeout(`${MP}/terminals/v1/list?limit=50&offset=0`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`MP getAllDevices failed: ${res.status} ${text}`);
+  if (res.ok) {
+    const data = await res.json();
+    const terminals = data.data?.terminals || [];
+    if (terminals.length > 0) return terminals;
   }
 
-  const data = await res.json();
+  const legacy = await fetchWithTimeout(`${MP}/point/integration-api/devices`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!legacy.ok) {
+    const text = await legacy.text();
+    throw new Error(`MP getAllDevices failed: ${res.status}; legacy failed: ${legacy.status} ${text}`);
+  }
+
+  const data = await legacy.json();
   return data.devices || [];
 }
 
 /**
  * Switch a Point device's operating mode ('PDV' = integrated, 'STANDALONE').
+ *
+ * IMPORTANT: charges and terminal listing go through MP's NEW APIs
+ * (/v1/orders, /terminals/v1/list), so the mode switch must go through the
+ * matching /terminals/v1/setup endpoint — a legacy-only PATCH updates the old
+ * API's view but leaves the terminal invisible to /terminals/v1/list (bug seen
+ * live 2026-07-17: terminal "activated" but never appeared in the POS pickers).
+ * Legacy PATCH is kept as a fallback for accounts not yet on the new API.
  * The device must be restarted afterwards for the change to take effect.
+ * Note: MP allows only ONE PDV-mode terminal per point-of-sale (caja) — if the
+ * new API rejects the switch, check the terminal's store/POS assignment in the
+ * MP dashboard.
  */
 export async function setDeviceOperatingMode(accessToken, deviceId, operatingMode) {
-  const res = await fetchWithTimeout(`${MP}/point/integration-api/devices/${deviceId}`, {
+  const res = await fetchWithTimeout(`${MP}/terminals/v1/setup`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      terminals: [{ id: deviceId, operating_mode: operatingMode }],
+    }),
+  });
+
+  if (res.ok) {
+    const data = await res.json();
+    return data.terminals?.[0] || { id: deviceId, operating_mode: operatingMode };
+  }
+
+  const newApiError = await res.text();
+
+  // Fallback for accounts still exposed only through the legacy Point API.
+  const legacy = await fetchWithTimeout(`${MP}/point/integration-api/devices/${deviceId}`, {
     method: 'PATCH',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -170,12 +212,14 @@ export async function setDeviceOperatingMode(accessToken, deviceId, operatingMod
     body: JSON.stringify({ operating_mode: operatingMode }),
   });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`MP setDeviceOperatingMode failed: ${res.status} ${text}`);
+  if (!legacy.ok) {
+    const text = await legacy.text();
+    throw new Error(
+      `MP setDeviceOperatingMode failed: ${res.status} ${newApiError}; legacy failed: ${legacy.status} ${text}`
+    );
   }
 
-  return res.json();
+  return legacy.json();
 }
 
 /**
