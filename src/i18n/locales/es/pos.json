@@ -641,5 +641,10 @@
     "bringCardCloser": "Acerque la tarjeta al dispositivo para completar el pago.",
     "paymentConfirmed": "Pago confirmado",
     "tryAgain": "Intentar de nuevo"
+  },
+  "printBridge": {
+    "offline": "El puente de la impresora de cocina está desconectado — los tickets se imprimirán al reconectar. Toca para revisar.",
+    "stuck": "{{count}} ticket esperando impresión — toca para revisar la impresora",
+    "stuck_plural": "{{count}} tickets esperando impresión — toca para revisar la impresora"
   }
 }

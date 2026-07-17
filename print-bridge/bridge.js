@@ -101,6 +101,28 @@ function sendToPrinter(address, buffer) {
   });
 }
 
+/**
+ * Connectivity check: open a TCP socket to the printer and close it without
+ * sending anything. Port 9100 accepting a connection = printer is on the LAN
+ * and listening. Resolves on connect; rejects on refusal/timeout.
+ */
+function pingPrinter(address) {
+  const { host, port } = parseAddress(address);
+  return new Promise((resolve, reject) => {
+    const socket = new net.Socket();
+    let settled = false;
+    const finish = (err) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      err ? reject(err) : resolve();
+    };
+    socket.setTimeout(5_000, () => finish(new Error(`Printer ${host}:${port} timed out`)));
+    socket.once('error', (err) => finish(new Error(`Printer ${host}:${port}: ${err.message}`)));
+    socket.connect(port, host, () => finish());
+  });
+}
+
 // ==================== Server API ====================
 
 async function api(pathname, body) {
@@ -128,11 +150,20 @@ let lastHeartbeat = 0;
 
 async function processJob(job) {
   const payload = typeof job.payload === 'string' ? JSON.parse(job.payload) : job.payload;
+  const address = cfg.printers[String(job.printer_id)] || cfg.printers.default;
+
+  // Connectivity check requested from the POS (Impresoras → Probar):
+  // TCP connect only, nothing sent, nothing printed.
+  if (payload?.format === 'ping' || job.job_type === 'ping') {
+    await pingPrinter(address);
+    console.log(`[bridge] ✓ ping ok → ${address}`);
+    return;
+  }
+
   if (!payload?.data || payload.format !== 'escpos') {
     throw new Error(`Job ${job.id}: unsupported payload format`);
   }
   const bytes = Buffer.from(payload.data, 'base64');
-  const address = cfg.printers[String(job.printer_id)] || cfg.printers.default;
 
   await sendToPrinter(address, bytes);
   printedTotal++;

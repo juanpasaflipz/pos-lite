@@ -4,7 +4,7 @@ import { all, get, run, getConn, getTenantId } from '../db/index.js';
 import { adminSql } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireAgentToken } from '../middleware/agentAuth.js';
-import { enqueueTestTicket } from '../lib/printQueue.js';
+import { enqueueTestTicket, enqueuePingJob, getBridgeHealth } from '../lib/printQueue.js';
 
 const router = Router();
 
@@ -61,7 +61,7 @@ router.post('/:id/result', requireAgentToken(), async (req, res) => {
     const { id } = req.params;
     const { ok, error } = req.body || {};
 
-    const job = await get('SELECT id, attempts FROM print_jobs WHERE id = $1', [id]);
+    const job = await get('SELECT id, attempts, job_type FROM print_jobs WHERE id = $1', [id]);
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
     if (ok) {
@@ -70,7 +70,9 @@ router.post('/:id/result', requireAgentToken(), async (req, res) => {
         [id]
       );
     } else {
-      const failed = job.attempts >= MAX_ATTEMPTS;
+      // Pings fail hard on the first error — someone is watching a spinner
+      // in the UI, so a 3-attempt retry loop only delays the bad news.
+      const failed = job.job_type === 'ping' || job.attempts >= MAX_ATTEMPTS;
       await run(
         'UPDATE print_jobs SET status = $1, last_error = $2 WHERE id = $3',
         [failed ? 'error' : 'queued', String(error || 'unknown').slice(0, 500), id]
@@ -123,17 +125,29 @@ router.get('/bridge-status', requireAuth(), async (req, res) => {
     `;
     const creds = Object.fromEntries(rows.map(r => [r.key, r.value]));
 
+    // Pings are connectivity probes, not tickets — keep them out of the counts
     const counts = await all(`
       SELECT status, COUNT(*)::int AS n
       FROM print_jobs
       WHERE created_at > NOW() - INTERVAL '24 hours'
+        AND job_type <> 'ping'
       GROUP BY status
     `);
     const byStatus = Object.fromEntries(counts.map(c => [c.status, c.n]));
 
+    // Real tickets sitting queued for 2+ minutes — the "orders aren't
+    // printing" signal the POS banner surfaces during service.
+    const stuck = await get(`
+      SELECT COUNT(*)::int AS n
+      FROM print_jobs
+      WHERE status = 'queued'
+        AND job_type <> 'ping'
+        AND created_at < NOW() - INTERVAL '2 minutes'
+    `);
+
     const lastSeen = creds.last_seen || null;
     const online = lastSeen
-      ? (Date.now() - new Date(lastSeen).getTime()) < 60_000
+      ? (Date.now() - new Date(lastSeen).getTime()) < 90_000
       : false;
 
     res.json({
@@ -141,6 +155,7 @@ router.get('/bridge-status', requireAuth(), async (req, res) => {
       online,
       last_seen: lastSeen,
       queued: byStatus.queued || 0,
+      stuck_queued: stuck?.n || 0,
       printing: byStatus.printing || 0,
       done_24h: byStatus.done || 0,
       errors_24h: byStatus.error || 0,
@@ -169,6 +184,48 @@ router.post('/test', requireAuth('manage_printers'), async (req, res) => {
   } catch (error) {
     console.error('[PrintJobs] Test print error:', error);
     res.status(500).json({ error: 'Failed to enqueue test print' });
+  }
+});
+
+/**
+ * POST /api/print-jobs/ping
+ * Body: { printer_id?: number }
+ *
+ * End-to-end printer connectivity check: enqueues a 'ping' job that the
+ * on-site bridge claims and answers by opening a TCP socket to the printer
+ * (no paper output). Fails fast without queueing when the bridge itself
+ * isn't configured or hasn't polled recently.
+ */
+router.post('/ping', requireAuth('manage_printers'), async (req, res) => {
+  try {
+    const health = await getBridgeHealth(getTenantId());
+    if (!health.configured) return res.json({ status: 'not_configured' });
+    if (!health.online) return res.json({ status: 'bridge_offline', last_seen: health.last_seen });
+
+    const printerId = req.body?.printer_id || null;
+    const jobId = await enqueuePingJob(printerId);
+    res.status(201).json({ status: 'queued', job_id: jobId });
+  } catch (error) {
+    console.error('[PrintJobs] Ping error:', error);
+    res.status(500).json({ error: 'Failed to enqueue printer check' });
+  }
+});
+
+/**
+ * GET /api/print-jobs/:id/status
+ * Poll a single job (used by the UI while a ping/test is in flight).
+ */
+router.get('/:id/status', requireAuth(), async (req, res) => {
+  try {
+    const job = await get(
+      'SELECT id, job_type, status, attempts, last_error, printed_at, created_at FROM print_jobs WHERE id = $1',
+      [req.params.id]
+    );
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    res.json(job);
+  } catch (error) {
+    console.error('[PrintJobs] Status error:', error);
+    res.status(500).json({ error: 'Failed to fetch job status' });
   }
 });
 

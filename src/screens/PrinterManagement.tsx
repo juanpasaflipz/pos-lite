@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Plus, Printer as PrinterIcon, Wifi, WifiOff, KeyRound, FileCheck } from 'lucide-react';
+import { ArrowLeft, Plus, Printer as PrinterIcon, Wifi, WifiOff, KeyRound, FileCheck, Activity, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import {
   getPrinters,
   createPrinter,
@@ -12,6 +12,8 @@ import {
   getPrintBridgeStatus,
   generatePrintAgentToken,
   sendTestPrint,
+  pingPrinter,
+  getPrintJobStatus,
   PrintBridgeStatus,
 } from '../api';
 import { Printer, MenuCategory } from '../types';
@@ -31,6 +33,8 @@ export default function PrinterManagement() {
   const [bridge, setBridge] = useState<PrintBridgeStatus | null>(null);
   const [newToken, setNewToken] = useState<string | null>(null);
   const [testSent, setTestSent] = useState(false);
+  // Connectivity checks keyed by printer id ('default' = bridge default printer)
+  const [pingResults, setPingResults] = useState<Record<string, { state: 'running' | 'ok' | 'fail'; message?: string }>>({});
 
   useEffect(() => {
     fetchData();
@@ -65,6 +69,46 @@ export default function PrinterManagement() {
       setTimeout(() => setTestSent(false), 4000);
     } catch (err) {
       console.error('Failed to send test print:', err);
+    }
+  };
+
+  // End-to-end connectivity check: server enqueues a ping job, the on-site
+  // bridge claims it and opens a TCP socket to the printer (no paper), then
+  // reports back. We poll the job until it lands. Typical round-trip: 3-8s.
+  const handlePingPrinter = async (printerId: number | null) => {
+    const key = printerId === null ? 'default' : String(printerId);
+    const setResult = (state: 'running' | 'ok' | 'fail', message?: string) =>
+      setPingResults((prev) => ({ ...prev, [key]: { state, message } }));
+
+    setResult('running');
+    try {
+      const res = await pingPrinter(printerId);
+      if (res.status === 'not_configured') {
+        setResult('fail', t('printers.ping.notConfigured'));
+        return;
+      }
+      if (res.status === 'bridge_offline') {
+        setResult('fail', t('printers.ping.bridgeOffline'));
+        return;
+      }
+      // Poll the job: bridge claim poll is 3s + 5s socket timeout worst case
+      const jobId = res.job_id!;
+      for (let i = 0; i < 16; i++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const job = await getPrintJobStatus(jobId);
+        if (job.status === 'done') {
+          setResult('ok', t('printers.ping.ok'));
+          return;
+        }
+        if (job.status === 'error') {
+          setResult('fail', t('printers.ping.fail', { error: job.last_error || '' }));
+          return;
+        }
+      }
+      setResult('fail', t('printers.ping.timeout'));
+    } catch (err) {
+      console.error('Printer ping failed:', err);
+      setResult('fail', t('printers.ping.timeout'));
     }
   };
 
@@ -121,6 +165,30 @@ export default function PrinterManagement() {
     return routes.find((r) => r.category_id === categoryId);
   };
 
+  const renderPingResult = (key: string) => {
+    const result = pingResults[key];
+    if (!result || result.state === 'running') return null;
+    return (
+      <p className={`text-sm mt-1 flex items-center gap-1.5 ${result.state === 'ok' ? 'text-green-400' : 'text-red-400'}`}>
+        {result.state === 'ok' ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
+        {result.message}
+      </p>
+    );
+  };
+
+  const pingButton = (printerId: number | null, key: string) => (
+    <button
+      onClick={() => handlePingPrinter(printerId)}
+      disabled={!bridge?.configured || pingResults[key]?.state === 'running'}
+      className="flex items-center gap-2 px-4 py-2 bg-neutral-800 text-white rounded-lg font-medium hover:bg-neutral-700 transition-colors disabled:opacity-40 min-h-[40px]"
+    >
+      {pingResults[key]?.state === 'running'
+        ? <Loader2 size={18} className="animate-spin" />
+        : <Activity size={18} />}
+      {pingResults[key]?.state === 'running' ? t('printers.ping.running') : t('printers.ping.button')}
+    </button>
+  );
+
   return (
     <FeatureGate feature="printers" featureLabel="Printer Management">
     <div className="min-h-screen bg-neutral-950">
@@ -171,13 +239,14 @@ export default function PrinterManagement() {
                       )}
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <button
                       onClick={handleGenerateToken}
                       className="flex items-center gap-2 px-4 py-2 bg-neutral-800 text-white rounded-lg font-medium hover:bg-neutral-700 transition-colors min-h-[40px]"
                     >
                       <KeyRound size={18} /> {t('printers.bridge.generateToken')}
                     </button>
+                    {pingButton(null, 'default')}
                     <button
                       onClick={handleTestPrint}
                       disabled={!bridge?.configured}
@@ -187,6 +256,7 @@ export default function PrinterManagement() {
                     </button>
                   </div>
                 </div>
+                {renderPingResult('default')}
 
                 {bridge?.configured && (
                   <div className="flex gap-4 text-sm text-neutral-400 flex-wrap">
@@ -268,14 +338,18 @@ export default function PrinterManagement() {
                         <p className="text-sm text-neutral-400">
                           {printer.printer_type} {printer.address && `\u2014 ${printer.address}`}
                         </p>
+                        {renderPingResult(String(printer.id))}
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleTogglePrinter(printer)}
-                      className={`px-3 py-1 rounded-lg text-sm font-medium ${printer.active ? 'bg-cockpit-green/30 text-cockpit-in-text' : 'bg-neutral-800 text-neutral-500'}`}
-                    >
-                      {printer.active ? t('printers.active') : t('printers.inactive')}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {printer.active && pingButton(printer.id, String(printer.id))}
+                      <button
+                        onClick={() => handleTogglePrinter(printer)}
+                        className={`px-3 py-1 rounded-lg text-sm font-medium min-h-[40px] ${printer.active ? 'bg-cockpit-green/30 text-cockpit-in-text' : 'bg-neutral-800 text-neutral-500'}`}
+                      >
+                        {printer.active ? t('printers.active') : t('printers.inactive')}
+                      </button>
+                    </div>
                   </div>
                 ))}
                 {printers.length === 0 && (

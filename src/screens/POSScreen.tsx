@@ -30,6 +30,7 @@ import {
 import { MenuCategory, MenuItem, CartItem, Order, AISuggestion, LoyaltyCustomer, ComboDefinition, OrderTemplate, VirtualBrand, Discount } from '../types';
 import RefundModal from '../components/RefundModal';
 import KioskHeldOrdersBanner from '../components/pos/KioskHeldOrdersBanner';
+import PrintBridgeBanner from '../components/pos/PrintBridgeBanner';
 import type { KioskHeldOrder } from '../api';
 import NotesModal from '../components/pos/NotesModal';
 import DiscountModal from '../components/pos/DiscountModal';
@@ -1200,6 +1201,7 @@ const POSScreen: React.FC = () => {
           <SetupChecklistBanner />
         )}
 
+        <PrintBridgeBanner />
         <KioskHeldOrdersBanner
           onClaim={handleClaimKioskOrder}
           onError={(msg) => addToast(msg, 'error')}

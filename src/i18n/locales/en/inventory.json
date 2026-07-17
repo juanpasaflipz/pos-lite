@@ -560,6 +560,15 @@
       "errors24h": "Errors (24h)",
       "tokenOnce": "This token is shown ONCE. Copy it now.",
       "tokenHint": "Paste it into the print-bridge config.json on the kitchen Mac (see print-bridge/README.md)."
+    },
+    "ping": {
+      "button": "Test connection",
+      "running": "Testing…",
+      "ok": "Printer connected",
+      "fail": "Unreachable: {{error}}",
+      "bridgeOffline": "The print bridge is offline — start it on the on-site computer first",
+      "notConfigured": "Set up the print bridge first (generate a token below)",
+      "timeout": "No response from the bridge — check that it is running"
     }
   },
   "recipe": {
@@ -588,7 +597,7 @@
     "createIngredient": "Create Ingredient",
     "ingredientName": "Name",
     "ingredientNamePlaceholder": "e.g., Carne Asada, Fries, Guacamole",
-    "costPerUnit": "Cost per unit",
+    "costPerUnit": "Cost/Unit",
     "unit": "Unit",
     "unitPlaceholder": "Select…",
     "packSize": "Pack size",
@@ -613,8 +622,6 @@
     "selectIngredient": "Select ingredient...",
     "ingredient": "Ingredient",
     "qtyUsed": "Qty Used",
-    "unit": "Unit",
-    "costPerUnit": "Cost/Unit",
     "lineCost": "Line Cost",
     "waste7d": "Waste (7d)",
     "none": "none",

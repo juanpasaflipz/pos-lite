@@ -1678,6 +1678,7 @@ export interface PrintBridgeStatus {
   online: boolean;
   last_seen: string | null;
   queued: number;
+  stuck_queued: number;
   printing: number;
   done_24h: number;
   errors_24h: number;
@@ -1696,6 +1697,34 @@ export async function sendTestPrint(printerId: number | null): Promise<{ job_id:
     method: 'POST',
     body: JSON.stringify({ printer_id: printerId }),
   });
+}
+
+export interface PrinterPingResult {
+  status: 'queued' | 'bridge_offline' | 'not_configured';
+  job_id?: number;
+  last_seen?: string | null;
+}
+
+/** Enqueue an end-to-end printer connectivity check (no paper output). */
+export async function pingPrinter(printerId: number | null): Promise<PrinterPingResult> {
+  return apiRequest<PrinterPingResult>('/print-jobs/ping', {
+    method: 'POST',
+    body: JSON.stringify({ printer_id: printerId }),
+  });
+}
+
+export interface PrintJobStatus {
+  id: number;
+  job_type: string;
+  status: 'queued' | 'printing' | 'done' | 'error';
+  attempts: number;
+  last_error: string | null;
+  printed_at: string | null;
+  created_at: string;
+}
+
+export async function getPrintJobStatus(jobId: number): Promise<PrintJobStatus> {
+  return apiRequest<PrintJobStatus>(`/print-jobs/${jobId}/status`);
 }
 
 /* ==================== Delivery Endpoints ==================== */

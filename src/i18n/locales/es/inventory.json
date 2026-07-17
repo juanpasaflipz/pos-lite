@@ -560,6 +560,15 @@
       "errors24h": "Errores (24h)",
       "tokenOnce": "Este token se muestra UNA sola vez. Cópialo ahora.",
       "tokenHint": "Pégalo en el config.json del print-bridge en la Mac de cocina (ver print-bridge/README.md)."
+    },
+    "ping": {
+      "button": "Probar conexión",
+      "running": "Probando…",
+      "ok": "Impresora conectada",
+      "fail": "Sin acceso: {{error}}",
+      "bridgeOffline": "El puente de impresión está desconectado — inícialo en la computadora del local",
+      "notConfigured": "Configura primero el puente de impresión (genera un token abajo)",
+      "timeout": "El puente no respondió — verifica que esté corriendo"
     }
   },
   "recipe": {
@@ -588,7 +597,7 @@
     "createIngredient": "Crear Ingrediente",
     "ingredientName": "Nombre",
     "ingredientNamePlaceholder": "Ej: Carne Asada, Papas, Guacamole",
-    "costPerUnit": "Costo por unidad",
+    "costPerUnit": "Costo/Unid.",
     "unit": "Unidad",
     "unitPlaceholder": "Elegir…",
     "packSize": "Tamaño del paquete",
@@ -613,8 +622,6 @@
     "selectIngredient": "Seleccionar ingrediente...",
     "ingredient": "Ingrediente",
     "qtyUsed": "Cant. Usada",
-    "unit": "Unidad",
-    "costPerUnit": "Costo/Unid.",
     "lineCost": "Costo Línea",
     "waste7d": "Merma (7d)",
     "none": "ninguna",

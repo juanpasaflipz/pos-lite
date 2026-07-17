@@ -10,7 +10,31 @@
  */
 
 import { all, get, run, getTenantId } from '../db/index.js';
+import { adminSql } from '../db/index.js';
 import { buildKitchenTicket, buildTestTicket } from './escpos.js';
+
+/** Bridge counts as online if it has claimed/heartbeat within this window.
+ *  Liveness writes are throttled to 30s (agentAuth), so allow 90s of slack. */
+const BRIDGE_ONLINE_WINDOW_MS = 90_000;
+
+/**
+ * Bridge health for a tenant: is a print bridge configured, and has it
+ * polled recently? Used by the ping endpoint (fail fast instead of letting
+ * a check job sit in the queue) and by the POS print-status banner.
+ */
+export async function getBridgeHealth(tenantId) {
+  const rows = await adminSql`
+    SELECT key, value FROM tenant_credentials
+    WHERE tenant_id = ${tenantId} AND service = 'print_agent' AND key IN ('token', 'last_seen')
+  `;
+  const creds = Object.fromEntries(rows.map(r => [r.key, r.value]));
+  const lastSeen = creds.last_seen || null;
+  return {
+    configured: Boolean(creds.token),
+    online: lastSeen ? (Date.now() - new Date(lastSeen).getTime()) < BRIDGE_ONLINE_WINDOW_MS : false,
+    last_seen: lastSeen,
+  };
+}
 
 /**
  * Pick the target printer for a kitchen ticket.
@@ -119,6 +143,28 @@ export async function enqueueTestTicket(printerId = null, printerName = '') {
     getTenantId(),
     printerId,
     JSON.stringify({ format: 'escpos', encoding: 'base64', data, ticket: { test: true } }),
+  ]);
+  return result.lastInsertRowid;
+}
+
+/**
+ * Enqueue a connectivity check ("ping") for a printer. The bridge claims it
+ * like any job but, instead of printing, opens a TCP socket to the printer
+ * and reports ok/error — nothing comes out of the paper slot.
+ *
+ * Ping jobs fail hard on first error (no retry loop) so the UI gets an
+ * answer in seconds; they are also excluded from bridge-status job counts.
+ *
+ * @param {number|null} printerId — printer to check; null = bridge default
+ */
+export async function enqueuePingJob(printerId = null) {
+  const result = await run(`
+    INSERT INTO print_jobs (tenant_id, printer_id, job_type, source, payload)
+    VALUES ($1, $2, 'ping', 'ping', $3)
+  `, [
+    getTenantId(),
+    printerId,
+    JSON.stringify({ format: 'ping' }),
   ]);
   return result.lastInsertRowid;
 }

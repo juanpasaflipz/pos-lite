@@ -77,3 +77,11 @@ Logs: `tail -f ~/Library/Logs/print-bridge/bridge.log`
 | Tickets queue but don't print | Is the bridge running? `launchctl list \| grep print-bridge`; check logs. |
 | Accents print as `?` | The printer isn't honoring CP850 — tell the dev, we can switch codepage per printer. |
 | Duplicated tickets | Job retried after a slow print. Check `last_error` in Admin → print jobs. |
+
+## Connectivity check (Probar conexión)
+
+The POS (Impresoras → **Probar conexión**) enqueues a `ping` job. The bridge
+answers it by opening a TCP socket to the printer and closing it — nothing
+prints. Result shows in the POS within a few seconds (claim poll + socket
+timeout). Requires this bridge version or newer; older bridges report
+"unsupported payload format" — update `bridge.js` and restart the agent.

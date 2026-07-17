@@ -641,5 +641,10 @@
     "bringCardCloser": "Hold the card near the device to complete the payment.",
     "paymentConfirmed": "Payment confirmed",
     "tryAgain": "Try again"
+  },
+  "printBridge": {
+    "offline": "Kitchen printer bridge is offline — tickets will print when it reconnects. Tap to check.",
+    "stuck": "{{count}} ticket waiting to print — tap to check the printer",
+    "stuck_plural": "{{count}} tickets waiting to print — tap to check the printer"
   }
 }
