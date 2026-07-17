@@ -23,6 +23,14 @@ export const adminSql = postgres(DATABASE_URL, {
   max: ADMIN_POOL_MAX,
   idle_timeout: 20,
   connect_timeout: 10,
+  // prepare: false — disable client-side prepared statements. DATABASE_URL
+  // goes through Neon's pooler, and `SELECT * FROM tenants` (used by
+  // getTenant on every request) would otherwise cache a plan whose column
+  // shape ALTER TABLE migrations invalidate — producing "cached plan must
+  // not change result type" errors platform-wide until the next deploy.
+  // Recovered from live 2026-07-17 after migration 0086 added
+  // mp_default_kiosk_terminal_id.
+  prepare: false,
 });
 
 /**
