@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Truck, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useKioskBinding } from '../context/KioskBindingContext';
 import { useKioskCart } from '../context/KioskCartContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
@@ -10,6 +11,7 @@ const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN
 
 const KioskDeliveryAddressScreen: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { tenantId, kioskToken } = useKioskBinding();
   const { setDelivery, delivery, setCallName } = useKioskCart();
 
@@ -54,7 +56,7 @@ const KioskDeliveryAddressScreen: React.FC = () => {
         : result.duration_min;
       setQuote({ fee: result.fee, etaMin, quoteId: result.quote_id });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo cotizar el envío');
+      setError(err instanceof Error ? err.message : t('delivery.quoteFailed'));
       setQuote(null);
     } finally {
       setQuoting(false);
@@ -87,11 +89,11 @@ const KioskDeliveryAddressScreen: React.FC = () => {
           className="h-16 px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 text-lg font-bold touch-manipulation inline-flex items-center gap-2"
         >
           <ArrowLeft className="h-6 w-6" />
-          Atras
+          {t('common.back')}
         </button>
         <h1 className="text-3xl xl:text-4xl font-black text-center leading-none inline-flex items-center justify-center gap-3">
           <Truck className="h-8 w-8" />
-          Datos de envío
+          {t('delivery.title')}
         </h1>
         <div />
       </header>
@@ -99,11 +101,11 @@ const KioskDeliveryAddressScreen: React.FC = () => {
       <main className="flex-1 min-h-0 overflow-y-auto px-8 py-6 grid grid-cols-1 md:grid-cols-2 gap-8">
         <div className="space-y-5">
           <div>
-            <label className="block text-lg font-bold text-neutral-400 mb-2">Tu nombre</label>
+            <label className="block text-lg font-bold text-neutral-400 mb-2">{t('common.yourName')}</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Juan Pérez"
+              placeholder={t('delivery.namePlaceholder')}
               className="w-full h-16 px-5 rounded-lg bg-neutral-900 border border-neutral-800 text-2xl font-bold focus:outline-none focus:border-cockpit-green"
               autoCapitalize="words"
               maxLength={40}
@@ -111,24 +113,24 @@ const KioskDeliveryAddressScreen: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-lg font-bold text-neutral-400 mb-2">Tu teléfono</label>
+            <label className="block text-lg font-bold text-neutral-400 mb-2">{t('delivery.phone')}</label>
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="55 1234 5678"
+              placeholder={t('delivery.phonePlaceholder')}
               inputMode="tel"
               className="w-full h-16 px-5 rounded-lg bg-neutral-900 border border-neutral-800 text-2xl font-bold focus:outline-none focus:border-cockpit-green"
               maxLength={20}
             />
-            <p className="text-sm text-neutral-500 mt-1">Lo usamos para que el repartidor pueda llamarte.</p>
+            <p className="text-sm text-neutral-500 mt-1">{t('delivery.phoneHelp')}</p>
           </div>
 
           <div>
-            <label className="block text-lg font-bold text-neutral-400 mb-2">Dirección de entrega</label>
+            <label className="block text-lg font-bold text-neutral-400 mb-2">{t('delivery.address')}</label>
             <textarea
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              placeholder="Calle, número, colonia, código postal, alcaldía"
+              placeholder={t('delivery.addressPlaceholder')}
               rows={3}
               className="w-full px-5 py-3 rounded-lg bg-neutral-900 border border-neutral-800 text-xl font-bold focus:outline-none focus:border-cockpit-green resize-none"
               maxLength={300}
@@ -136,11 +138,11 @@ const KioskDeliveryAddressScreen: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-lg font-bold text-neutral-400 mb-2">Indicaciones (opcional)</label>
+            <label className="block text-lg font-bold text-neutral-400 mb-2">{t('delivery.notes')}</label>
             <input
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Departamento, color de puerta, etc."
+              placeholder={t('delivery.notesPlaceholder')}
               className="w-full h-16 px-5 rounded-lg bg-neutral-900 border border-neutral-800 text-xl font-bold focus:outline-none focus:border-cockpit-green"
               maxLength={200}
             />
@@ -154,7 +156,7 @@ const KioskDeliveryAddressScreen: React.FC = () => {
             className="w-full h-20 rounded-lg bg-cockpit-green active:bg-cockpit-green/80 disabled:bg-neutral-800 disabled:text-neutral-500 text-white text-2xl font-black inline-flex items-center justify-center gap-3 touch-manipulation"
           >
             {quoting ? <Loader2 className="h-7 w-7 animate-spin" /> : null}
-            {quoting ? 'Cotizando…' : (quote ? 'Volver a cotizar' : 'Cotizar envío')}
+            {quoting ? t('delivery.quoting') : (quote ? t('delivery.requote') : t('delivery.quote'))}
           </button>
 
           {error && (
@@ -166,14 +168,14 @@ const KioskDeliveryAddressScreen: React.FC = () => {
           {quote && !error && (
             <div className="rounded-lg bg-cockpit-green/15 border border-cockpit-green/40 p-5 space-y-4">
               <div>
-                <p className="text-sm text-neutral-400 font-bold uppercase">Costo de envío</p>
+                <p className="text-sm text-neutral-400 font-bold uppercase">{t('delivery.fee')}</p>
                 <p className="text-4xl font-black text-cockpit-in-text">{money.format(quote.fee)}</p>
               </div>
               <div>
-                <p className="text-sm text-neutral-400 font-bold uppercase">Llega en aprox.</p>
-                <p className="text-3xl font-black">{quote.etaMin} min</p>
+                <p className="text-sm text-neutral-400 font-bold uppercase">{t('delivery.eta')}</p>
+                <p className="text-3xl font-black">{t('delivery.etaMin', { min: quote.etaMin })}</p>
               </div>
-              <p className="text-sm text-neutral-400">Repartidor de Uber. El cargo del envío se suma al total de tu orden.</p>
+              <p className="text-sm text-neutral-400">{t('delivery.uberNote')}</p>
             </div>
           )}
 
@@ -182,7 +184,7 @@ const KioskDeliveryAddressScreen: React.FC = () => {
             disabled={!quote}
             className="w-full h-20 rounded-lg bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-500 text-white text-2xl font-black touch-manipulation"
           >
-            Continuar al menú
+            {t('delivery.continueToMenu')}
           </button>
         </div>
       </main>

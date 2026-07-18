@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 
 // Kiosk idle handling. Screens call `useIdleTimer(onIdle, timeoutMs)`, then
 // render `{warning}` from the return value so the countdown surfaces at the
@@ -77,6 +78,7 @@ interface IdleWarningOverlayProps {
 }
 
 const IdleWarningOverlay: React.FC<IdleWarningOverlayProps> = ({ seconds }) => {
+  const { t } = useTranslation();
   const blink = seconds <= BLINK_THRESHOLD_S;
   const content = (
     <div
@@ -87,7 +89,7 @@ const IdleWarningOverlay: React.FC<IdleWarningOverlayProps> = ({ seconds }) => {
           blink ? 'border-red-500' : 'border-brand-500'
         }`}
       >
-        <p className="text-2xl font-black text-white/85">Tu sesión se cerrará en</p>
+        <p className="text-2xl font-black text-white/85">{t('idle.closesIn')}</p>
         <p
           className={`mt-4 text-[160px] leading-none font-black tabular-nums ${
             blink ? 'text-red-400' : 'text-brand-300'
@@ -96,14 +98,14 @@ const IdleWarningOverlay: React.FC<IdleWarningOverlayProps> = ({ seconds }) => {
           {seconds}
         </p>
         <p className="mt-2 text-2xl font-black text-white/70">
-          {seconds === 1 ? 'segundo' : 'segundos'}
+          {t('idle.second', { count: seconds })}
         </p>
         <button
           type="button"
           onClick={() => { /* click handler is a no-op — document listener resets the timer */ }}
           className="mt-10 w-full h-20 rounded-2xl bg-brand-600 active:bg-brand-700 text-white text-3xl font-black touch-manipulation"
         >
-          Sigo aquí
+          {t('idle.stillHere')}
         </button>
       </div>
     </div>

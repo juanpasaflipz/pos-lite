@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Check, Plus, Sparkles } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useKioskCart } from '../context/KioskCartContext';
 import { useKioskCustomer } from '../context/KioskCustomerContext';
 import { useKioskSuggestions } from '../context/KioskSuggestionsContext';
@@ -28,6 +29,7 @@ function suggestionToMenuItem(s: SuggestionItem): KioskMenuItem {
  * opening the modifier modal when needed, same as the menu screen.
  */
 const CartUpsellStrip: React.FC = () => {
+  const { t } = useTranslation();
   const { lines, addItem } = useKioskCart();
   const { session } = useKioskCustomer();
   const { anonPopular, modifierMap } = useKioskSuggestions();
@@ -85,7 +87,7 @@ const CartUpsellStrip: React.FC = () => {
     <section className="space-y-3">
       <div className="flex items-center gap-2 px-1">
         <Sparkles className="h-5 w-5 text-brand-300" />
-        <h2 className="text-xl font-black">¿Algo más antes de pagar?</h2>
+        <h2 className="text-xl font-black">{t('upsell.anythingElse')}</h2>
       </div>
       <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
         {candidates.map((s) => {
@@ -119,7 +121,7 @@ const CartUpsellStrip: React.FC = () => {
               {added && (
                 <div className="absolute inset-0 bg-cockpit-green/90 flex items-center justify-center gap-1 text-base font-black">
                   <Check className="h-6 w-6" />
-                  Agregado
+                  {t('suggestions.added')}
                 </div>
               )}
             </button>

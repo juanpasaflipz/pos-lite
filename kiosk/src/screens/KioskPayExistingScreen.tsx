@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Banknote, CreditCard, Loader2, MapPin, Truck } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useKioskBinding } from '../context/KioskBindingContext';
 import { useKioskCart } from '../context/KioskCartContext';
 import { useKioskCustomer } from '../context/KioskCustomerContext';
@@ -32,6 +33,7 @@ interface LocationState {
 const KioskPayExistingScreen: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation();
   const { tenantId, kioskToken, terminalId } = useKioskBinding();
   const { clearCart } = useKioskCart();
   const { clearSession, session } = useKioskCustomer();
@@ -106,10 +108,10 @@ const KioskPayExistingScreen: React.FC = () => {
     if (busy) return;
     setBusy('card');
     setError(null);
-    setMessage('Enviando al terminal…');
+    setMessage(t('pay.sendingToTerminal'));
     try {
       await chargeExistingKioskOrderOnTerminal(auth, order.id, terminalId);
-      setMessage('Paga en el terminal');
+      setMessage(t('pay.payAtTerminal'));
 
       for (let i = 0; i < POLL_MAX_ITERATIONS; i += 1) {
         if (cancelledRef.current) return;
@@ -122,7 +124,7 @@ const KioskPayExistingScreen: React.FC = () => {
           // booked. The cashier needs to rebook from the POS — don't whisk
           // the customer to the happy-path success screen.
           if (isDelivery && status.delivery_error) {
-            setError(`Pago recibido, pero no pudimos despachar al repartidor: ${status.delivery_error}. Avisa al cajero.`);
+            setError(t('pay.paidNoCourier', { error: status.delivery_error }));
             setMessage(null);
             setBusy(null);
             return;
@@ -133,12 +135,12 @@ const KioskPayExistingScreen: React.FC = () => {
           return;
         }
         if (status.payment_status === 'failed') {
-          throw new Error('El pago no pasó. Intenta de nuevo o ve a la caja.');
+          throw new Error(t('pay.paymentFailed'));
         }
       }
-      throw new Error('El terminal tardó demasiado. Pide ayuda en caja.');
+      throw new Error(t('pay.terminalTimeout'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo cobrar en terminal');
+      setError(err instanceof Error ? err.message : t('pay.chargeFailed'));
       setMessage(null);
       setBusy(null);
     }
@@ -153,9 +155,9 @@ const KioskPayExistingScreen: React.FC = () => {
           className="h-16 px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 disabled:opacity-50 text-lg font-bold touch-manipulation inline-flex items-center gap-2"
         >
           <ArrowLeft className="h-6 w-6" />
-          Inicio
+          {t('common.home')}
         </button>
-        <h1 className="text-4xl font-black leading-none">Tu cuenta</h1>
+        <h1 className="text-4xl font-black leading-none">{t('pay.yourTab')}</h1>
         <div className="w-32" />
       </header>
 
@@ -193,10 +195,10 @@ const KioskPayExistingScreen: React.FC = () => {
 
         <aside className="flex flex-col">
           <div className="text-center mb-6">
-            <p className="text-neutral-400 text-xl font-bold uppercase tracking-wider">Total</p>
+            <p className="text-neutral-400 text-xl font-bold uppercase tracking-wider">{t('common.total')}</p>
             <p className="text-[64px] font-black leading-none mt-2">{money.format(Number(order.total))}</p>
             <p className="text-sm text-neutral-500 mt-2 font-bold">
-              Incluye IVA · Subtotal {money.format(Number(order.subtotal))}
+              {t('pay.includesTax', { subtotal: money.format(Number(order.subtotal)) })}
             </p>
           </div>
 
@@ -204,7 +206,7 @@ const KioskPayExistingScreen: React.FC = () => {
             <div className="mb-4 rounded-lg bg-neutral-900 border border-neutral-800 px-5 py-4 flex items-center gap-3">
               <Truck className="h-6 w-6 text-neutral-400 shrink-0" />
               <p className="text-sm font-bold text-neutral-300">
-                Pedimos al repartidor en cuanto se confirme tu pago.
+                {t('pay.courierAfterPay')}
               </p>
             </div>
           )}
@@ -213,8 +215,8 @@ const KioskPayExistingScreen: React.FC = () => {
               <div className="flex items-center gap-3">
                 <Truck className="h-7 w-7 text-cockpit-in-text shrink-0" />
                 <div>
-                  <p className="text-lg font-black text-cockpit-in-text">Repartidor en camino</p>
-                  <p className="text-sm text-neutral-300">Envío {money.format(deliveryInfo.fee)}</p>
+                  <p className="text-lg font-black text-cockpit-in-text">{t('pay.courierOnWay')}</p>
+                  <p className="text-sm text-neutral-300">{t('pay.deliveryFee', { fee: money.format(deliveryInfo.fee) })}</p>
                 </div>
               </div>
               {deliveryInfo.tracking_url && (
@@ -225,15 +227,15 @@ const KioskPayExistingScreen: React.FC = () => {
                   className="w-full inline-flex items-center justify-center gap-2 py-3 rounded-lg bg-cockpit-green text-white text-lg font-black"
                 >
                   <MapPin className="h-5 w-5" />
-                  Rastrear repartidor
+                  {t('pay.trackCourier')}
                 </a>
               )}
             </div>
           )}
           {deliveryError && (
             <div className="mb-4 rounded-lg bg-cockpit-red/20 border border-cockpit-red/50 px-5 py-3 text-base font-bold text-white">
-              No se pudo despachar al repartidor: {deliveryError}
-              <p className="text-sm font-normal text-neutral-300 mt-1">El operador podrá reintentar desde el POS.</p>
+              {t('pay.dispatchFailed', { error: deliveryError })}
+              <p className="text-sm font-normal text-neutral-300 mt-1">{t('pay.posRetry')}</p>
             </div>
           )}
 
@@ -256,8 +258,8 @@ const KioskPayExistingScreen: React.FC = () => {
               className="w-full min-h-[160px] bg-brand-600 active:bg-brand-700 disabled:opacity-50 rounded-lg text-3xl font-black touch-manipulation flex flex-col items-center justify-center gap-2"
             >
               {busy === 'card' ? <Loader2 className="h-16 w-16 animate-spin" /> : <CreditCard className="h-16 w-16" />}
-              Pagar con tarjeta
-              <span className="text-base font-bold text-white/75">En el terminal</span>
+              {t('pay.payWithCard')}
+              <span className="text-base font-bold text-white/75">{t('pay.atTerminal')}</span>
             </button>
             {!isDelivery && (
               <button
@@ -266,8 +268,8 @@ const KioskPayExistingScreen: React.FC = () => {
                 className="w-full min-h-[120px] bg-neutral-800 active:bg-neutral-700 disabled:opacity-50 rounded-lg text-2xl font-black touch-manipulation flex flex-col items-center justify-center gap-1"
               >
                 <Banknote className="h-12 w-12" />
-                Pagar en efectivo
-                <span className="text-sm font-bold text-neutral-400">En la caja</span>
+                {t('pay.payCash')}
+                <span className="text-sm font-bold text-neutral-400">{t('pay.atCounter')}</span>
               </button>
             )}
           </div>

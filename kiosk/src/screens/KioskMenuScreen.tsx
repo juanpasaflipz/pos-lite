@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Gift, Plus, ShoppingCart, Sparkles, UtensilsCrossed } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useKioskBinding } from '../context/KioskBindingContext';
 import { useKioskCart } from '../context/KioskCartContext';
 import { useKioskCustomer } from '../context/KioskCustomerContext';
@@ -19,6 +20,7 @@ import {
 } from '../lib/kioskApi';
 import KioskModifierModal from '../components/KioskModifierModal';
 import SuggestionsPanel from '../components/SuggestionsPanel';
+import LanguageToggle from '../components/LanguageToggle';
 import { tap, success } from '../lib/haptics';
 
 const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
@@ -27,11 +29,12 @@ const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN
 const SUGGEST_TAB = -1;
 
 const StampBar: React.FC<{ stamp: StampStatus }> = ({ stamp }) => {
+  const { t } = useTranslation();
   if (stamp.completed) {
     return (
       <span className="inline-flex items-center gap-2 rounded-full bg-cockpit-yellow text-neutral-950 px-3 py-1 text-sm font-black">
         <Gift className="h-4 w-4" />
-        ¡Tienes un premio!
+        {t('menu.prize')}
       </span>
     );
   }
@@ -49,7 +52,7 @@ const StampBar: React.FC<{ stamp: StampStatus }> = ({ stamp }) => {
         ))}
       </span>
       <span className="text-sm font-bold text-neutral-400">
-        {stamp.earned}/{stamp.required} sellos
+        {t('menu.stampProgress', { earned: stamp.earned, required: stamp.required })}
       </span>
     </span>
   );
@@ -57,6 +60,7 @@ const StampBar: React.FC<{ stamp: StampStatus }> = ({ stamp }) => {
 
 const KioskMenuScreen: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { tenantId, kioskToken } = useKioskBinding();
   const { addItem, count, total } = useKioskCart();
   const { session } = useKioskCustomer();
@@ -96,7 +100,7 @@ const KioskMenuScreen: React.FC = () => {
         setError(null);
       })
       .catch((err) => {
-        if (alive) setError(err.message || 'No se pudo cargar el menu');
+        if (alive) setError(err.message || t('menu.loadError'));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -104,6 +108,7 @@ const KioskMenuScreen: React.FC = () => {
     return () => {
       alive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth]);
 
   const itemsById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
@@ -185,32 +190,35 @@ const KioskMenuScreen: React.FC = () => {
           {session ? (
             <>
               <h1 className="text-4xl font-black leading-none truncate">
-                Hola, {session.firstName} 👋
+                {t('menu.hello', { name: session.firstName })}
               </h1>
               <div className="mt-2">
                 {session.stamp ? (
                   <StampBar stamp={session.stamp} />
                 ) : (
-                  <p className="text-sm text-neutral-500 font-bold">Haz tu pedido</p>
+                  <p className="text-sm text-neutral-500 font-bold">{t('menu.placeYourOrder')}</p>
                 )}
               </div>
             </>
           ) : (
             <>
               <p className="text-sm text-neutral-500 font-bold uppercase tracking-wider">
-                Bienvenido
+                {t('menu.welcome')}
               </p>
-              <h1 className="text-4xl font-black leading-none">Haz tu pedido</h1>
+              <h1 className="text-4xl font-black leading-none">{t('menu.placeYourOrder')}</h1>
             </>
           )}
         </div>
-        <button
-          onClick={() => navigate('/')}
-          className="h-16 px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 text-lg font-bold touch-manipulation inline-flex items-center gap-2 shrink-0"
-        >
-          <ArrowLeft className="h-6 w-6" />
-          Salir
-        </button>
+        <div className="flex items-center gap-3 shrink-0">
+          <LanguageToggle />
+          <button
+            onClick={() => navigate('/')}
+            className="h-16 px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 text-lg font-bold touch-manipulation inline-flex items-center gap-2 shrink-0"
+          >
+            <ArrowLeft className="h-6 w-6" />
+            {t('common.exit')}
+          </button>
+        </div>
       </header>
 
       <main className="flex-1 min-h-0 flex flex-col">
@@ -225,7 +233,7 @@ const KioskMenuScreen: React.FC = () => {
               }`}
             >
               <Sparkles className="h-5 w-5" />
-              {session ? 'Para ti' : 'Popular'}
+              {session ? t('menu.forYou') : t('menu.popular')}
             </button>
             {categories.map((category) => (
               <button
@@ -246,7 +254,7 @@ const KioskMenuScreen: React.FC = () => {
         <section className="flex-1 min-h-0 p-5 overflow-y-auto">
           {loading && (
             <div className="h-full flex items-center justify-center text-2xl text-neutral-400">
-              Cargando menu...
+              {t('menu.loading')}
             </div>
           )}
           {error && (
@@ -302,7 +310,7 @@ const KioskMenuScreen: React.FC = () => {
                         </p>
                       )}
                       {hasModifiers && (
-                        <p className="text-xs font-bold text-brand-300 mt-1">Personaliza tu orden</p>
+                        <p className="text-xs font-bold text-brand-300 mt-1">{t('menu.customize')}</p>
                       )}
                     </div>
                     <div className="flex items-center justify-between mt-3">
@@ -333,10 +341,10 @@ const KioskMenuScreen: React.FC = () => {
         >
           <span className="inline-flex items-center gap-3">
             <ShoppingCart className="h-8 w-8" />
-            Tu orden
+            {t('menu.yourOrder')}
           </span>
           <span className="text-right">
-            {count} productos · {money.format(total)}
+            {t('menu.productCount', { count })} · {money.format(total)}
           </span>
         </button>
       </footer>

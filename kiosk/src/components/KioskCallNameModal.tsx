@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ArrowRight, User, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   onSkip: () => void;
@@ -18,6 +19,7 @@ const MAX_LEN = 40;
  * loyalty customers never see this modal (their name comes from the session).
  */
 const KioskCallNameModal: React.FC<Props> = ({ onSkip, onConfirm, required = false, title, subtitle }) => {
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const trimmed = name.trim();
   const canSubmit = required ? trimmed.length > 0 : true;
@@ -36,16 +38,16 @@ const KioskCallNameModal: React.FC<Props> = ({ onSkip, onConfirm, required = fal
       <div className="bg-neutral-900 rounded-xl border border-neutral-800 shadow-2xl w-full max-w-[560px] p-6 sm:p-8 space-y-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-3xl font-black leading-tight">{title || '¿Cómo te llamamos?'}</h2>
+            <h2 className="text-3xl font-black leading-tight">{title || t('callName.title')}</h2>
             <p className="text-neutral-400 text-base font-bold mt-1">
-              {subtitle || 'Te llamamos por tu nombre cuando esté lista tu orden.'}
+              {subtitle || t('callName.subtitle')}
             </p>
           </div>
           {!required && (
             <button
               onClick={onSkip}
               className="h-12 w-12 rounded-lg bg-neutral-800 active:bg-neutral-700 flex items-center justify-center shrink-0"
-              aria-label="Omitir"
+              aria-label={t('common.skip')}
             >
               <X className="h-6 w-6" />
             </button>
@@ -53,7 +55,7 @@ const KioskCallNameModal: React.FC<Props> = ({ onSkip, onConfirm, required = fal
         </div>
 
         <label className="block">
-          <span className="sr-only">Tu nombre</span>
+          <span className="sr-only">{t('common.yourName')}</span>
           <div className="flex items-center gap-3 bg-neutral-950 border border-neutral-700 rounded-lg px-4 py-3 focus-within:border-brand-500">
             <User className="h-6 w-6 text-neutral-500 shrink-0" />
             <input
@@ -66,7 +68,7 @@ const KioskCallNameModal: React.FC<Props> = ({ onSkip, onConfirm, required = fal
               onKeyDown={(e) => {
                 if (e.key === 'Enter') submit();
               }}
-              placeholder={required ? 'Tu nombre' : 'Tu nombre (opcional)'}
+              placeholder={required ? t('callName.placeholder') : t('callName.placeholderOptional')}
               className="flex-1 bg-transparent outline-none text-2xl font-black placeholder:text-neutral-600"
             />
           </div>
@@ -78,7 +80,7 @@ const KioskCallNameModal: React.FC<Props> = ({ onSkip, onConfirm, required = fal
               onClick={onSkip}
               className="h-16 rounded-lg bg-neutral-800 active:bg-neutral-700 text-xl font-black touch-manipulation"
             >
-              Omitir
+              {t('common.skip')}
             </button>
           )}
           <button
@@ -86,7 +88,7 @@ const KioskCallNameModal: React.FC<Props> = ({ onSkip, onConfirm, required = fal
             disabled={!canSubmit}
             className="h-16 w-full rounded-lg bg-brand-600 active:bg-brand-700 disabled:opacity-40 text-xl font-black touch-manipulation inline-flex items-center justify-center gap-2"
           >
-            Continuar
+            {t('common.continue')}
             <ArrowRight className="h-6 w-6" />
           </button>
         </div>

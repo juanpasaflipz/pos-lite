@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { X, Check } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { KioskMenuItem, KioskModifier, KioskModifierGroup } from '../lib/kioskApi';
 import { selectionChanged, success } from '../lib/haptics';
 
@@ -25,6 +26,7 @@ function isValid(groups: KioskModifierGroup[], selection: SelectionMap): boolean
 }
 
 const KioskModifierModal: React.FC<Props> = ({ item, groups, onCancel, onConfirm }) => {
+  const { t } = useTranslation();
   const [selection, setSelection] = useState<SelectionMap>(() => {
     const initial: SelectionMap = {};
     for (const group of groups) initial[group.id] = new Set();
@@ -82,7 +84,7 @@ const KioskModifierModal: React.FC<Props> = ({ item, groups, onCancel, onConfirm
           </div>
           <button
             onClick={onCancel}
-            aria-label="Cerrar"
+            aria-label={t('common.close')}
             className="h-14 w-14 rounded-full bg-neutral-800 active:bg-neutral-700 flex items-center justify-center shrink-0"
           >
             <X className="h-7 w-7" />
@@ -98,8 +100,8 @@ const KioskModifierModal: React.FC<Props> = ({ item, groups, onCancel, onConfirm
                 <header className="mb-3 flex items-baseline justify-between gap-3">
                   <h3 className="text-2xl font-black">{group.name}</h3>
                   <p className="text-sm font-bold text-neutral-400 shrink-0">
-                    {group.required ? 'Requerido' : 'Opcional'}
-                    {group.selection_type === 'multiple' && max > 0 && ` · hasta ${max}`}
+                    {group.required ? t('modifier.required') : t('modifier.optional')}
+                    {group.selection_type === 'multiple' && max > 0 && ` · ${t('modifier.upTo', { max })}`}
                   </p>
                 </header>
                 <div className="grid grid-cols-2 gap-3">
@@ -125,7 +127,7 @@ const KioskModifierModal: React.FC<Props> = ({ item, groups, onCancel, onConfirm
                           )}
                           {isOn && (
                             <p className="text-xs font-black uppercase tracking-wider text-brand-100 mt-0.5">
-                              ✓ Agregado
+                              {t('modifier.added')}
                             </p>
                           )}
                         </div>
@@ -150,7 +152,7 @@ const KioskModifierModal: React.FC<Props> = ({ item, groups, onCancel, onConfirm
             onClick={onCancel}
             className="h-16 rounded-2xl bg-neutral-800 active:bg-neutral-700 text-lg font-black touch-manipulation"
           >
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button
             onClick={() => {

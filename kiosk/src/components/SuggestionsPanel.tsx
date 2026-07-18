@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { Check, Flame, Plus, RefreshCw, Sparkles, Store } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type {
   KioskSuggestions,
   RepeatOrderSuggestion,
@@ -60,6 +61,7 @@ const SuggestionsPanel: React.FC<Props> = ({
   onPickItem,
   onPickRepeat,
 }) => {
+  const { t } = useTranslation();
   const [flash, setFlash] = useState<string | null>(null);
 
   const pulse = useCallback((key: string) => {
@@ -74,7 +76,7 @@ const SuggestionsPanel: React.FC<Props> = ({
   if (!hasAnything) {
     return (
       <div className="h-full flex items-center justify-center text-center text-neutral-500 text-xl px-8">
-        Explora el menú y arma tu orden — toca cualquier platillo para agregarlo.
+        {t('suggestions.explore')}
       </div>
     );
   }
@@ -120,7 +122,7 @@ const SuggestionsPanel: React.FC<Props> = ({
         {added && (
           <div className="absolute inset-0 bg-cockpit-green/90 flex items-center justify-center gap-2 text-2xl font-black">
             <Check className="h-9 w-9" />
-            Agregado
+            {t('suggestions.added')}
           </div>
         )}
       </button>
@@ -132,7 +134,7 @@ const SuggestionsPanel: React.FC<Props> = ({
       {/* Repeat last order */}
       {usual && (
         <section>
-          <LaneHeading icon={<RefreshCw className="h-7 w-7" />} title="Tu de siempre" />
+          <LaneHeading icon={<RefreshCw className="h-7 w-7" />} title={t('suggestions.usual')} />
           <button
             onClick={() => {
               onPickRepeat(usual);
@@ -151,12 +153,12 @@ const SuggestionsPanel: React.FC<Props> = ({
             </div>
             <span className="shrink-0 h-16 px-5 rounded-lg bg-brand-600 flex items-center gap-2 text-lg font-black">
               <Plus className="h-7 w-7" />
-              Agregar
+              {t('suggestions.add')}
             </span>
             {flash === 'usual' && (
               <div className="absolute inset-0 bg-cockpit-green/90 flex items-center justify-center gap-2 text-2xl font-black">
                 <Check className="h-9 w-9" />
-                Agregado a tu orden
+                {t('suggestions.addedToOrder')}
               </div>
             )}
           </button>
@@ -168,8 +170,8 @@ const SuggestionsPanel: React.FC<Props> = ({
         <section>
           <LaneHeading
             icon={<Sparkles className="h-7 w-7" />}
-            title={firstName ? `Para ti, ${firstName}` : 'Para ti'}
-            badge={aiPowered ? 'Elegido con IA' : undefined}
+            title={firstName ? t('suggestions.forYouName', { name: firstName }) : t('suggestions.forYou')}
+            badge={aiPowered ? t('suggestions.aiPicked') : undefined}
           />
           <div className="flex gap-4 overflow-x-auto pb-2">
             {for_you.map((s) => card(s, 'for_you', 'brand'))}
@@ -180,7 +182,7 @@ const SuggestionsPanel: React.FC<Props> = ({
       {/* Business-priority pick (customer-fit) */}
       {house && (
         <section>
-          <LaneHeading icon={<Store className="h-7 w-7" />} title="Hoy en la casa" />
+          <LaneHeading icon={<Store className="h-7 w-7" />} title={t('suggestions.houseToday')} />
           <div className="flex gap-4 overflow-x-auto pb-2">
             {card(house, 'house', 'amber')}
           </div>
@@ -190,7 +192,7 @@ const SuggestionsPanel: React.FC<Props> = ({
       {/* Time-of-day popular — shown when there are no personalized picks */}
       {for_you.length === 0 && popular.length > 0 && (
         <section>
-          <LaneHeading icon={<Flame className="h-7 w-7" />} title="Lo más pedido ahora" />
+          <LaneHeading icon={<Flame className="h-7 w-7" />} title={t('suggestions.popularNow')} />
           <div className="flex gap-4 overflow-x-auto pb-2">
             {popular.map((s) => card(s, 'popular', 'brand'))}
           </div>

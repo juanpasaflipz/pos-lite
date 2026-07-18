@@ -1,21 +1,26 @@
 import React, { useEffect, useRef } from 'react';
 import { Hand } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useKioskBinding } from '../context/KioskBindingContext';
 import { useKioskCustomer } from '../context/KioskCustomerContext';
 import { useKioskCart } from '../context/KioskCartContext';
+import { resetKioskLanguage } from '../i18n';
+import LanguageToggle from '../components/LanguageToggle';
 
 const AttractScreen: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { tenantName } = useKioskBinding();
   const { clearSession } = useKioskCustomer();
   const { clearCart } = useKioskCart();
 
   // The attract screen is the start of every order — reset any leftover
-  // customer session or cart from a previous, abandoned interaction.
+  // customer session, cart, or language choice from a previous interaction.
   useEffect(() => {
     clearSession();
     clearCart();
+    resetKioskLanguage();
   }, [clearSession, clearCart]);
 
   // Hidden admin gesture: 5 taps in the top-right corner within 3 seconds opens
@@ -43,13 +48,17 @@ const AttractScreen: React.FC = () => {
           </div>
         )}
         <div className="text-[96px] font-black tracking-tight mb-6 text-center leading-none">
-          Ordena aqui
+          {t('attract.orderHere')}
         </div>
-        <div className="text-4xl font-black text-white/85 mb-16">Toca para empezar</div>
+        <div className="text-4xl font-black text-white/85 mb-16">{t('attract.tapToStart')}</div>
         <div className="w-36 h-36 rounded-full border-4 border-white/45 flex items-center justify-center motion-safe:animate-pulse">
           <Hand className="h-20 w-20" />
         </div>
       </button>
+      {/* Bottom-left, away from the hidden admin corner (top-right). */}
+      <div className="absolute bottom-8 left-8">
+        <LanguageToggle size="large" />
+      </div>
       <button
         type="button"
         aria-label="Admin"

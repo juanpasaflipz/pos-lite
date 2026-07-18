@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { CheckCircle2, Gift, Plus, Store, Utensils, Wallet } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useKioskCart } from '../context/KioskCartContext';
 import { useKioskCustomer } from '../context/KioskCustomerContext';
 import { useKioskBinding } from '../context/KioskBindingContext';
@@ -33,6 +34,7 @@ const COUNTDOWN_BY_MODE: Record<ConfirmMode, number> = {
 const KioskHoldConfirmationScreen: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation();
   const { clearCart } = useKioskCart();
   const { session, clearSession } = useKioskCustomer();
   const { tenantId, tenantName, kioskToken } = useKioskBinding();
@@ -137,26 +139,28 @@ const KioskHoldConfirmationScreen: React.FC = () => {
 
   let heading: string;
   if (isPaid) {
-    heading = state.firstName ? `¡Gracias, ${state.firstName}!` : '¡Gracias!';
+    heading = state.firstName ? t('confirm.thanksName', { name: state.firstName }) : t('confirm.thanks');
   } else if (isCashCounter) {
-    heading = state.firstName ? `${state.firstName}, ve a la caja` : 'Ve a la caja';
+    heading = state.firstName ? t('confirm.goToCashierName', { name: state.firstName }) : t('confirm.goToCashier');
   } else if (isAppended) {
-    heading = state.firstName ? `¡Agregado, ${state.firstName}!` : '¡Agregado!';
+    heading = state.firstName ? t('confirm.addedHeadingName', { name: state.firstName }) : t('confirm.addedHeading');
   } else {
-    heading = state.firstName ? `¡Listo, ${state.firstName}!` : '¡Listo!';
+    heading = state.firstName ? t('confirm.readyName', { name: state.firstName }) : t('confirm.ready');
   }
 
   let subheading: string;
   if (isPaid) {
-    subheading = 'Pago recibido. ¡Vuelve pronto!';
+    subheading = t('confirm.paidSub');
   } else if (isCashCounter) {
-    subheading = `Di tu nombre en la caja, paga ${money.format(state.total)} en efectivo y la cocina empieza a preparar tu orden.`;
+    subheading = t('confirm.cashSub', { total: money.format(state.total) });
   } else if (isAppended) {
-    subheading = `Sumamos ${state.addedCount ?? 'tus'} ${state.addedCount === 1 ? 'producto' : 'productos'} a tu cuenta. La cocina los está preparando. Tu total actualizado es ${money.format(state.total)}.`;
+    subheading = typeof state.addedCount === 'number'
+      ? t('confirm.appendedSub', { count: state.addedCount, total: money.format(state.total) })
+      : t('confirm.appendedSubUnknown', { total: money.format(state.total) });
   } else if (isKitchen) {
-    subheading = 'Tu comida está en camino. Te llamamos por tu nombre. Cuando quieras pagar o agregar más, regresa al kiosko.';
+    subheading = t('confirm.kitchenSub');
   } else {
-    subheading = 'El cajero te llevará la terminal a tu mesa.';
+    subheading = t('confirm.holdSub');
   }
 
   return (
@@ -172,11 +176,11 @@ const KioskHoldConfirmationScreen: React.FC = () => {
       {showsBigOrderCard && (
         <div className="mt-10 grid grid-cols-2 gap-6 max-w-xl w-full">
           <div className="rounded-2xl bg-neutral-900 border border-neutral-800 p-6 min-w-0">
-            <p className="text-sm text-neutral-500 font-bold uppercase tracking-wider">Orden</p>
+            <p className="text-sm text-neutral-500 font-bold uppercase tracking-wider">{t('confirm.order')}</p>
             <p className="text-4xl font-black text-brand-300 mt-1 tabular-nums truncate">#{state.orderNumber}</p>
           </div>
           <div className="rounded-2xl bg-neutral-900 border border-neutral-800 p-6 min-w-0">
-            <p className="text-sm text-neutral-500 font-bold uppercase tracking-wider">Total</p>
+            <p className="text-sm text-neutral-500 font-bold uppercase tracking-wider">{t('common.total')}</p>
             <p className="text-4xl font-black mt-1 tabular-nums truncate">{money.format(state.total)}</p>
           </div>
         </div>
@@ -190,16 +194,16 @@ const KioskHoldConfirmationScreen: React.FC = () => {
           <div className="min-w-0">
             <p className="text-xl font-black inline-flex items-center gap-2">
               <Wallet className="h-6 w-6 text-brand-300 shrink-0" />
-              Guarda tu tarjeta de sellos
+              {t('confirm.walletTitle')}
             </p>
             <p className="text-neutral-300 font-bold mt-2">
-              Escanea con la cámara de tu teléfono y agrégala a Apple Wallet.
+              {t('confirm.walletScan')}
               {session?.stamp
-                ? ` Llevas ${session.stamp.earned} de ${session.stamp.required} sellos.`
+                ? ` ${t('confirm.walletStamps', { earned: session.stamp.earned, required: session.stamp.required })}`
                 : ''}
             </p>
             <p className="text-neutral-500 text-sm font-bold mt-2">
-              Se actualiza sola con cada compra.
+              {t('confirm.walletAuto')}
             </p>
           </div>
         </div>
@@ -213,13 +217,13 @@ const KioskHoldConfirmationScreen: React.FC = () => {
           <div className="min-w-0">
             <p className="text-xl font-black inline-flex items-center gap-2">
               <Gift className="h-6 w-6 text-brand-300 shrink-0" />
-              ¿Ya estás en el programa de lealtad{tenantName ? ` de ${tenantName}` : ''}?
+              {tenantName ? t('confirm.joinTitleTenant', { tenant: tenantName }) : t('confirm.joinTitle')}
             </p>
             <p className="text-neutral-300 font-bold mt-2">
-              Escanea con la cámara de tu teléfono. Sumamos los sellos de esta compra y te damos tu tarjeta digital.
+              {t('confirm.joinScan')}
             </p>
             <p className="text-neutral-500 text-sm font-bold mt-2">
-              Ya seas cliente o nuevo, funciona igual.
+              {t('confirm.joinAnyone')}
             </p>
           </div>
         </div>
@@ -236,7 +240,7 @@ const KioskHoldConfirmationScreen: React.FC = () => {
             className="w-full h-20 rounded-2xl bg-brand-600 active:bg-brand-700 text-2xl font-black touch-manipulation inline-flex items-center justify-center gap-3"
           >
             <Store className="h-7 w-7" />
-            Listo · {seconds}s
+            {t('confirm.done')} · {seconds}s
           </button>
         </div>
       ) : (
@@ -246,20 +250,20 @@ const KioskHoldConfirmationScreen: React.FC = () => {
             className="h-20 rounded-2xl bg-brand-600 active:bg-brand-700 text-2xl font-black touch-manipulation inline-flex items-center justify-center gap-3"
           >
             <Plus className="h-7 w-7" />
-            Agregar más
+            {t('confirm.addMore')}
           </button>
           <button
             onClick={handleDone}
             className="h-20 rounded-2xl bg-neutral-800 active:bg-neutral-700 text-2xl font-black touch-manipulation inline-flex items-center justify-center gap-3"
           >
             <Store className="h-7 w-7" />
-            Listo · {seconds}s
+            {t('confirm.done')} · {seconds}s
           </button>
         </div>
       )}
 
       <p className="mt-6 text-sm text-neutral-500 font-bold">
-        Esta pantalla se cerrará sola en {seconds}s.
+        {t('confirm.autoClose', { seconds })}
       </p>
     </div>
   );
