@@ -14,6 +14,7 @@ import enSettlement from './locales/en/settlement.json';
 import enSuperAdmin from './locales/en/superAdmin.json';
 import enOrg from './locales/en/org.json';
 import enQrMenu from './locales/en/qrMenu.json';
+import enCustomerOrder from './locales/en/customerOrder.json';
 
 // ES namespaces
 import esCommon from './locales/es/common.json';
@@ -27,6 +28,7 @@ import esSettlement from './locales/es/settlement.json';
 import esSuperAdmin from './locales/es/superAdmin.json';
 import esOrg from './locales/es/org.json';
 import esQrMenu from './locales/es/qrMenu.json';
+import esCustomerOrder from './locales/es/customerOrder.json';
 
 const resources = {
   en: {
@@ -41,6 +43,7 @@ const resources = {
     superAdmin: enSuperAdmin,
     org: enOrg,
     qrMenu: enQrMenu,
+    customerOrder: enCustomerOrder,
   },
   es: {
     common: esCommon,
@@ -54,6 +57,7 @@ const resources = {
     superAdmin: esSuperAdmin,
     org: esOrg,
     qrMenu: esQrMenu,
+    customerOrder: esCustomerOrder,
   },
 };
 
@@ -64,7 +68,7 @@ i18n
     resources,
     fallbackLng: 'en',
     defaultNS: 'common',
-    ns: ['common', 'pos', 'kitchen', 'admin', 'inventory', 'reports', 'financing', 'settlement', 'superAdmin', 'org', 'qrMenu'],
+    ns: ['common', 'pos', 'kitchen', 'admin', 'inventory', 'reports', 'financing', 'settlement', 'superAdmin', 'org', 'qrMenu', 'customerOrder'],
     interpolation: {
       escapeValue: false,
     },

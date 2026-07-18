@@ -1,0 +1,42 @@
+{
+  "menu": {
+    "brandFallback": "Menu",
+    "empty": "No menu items available",
+    "loadError": "Failed to load menu",
+    "tryAgain": "Try again"
+  },
+  "cart": {
+    "openLabel": "Cart",
+    "title": "Your Cart",
+    "empty": "Your cart is empty",
+    "total": "Total",
+    "itemCount_one": "{{count}} item",
+    "itemCount_other": "{{count}} items",
+    "sendToKitchen": "Send to Kitchen",
+    "sending": "Sending to kitchen…",
+    "placeOrderError": "Failed to send order to kitchen"
+  },
+  "item": {
+    "required": "Required",
+    "specialInstructions": "Special instructions",
+    "notesPlaceholder": "Any allergies or preferences…",
+    "addToCart": "Add to cart"
+  },
+  "tracking": {
+    "yourOrder": "Your order",
+    "steps": {
+      "placed": "Placed",
+      "preparing": "Preparing",
+      "ready": "Ready!"
+    },
+    "readyTitle": "Your order is ready!",
+    "readySubtitle": "Head to the counter to pay and pick it up",
+    "payAtCashierTitle": "Pay at cashier",
+    "payAtCashierSubtitle": "Show this screen to the cashier when your order is ready",
+    "estimated": "Estimated ~{{minutes}} min",
+    "statusError": "Unable to check status",
+    "refresh": "Refresh",
+    "orderAgain": "Order again",
+    "placeAnother": "Place another order"
+  }
+}

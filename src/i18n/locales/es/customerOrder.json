@@ -1,0 +1,42 @@
+{
+  "menu": {
+    "brandFallback": "Menú",
+    "empty": "No hay productos disponibles",
+    "loadError": "No se pudo cargar el menú",
+    "tryAgain": "Reintentar"
+  },
+  "cart": {
+    "openLabel": "Carrito",
+    "title": "Tu carrito",
+    "empty": "Tu carrito está vacío",
+    "total": "Total",
+    "itemCount_one": "{{count}} producto",
+    "itemCount_other": "{{count}} productos",
+    "sendToKitchen": "Enviar a cocina",
+    "sending": "Enviando a cocina…",
+    "placeOrderError": "No se pudo enviar el pedido a cocina"
+  },
+  "item": {
+    "required": "Obligatorio",
+    "specialInstructions": "Instrucciones especiales",
+    "notesPlaceholder": "Alergias o preferencias…",
+    "addToCart": "Agregar al carrito"
+  },
+  "tracking": {
+    "yourOrder": "Tu pedido",
+    "steps": {
+      "placed": "Recibido",
+      "preparing": "Preparando",
+      "ready": "¡Listo!"
+    },
+    "readyTitle": "¡Tu pedido está listo!",
+    "readySubtitle": "Pasa a caja a pagar y recogerlo",
+    "payAtCashierTitle": "Paga en caja",
+    "payAtCashierSubtitle": "Muestra esta pantalla al cajero cuando tu pedido esté listo",
+    "estimated": "Estimado ~{{minutes}} min",
+    "statusError": "No se pudo consultar el estado",
+    "refresh": "Actualizar",
+    "orderAgain": "Pedir otra vez",
+    "placeAnother": "Hacer otro pedido"
+  }
+}

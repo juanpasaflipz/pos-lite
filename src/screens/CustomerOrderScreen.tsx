@@ -1,23 +1,14 @@
 import React, { useState, useEffect, useReducer, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useBranding } from '../context/BrandingContext';
 import {
-  getCustomerOrderSettings,
   placeCustomerOrder,
   getCustomerOrderStatus,
-  createCustomerPaymentIntent,
-  confirmCustomerPayment,
   type CustomerOrderItem,
   type CustomerOrderStatus,
 } from '../api/customerOrder';
-import { loadStripe } from '@stripe/stripe-js';
-import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
-import { ShoppingCart, Plus, Minus, X, Check, Loader2, Clock, ChefHat, Bell, ArrowLeft, RefreshCw } from 'lucide-react';
-
-/* ==================== Stripe setup ==================== */
-
-const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-const stripePromise = stripeKey ? loadStripe(stripeKey) : null;
+import { ShoppingCart, Plus, Minus, X, Check, Loader2, Clock, ChefHat, Bell, RefreshCw, Wallet } from 'lucide-react';
 
 /* ==================== Types ==================== */
 
@@ -123,72 +114,7 @@ function cartReducer(state: CartItem[], action: CartAction): CartItem[] {
   }
 }
 
-/* ==================== Payment Form (Stripe Elements) ==================== */
-
-function PaymentForm({ orderId, orderSecret, onSuccess, onError }: {
-  orderId: number;
-  orderSecret: string;
-  onSuccess: () => void;
-  onError: (msg: string) => void;
-}) {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [processing, setProcessing] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!stripe || !elements) return;
-
-    setProcessing(true);
-    try {
-      const { error } = await stripe.confirmPayment({
-        elements,
-        redirect: 'if_required',
-      });
-
-      if (error) {
-        onError(error.message || 'Payment failed');
-        setProcessing(false);
-        return;
-      }
-
-      // Confirm on our backend
-      await confirmCustomerPayment(orderId, orderSecret);
-      onSuccess();
-    } catch (err) {
-      onError(err instanceof Error ? err.message : 'Payment failed');
-      setProcessing(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <PaymentElement />
-      <button
-        type="submit"
-        disabled={!stripe || processing}
-        className="w-full bg-brand-600 hover:bg-brand-700 disabled:bg-brand-800 disabled:opacity-50 text-white font-bold py-4 rounded-xl transition-colors flex items-center justify-center gap-2"
-      >
-        {processing ? (
-          <>
-            <Loader2 size={18} className="animate-spin" />
-            Processing...
-          </>
-        ) : (
-          'Pay Now'
-        )}
-      </button>
-    </form>
-  );
-}
-
 /* ==================== Status Tracker ==================== */
-
-const STATUS_STEPS = [
-  { key: 'placed', label: 'Order Placed', icon: Check },
-  { key: 'preparing', label: 'Preparing', icon: ChefHat },
-  { key: 'ready', label: 'Ready!', icon: Bell },
-] as const;
 
 function getStepIndex(status: string): number {
   // Post-collapse, in-flight orders all sit at status='active' through the
@@ -199,11 +125,20 @@ function getStepIndex(status: string): number {
   return 0; // pending
 }
 
+// Show only the last 4 characters of the order number so the customer sees
+// a short ticket ID that matches what the cashier reads on the KDS/receipt.
+function short(orderNumber: string | number | undefined | null): string {
+  if (orderNumber === null || orderNumber === undefined) return '…';
+  const s = String(orderNumber);
+  return s.slice(-4);
+}
+
 function OrderStatusTracker({ orderId, orderSecret, onNewOrder }: {
   orderId: number;
   orderSecret: string;
   onNewOrder: () => void;
 }) {
+  const { t } = useTranslation('customerOrder');
   const [status, setStatus] = useState<CustomerOrderStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -224,9 +159,9 @@ function OrderStatusTracker({ orderId, orderSecret, onNewOrder }: {
         clearActiveOrder();
       }
     } catch (err) {
-      setError('Unable to check status');
+      setError(t('tracking.statusError'));
     }
-  }, [orderId, orderSecret]);
+  }, [orderId, orderSecret, t]);
 
   useEffect(() => {
     fetchStatus();
@@ -239,20 +174,38 @@ function OrderStatusTracker({ orderId, orderSecret, onNewOrder }: {
   const stepIndex = status ? getStepIndex(status.status) : 0;
   const isReady = status && (status.status === 'ready' || status.status === 'completed');
 
+  const steps = [
+    { key: 'placed', label: t('tracking.steps.placed'), icon: Check },
+    { key: 'preparing', label: t('tracking.steps.preparing'), icon: ChefHat },
+    { key: 'ready', label: t('tracking.steps.ready'), icon: Bell },
+  ];
+
   return (
     <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center p-6">
       <div className="bg-neutral-900 rounded-2xl p-6 max-w-sm w-full border border-neutral-800">
-        {/* Order number */}
+        {/* Order number — last 4 only */}
         <div className="text-center mb-6">
-          <p className="text-neutral-500 text-sm mb-1">Your order</p>
+          <p className="text-neutral-500 text-sm mb-1">{t('tracking.yourOrder')}</p>
           <p className="text-5xl font-black text-brand-500 tracking-tight">
-            #{status?.order_number || '...'}
+            #{short(status?.order_number)}
           </p>
+        </div>
+
+        {/* Pay at cashier banner — the whole flow is pay-at-counter, so surface
+            this prominently as soon as the ticket is placed */}
+        <div className="bg-cockpit-attention/15 border border-cockpit-attention/40 rounded-xl p-4 mb-6 flex items-start gap-3">
+          <div className="w-9 h-9 rounded-full bg-cockpit-attention/25 flex items-center justify-center flex-shrink-0">
+            <Wallet size={18} className="text-cockpit-attention-text" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-white font-bold text-base">{t('tracking.payAtCashierTitle')}</p>
+            <p className="text-neutral-400 text-sm mt-0.5">{t('tracking.payAtCashierSubtitle')}</p>
+          </div>
         </div>
 
         {/* Status stepper */}
         <div className="flex items-center justify-between mb-8 px-2">
-          {STATUS_STEPS.map((step, i) => {
+          {steps.map((step, i) => {
             const Icon = step.icon;
             const isActive = i <= stepIndex;
             const isCurrent = i === stepIndex;
@@ -287,8 +240,8 @@ function OrderStatusTracker({ orderId, orderSecret, onNewOrder }: {
         {/* Ready state */}
         {isReady && (
           <div className="bg-cockpit-green/15 border border-cockpit-green/40 rounded-xl p-4 text-center mb-4 animate-pulse">
-            <p className="text-cockpit-in-text font-bold text-lg">Your order is ready!</p>
-            <p className="text-cockpit-in-text/70 text-sm mt-1">Please pick it up at the counter</p>
+            <p className="text-cockpit-in-text font-bold text-lg">{t('tracking.readyTitle')}</p>
+            <p className="text-cockpit-in-text/70 text-sm mt-1">{t('tracking.readySubtitle')}</p>
           </div>
         )}
 
@@ -297,7 +250,7 @@ function OrderStatusTracker({ orderId, orderSecret, onNewOrder }: {
           <div className="flex items-center justify-center gap-2 text-neutral-400 mb-4">
             <Clock size={16} />
             <span className="text-sm">
-              Estimated ~{status.estimated_ready_minutes} min
+              {t('tracking.estimated', { minutes: status.estimated_ready_minutes })}
             </span>
           </div>
         )}
@@ -315,7 +268,7 @@ function OrderStatusTracker({ orderId, orderSecret, onNewOrder }: {
               className="w-full bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-medium py-3 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
             >
               <RefreshCw size={14} />
-              Refresh Status
+              {t('tracking.refresh')}
             </button>
           )}
           <button
@@ -325,7 +278,7 @@ function OrderStatusTracker({ orderId, orderSecret, onNewOrder }: {
             }}
             className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3 rounded-xl transition-colors"
           >
-            {isReady ? 'Order Again' : 'Place Another Order'}
+            {isReady ? t('tracking.orderAgain') : t('tracking.placeAnother')}
           </button>
         </div>
       </div>
@@ -335,9 +288,13 @@ function OrderStatusTracker({ orderId, orderSecret, onNewOrder }: {
 
 /* ==================== Main Component ==================== */
 
-type Stage = 'menu' | 'payment' | 'tracking';
+// Table QR is a pay-at-counter model: send to kitchen, pick up + pay at the
+// cashier. The pre-pay stage was removed so there is no card-payment language
+// on the customer's phone. Keep the two remaining stages as-is.
+type Stage = 'menu' | 'tracking';
 
 export default function CustomerOrderScreen() {
+  const { t } = useTranslation('customerOrder');
   const { branding } = useBranding();
   const [searchParams] = useSearchParams();
   const tableNumber = searchParams.get('table') || undefined;
@@ -346,13 +303,11 @@ export default function CustomerOrderScreen() {
   const [brands, setBrands] = useState<BrandData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [requirePayment, setRequirePayment] = useState(false);
 
   // Stage + order state
   const [stage, setStage] = useState<Stage>('menu');
   const [orderId, setOrderId] = useState<number | null>(null);
   const [orderSecret, setOrderSecret] = useState<string | null>(null);
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
 
   // UI state
   const [activeCategory, setActiveCategory] = useState<number | null>(null);
@@ -384,32 +339,34 @@ export default function CustomerOrderScreen() {
     }
   }, []);
 
-  // Load menu data + settings
+  // Load menu data.
+  // `?source=kiosk` bypasses the virtual-brands path — that path returns each
+  // item once per assigned brand, and the frontend then flattens every brand's
+  // categories, which duplicates any item that belongs to more than one brand.
+  // The QR customer just wants a single flat menu ordered by category/item
+  // sort, so we take the regular-menu branch of the endpoint.
   useEffect(() => {
     if (stage !== 'menu') return;
-    Promise.all([
-      fetch('/api/customer-order/menu').then(r => r.json()),
-      getCustomerOrderSettings().catch(() => ({ requirePayment: false })),
-    ]).then(([menuData, settings]) => {
-      // Parse prices to numbers (Postgres returns NUMERIC as strings)
-      const brandList: BrandData[] = (menuData.brands || menuData || []).map((b: BrandData) => ({
-        ...b,
-        categories: b.categories.map(c => ({
-          ...c,
-          items: c.items.map(item => ({ ...item, price: Number(item.price) })),
-        })),
-      }));
-      setBrands(brandList);
-      setRequirePayment(settings.requirePayment);
+    fetch('/api/customer-order/menu?source=kiosk').then(r => r.json())
+      .then((menuData) => {
+        // Parse prices to numbers (Postgres returns NUMERIC as strings)
+        const brandList: BrandData[] = (menuData.brands || menuData || []).map((b: BrandData) => ({
+          ...b,
+          categories: b.categories.map(c => ({
+            ...c,
+            items: c.items.map(item => ({ ...item, price: Number(item.price) })),
+          })),
+        }));
+        setBrands(brandList);
 
-      // Set first category as active
-      const firstCat = brandList[0]?.categories?.[0];
-      if (firstCat) setActiveCategory(firstCat.id);
-    }).catch(err => {
-      setError('Failed to load menu');
-      console.error(err);
-    }).finally(() => setLoading(false));
-  }, [stage]);
+        // Set first category as active
+        const firstCat = brandList[0]?.categories?.[0];
+        if (firstCat) setActiveCategory(firstCat.id);
+      }).catch(err => {
+        setError(t('menu.loadError'));
+        console.error(err);
+      }).finally(() => setLoading(false));
+  }, [stage, t]);
 
   // Auto-scroll active category pill into view
   useEffect(() => {
@@ -440,7 +397,7 @@ export default function CustomerOrderScreen() {
 
   // All categories flattened
   const allCategories = brands.flatMap(b => b.categories);
-  const brandName = branding?.restaurantName || brands[0]?.name || 'Menu';
+  const brandName = branding?.restaurantName || brands[0]?.name || t('menu.brandFallback');
 
   // Cart totals
   const cartItemCount = cart.reduce((sum, i) => sum + i.quantity, 0);
@@ -534,7 +491,8 @@ export default function CustomerOrderScreen() {
     setSelectedItem(null);
   }, [selectedItem, modifierGroups, selectedModifiers, itemQty, itemNotes]);
 
-  // Place order
+  // Send order to the kitchen. No pre-pay stage — the table-QR flow is always
+  // pay-at-cashier, so the ticket goes straight to tracking after submit.
   const handlePlaceOrder = useCallback(async () => {
     if (cart.length === 0) return;
     setSubmitting(true);
@@ -554,26 +512,13 @@ export default function CustomerOrderScreen() {
       saveActiveOrder(result.order_id, result.order_secret);
       dispatch({ type: 'CLEAR' });
       setCartOpen(false);
-
-      if (requirePayment && stripePromise) {
-        // Create payment intent
-        try {
-          const { clientSecret: secret } = await createCustomerPaymentIntent(result.order_id, result.order_secret);
-          setClientSecret(secret);
-          setStage('payment');
-        } catch {
-          // Payment setup failed — go to tracking anyway
-          setStage('tracking');
-        }
-      } else {
-        setStage('tracking');
-      }
+      setStage('tracking');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to place order');
+      setError(err instanceof Error ? err.message : t('cart.placeOrderError'));
     } finally {
       setSubmitting(false);
     }
-  }, [cart, tableNumber, requirePayment]);
+  }, [cart, tableNumber, t]);
 
   // Handle category click with manual scroll
   const handleCategoryClick = useCallback((catId: number) => {
@@ -589,60 +534,6 @@ export default function CustomerOrderScreen() {
   // Format price
   const fmt = (n: number) => `$${n.toFixed(2)}`;
 
-  // Memoize Stripe Elements options to prevent re-initialization on every render
-  const stripeOptions = React.useMemo(() => clientSecret ? {
-    clientSecret,
-    appearance: {
-      theme: 'night' as const,
-      variables: {
-        colorPrimary: '#0d9488',
-        colorBackground: '#171717',
-        colorText: '#ffffff',
-        colorTextSecondary: '#a3a3a3',
-        borderRadius: '12px',
-      },
-    },
-  } : undefined, [clientSecret]);
-
-  /* ==================== Payment Stage ==================== */
-  if (stage === 'payment' && clientSecret && orderId && orderSecret && stripePromise) {
-    return (
-      <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center p-6">
-        <div className="bg-neutral-900 rounded-2xl p-6 max-w-sm w-full border border-neutral-800">
-          <h2 className="text-xl font-bold text-white mb-2 text-center">Payment</h2>
-          <p className="text-neutral-400 text-sm text-center mb-6">
-            Complete your payment to confirm the order
-          </p>
-
-          {error && (
-            <div className="mb-4 px-3 py-2 bg-cockpit-red/20 border border-cockpit-red/50 rounded-lg text-cockpit-out-text text-sm">
-              {error}
-            </div>
-          )}
-
-          <Elements
-            stripe={stripePromise}
-            options={stripeOptions}
-          >
-            <PaymentForm
-              orderId={orderId}
-              orderSecret={orderSecret}
-              onSuccess={() => setStage('tracking')}
-              onError={(msg) => setError(msg)}
-            />
-          </Elements>
-
-          <button
-            onClick={() => setStage('tracking')}
-            className="w-full mt-3 text-neutral-500 hover:text-neutral-300 text-sm py-2 transition-colors"
-          >
-            Skip — pay at counter
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   /* ==================== Tracking Stage ==================== */
   if (stage === 'tracking' && orderId && orderSecret) {
     return (
@@ -652,7 +543,6 @@ export default function CustomerOrderScreen() {
         onNewOrder={() => {
           setOrderId(null);
           setOrderSecret(null);
-          setClientSecret(null);
           setStage('menu');
           setLoading(true);
         }}
@@ -678,7 +568,7 @@ export default function CustomerOrderScreen() {
             onClick={() => window.location.reload()}
             className="text-brand-400 underline"
           >
-            Try again
+            {t('menu.tryAgain')}
           </button>
         </div>
       </div>
@@ -781,7 +671,7 @@ export default function CustomerOrderScreen() {
         ))}
 
         {allCategories.length === 0 && (
-          <p className="text-neutral-600 text-center py-12">No menu items available</p>
+          <p className="text-neutral-600 text-center py-12">{t('menu.empty')}</p>
         )}
       </div>
 
@@ -794,7 +684,7 @@ export default function CustomerOrderScreen() {
           >
             <span className="flex items-center gap-2">
               <ShoppingCart size={20} />
-              <span>{cartItemCount} item{cartItemCount !== 1 ? 's' : ''}</span>
+              <span>{t('cart.itemCount', { count: cartItemCount })}</span>
             </span>
             <span>{fmt(cartTotal)}</span>
           </button>
@@ -848,7 +738,7 @@ export default function CustomerOrderScreen() {
                     <h3 className="text-sm font-semibold text-white">{group.name}</h3>
                     {group.required && (
                       <span className="text-xs bg-brand-600/20 text-brand-400 px-2 py-0.5 rounded-full">
-                        Required
+                        {t('item.required')}
                       </span>
                     )}
                   </div>
@@ -886,13 +776,13 @@ export default function CustomerOrderScreen() {
 
               {/* Notes */}
               <div>
-                <label className="text-sm text-neutral-500 block mb-1">Special instructions</label>
+                <label className="text-sm text-neutral-500 block mb-1">{t('item.specialInstructions')}</label>
                 <textarea
                   value={itemNotes}
                   onChange={e => setItemNotes(e.target.value)}
                   maxLength={500}
                   rows={2}
-                  placeholder="Any allergies or preferences..."
+                  placeholder={t('item.notesPlaceholder')}
                   className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white text-sm placeholder-neutral-600 focus:outline-none focus:border-brand-500 resize-none"
                 />
               </div>
@@ -922,7 +812,7 @@ export default function CustomerOrderScreen() {
                 className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 rounded-xl transition-colors flex items-center justify-center gap-2 active:scale-[0.98]"
               >
                 <Plus size={18} />
-                Add to Cart — {fmt(
+                {t('item.addToCart')} — {fmt(
                   (selectedItem.price +
                     Object.values(selectedModifiers)
                       .flat()
@@ -950,7 +840,7 @@ export default function CustomerOrderScreen() {
           <div className="bg-neutral-900 w-full max-w-lg rounded-t-2xl sm:rounded-2xl max-h-[85vh] flex flex-col animate-slide-up">
             {/* Cart header */}
             <div className="flex items-center justify-between p-4 border-b border-neutral-800">
-              <h2 className="text-lg font-bold text-white">Your Cart</h2>
+              <h2 className="text-lg font-bold text-white">{t('cart.title')}</h2>
               <button
                 onClick={() => setCartOpen(false)}
                 className="text-neutral-500 hover:text-white p-1"
@@ -962,7 +852,7 @@ export default function CustomerOrderScreen() {
             {/* Cart items */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {cart.length === 0 ? (
-                <p className="text-neutral-500 text-center py-12">Your cart is empty</p>
+                <p className="text-neutral-500 text-center py-12">{t('cart.empty')}</p>
               ) : (
                 cart.map(ci => {
                   const modTotal = ci.modifiers.reduce((s, m) => s + m.price_adjustment, 0);
@@ -1019,7 +909,7 @@ export default function CustomerOrderScreen() {
             {cart.length > 0 && (
               <div className="p-4 border-t border-neutral-800 space-y-3">
                 <div className="flex items-center justify-between text-lg">
-                  <span className="text-neutral-400">Total</span>
+                  <span className="text-neutral-400">{t('cart.total')}</span>
                   <span className="text-white font-bold">{fmt(cartTotal)}</span>
                 </div>
                 <button
@@ -1030,10 +920,10 @@ export default function CustomerOrderScreen() {
                   {submitting ? (
                     <>
                       <Loader2 size={18} className="animate-spin" />
-                      Placing order...
+                      {t('cart.sending')}
                     </>
                   ) : (
-                    requirePayment ? 'Continue to Payment' : 'Place Order'
+                    t('cart.sendToKitchen')
                   )}
                 </button>
               </div>
