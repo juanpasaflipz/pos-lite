@@ -61,8 +61,13 @@ html.light .text-white {
   color: rgb(23 23 23 / var(--tw-text-opacity));
 }
 
-/* Keep white text on brand/colored backgrounds — same element */
+/* Keep white text on brand/colored backgrounds — same element.
+   `bg-cockpit-*` covers the custom semantic palette (cockpit-blue, -green,
+   -red, -in, -out, -system, -attention…). `bg-cockpit-yellow` and
+   `bg-cockpit-attention` are mustard: colored buttons on those tones use
+   `text-neutral-900` on purpose, so this rule doesn't affect them. */
 html.light [class*="bg-brand"].text-white,
+html.light [class*="bg-cockpit-"].text-white,
 html.light [class*="bg-red-"].text-white,
 html.light [class*="bg-green-"].text-white,
 html.light [class*="bg-emerald-"].text-white,
@@ -79,6 +84,7 @@ html.light [class*="bg-indigo-"].text-white {
 
 /* Keep white text on colored backgrounds — descendant */
 html.light [class*="bg-brand"] .text-white,
+html.light [class*="bg-cockpit-"] .text-white,
 html.light [class*="bg-red-"] .text-white,
 html.light [class*="bg-green-"] .text-white,
 html.light [class*="bg-emerald-"] .text-white,
