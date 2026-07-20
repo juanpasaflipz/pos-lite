@@ -1,4 +1,8 @@
 {
+  "deleteOrder": {
+    "confirm": "¿Eliminar la orden #{{number}}? Esta acción no se puede deshacer.",
+    "failed": "No se pudo eliminar la orden"
+  },
   "header": {
     "operator": "Operador",
     "time": "Hora",

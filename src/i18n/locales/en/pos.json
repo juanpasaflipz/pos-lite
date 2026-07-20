@@ -1,4 +1,8 @@
 {
+  "deleteOrder": {
+    "confirm": "Delete order #{{number}}? This cannot be undone.",
+    "failed": "Failed to delete order"
+  },
   "header": {
     "operator": "Operator",
     "time": "Time",

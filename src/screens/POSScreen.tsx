@@ -1280,12 +1280,12 @@ const POSScreen: React.FC = () => {
         onClearUnpaidSelection={handleClearUnpaidSelection}
         onCobrarJuntas={handleOpenPayTogether}
         onDeleteUnpaidOrder={async (order) => {
-          if (!window.confirm(`Delete order #${order.order_number}? This cannot be undone.`)) return;
+          if (!window.confirm(t('deleteOrder.confirm', { number: order.order_number }))) return;
           try {
             await deleteOrder(order.id);
             setUnpaidOrders((prev) => prev.filter((o) => o.id !== order.id));
           } catch (err) {
-            window.alert(err instanceof Error ? err.message : 'Failed to delete order');
+            window.alert(err instanceof Error ? err.message : t('deleteOrder.failed'));
           }
         }}
       />
@@ -1322,12 +1322,12 @@ const POSScreen: React.FC = () => {
             onCobrar={handleCobrar}
             onToggleUnpaidOrders={() => setShowUnpaidOrders(!showUnpaidOrders)}
             onDeleteUnpaidOrder={async (order) => {
-              if (!window.confirm(`Delete order #${order.order_number}? This cannot be undone.`)) return;
+              if (!window.confirm(t('deleteOrder.confirm', { number: order.order_number }))) return;
               try {
                 await deleteOrder(order.id);
                 setUnpaidOrders((prev) => prev.filter((o) => o.id !== order.id));
               } catch (err) {
-                window.alert(err instanceof Error ? err.message : 'Failed to delete order');
+                window.alert(err instanceof Error ? err.message : t('deleteOrder.failed'));
               }
             }}
             selectedUnpaidIds={selectedUnpaidIds}
