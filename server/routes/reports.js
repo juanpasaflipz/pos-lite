@@ -642,52 +642,41 @@ router.get('/category-margins', requireAuth(), async (req, res) => {
       ORDER BY revenue DESC
     `, [startDate, endDate, tz]);
 
-    const result = [];
-    for (const cat of categories) {
-      // Get all menu items in this category that were sold
-      const catItems = await all(`
-        SELECT DISTINCT oi.menu_item_id
-        FROM order_items oi
-        JOIN orders o ON oi.order_id = o.id
-        JOIN menu_items mi ON oi.menu_item_id = mi.id
-        WHERE mi.category_id = $1
-          AND (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $4)::date BETWEEN $2 AND $3
-          AND o.payment_status = 'paid'
-      `, [cat.category_id, startDate, endDate, tz]);
+    // COGS per category in ONE set-based pass. This was an N+1: for each
+    // category, a DISTINCT-items query, then per item a sold-qty query AND an
+    // ingredients query — O(categories × items × 2) round-trips. Same formula:
+    // cogs = Σ items( qty_sold × Σ ingredients(quantity_used × cost_price) ).
+    const cogsRows = await all(`
+      WITH item_cogs AS (
+        SELECT mii.menu_item_id,
+               SUM(mii.quantity_used * ii.cost_price) AS cogs_per_unit
+        FROM menu_item_ingredients mii
+        JOIN inventory_items ii ON ii.id = mii.inventory_item_id
+        GROUP BY mii.menu_item_id
+      )
+      SELECT mi.category_id,
+             SUM(oi.quantity * COALESCE(ic.cogs_per_unit, 0)) AS cogs
+      FROM order_items oi
+      JOIN orders o ON o.id = oi.order_id
+      JOIN menu_items mi ON mi.id = oi.menu_item_id
+      LEFT JOIN item_cogs ic ON ic.menu_item_id = oi.menu_item_id
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2
+        AND o.payment_status = 'paid'
+      GROUP BY mi.category_id
+    `, [startDate, endDate, tz]);
+    const cogsByCategory = new Map(cogsRows.map((r) => [r.category_id, Math.round((Number(r.cogs) || 0) * 100) / 100]));
 
-      let totalCogs = 0;
-      for (const item of catItems) {
-        const sold = await get(`
-          SELECT SUM(oi.quantity) as qty
-          FROM order_items oi
-          JOIN orders o ON oi.order_id = o.id
-          WHERE oi.menu_item_id = $1
-            AND (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $4)::date BETWEEN $2 AND $3
-            AND o.payment_status = 'paid'
-        `, [item.menu_item_id, startDate, endDate, tz]);
-
-        const ingredients = await all(`
-          SELECT mii.quantity_used, ii.cost_price
-          FROM menu_item_ingredients mii
-          JOIN inventory_items ii ON mii.inventory_item_id = ii.id
-          WHERE mii.menu_item_id = $1
-        `, [item.menu_item_id]);
-
-        const cogsPerUnit = ingredients.reduce((sum, ing) => sum + (ing.quantity_used * ing.cost_price), 0);
-        totalCogs += cogsPerUnit * (sold?.qty || 0);
-      }
-
-      totalCogs = Math.round(totalCogs * 100) / 100;
+    const result = categories.map((cat) => {
+      const totalCogs = cogsByCategory.get(cat.category_id) || 0;
       const margin = cat.revenue - totalCogs;
       const marginPercent = cat.revenue > 0 ? Math.round((margin / cat.revenue) * 100) : 0;
-
-      result.push({
+      return {
         ...cat,
         cogs: totalCogs,
         margin,
         margin_percent: marginPercent,
-      });
-    }
+      };
+    });
 
     res.json({ period, startDate, categories: result });
   } catch (error) {
@@ -716,44 +705,41 @@ router.get('/contribution-margin', requireAuth(), async (req, res) => {
       ORDER BY date ASC
     `, [startDate, endDate, tz]);
 
-    const result = [];
-    for (const day of dailyRevenue) {
-      // Calculate COGS for all items sold that day
-      const dayItems = await all(`
-        SELECT oi.menu_item_id, SUM(oi.quantity) as qty
-        FROM order_items oi
-        JOIN orders o ON oi.order_id = o.id
-        WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $2)::date = $1
-          AND o.payment_status = 'paid'
-        GROUP BY oi.menu_item_id
-      `, [day.date, tz]);
+    // COGS per day in ONE set-based pass. This was an N+1: for each day, a
+    // per-item query, then an ingredients query per menu item — O(days × items).
+    // Same formula: cogs = Σ items( qty_sold × Σ ing(quantity_used × cost_price) ).
+    const cogsRows = await all(`
+      WITH item_cogs AS (
+        SELECT mii.menu_item_id,
+               SUM(mii.quantity_used * ii.cost_price) AS cogs_per_unit
+        FROM menu_item_ingredients mii
+        JOIN inventory_items ii ON ii.id = mii.inventory_item_id
+        GROUP BY mii.menu_item_id
+      )
+      SELECT (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date AS date,
+             SUM(oi.quantity * COALESCE(ic.cogs_per_unit, 0)) AS cogs
+      FROM order_items oi
+      JOIN orders o ON o.id = oi.order_id
+      LEFT JOIN item_cogs ic ON ic.menu_item_id = oi.menu_item_id
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2
+        AND o.payment_status = 'paid'
+      GROUP BY (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date
+    `, [startDate, endDate, tz]);
+    const cogsByDate = new Map(cogsRows.map((r) => [String(r.date), Math.round((Number(r.cogs) || 0) * 100) / 100]));
 
-      let dayCogs = 0;
-      for (const item of dayItems) {
-        const ingredients = await all(`
-          SELECT mii.quantity_used, ii.cost_price
-          FROM menu_item_ingredients mii
-          JOIN inventory_items ii ON mii.inventory_item_id = ii.id
-          WHERE mii.menu_item_id = $1
-        `, [item.menu_item_id]);
-
-        const cogsPerUnit = ingredients.reduce((sum, ing) => sum + (ing.quantity_used * ing.cost_price), 0);
-        dayCogs += cogsPerUnit * item.qty;
-      }
-
-      dayCogs = Math.round(dayCogs * 100) / 100;
+    const result = dailyRevenue.map((day) => {
+      const dayCogs = cogsByDate.get(String(day.date)) || 0;
       const margin = Math.round((day.revenue - dayCogs) * 100) / 100;
       const marginPercent = day.revenue > 0 ? Math.round((margin / day.revenue) * 100) : 0;
-
-      result.push({
+      return {
         date: day.date,
         revenue: day.revenue,
         cogs: dayCogs,
         contribution_margin: margin,
         margin_percent: marginPercent,
         orders: day.orders,
-      });
-    }
+      };
+    });
 
     res.json({ period, startDate, data: result });
   } catch (error) {
