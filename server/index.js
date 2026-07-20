@@ -13,6 +13,7 @@ import { startAutoCompleteSweep, stopAutoCompleteSweep } from './lib/autoComplet
 import { startRewardReminderSweep, stopRewardReminderSweep } from './lib/rewardRedemptionReminders.js';
 import { startWinbackSweep, stopWinbackSweep } from './lib/winbackReminders.js';
 import { startPostOrderReviewSweep, stopPostOrderReviewSweep } from './lib/postOrderReviewReminders.js';
+import { startPrunePrintJobsSweep, stopPrunePrintJobsSweep } from './lib/pruneOldPrintJobs.js';
 import { startSentinelSweep, stopSentinelSweep } from './sentinel/sweep.js';
 
 // ==================== Route Imports (Lean POS) ====================
@@ -351,6 +352,7 @@ async function gracefulShutdown(signal) {
   stopWinbackSweep();
   stopPostOrderReviewSweep();
   stopSentinelSweep();
+  stopPrunePrintJobsSweep();
 
   await shutdownDb();
   console.log('[Shutdown] Database pools closed');
@@ -386,6 +388,7 @@ process.on('SIGINT', () => shutdownWithTimeout('SIGINT'));
     startWinbackSweep();
     startPostOrderReviewSweep();
     startSentinelSweep();
+    startPrunePrintJobsSweep();
   } catch (error) {
     console.error('Failed to initialize:', error);
     process.exit(1);
