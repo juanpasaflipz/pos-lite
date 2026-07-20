@@ -2460,6 +2460,8 @@ export interface OnboardingStatus {
   has_extra_staff: boolean;
   has_branding: boolean;
   has_delivery: boolean;
+  has_payment: boolean;
+  has_printer: boolean;
   real_order_count: number;
 }
 
