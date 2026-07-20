@@ -160,12 +160,25 @@ router.post('/:token/issue', async (req, res) => {
     // Fetch order. Line items no longer feed the CFDI concept (generic
     // "Consumo de alimentos y bebidas") — only order.total is authoritative.
     const order = await adminSql`
-      SELECT id, order_number, subtotal, tax, total, payment_method
+      SELECT id, order_number, subtotal, tax, total, payment_method, payment_status
       FROM orders WHERE id = ${tokenRow.order_id} AND tenant_id = ${tokenRow.tenant_id}
     `.then(rows => rows[0]);
 
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // Pay-first restaurant model (Juan, 2026-07-20): this path stamps a real
+    // PUE (pago en una sola exhibición) CFDI at the SAT — metodo_pago is
+    // hardcoded 'PUE' below. Stamping an unpaid order asserts to the tax
+    // authority that money changed hands when it didn't. The staff-issued
+    // path (cfdi.js POST /invoices) already guards this; the customer
+    // self-invoice QR must too.
+    if (!['paid', 'completed'].includes(order.payment_status)) {
+      return res.status(409).json({
+        error: 'Esta orden aún no está pagada. Solicita tu factura después de pagar.',
+        code: 'ORDER_NOT_PAID',
+      });
     }
 
     const formaPago = mapPaymentToFormaPago(order.payment_method);

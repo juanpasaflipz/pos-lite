@@ -707,6 +707,18 @@ router.get('/orders/:orderId/token', requireAuth('pos_access'), async (req, res)
     const order = await get('SELECT id, invoice_token, payment_status FROM orders WHERE id = $1', [orderId]);
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
+    // Pay-first restaurant model (Juan, 2026-07-20): a CFDI is a PUE (pago en
+    // una sola exhibición) tax document — never mint an invoice link for an
+    // order that hasn't settled, or you SAT-stamp a sale that never happened.
+    // The stamp path (cfdi-public.js /:token/issue) enforces the same guard.
+    if (!['paid', 'completed'].includes(order.payment_status)) {
+      return res.status(409).json({
+        error: 'La orden debe estar pagada antes de generar factura',
+        code: 'ORDER_NOT_PAID',
+        payment_status: order.payment_status,
+      });
+    }
+
     if (order.invoice_token) {
       const appUrl = process.env.APP_URL || 'https://pos.desktop.kitchen';
       return res.json({
