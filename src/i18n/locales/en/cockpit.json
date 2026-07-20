@@ -1,0 +1,44 @@
+{
+  "header": {
+    "title": "Owner Cockpit",
+    "subtitle": "See what comes in, what goes out, and how the machine runs."
+  },
+  "sections": {
+    "in": { "title": "IN", "description": "Money and demand entering the business." },
+    "out": { "title": "OUT", "description": "Costs, labor, waste, and pressure leaving the business." },
+    "system": { "title": "SYSTEM", "description": "Reports, connections, controls, and setup." }
+  },
+  "cards": {
+    "pos": { "label": "POS", "hint": "Ring up sales" },
+    "orders": { "label": "Orders", "hint": "Track every ticket" },
+    "sales": { "label": "Sales", "hint": "Daily revenue" },
+    "menu": { "label": "Menu", "hint": "Items & prices" },
+    "loyalty": { "label": "Loyalty", "hint": "Repeat customers" },
+    "qrMenu": { "label": "QR Menu", "hint": "Table QR codes" },
+    "delivery": { "label": "Delivery", "hint": "Rappi, Uber, DiDi" },
+    "menuPerformance": { "label": "Menu Performance", "hint": "Top sellers" },
+    "expenses": { "label": "Expenses", "hint": "Money going out" },
+    "staff": { "label": "Staff", "hint": "Hours & pay" },
+    "inventory": { "label": "Inventory", "hint": "Stock & COGS" },
+    "recipes": { "label": "Recipes", "hint": "Cost per item" },
+    "purchaseOrders": { "label": "Purchase Orders", "hint": "Supplier orders" },
+    "reports": { "label": "Reports", "hint": "Numbers & trends" },
+    "integrations": { "label": "Integrations", "hint": "Payments & apps" },
+    "modifiers": { "label": "Modifiers", "hint": "Sizes, extras & add-ons" },
+    "kitchenDisplay": { "label": "Kitchen Display", "hint": "Order screen for cooks" },
+    "devices": { "label": "Devices", "hint": "Paired KDS screens & TVs" },
+    "permissions": { "label": "Permissions", "hint": "Role access" },
+    "identity": { "label": "Identity", "hint": "Logo & info" },
+    "invoicing": { "label": "Invoicing", "hint": "CFDI & invoices" },
+    "account": { "label": "Account", "hint": "Plan & billing" }
+  },
+  "danger": {
+    "title": "Danger zone",
+    "description": "Bulk-delete all unpaid and pending-terminal orders. Useful for clearing test orders.",
+    "button": "Delete all unpaid orders",
+    "deleting": "Deleting…",
+    "confirm": "Delete ALL unpaid and pending-terminal orders? This cannot be undone.",
+    "deleted": "Deleted {{count}} order(s).",
+    "failed": "Failed to purge orders"
+  }
+}

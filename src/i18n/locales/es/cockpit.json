@@ -1,0 +1,44 @@
+{
+  "header": {
+    "title": "Centro de Control",
+    "subtitle": "Mira lo que entra, lo que sale y cómo funciona todo."
+  },
+  "sections": {
+    "in": { "title": "ENTRA", "description": "Dinero y demanda entrando al negocio." },
+    "out": { "title": "SALE", "description": "Costos, nómina, merma y presión saliendo del negocio." },
+    "system": { "title": "SISTEMA", "description": "Reportes, conexiones, controles y configuración." }
+  },
+  "cards": {
+    "pos": { "label": "Punto de Venta", "hint": "Cobrar ventas" },
+    "orders": { "label": "Órdenes", "hint": "Sigue cada ticket" },
+    "sales": { "label": "Ventas", "hint": "Ingresos del día" },
+    "menu": { "label": "Menú", "hint": "Productos y precios" },
+    "loyalty": { "label": "Lealtad", "hint": "Clientes frecuentes" },
+    "qrMenu": { "label": "Menú QR", "hint": "Códigos QR de mesa" },
+    "delivery": { "label": "Delivery", "hint": "Rappi, Uber, DiDi" },
+    "menuPerformance": { "label": "Desempeño de Menú", "hint": "Más vendidos" },
+    "expenses": { "label": "Gastos", "hint": "Dinero que sale" },
+    "staff": { "label": "Personal", "hint": "Horas y pago" },
+    "inventory": { "label": "Inventario", "hint": "Stock y costos" },
+    "recipes": { "label": "Recetas", "hint": "Costo por producto" },
+    "purchaseOrders": { "label": "Órdenes de Compra", "hint": "Pedidos a proveedores" },
+    "reports": { "label": "Reportes", "hint": "Números y tendencias" },
+    "integrations": { "label": "Integraciones", "hint": "Pagos y apps" },
+    "modifiers": { "label": "Modificadores", "hint": "Tamaños, extras y complementos" },
+    "kitchenDisplay": { "label": "Pantalla de Cocina", "hint": "Pantalla de órdenes para cocineros" },
+    "devices": { "label": "Dispositivos", "hint": "Pantallas KDS y TVs vinculadas" },
+    "permissions": { "label": "Permisos", "hint": "Acceso por rol" },
+    "identity": { "label": "Identidad", "hint": "Logo e información" },
+    "invoicing": { "label": "Facturación", "hint": "CFDI y facturas" },
+    "account": { "label": "Cuenta", "hint": "Plan y facturación" }
+  },
+  "danger": {
+    "title": "Zona de peligro",
+    "description": "Elimina todas las órdenes no pagadas y pendientes de terminal. Útil para limpiar órdenes de prueba.",
+    "button": "Eliminar órdenes no pagadas",
+    "deleting": "Eliminando…",
+    "confirm": "¿Eliminar TODAS las órdenes no pagadas y pendientes de terminal? Esto no se puede deshacer.",
+    "deleted": "Se eliminaron {{count}} orden(es).",
+    "failed": "No se pudieron eliminar las órdenes"
+  }
+}
