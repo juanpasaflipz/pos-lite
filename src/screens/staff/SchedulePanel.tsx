@@ -13,8 +13,7 @@ import type { PayrollForecast } from '../../api';
 import { useToast } from '../../context/ToastContext';
 import type { Employee, ScheduledShiftRow } from '../../types';
 
-const moneyMXN = (cents: number) =>
-  new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format((cents || 0) / 100);
+import { formatCents as moneyMXN } from '../../utils/currency';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

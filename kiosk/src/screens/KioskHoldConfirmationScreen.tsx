@@ -20,7 +20,7 @@ interface HoldState {
   addedCount?: number;
 }
 
-const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
+import { mxn as money } from '../lib/format';
 // Dine-in / appended / paid clears faster so the tablet rolls to the next customer.
 // Takeaway hold lingers because the cashier needs time to walk over.
 const COUNTDOWN_BY_MODE: Record<ConfirmMode, number> = {

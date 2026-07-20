@@ -24,7 +24,7 @@ import SuggestionsPanel from '../components/SuggestionsPanel';
 import LanguageToggle from '../components/LanguageToggle';
 import { tap, success } from '../lib/haptics';
 
-const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
+import { mxn as money } from '../lib/format';
 
 // Virtual category id for the personalized suggestions tab.
 const SUGGEST_TAB = -1;

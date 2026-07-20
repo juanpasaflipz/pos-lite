@@ -4,8 +4,7 @@ import { SalesReport, EmployeePerformanceReport, HourlyReport, ItemSalesReport }
 import { AlertCircle, Filter } from 'lucide-react';
 import LaborStrip from './LaborStrip';
 
-const fmt = (v: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(v);
-const intFmt = (v: number) => new Intl.NumberFormat('es-MX').format(v || 0);
+import { formatMoney as fmt, formatInt as intFmt } from '../../utils/currency';
 const hourLabel = (hour: number) => `${String(hour).padStart(2, '0')}:00`;
 
 type ItemSalesFilters = {

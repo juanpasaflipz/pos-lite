@@ -7,7 +7,7 @@ import { useKioskSuggestions } from '../context/KioskSuggestionsContext';
 import KioskModifierModal from './KioskModifierModal';
 import type { KioskMenuItem, KioskModifier, SuggestionItem } from '../lib/kioskApi';
 
-const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
+import { mxn as money } from '../lib/format';
 const MAX_CARDS = 6;
 
 function suggestionToMenuItem(s: SuggestionItem): KioskMenuItem {

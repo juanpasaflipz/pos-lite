@@ -2,7 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { COGSReport } from '../../types';
 
-const fmt = (v: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(v);
+import { formatMoney as fmt } from '../../utils/currency';
 
 interface COGSTabProps {
   cogsData: COGSReport;

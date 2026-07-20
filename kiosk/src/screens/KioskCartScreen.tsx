@@ -16,7 +16,7 @@ import {
 import CartUpsellStrip from '../components/CartUpsellStrip';
 import KioskCallNameModal from '../components/KioskCallNameModal';
 
-const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
+import { mxn as money } from '../lib/format';
 
 const KioskCartScreen: React.FC = () => {
   const navigate = useNavigate();

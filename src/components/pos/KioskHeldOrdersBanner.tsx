@@ -7,7 +7,7 @@ interface Props {
   onError?: (message: string) => void;
 }
 
-const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
+import { mxn as money } from '../../utils/currency';
 
 export default function KioskHeldOrdersBanner({ onClaim, onError }: Props) {
   const [orders, setOrders] = useState<KioskHeldOrder[]>([]);

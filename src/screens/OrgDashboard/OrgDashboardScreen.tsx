@@ -12,10 +12,7 @@ import {
 } from '../../api/org';
 import LanguageSwitcher from '../../components/LanguageSwitcher';
 
-const fmtMXN = (n: number) =>
-  new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
-
-const fmtNum = (n: number) => new Intl.NumberFormat('es-MX').format(n);
+import { formatMoney0 as fmtMXN, formatInt as fmtNum } from '../../utils/currency';
 
 const KPICard: React.FC<{ label: string; value: string; sub?: string; icon: React.ReactNode }> = ({
   label, value, sub, icon,

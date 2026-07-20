@@ -12,7 +12,7 @@ import {
 // don't know until the customer types their phone, and it makes no difference
 // to the server (find-or-create + idempotent stamp credit).
 
-const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
+import { mxn as money } from '../utils/currency';
 
 function formatPhoneDisplay(digits: string): string {
   const a = digits.slice(0, 2);

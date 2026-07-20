@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { CategoryMargins } from '../../types';
 
-const fmt = (v: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(v);
+import { formatMoney as fmt } from '../../utils/currency';
 
 interface CategoriesTabProps {
   categoryData: CategoryMargins;

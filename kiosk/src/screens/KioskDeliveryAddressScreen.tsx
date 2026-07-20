@@ -7,7 +7,7 @@ import { useKioskCart } from '../context/KioskCartContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
 import { quoteKioskDelivery } from '../lib/kioskApi';
 
-const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
+import { mxn as money } from '../lib/format';
 
 const KioskDeliveryAddressScreen: React.FC = () => {
   const navigate = useNavigate();

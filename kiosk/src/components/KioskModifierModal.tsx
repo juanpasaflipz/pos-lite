@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { localizeMenuItem, type KioskMenuItem, type KioskModifier, type KioskModifierGroup } from '../lib/kioskApi';
 import { selectionChanged, success } from '../lib/haptics';
 
-const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
+import { mxn as money } from '../lib/format';
 
 interface Props {
   item: KioskMenuItem;

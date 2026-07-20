@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { getCfdiPublicOrder, issueCfdiPublicInvoice } from '../api';
+import { formatMoney as formatMXN } from '../utils/currency';
 
 /* ---------- SAT catalog subsets (hardcoded for public page) ---------- */
 
@@ -60,15 +61,6 @@ interface ErrorInfo {
 }
 
 /* ---------- Helpers ---------- */
-
-function formatMXN(amount: number): string {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
 
 function formatDate(dateStr: string): string {
   try {

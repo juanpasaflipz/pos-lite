@@ -12,7 +12,7 @@ import {
   type KioskOpenOrder,
 } from '../lib/kioskApi';
 
-const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
+import { mxn as money } from '../lib/format';
 const wait = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 const POLL_INTERVAL_MS = 2_500;
 const POLL_MAX_ITERATIONS = 60; // 2.5s * 60 = ~2.5 minutes

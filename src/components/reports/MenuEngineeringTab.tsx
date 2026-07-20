@@ -7,7 +7,7 @@ import {
 import { Star, TrendingUp, HelpCircle, XCircle } from 'lucide-react';
 import { MenuEngineeringReport, MenuEngineeringItem } from '../../types';
 
-const fmt = (v: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(v);
+import { formatMoney as fmt } from '../../utils/currency';
 
 // BCG matrix mapped onto cockpit semantic zones:
 //   star      → cockpit.in        (healthy, money in)

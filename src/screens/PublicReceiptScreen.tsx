@@ -2,8 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getPublicReceipt, PublicReceiptResponse } from '../api';
 
-const formatMoney = (n: number) =>
-  new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(n) || 0);
+import { formatMoney } from '../utils/currency';
 
 const formatDateTime = (iso: string) => {
   try {

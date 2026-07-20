@@ -7,7 +7,7 @@ import type {
   SuggestionItem,
 } from '../lib/kioskApi';
 
-const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
+import { mxn as money } from '../lib/format';
 
 interface Props {
   suggestions: KioskSuggestions;

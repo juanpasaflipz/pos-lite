@@ -10,8 +10,7 @@ import {
 } from '../../api';
 import { PayrollSnapshot, PayrollPeriodsList, PayrollClosedPeriod } from '../../types';
 
-const money = (cents: number) =>
-  new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format((cents || 0) / 100);
+import { formatCents as money } from '../../utils/currency';
 
 const hoursFmt = (h: number) => `${(h || 0).toFixed(2)}h`;
 
