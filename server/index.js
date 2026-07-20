@@ -331,6 +331,17 @@ if (process.env.NODE_ENV === 'production') {
     console.error(`FATAL: Missing required environment variables: ${missing.join(', ')}`);
     process.exit(1);
   }
+
+  // Recommended-but-not-fatal. When MP_WEBHOOK_SECRET is unset the Mercado Pago
+  // webhook falls back to fail-open signature handling (mitigated by a live
+  // re-pull of the order from MP before trusting it — see payments.js:2007). Warn
+  // loudly at boot so the gap is visible. Once the value is set in the
+  // environment, promote it into the `required` array above to fail-fast.
+  const recommended = ['MP_WEBHOOK_SECRET'];
+  const missingRecommended = recommended.filter(k => !process.env[k]);
+  if (missingRecommended.length > 0) {
+    console.warn(`WARNING: recommended env var(s) unset: ${missingRecommended.join(', ')} — MP webhook signature verification is disabled (fail-open).`);
+  }
 }
 
 // ==================== Graceful Shutdown ====================
