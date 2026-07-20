@@ -1032,17 +1032,25 @@ router.put('/:id/status', async (req, res) => {
 
 // GET /api/orders/kitchen/active - get active orders for kitchen display.
 // Pass ?include_ready=1 to also include 'ready' orders (cashier order board).
-router.get('/kitchen/active', async (req, res) => {
+router.get('/kitchen/active', requireAuth(), async (req, res) => {
   try {
-    // Stamp first_kds_seen_at on any active orders the KDS hasn't seen yet.
-    // Single UPDATE — costs effectively nothing once the index is warm,
-    // and gives us the audit trail to answer "did the kitchen see X?"
-    await run(`
-      UPDATE orders
-      SET first_kds_seen_at = NOW()
-      WHERE status IN ('pending', 'confirmed', 'preparing', 'active')
-        AND first_kds_seen_at IS NULL
-    `);
+    // Stamp first_kds_seen_at ONLY when a real kitchen display is polling
+    // (?kds=1). The cashier order board and POS live-orders strip share this
+    // endpoint but must NOT stamp — their 2s poll would otherwise mark every
+    // order "seen by kitchen" within seconds of creation, permanently blinding
+    // the sentinel's kds_blind sensor (which fires when an active order's
+    // first_kds_seen_at stays NULL past a threshold = the kitchen screen is
+    // down and food isn't being made). Only KitchenDisplay / MobileKitchen
+    // send kds=1.
+    const isKds = req.query.kds === '1' || req.query.kds === 'true';
+    if (isKds) {
+      await run(`
+        UPDATE orders
+        SET first_kds_seen_at = NOW()
+        WHERE status IN ('pending', 'confirmed', 'preparing', 'active')
+          AND first_kds_seen_at IS NULL
+      `);
+    }
 
     const includeReady = req.query.include_ready === '1' || req.query.include_ready === 'true';
     // 'active' is the canonical in-flight status post-collapse; the others are
@@ -1302,7 +1310,12 @@ router.post('/:id/sms-receipt', requireAuth('pos_access'), async (req, res) => {
         );
 
     if (!sid) {
-      return res.status(502).json({ error: 'SMS send failed. Check Twilio credentials and try again.' });
+      // 400 (not 502): edge proxies (Cloudflare/Railway) strip JSON bodies from
+      // 5xx responses and swap in their own HTML, so the client falls back to
+      // a generic "API Error: 502" instead of showing this message.
+      return res.status(400).json({
+        error: 'No pudimos enviar el SMS. Revisa que el número sea un móvil mexicano válido (10 dígitos) y vuelve a intentar.',
+      });
     }
 
     audit({

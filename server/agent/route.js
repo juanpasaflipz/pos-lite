@@ -332,7 +332,7 @@ router.post('/chat', requireAuth('view_dashboard'), async (req, res) => {
 /**
  * Execute a single approved action
  */
-router.post('/execute', requireAuth('view_dashboard'), async (req, res) => {
+router.post('/execute', requireAuth('manage_ai'), async (req, res) => {
   try {
     // Plan gate: AI is Pro-only
     const tenantPlan = req.tenant?.plan || 'free';

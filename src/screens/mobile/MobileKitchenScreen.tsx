@@ -54,7 +54,7 @@ const MobileKitchenScreen: React.FC = () => {
 
   const fetchOrders = useCallback(async () => {
     try {
-      const data = await getKitchenOrders();
+      const data = await getKitchenOrders({ kds: true });
       const active = data
         .filter((o) => o.status !== 'completed' && o.status !== 'cancelled')
         .map((o) => ({ ...o, elapsedSeconds: calcElapsed(o.created_at) }))

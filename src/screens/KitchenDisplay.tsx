@@ -131,7 +131,7 @@ export default function KitchenDisplay() {
 
   const fetchOrders = useCallback(async () => {
     try {
-      const data = await getKitchenOrders();
+      const data = await getKitchenOrders({ kds: true });
 
       const activeOrders = data
         .filter((order) => order.status !== 'completed' && order.status !== 'cancelled')

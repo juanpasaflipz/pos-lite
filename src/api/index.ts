@@ -699,9 +699,15 @@ export async function applyOrderDiscount(
   });
 }
 
-export async function getKitchenOrders(opts?: { includeReady?: boolean }): Promise<Order[]> {
-  const query = opts?.includeReady ? '?include_ready=1' : '';
-  return apiRequest<Order[]>(`/orders/kitchen/active${query}`);
+export async function getKitchenOrders(opts?: { includeReady?: boolean; kds?: boolean }): Promise<Order[]> {
+  const params = new URLSearchParams();
+  if (opts?.includeReady) params.set('include_ready', '1');
+  // kds=1 tells the server this is a REAL kitchen display, so it stamps
+  // first_kds_seen_at. Cashier boards / live strips must omit it, or they
+  // blind the sentinel's kds_blind sensor. See routes/orders.js.
+  if (opts?.kds) params.set('kds', '1');
+  const qs = params.toString();
+  return apiRequest<Order[]>(`/orders/kitchen/active${qs ? `?${qs}` : ''}`);
 }
 
 export async function confirmOrderPayment(
