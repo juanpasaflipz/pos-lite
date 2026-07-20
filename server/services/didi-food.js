@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../lib/http.js';
 import crypto from 'crypto';
 import { getServiceCredentials } from '../helpers/tenantCredentials.js';
 
@@ -59,7 +60,7 @@ export async function getAccessToken(tenantId) {
     throw new Error('DiDi Food credentials not configured');
   }
 
-  const res = await fetch(`${DIDI_API}/auth/v1/token`, {
+  const res = await fetchWithTimeout(`${DIDI_API}/auth/v1/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -98,7 +99,7 @@ async function didiRequest(accessToken, method, path, body = null) {
   };
   if (body) opts.body = JSON.stringify(body);
 
-  const res = await fetch(`${DIDI_API}${path}`, opts);
+  const res = await fetchWithTimeout(`${DIDI_API}${path}`, opts);
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`DiDi Food ${method} ${path} failed (${res.status}): ${text}`);

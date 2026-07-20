@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../lib/http.js';
 // WhatsApp receipt-photo → voice-intent shape.
 //
 // Single Claude vision call that combines two things the codebase already
@@ -109,7 +110,7 @@ export async function parseReceiptImage(imageBuffer, mediaType, caption) {
   const mt = ALLOWED_MEDIA.includes(mediaType) ? mediaType : 'image/jpeg';
   const base64 = imageBuffer.toString('base64');
 
-  const res = await fetch(CLAUDE_URL, {
+  const res = await fetchWithTimeout(CLAUDE_URL, { timeoutMs: 30000,
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

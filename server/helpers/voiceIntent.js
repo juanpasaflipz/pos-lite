@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../lib/http.js';
 // Voice-note intent parsing + execution.
 //
 // Input: a transcript like "tiré tres burritos, se quemaron" or
@@ -94,7 +95,7 @@ export async function parseVoiceIntent(transcript) {
     all('SELECT id, name, active FROM menu_items ORDER BY name ASC LIMIT 150'),
   ]);
 
-  const res = await fetch(CLAUDE_URL, {
+  const res = await fetchWithTimeout(CLAUDE_URL, { timeoutMs: 30000,
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

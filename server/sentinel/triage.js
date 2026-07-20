@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../lib/http.js';
 /**
  * Sentinel — Triage (the only place the LLM appears)
  *
@@ -142,7 +143,7 @@ async function callClaude(messages, toolChoice = null) {
   };
   if (toolChoice) body.tool_choice = toolChoice;
 
-  const response = await fetch(ANTHROPIC_API_URL, {
+  const response = await fetchWithTimeout(ANTHROPIC_API_URL, { timeoutMs: 30000,
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

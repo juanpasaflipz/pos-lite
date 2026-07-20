@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../lib/http.js';
 import { Router } from 'express';
 import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
@@ -1956,7 +1957,7 @@ export async function mpOAuthCallback(req, res) {
     });
 
     const tenantOrigin = `${req.protocol}://${req.get('host')}`;
-    const tokenRes = await fetch('https://api.mercadopago.com/oauth/token', {
+    const tokenRes = await fetchWithTimeout('https://api.mercadopago.com/oauth/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

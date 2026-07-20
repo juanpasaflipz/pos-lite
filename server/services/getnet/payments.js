@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../../lib/http.js';
 import crypto from 'crypto';
 import { getAccessToken, getBaseUrl, getGetnetCredentials } from './auth.js';
 
@@ -17,7 +18,7 @@ async function getnetRequest(tenantId, environment, method, path, body = null, e
   const options = { method, headers };
   if (body) options.body = JSON.stringify(body);
 
-  const res = await fetch(`${baseUrl}${path}`, options);
+  const res = await fetchWithTimeout(`${baseUrl}${path}`, options);
 
   // Some Getnet endpoints return empty body on success
   const text = await res.text();

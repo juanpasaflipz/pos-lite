@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../lib/http.js';
 // Recipe text → structured ingredient lines via Claude.
 //
 // Input: a free-text recipe pasted by the owner. Mixed Spanish/English,
@@ -36,7 +37,7 @@ export async function parseRecipeText(text) {
   const trimmed = String(text || '').trim();
   if (!trimmed) return { lines: [] };
 
-  const res = await fetch(CLAUDE_URL, {
+  const res = await fetchWithTimeout(CLAUDE_URL, { timeoutMs: 30000,
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../../lib/http.js';
 /**
  * Google Wallet loyalty passes — the Android counterpart to applePass.js.
  *
@@ -57,7 +58,7 @@ async function getAccessToken() {
     { algorithm: 'RS256' }
   );
 
-  const res = await fetch('https://oauth2.googleapis.com/token', {
+  const res = await fetchWithTimeout('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -75,7 +76,7 @@ async function getAccessToken() {
 
 async function gapi(method, path, body) {
   const token = await getAccessToken();
-  const res = await fetch(`${API}${path}`, {
+  const res = await fetchWithTimeout(`${API}${path}`, {
     method,
     headers: {
       Authorization: `Bearer ${token}`,

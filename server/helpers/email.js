@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../lib/http.js';
 export async function sendPasswordResetEmail(email, resetUrl, tenantName) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
@@ -5,7 +6,7 @@ export async function sendPasswordResetEmail(email, resetUrl, tenantName) {
     return;
   }
   try {
-    await fetch('https://api.resend.com/emails', {
+    await fetchWithTimeout('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -40,7 +41,7 @@ export async function sendWelcomeEmail(email, restaurantName, subdomain, pin) {
     : 'https://pos.desktop.kitchen';
   const docsUrl = 'https://docs.desktop.kitchen';
   try {
-    await fetch('https://api.resend.com/emails', {
+    await fetchWithTimeout('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -107,7 +108,7 @@ export async function sendSalesRepWelcomeEmail(email, fullName, password) {
   }
 
   try {
-    await fetch('https://api.resend.com/emails', {
+    await fetchWithTimeout('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -182,7 +183,7 @@ export async function sendSecurityAlertEmail(email, restaurantName, ip, attempts
   }
   const timestamp = new Date().toLocaleString('en-US', { timeZone: 'America/Mexico_City' });
   try {
-    await fetch('https://api.resend.com/emails', {
+    await fetchWithTimeout('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -219,7 +220,7 @@ export async function sendPinEmail(email, pin, restaurantName, subdomain) {
     ? `https://${subdomain}.desktop.kitchen`
     : 'https://pos.desktop.kitchen';
   try {
-    await fetch('https://api.resend.com/emails', {
+    await fetchWithTimeout('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({

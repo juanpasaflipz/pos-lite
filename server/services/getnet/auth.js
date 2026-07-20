@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../../lib/http.js';
 import { getServiceCredentials } from '../../helpers/tenantCredentials.js';
 
 const SANDBOX_URL = 'https://api-sbx.pre.globalgetnet.com';
@@ -43,7 +44,7 @@ export async function getAccessToken(tenantId, environment = 'sandbox') {
   const baseUrl = getBaseUrl(environment);
   const basicAuth = Buffer.from(`${creds.client_id}:${creds.client_secret}`).toString('base64');
 
-  const res = await fetch(`${baseUrl}/authentication/oauth2/access_token`, {
+  const res = await fetchWithTimeout(`${baseUrl}/authentication/oauth2/access_token`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',

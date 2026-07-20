@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../lib/http.js';
 // Twilio media → OpenAI Whisper transcription.
 //
 // Twilio voice notes from WhatsApp are typically audio/ogg (Opus codec).
@@ -19,7 +20,7 @@ function extensionFor(contentType) {
 
 export async function fetchTwilioMedia(mediaUrl, { accountSid, authToken }) {
   const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
-  const res = await fetch(mediaUrl, {
+  const res = await fetchWithTimeout(mediaUrl, { timeoutMs: 15000,
     headers: { Authorization: `Basic ${auth}` },
     redirect: 'follow',
   });
@@ -43,7 +44,7 @@ export async function transcribeAudio(buffer, contentType, { language = 'es' } =
   if (language) form.append('language', language);
   form.append('response_format', 'json');
 
-  const res = await fetch(WHISPER_URL, {
+  const res = await fetchWithTimeout(WHISPER_URL, { timeoutMs: 30000,
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}` },
     body: form,

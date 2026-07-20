@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../lib/http.js';
 import crypto from 'crypto';
 import { getServiceCredentials } from '../helpers/tenantCredentials.js';
 
@@ -55,7 +56,7 @@ export async function getAccessToken(tenantId) {
     throw new Error('Rappi credentials not configured');
   }
 
-  const res = await fetch(RAPPI_AUTH, {
+  const res = await fetchWithTimeout(RAPPI_AUTH, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -92,7 +93,7 @@ async function rappiRequest(accessToken, method, path, body = null) {
   };
   if (body) opts.body = JSON.stringify(body);
 
-  const res = await fetch(`${RAPPI_API}${path}`, opts);
+  const res = await fetchWithTimeout(`${RAPPI_API}${path}`, opts);
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Rappi ${method} ${path} failed (${res.status}): ${text}`);

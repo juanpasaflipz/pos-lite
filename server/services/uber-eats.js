@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../lib/http.js';
 import crypto from 'crypto';
 import { getServiceCredentials } from '../helpers/tenantCredentials.js';
 
@@ -41,7 +42,7 @@ export async function getAccessToken(tenantId) {
     throw new Error('Uber Eats credentials not configured');
   }
 
-  const res = await fetch(`${UBER_AUTH}/oauth/v2/token`, {
+  const res = await fetchWithTimeout(`${UBER_AUTH}/oauth/v2/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -70,7 +71,7 @@ export async function getAccessToken(tenantId) {
  * Fetch full order details from Uber Eats API.
  */
 export async function fetchOrder(accessToken, orderId) {
-  const res = await fetch(`${UBER_API}/v2/eats/order/${orderId}`, {
+  const res = await fetchWithTimeout(`${UBER_API}/v2/eats/order/${orderId}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) {
@@ -89,7 +90,7 @@ export async function acceptOrder(accessToken, orderId, { reason, pickupTime, ex
   if (pickupTime) body.pickup_time = Math.floor(pickupTime / 1000);
   if (externalRef) body.external_reference_id = externalRef;
 
-  const res = await fetch(`${UBER_API}/v1/eats/orders/${orderId}/accept_pos_order`, {
+  const res = await fetchWithTimeout(`${UBER_API}/v1/eats/orders/${orderId}/accept_pos_order`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -119,7 +120,7 @@ export async function denyOrder(accessToken, orderId, { explanation, code } = {}
     },
   };
 
-  const res = await fetch(`${UBER_API}/v1/eats/orders/${orderId}/deny_pos_order`, {
+  const res = await fetchWithTimeout(`${UBER_API}/v1/eats/orders/${orderId}/deny_pos_order`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -139,7 +140,7 @@ export async function denyOrder(accessToken, orderId, { explanation, code } = {}
  * Cancel an already-accepted order on Uber Eats.
  */
 export async function cancelUberOrder(accessToken, orderId, reason) {
-  const res = await fetch(`${UBER_API}/v1/eats/orders/${orderId}/cancel`, {
+  const res = await fetchWithTimeout(`${UBER_API}/v1/eats/orders/${orderId}/cancel`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,

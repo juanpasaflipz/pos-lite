@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../lib/http.js';
 /**
  * POS Agent — API Route
  *
@@ -92,7 +93,7 @@ async function callClaude(messages, tools, toolChoice = null) {
   };
   if (toolChoice) body.tool_choice = toolChoice;
 
-  const response = await fetch(ANTHROPIC_API_URL, {
+  const response = await fetchWithTimeout(ANTHROPIC_API_URL, { timeoutMs: 90000,
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

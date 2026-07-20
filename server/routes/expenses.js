@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../lib/http.js';
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
@@ -910,7 +911,7 @@ router.post('/scan-receipt', requireAuth('manage_inventory'), upload.single('rec
       mediaType = 'image/jpeg';
     }
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', { timeoutMs: 30000,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
