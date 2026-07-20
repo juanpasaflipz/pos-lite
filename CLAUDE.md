@@ -59,7 +59,8 @@ Brand: kiosk wears Talavera Terracotta (`#A8542A`), driven by CSS variables in `
 ## Migrations
 - `server/db/migrations/NNNN_name.js` — each file exports `version: number`, `name: string`, `async up(sql)`. No down migrations
 - Runs once at server boot (`initMigrations()` + `runMigrations()`). Uses `adminSql` (bypasses RLS) inside `adminSql.begin()` so each migration is atomic
-- Numbering is sequential; current latest is `0079_sentinel_incidents.js`. `MAX(version)` bug was fixed 2026-05-27 — set-difference tracking means renumbered/missing versions are tolerated
+- Numbering is sequential; check `ls server/db/migrations | sort | tail -1` for the current latest rather than trusting this file (a stale "latest is 0079" here once misled an agent into flagging a phantom numbering gap). `MAX(version)` bug was fixed 2026-05-27 — set-difference tracking means renumbered/missing versions are tolerated
+- Migration 0088 codifies the nine `ai_*` tables that previously existed only in prod (pre-extraction artifacts). If a table exists in prod but not in migrations/`pg-schema.sql`, codify it the same way: introspect prod, transcribe faithfully (incl. RLS policy + `app_user` grants), keep it idempotent
 
 ## Auth conventions
 - Two auth surfaces: **Employee PIN login** (cashier/kitchen/bar — local POS entry) and **Owner JWT** (admin, billing, super-admin). Both end up as Bearer JWT for `/api/*` calls
@@ -111,6 +112,7 @@ Brand: kiosk wears Talavera Terracotta (`#A8542A`), driven by CSS variables in `
 - Auth middleware: `server/middleware/auth.js`
 - Kiosk API surface (client): `kiosk/src/lib/kioskApi.ts`
 - Kiosk routes (server): `server/routes/kiosk.js`
+- AI inventory intelligence (server): `server/routes/ai.js` — the only live `/api/ai/*` surface; keep `src/api/index.ts` /ai functions 1:1 with it (dead pre-extraction endpoints were pruned 2026-07-20; rebuild server-first if a screen needs one back)
 
 ## Agent handoff (multi-agent coordination)
 Multiple Claude agents work this project: Claude Code sessions in this repo, and a Cowork cloud session (Claude desktop app) with file-bridge access to the same folder. Coordination happens through `HANDOFF.md` (repo root):
