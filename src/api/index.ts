@@ -24,13 +24,7 @@ import {
   Printer,
   DeliveryPlatform,
   DeliveryOrder,
-  AISuggestion,
   InventoryPushData,
-  AISuggestionFeedback,
-  AIConfig,
-  AIInsights,
-  AIAnalytics,
-  PricingSuggestion,
   InventoryForecast,
   CategoryRole,
   PricingDashboard,
@@ -1817,66 +1811,14 @@ export async function bookUberDirect(body: {
   });
 }
 
-/* ==================== AI Endpoints ==================== */
-
-export async function getCartSuggestions(
-  itemIds: number[],
-  hour?: number
-): Promise<AISuggestion[]> {
-  const params = new URLSearchParams();
-  params.append('items', itemIds.join(','));
-  if (hour !== undefined) params.append('hour', String(hour));
-  return apiRequest<AISuggestion[]>(`/ai/suggestions/cart?${params}`);
-}
+/* ==================== AI Endpoints ====================
+ * Only functions with a live server counterpart in server/routes/ai.js.
+ * The pre-extraction /ai surface (config, insights, analytics, pricing
+ * suggestions, cart suggestions, feedback, ask/analyze) was pruned
+ * 2026-07-20 — no callers, no backend. Rebuild server-first if needed. */
 
 export async function getInventoryPushItems(): Promise<InventoryPushData> {
   return apiRequest<InventoryPushData>('/ai/suggestions/inventory-push');
-}
-
-export async function submitSuggestionFeedback(
-  feedback: AISuggestionFeedback
-): Promise<any> {
-  return apiRequest('/ai/suggestions/feedback', {
-    method: 'POST',
-    body: JSON.stringify(feedback),
-  });
-}
-
-export async function getAIConfig(): Promise<AIConfig> {
-  return apiRequest<AIConfig>('/ai/config');
-}
-
-export async function updateAIConfig(
-  data: { key: string; value: string; description?: string } | { entries: Array<{ key: string; value: string; description?: string }> }
-): Promise<any> {
-  return apiRequest('/ai/config', {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  });
-}
-
-export async function getAIInsights(): Promise<AIInsights> {
-  return apiRequest<AIInsights>('/ai/insights');
-}
-
-export async function getAIAnalytics(period?: string): Promise<AIAnalytics> {
-  const endpoint = period ? `/ai/analytics?period=${period}` : '/ai/analytics';
-  return apiRequest<AIAnalytics>(endpoint);
-}
-
-export async function getPricingSuggestions(): Promise<PricingSuggestion[]> {
-  return apiRequest<PricingSuggestion[]>('/ai/pricing-suggestions');
-}
-
-export async function applyPricingSuggestion(
-  id: string,
-  menuItemId: number,
-  newPrice: number
-): Promise<any> {
-  return apiRequest(`/ai/pricing-suggestions/${id}/apply`, {
-    method: 'POST',
-    body: JSON.stringify({ menu_item_id: menuItemId, new_price: newPrice }),
-  });
 }
 
 export async function getInventoryForecast(): Promise<InventoryForecast[]> {
@@ -1894,31 +1836,6 @@ export async function updateCategoryRole(
   return apiRequest(`/ai/category-roles/${categoryId}`, {
     method: 'PUT',
     body: JSON.stringify({ role }),
-  });
-}
-
-export async function exportAIConfig(): Promise<any> {
-  return apiRequest('/ai/config/export');
-}
-
-export async function importAIConfig(data: any): Promise<any> {
-  return apiRequest('/ai/config/import', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-}
-
-export async function runGrokAnalysis(type?: string): Promise<any> {
-  return apiRequest('/ai/analyze', {
-    method: 'POST',
-    body: JSON.stringify({ type: type || 'all' }),
-  });
-}
-
-export async function askAIAssistant(questionType: string, customQuestion?: string): Promise<import('../types').AIAssistantResponse> {
-  return apiRequest('/ai/ask', {
-    method: 'POST',
-    body: JSON.stringify({ question_type: questionType, custom_question: customQuestion }),
   });
 }
 

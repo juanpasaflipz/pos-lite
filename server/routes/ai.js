@@ -33,7 +33,8 @@
  */
 
 import { Router } from 'express';
-import { all, get } from '../db/index.js';
+import { all, get, run } from '../db/index.js';
+import { requireAuth } from '../middleware/auth.js';
 import { getPlanLimits, planUpgradeError } from '../planLimits.js';
 
 const router = Router();
@@ -581,6 +582,48 @@ router.get('/suggestions/inventory-push', async (_req, res) => {
   } catch (error) {
     console.error('Error building inventory push suggestions:', error);
     res.status(500).json({ error: 'Failed to build inventory push suggestions' });
+  }
+});
+
+// Category roles power the KDS station filter (Todo/Cocina/Bar). The client
+// has called GET /ai/category-roles since the beginning (silently ignoring
+// the 404), and migration 0088 codified the ai_category_roles table — this
+// closes the loop. Roles: e.g. 'kitchen' | 'bar' (free-form text; the KDS
+// filter matches on the stored string).
+router.get('/category-roles', async (_req, res) => {
+  try {
+    const rows = await all(`
+      SELECT acr.id, acr.category_id, acr.role, mc.name AS category_name
+      FROM ai_category_roles acr
+      JOIN menu_categories mc ON mc.id = acr.category_id
+      ORDER BY mc.name
+    `);
+    res.json(rows);
+  } catch (error) {
+    console.error('Error fetching category roles:', error);
+    res.status(500).json({ error: 'Failed to fetch category roles' });
+  }
+});
+
+router.put('/category-roles/:categoryId', requireAuth('manage_menu'), async (req, res) => {
+  try {
+    const categoryId = Number(req.params.categoryId);
+    const role = typeof req.body?.role === 'string' ? req.body.role.trim() : '';
+    if (!Number.isInteger(categoryId) || !role) {
+      return res.status(400).json({ error: 'categoryId and role are required' });
+    }
+    const category = await get('SELECT id FROM menu_categories WHERE id = $1', [categoryId]);
+    if (!category) return res.status(404).json({ error: 'Category not found' });
+
+    await run(`
+      INSERT INTO ai_category_roles (category_id, role)
+      VALUES ($1, $2)
+      ON CONFLICT (tenant_id, category_id) DO UPDATE SET role = EXCLUDED.role
+    `, [categoryId, role]);
+    res.json({ category_id: categoryId, role });
+  } catch (error) {
+    console.error('Error updating category role:', error);
+    res.status(500).json({ error: 'Failed to update category role' });
   }
 });
 
