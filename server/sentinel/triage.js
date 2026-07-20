@@ -177,18 +177,31 @@ async function runTool(name, input, incident) {
 // Incident state helpers
 // ---------------------------------------------------------------------------
 
-async function updateIncident(id, { status, diagnosis, action }) {
+// Exported for tests. Explicit ::text/::jsonb casts are load-bearing: a bare
+// null parameter inside `CASE WHEN $n IS NULL` gives Postgres no context to
+// infer its type and the whole UPDATE fails with "could not determine data
+// type of parameter" — which is why no incident ever got a diagnosis written
+// before 2026-07-20 (every triage call, including the error handler's own
+// fallback write, died on this statement).
+export async function updateIncident(id, { status, diagnosis, action }) {
   const actionRow = action ? [{ ...action, at: new Date().toISOString() }] : null;
-  await adminSql`
+  // ::text::jsonb (not a bare ::jsonb): with a direct jsonb cast postgres.js
+  // types the parameter as jsonb and serializes the pre-stringified JSON as a
+  // jsonb STRING scalar (double-encoded). Routing through text makes Postgres
+  // itself parse the JSON.
+  await adminSql.unsafe(`
     UPDATE sentinel_incidents SET
-      status = COALESCE(${status ?? null}, status),
-      diagnosis = COALESCE(${diagnosis ? adminSql.json(diagnosis) : null}, diagnosis),
-      actions = CASE WHEN ${actionRow ? adminSql.json(actionRow) : null} IS NULL
-                     THEN actions
-                     ELSE actions || ${actionRow ? adminSql.json(actionRow) : null} END,
-      resolved_at = CASE WHEN ${status ?? null} IN ('auto_fixed','resolved') THEN NOW() ELSE resolved_at END
-    WHERE id = ${id}
-  `;
+      status = COALESCE($2::text, status),
+      diagnosis = COALESCE($3::text::jsonb, diagnosis),
+      actions = CASE WHEN $4::text IS NULL THEN actions ELSE actions || $4::text::jsonb END,
+      resolved_at = CASE WHEN $2::text IN ('auto_fixed','resolved') THEN NOW() ELSE resolved_at END
+    WHERE id = $1
+  `, [
+    id,
+    status ?? null,
+    diagnosis ? JSON.stringify(diagnosis) : null,
+    actionRow ? JSON.stringify(actionRow) : null,
+  ]);
 }
 
 // ---------------------------------------------------------------------------

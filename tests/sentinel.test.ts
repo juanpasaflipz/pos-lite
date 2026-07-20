@@ -23,7 +23,7 @@ import { sweepOnce } from '../server/sentinel/sweep.js';
 // @ts-ignore
 import { PLAYBOOKS } from '../server/sentinel/playbooks.js';
 // @ts-ignore
-import { consumeTriageBudget, _resetTriageBudget } from '../server/sentinel/triage.js';
+import { consumeTriageBudget, _resetTriageBudget, updateIncident } from '../server/sentinel/triage.js';
 
 let tenantA: TestTenant;
 let tenantB: TestTenant;
@@ -279,5 +279,51 @@ describe('RLS: incidents are tenant-isolated', () => {
 
     const bRows = await asTenant(tenantB.id, () => all(`SELECT id FROM sentinel_incidents`));
     expect(bRows.length).toBe(0);
+  });
+});
+
+describe('updateIncident: typed-null parameters (regression for the $n type-inference bug)', () => {
+  // Before 2026-07-20 every updateIncident call with a null action died with
+  // "could not determine data type of parameter" — including the error
+  // handler's own fallback write — so NO incident ever received a diagnosis.
+  // These pin the fixed statement across all null/non-null combinations.
+  let incidentId: number;
+
+  beforeAll(async () => {
+    const [row] = await adminSql`
+      INSERT INTO sentinel_incidents (tenant_id, sensor, dedup_key, severity, evidence)
+      VALUES (${tenantA.id}, 'stuck_terminal_payment', 'test:updateIncident', 'high', ${adminSql.json({ test: true })})
+      RETURNING id
+    `;
+    incidentId = row.id;
+  });
+
+  it('status-only update (all other params null) does not throw', async () => {
+    await updateIncident(incidentId, { status: 'diagnosing' });
+    const [row] = await adminSql`SELECT status, diagnosis FROM sentinel_incidents WHERE id = ${incidentId}`;
+    expect(row.status).toBe('diagnosing');
+    expect(row.diagnosis).toBeNull();
+  });
+
+  it('writes diagnosis and appends action', async () => {
+    await updateIncident(incidentId, {
+      status: 'needs_human',
+      diagnosis: { classification: 'dead_intent', confidence: 'high', explanation: 'test', proposed_playbook: null },
+      action: { playbook: 'unstick_terminal_payment', shadow: true, result: { shadow: true } },
+    });
+    const [row] = await adminSql`SELECT status, diagnosis, actions FROM sentinel_incidents WHERE id = ${incidentId}`;
+    expect(row.status).toBe('needs_human');
+    expect(row.diagnosis.classification).toBe('dead_intent');
+    expect(Array.isArray(row.actions)).toBe(true);
+    expect(row.actions.length).toBe(1);
+    expect(row.actions[0].playbook).toBe('unstick_terminal_payment');
+  });
+
+  it('diagnosis-null update preserves existing diagnosis; resolved sets resolved_at', async () => {
+    await updateIncident(incidentId, { status: 'resolved' });
+    const [row] = await adminSql`SELECT status, diagnosis, resolved_at FROM sentinel_incidents WHERE id = ${incidentId}`;
+    expect(row.status).toBe('resolved');
+    expect(row.diagnosis.classification).toBe('dead_intent'); // COALESCE kept it
+    expect(row.resolved_at).not.toBeNull();
   });
 });
