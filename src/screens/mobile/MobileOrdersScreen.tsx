@@ -42,8 +42,22 @@ const MobileOrdersScreen: React.FC = () => {
 
   useEffect(() => {
     fetchOrders();
-    const interval = setInterval(fetchOrders, 10_000);
-    return () => clearInterval(interval);
+
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const start = () => { if (interval == null) interval = setInterval(fetchOrders, 10_000); };
+    const stop = () => { if (interval != null) { clearInterval(interval); interval = null; } };
+    // Pause polling while the tab is backgrounded; catch up on return.
+    const onVisibility = () => {
+      if (document.hidden) stop();
+      else { fetchOrders(); start(); }
+    };
+    if (!document.hidden) start();
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      stop();
+    };
   }, [fetchOrders]);
 
   const handleRefresh = () => {

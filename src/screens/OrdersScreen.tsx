@@ -230,22 +230,38 @@ export default function OrdersScreen() {
     if (pollRef.current) clearInterval(pollRef.current);
     setLoading(true);
 
+    // Per-lane refetch: history is on-demand (no poll); cancelled polls slowly;
+    // the live lanes poll the kitchen + unpaid feeds together.
+    let run: (() => void) | null = null;
+    let delay = 0;
     if (lane === 'cancelled') {
-      fetchCancelled();
-      pollRef.current = setInterval(fetchCancelled, 30_000);
+      run = fetchCancelled;
+      delay = 30_000;
+      run();
     } else if (lane === 'history') {
       fetchHistory();
     } else {
-      const tick = () => {
+      run = () => {
         fetchKitchen();
         fetchUnpaid();
       };
-      tick();
-      pollRef.current = setInterval(tick, 8_000);
+      delay = 8_000;
+      run();
     }
 
+    const start = () => { if (run && !pollRef.current) pollRef.current = setInterval(run, delay); };
+    const stop = () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
+    // Only poll while the tab is visible; catch up with one refetch on return.
+    const onVisibility = () => {
+      if (document.hidden) stop();
+      else if (run) { run(); start(); }
+    };
+    if (!document.hidden) start();
+    document.addEventListener('visibilitychange', onVisibility);
+
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
+      document.removeEventListener('visibilitychange', onVisibility);
+      stop();
     };
   }, [lane, fetchKitchen, fetchUnpaid, fetchCancelled, fetchHistory]);
 

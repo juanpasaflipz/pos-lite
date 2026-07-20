@@ -211,12 +211,28 @@ export default function KitchenDisplay() {
 
   useEffect(() => {
     fetchOrders();
-    pollIntervalRef.current = setInterval(fetchOrders, 5000);
 
-    return () => {
+    const start = () => {
+      if (!pollIntervalRef.current) pollIntervalRef.current = setInterval(fetchOrders, 5000);
+    };
+    const stop = () => {
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
       }
+    };
+    // Only poll while the KDS tab is visible — a backgrounded kitchen display
+    // was hitting the orders endpoint every 5s for a screen nobody was watching.
+    const onVisibility = () => {
+      if (document.hidden) stop();
+      else { fetchOrders(); start(); }
+    };
+    if (!document.hidden) start();
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      stop();
     };
   }, [fetchOrders]);
 
