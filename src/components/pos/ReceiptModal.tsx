@@ -246,7 +246,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
                 {recognizedCustomer ? `Enviar recibo a ${recognizedCustomer.name}` : 'Enviar recibo por SMS'}
               </button>
             ) : (
-              <div className="space-y-2 p-3 bg-neutral-50 rounded-lg border border-neutral-200">
+              <div className="space-y-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
                 {recognizedCustomer && (
                   <div className="flex items-center gap-2 text-xs text-cockpit-green bg-cockpit-green/10 border border-cockpit-green rounded-md px-2 py-1">
                     <span>✓ Cliente reconocido — {recognizedCustomer.name}</span>
@@ -260,7 +260,8 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
                   value={smsPhone}
                   onChange={(e) => setSmsPhone(e.target.value)}
                   disabled={smsState === 'sending' || smsState === 'sent'}
-                  className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-neutral-900 placeholder:text-neutral-400"
+                  style={{ colorScheme: 'light' }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder:text-gray-400"
                 />
                 {enrollLoyalty && !recognizedCustomer && (
                   <input
@@ -269,11 +270,12 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
                     value={smsName}
                     onChange={(e) => setSmsName(e.target.value)}
                     disabled={smsState === 'sending' || smsState === 'sent'}
-                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-neutral-900 placeholder:text-neutral-400"
+                    style={{ colorScheme: 'light' }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder:text-gray-400"
                   />
                 )}
                 {!recognizedCustomer && (
-                  <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer select-none">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
                     <input
                       type="checkbox"
                       checked={enrollLoyalty}
@@ -296,7 +298,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
                       setSmsError(null);
                     }}
                     disabled={smsState === 'sending'}
-                    className="flex-1 py-2 bg-neutral-200 text-neutral-700 font-semibold rounded-lg hover:bg-neutral-300"
+                    className="flex-1 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300"
                   >
                     Cancelar
                   </button>
