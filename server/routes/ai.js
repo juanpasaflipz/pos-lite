@@ -525,6 +525,21 @@ export async function buildInventoryInsights() {
   const criticalCount = forecasts.filter((f) => f.risk_level === 'critical').length;
   const highCount = forecasts.filter((f) => f.risk_level === 'high').length;
 
+  // Suggestion acceptance = of kiosk suggestions shown, the share that
+  // converted to an order over the last 30d. Fed by the kiosk telemetry loop
+  // (kiosk_suggestion_events; RLS scopes rows to this tenant). Whole percent
+  // for the KPI card; 0 when there's no data yet (nothing shown).
+  const acceptRows = await all(`
+    SELECT
+      count(*) FILTER (WHERE event_type = 'shown')   AS shown,
+      count(*) FILTER (WHERE event_type = 'ordered') AS ordered
+    FROM kiosk_suggestion_events
+    WHERE created_at >= NOW() - INTERVAL '30 days'
+  `);
+  const shownCount = Number(acceptRows?.[0]?.shown) || 0;
+  const orderedCount = Number(acceptRows?.[0]?.ordered) || 0;
+  const acceptanceRate = shownCount > 0 ? Math.round((orderedCount / shownCount) * 100) : 0;
+
   return {
     kpis: {
       itemsAtRisk: criticalCount + highCount,
@@ -532,9 +547,7 @@ export async function buildInventoryInsights() {
       highCount,
       prepActionsNeeded: prepForecast.items.filter((i) => i.prep_action !== 'sufficient').length,
       wasteTrendPercent,
-      // No suggestion-feedback store exists yet; a real acceptance metric
-      // needs an ai_suggestion_events table. 0 = "no data", not "0%".
-      acceptanceRate: 0,
+      acceptanceRate,
     },
     forecasts,
     prepForecast,
