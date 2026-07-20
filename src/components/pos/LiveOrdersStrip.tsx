@@ -149,9 +149,39 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, onRefund, refresh
   useEffect(() => {
     setLoading(true);
     fetchOrders();
-    pollRef.current = setInterval(fetchOrders, 2_000);
+
+    const POLL_MS = 2_000;
+    const startPoll = () => {
+      if (pollRef.current) return;
+      pollRef.current = setInterval(fetchOrders, POLL_MS);
+    };
+    const stopPoll = () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+
+    // Only poll while the tab is visible. A backgrounded POS tab (second
+    // monitor, minimized window, sleeping machine) was hitting the
+    // kitchen-orders endpoint every 2s for a screen nobody was looking at;
+    // pause when hidden and catch up with one immediate fetch on return so the
+    // strip is current the instant the cashier comes back.
+    const handleVisibility = () => {
+      if (document.hidden) {
+        stopPoll();
+      } else {
+        fetchOrders();
+        startPoll();
+      }
+    };
+
+    if (!document.hidden) startPoll();
+    document.addEventListener('visibilitychange', handleVisibility);
+
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      stopPoll();
     };
   }, [fetchOrders, refreshKey]);
 
