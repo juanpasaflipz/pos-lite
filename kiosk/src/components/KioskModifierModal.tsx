@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { X, Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { KioskMenuItem, KioskModifier, KioskModifierGroup } from '../lib/kioskApi';
+import { localizeMenuItem, type KioskMenuItem, type KioskModifier, type KioskModifierGroup } from '../lib/kioskApi';
 import { selectionChanged, success } from '../lib/haptics';
 
 const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
@@ -26,7 +26,8 @@ function isValid(groups: KioskModifierGroup[], selection: SelectionMap): boolean
 }
 
 const KioskModifierModal: React.FC<Props> = ({ item, groups, onCancel, onConfirm }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const display = localizeMenuItem(item, i18n.language);
   const [selection, setSelection] = useState<SelectionMap>(() => {
     const initial: SelectionMap = {};
     for (const group of groups) initial[group.id] = new Set();
@@ -77,9 +78,9 @@ const KioskModifierModal: React.FC<Props> = ({ item, groups, onCancel, onConfirm
       <div className="bg-neutral-900 border border-neutral-800 rounded-3xl w-full max-w-3xl max-h-[88vh] flex flex-col overflow-hidden">
         <div className="flex items-start justify-between p-6 border-b border-neutral-800 gap-4">
           <div className="min-w-0">
-            <h2 className="text-3xl font-black leading-tight">{item.name}</h2>
-            {item.description && (
-              <p className="text-base text-neutral-400 font-bold mt-1 line-clamp-2">{item.description}</p>
+            <h2 className="text-3xl font-black leading-tight">{display.name}</h2>
+            {display.description && (
+              <p className="text-base text-neutral-400 font-bold mt-1 line-clamp-2">{display.description}</p>
             )}
           </div>
           <button

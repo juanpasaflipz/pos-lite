@@ -9,6 +9,7 @@ import { useKioskSuggestions } from '../context/KioskSuggestionsContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
 import {
   fetchMenu,
+  localizeMenuItem,
   logSuggestionEvents,
   type KioskMenuCategory,
   type KioskMenuItem,
@@ -60,7 +61,7 @@ const StampBar: React.FC<{ stamp: StampStatus }> = ({ stamp }) => {
 
 const KioskMenuScreen: React.FC = () => {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { tenantId, kioskToken } = useKioskBinding();
   const { addItem, count, total } = useKioskCart();
   const { session } = useKioskCustomer();
@@ -290,7 +291,7 @@ const KioskMenuScreen: React.FC = () => {
                     {item.image_url ? (
                       <img
                         src={item.image_url}
-                        alt={item.name}
+                        alt={localizeMenuItem(item, i18n.language).name}
                         loading="lazy"
                         className="h-full w-full object-cover"
                         onError={(e) => {
@@ -303,10 +304,10 @@ const KioskMenuScreen: React.FC = () => {
                   </div>
                   <div className="p-4 flex-1 flex flex-col">
                     <div className="flex-1">
-                      <h2 className="text-xl font-black leading-tight mb-1">{item.name}</h2>
-                      {item.description && (
+                      <h2 className="text-xl font-black leading-tight mb-1">{localizeMenuItem(item, i18n.language).name}</h2>
+                      {localizeMenuItem(item, i18n.language).description && (
                         <p className="text-neutral-400 text-sm leading-snug line-clamp-2">
-                          {item.description}
+                          {localizeMenuItem(item, i18n.language).description}
                         </p>
                       )}
                       {hasModifiers && (

@@ -96,11 +96,30 @@ export type KioskFulfillmentType = 'for_here' | 'to_go' | 'delivery';
 export interface KioskMenuItem {
   id: number;
   name: string;
+  name_en: string | null;
   price: number;
   description: string | null;
+  description_en: string | null;
   image_url: string | null;
   category_id: number;
   active: boolean;
+}
+
+/**
+ * Pick the display name/description for the current kiosk language. Falls back
+ * to the Spanish source when the EN translation hasn't landed yet (fresh menu
+ * item, translation retry pending, ANTHROPIC key temporarily missing, etc.) —
+ * the customer never sees a blank tile.
+ */
+export function localizeMenuItem(
+  item: KioskMenuItem,
+  lang: string,
+): { name: string; description: string | null } {
+  const useEn = lang.startsWith('en');
+  return {
+    name: (useEn && item.name_en) ? item.name_en : item.name,
+    description: useEn && item.description_en ? item.description_en : item.description,
+  };
 }
 
 export interface KioskMenuCategory {

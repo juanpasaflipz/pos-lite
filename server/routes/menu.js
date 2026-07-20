@@ -1,13 +1,14 @@
 import { Router } from 'express';
 import multer from 'multer';
 import Papa from 'papaparse';
-import { all, get, run, getTenantId } from '../db/index.js';
+import { all, get, run, getTenantId, adminSql } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireOwner } from '../middleware/ownerAuth.js';
 import { checkLimit, planUpgradeError } from '../planLimits.js';
 import { audit } from '../lib/auditLog.js';
 import { parseRecipeText } from '../helpers/recipeParse.js';
 import { matchRecipeLines } from '../helpers/recipeMatch.js';
+import { translateMenuItem } from '../helpers/menuTranslate.js';
 // Template & AI parsing stubs (full AI removed in pos-lite)
 const TEMPLATE_LIST = [];
 const getTemplate = () => null;
@@ -15,6 +16,28 @@ const bulkInsertMenu = async () => ({ inserted: 0 });
 const parseMenuText = async () => ({ categories: [] });
 
 const router = Router();
+
+// Fire-and-forget English translation writeback for a menu item. Runs after
+// the response is sent so the write itself stays fast; the kiosk falls back
+// to the Spanish original until this lands (typically 1-2 s later). Uses
+// adminSql because the tenant request transaction is already closed by the
+// time this resolves.
+function scheduleMenuTranslation(itemId, tenantId, name, description) {
+  const trimmed = { name: String(name || '').trim(), description: String(description || '').trim() };
+  if (!trimmed.name && !trimmed.description) return;
+  setImmediate(async () => {
+    try {
+      const { name_en, description_en } = await translateMenuItem(trimmed);
+      await adminSql`
+        UPDATE menu_items
+        SET name_en = ${name_en || null}, description_en = ${description_en || null}
+        WHERE id = ${itemId} AND tenant_id = ${tenantId}
+      `;
+    } catch (err) {
+      console.warn('[menuTranslate] item', itemId, 'failed:', err.message);
+    }
+  });
+}
 
 // GET /api/menu/categories - list categories (all by default, ?active_only=1 for active only)
 router.get('/categories', async (req, res) => {
@@ -251,7 +274,7 @@ router.get('/items', async (req, res) => {
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     let query = `
-      SELECT id, category_id, name, price, description, image_url, sort_order, active, prep_time_minutes, is_example
+      SELECT id, category_id, name, name_en, price, description, description_en, image_url, sort_order, active, prep_time_minutes, is_example
       FROM menu_items
       ${whereClause}
     `;
@@ -271,7 +294,7 @@ router.get('/items/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const item = await get(`
-      SELECT id, category_id, name, price, description, image_url, sort_order
+      SELECT id, category_id, name, name_en, price, description, description_en, image_url, sort_order
       FROM menu_items
       WHERE id = $1 AND active = true
     `, [id]);
@@ -342,6 +365,8 @@ router.post('/items', requireAuth('manage_menu'), async (req, res) => {
       image_url,
       sort_order: resolvedSortOrder,
     });
+
+    scheduleMenuTranslation(result.lastInsertRowid, tid, name, description);
   } catch (error) {
     console.error('Error creating item:', error);
     res.status(500).json({ error: 'Failed to create item' });
@@ -433,6 +458,19 @@ router.put('/items/:id', requireAuth('manage_menu'), async (req, res) => {
     });
 
     res.json({ message: 'Item updated successfully' });
+
+    // Refresh the EN cache only when the text changed. Fetch the current row
+    // rather than trusting the payload, since callers may pass only one of
+    // name / description and we always translate the pair.
+    if (name !== undefined || description !== undefined) {
+      const current = await get(
+        'SELECT tenant_id, name, description FROM menu_items WHERE id = $1',
+        [id]
+      );
+      if (current) {
+        scheduleMenuTranslation(id, current.tenant_id, current.name, current.description);
+      }
+    }
   } catch (error) {
     console.error('Error updating item:', error);
     res.status(500).json({ error: 'Failed to update item' });
