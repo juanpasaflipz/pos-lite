@@ -282,7 +282,15 @@ app.use('/api/wallet', walletRoutes);
 app.use('/api/delivery', deliveryRoutes);
 app.use('/api/delivery-intel', deliveryIntelRoutes);
 app.use('/api/uber-direct', uberDirectRoutes);
-app.use('/api/getnet', getnetRoutes);
+// Getnet is still under processor approval. Keep the code, but leave the
+// routes DORMANT until GETNET_ENABLED=on — the /tap-charge surface currently
+// trusts a client-asserted payment id (no server-side verify yet), so it must
+// not be reachable in production before the real verify path lands.
+if (process.env.GETNET_ENABLED === 'on') {
+  app.use('/api/getnet', getnetRoutes);
+} else {
+  console.log('[Getnet] routes dormant — set GETNET_ENABLED=on to activate once approved');
+}
 
 // Account & Settings
 app.use('/api/branding', brandingRoutes);
