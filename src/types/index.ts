@@ -74,6 +74,8 @@ export interface OrderItem {
   unit_price: number;
   notes?: string;
   combo_instance_id?: string | null;
+  /** Menu category of this item — powers the KDS Todo/Cocina/Bar station filter. */
+  category_id?: number | null;
   modifiers?: OrderItemModifier[];
   virtual_brand_id?: number | null;
   brand_name?: string;

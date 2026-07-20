@@ -1073,6 +1073,7 @@ router.get('/kitchen/active', requireAuth(), async (req, res) => {
              oi.id AS item_id, oi.item_name, oi.quantity, oi.notes, oi.combo_instance_id,
              oi.virtual_brand_id, vb.name AS brand_name, vb.primary_color AS brand_color,
              oi.added_at, oi.voided_at, oi.void_reason, oi.qty_changed_at, oi.original_quantity,
+             mi_kds.category_id AS item_category_id,
              oim.modifier_name, oim.price_adjustment
       FROM orders o
       JOIN employees e ON o.employee_id = e.id
@@ -1083,6 +1084,9 @@ router.get('/kitchen/active', requireAuth(), async (req, res) => {
         -- Drop voided items from KDS after 90s so kitchen sees the strike
         -- briefly then it disappears, instead of cluttering forever.
         AND (oi.voided_at IS NULL OR oi.voided_at > NOW() - INTERVAL '90 seconds')
+      -- category_id powers the KDS Todo/Cocina/Bar station filter (client maps
+      -- category_id → role via ai_category_roles).
+      LEFT JOIN menu_items mi_kds ON mi_kds.id = oi.menu_item_id
       LEFT JOIN virtual_brands vb ON oi.virtual_brand_id = vb.id
       LEFT JOIN order_item_modifiers oim ON oim.order_item_id = oi.id
       WHERE o.status = ANY($1::text[])
@@ -1123,6 +1127,7 @@ router.get('/kitchen/active', requireAuth(), async (req, res) => {
           quantity: row.quantity,
           notes: row.notes,
           combo_instance_id: row.combo_instance_id,
+          category_id: row.item_category_id,
           virtual_brand_id: row.virtual_brand_id,
           brand_name: row.brand_name,
           brand_color: row.brand_color,

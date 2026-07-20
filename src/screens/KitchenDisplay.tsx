@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getKitchenOrders, updateOrderStatus, getCategoryRoles } from '../api';
@@ -283,9 +283,35 @@ export default function KitchenDisplay() {
     return t('time.hoursMinutesAgo', { hours, minutes: minutes % 60 });
   };
 
-  // Count anything in flight. 'active' is the canonical post-collapse name;
-  // the legacy values are accepted as equivalent for tolerance during rollout.
-  const pendingCount = orders.filter(
+  // Station filter (Todo / Cocina / Bar). Map each item's category_id → role
+  // via ai_category_roles; items on unmapped categories default to 'kitchen'
+  // (matches menu_categories.printer_target's default), so with no roles
+  // configured yet Cocina shows everything and Bar shows nothing — a sane
+  // default that becomes precise the moment an owner tags bar categories.
+  const roleByCategory = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const cr of categoryRoles) m.set(cr.category_id, (cr.role || '').toLowerCase());
+    return m;
+  }, [categoryRoles]);
+
+  const orderMatchesStation = useCallback(
+    (order: OrderWithElapsed, station: 'kitchen' | 'bar') =>
+      (order.items || []).some((it) => {
+        const role = it.category_id != null ? roleByCategory.get(it.category_id) : undefined;
+        return (role || 'kitchen') === station;
+      }),
+    [roleByCategory],
+  );
+
+  const visibleOrders = useMemo(() => {
+    if (displayFilter === 'all') return orders;
+    return orders.filter((o) => orderMatchesStation(o, displayFilter));
+  }, [orders, displayFilter, orderMatchesStation]);
+
+  // Count anything in flight IN THE CURRENT STATION VIEW. 'active' is the
+  // canonical post-collapse name; the legacy values are accepted as equivalent
+  // for tolerance during rollout.
+  const pendingCount = visibleOrders.filter(
     (o) =>
       o.status === 'pending' ||
       o.status === 'confirmed' ||
@@ -417,7 +443,7 @@ export default function KitchenDisplay() {
               <p className="text-xl text-neutral-400">{t('orders.loadingOrders')}</p>
             </div>
           </div>
-        ) : orders.length === 0 ? (
+        ) : visibleOrders.length === 0 ? (
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="text-center">
               <p className="text-3xl font-bold text-cockpit-in-text mb-2">{t('orders.allClear')}</p>
@@ -437,7 +463,7 @@ export default function KitchenDisplay() {
                 : 'repeat(auto-fill, minmax(340px, 1fr))',
             }}
           >
-            {orders.map((order) => (
+            {visibleOrders.map((order) => (
               <OrderCard
                 key={order.id}
                 order={order}
