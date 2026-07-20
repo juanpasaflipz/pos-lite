@@ -9,7 +9,9 @@ import { useIdleTimer } from '../hooks/useIdleTimer';
 import {
   sendKioskDeliveryOrder,
   sendKioskOrderToKitchen,
+  logSuggestionEvents,
   type KioskOpenOrder,
+  type SuggestionEvent,
 } from '../lib/kioskApi';
 import CartUpsellStrip from '../components/CartUpsellStrip';
 import KioskCallNameModal from '../components/KioskCallNameModal';
@@ -46,6 +48,30 @@ const KioskCartScreen: React.FC = () => {
         modifier_ids: line.modifiers.map((m) => m.id),
       }));
 
+      // Telemetry: which shown personalized suggestions actually converted to
+      // an order. Closes the shown → tapped → ordered loop that powers the
+      // suggestion-acceptance KPI (server records event_type='ordered'). The
+      // 'tapped' half is logged on the menu screen; this is the 'ordered' half.
+      // Best-effort, fire-and-forget — computed here from the known-customer
+      // session suggestions and the final cart.
+      const orderedSuggestionEvents: SuggestionEvent[] = (() => {
+        const s = session?.suggestions;
+        if (!s) return [];
+        const byId = new Map<number, { lane: SuggestionEvent['lane']; source?: string; reason?: string }>();
+        const all = [...(s.for_you || []), ...(s.popular || []), ...(s.house ? [s.house] : [])];
+        for (const it of all) {
+          if (it && !byId.has(it.menu_item_id)) byId.set(it.menu_item_id, { lane: it.lane, source: it.source, reason: it.reason });
+        }
+        const evs: SuggestionEvent[] = [];
+        for (const line of lines) {
+          const sug = byId.get(line.menu_item_id);
+          if (sug) evs.push({ menu_item_id: line.menu_item_id, lane: sug.lane, source: sug.source, event_type: 'ordered', reason: sug.reason });
+        }
+        return evs;
+      })();
+      const logOrdered = () =>
+        logSuggestionEvents({ tenantId, kioskToken }, session?.customerToken ?? null, orderedSuggestionEvents);
+
       if (isDelivery) {
         if (!delivery) {
           setHoldError(t('cart.deliveryDataMissing'));
@@ -61,6 +87,7 @@ const KioskCartScreen: React.FC = () => {
           dropoffNotes: delivery.notes,
           quoteId: delivery.quoteId,
         });
+        logOrdered();
         const openOrder = {
           id: result.id,
           order_number: result.order_number,
@@ -94,6 +121,7 @@ const KioskCartScreen: React.FC = () => {
         fulfillmentType,
       };
       const order = await sendKioskOrderToKitchen({ tenantId, kioskToken }, apiItems, opts);
+      logOrdered();
       const openOrder: KioskOpenOrder = {
         id: order.id,
         order_number: order.order_number,
