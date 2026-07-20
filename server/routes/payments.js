@@ -2031,7 +2031,12 @@ export async function mpWebhook(req, res) {
       const template = `id:${data.id};request-id:${xRequestId};ts:${ts};`;
       const expected = crypto.createHmac('sha256', webhookSecret).update(template).digest('hex');
 
-      if (expected !== hash) {
+      // Constant-time compare — a plain !== on the hex digest leaks match
+      // progress via timing. Guard length first so timingSafeEqual can't throw
+      // on a malformed / short signature value.
+      const expectedBuf = Buffer.from(expected, 'hex');
+      const hashBuf = Buffer.from(hash, 'hex');
+      if (expectedBuf.length !== hashBuf.length || !crypto.timingSafeEqual(expectedBuf, hashBuf)) {
         console.warn('MP webhook: signature verification failed');
         return;
       }

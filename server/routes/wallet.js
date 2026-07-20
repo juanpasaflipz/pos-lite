@@ -13,6 +13,7 @@
  */
 
 import { Router } from 'express';
+import crypto from 'crypto';
 import { get, all, run, getTenantId } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePlanFeature } from '../planLimits.js';
@@ -40,6 +41,17 @@ function applePassToken(req) {
   const header = req.headers.authorization || '';
   const m = header.match(/^ApplePass\s+(.+)$/i);
   return m ? m[1] : null;
+}
+
+// Constant-time compare for the PassKit auth token — a plain !== on the secret
+// token leaks match progress via response timing. Length guard first so
+// timingSafeEqual can't throw on unequal-length inputs.
+function safeTokenEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ab, bb);
 }
 
 async function loadPassContext(passRow, req) {
@@ -193,7 +205,7 @@ router.post('/apple/v1/devices/:deviceLibraryId/registrations/:passTypeId/:seria
       [req.params.serial]
     );
     if (!pass) return res.status(404).send();
-    if (applePassToken(req) !== pass.auth_token) return res.status(401).send();
+    if (!safeTokenEqual(applePassToken(req), pass.auth_token)) return res.status(401).send();
 
     const pushToken = req.body?.pushToken;
     if (!pushToken) return res.status(400).send();
@@ -228,7 +240,7 @@ router.delete('/apple/v1/devices/:deviceLibraryId/registrations/:passTypeId/:ser
       [req.params.serial]
     );
     if (!pass) return res.status(404).send();
-    if (applePassToken(req) !== pass.auth_token) return res.status(401).send();
+    if (!safeTokenEqual(applePassToken(req), pass.auth_token)) return res.status(401).send();
 
     await run(
       'DELETE FROM wallet_registrations WHERE pass_id = $1 AND device_library_id = $2',
@@ -283,7 +295,7 @@ router.get('/apple/v1/passes/:passTypeId/:serial', async (req, res) => {
       [req.params.serial]
     );
     if (!pass) return res.status(404).send();
-    if (applePassToken(req) !== pass.auth_token) return res.status(401).send();
+    if (!safeTokenEqual(applePassToken(req), pass.auth_token)) return res.status(401).send();
 
     const ifModifiedSince = req.headers['if-modified-since'];
     if (ifModifiedSince) {
