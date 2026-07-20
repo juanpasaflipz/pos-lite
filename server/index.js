@@ -77,6 +77,7 @@ import devicesRoutes from './routes/devices.js';
 
 // AI Agent
 import agentRoutes from './agent/route.js';
+import aiRoutes from './routes/ai.js';
 import sentinelRoutes from './sentinel/route.js';
 
 // Twilio inbound (WhatsApp voice ops — platform-level webhook)
@@ -297,6 +298,7 @@ app.use('/api/cfdi', cfdiRoutes);
 
 // AI Agent
 app.use('/api/agent', agentRoutes);
+app.use('/api/ai', aiRoutes);
 app.use('/api/sentinel', sentinelRoutes);
 
 // ==================== SPA Fallback ====================
