@@ -72,7 +72,7 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
 });
 
 // GET /api/waste - list waste log entries
-router.get('/', async (req, res) => {
+router.get('/', requireAuth(), async (req, res) => {
   try {
     const { start_date, end_date, item_id } = req.query;
     let query = `
@@ -112,7 +112,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/waste/report - waste report with summary, by-item, and daily trend
-router.get('/report', async (req, res) => {
+router.get('/report', requireAuth(), async (req, res) => {
   try {
     const { start_date, end_date } = req.query;
 

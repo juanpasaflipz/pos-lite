@@ -7,7 +7,7 @@ const router = Router();
 // ==================== Vendor CRUD ====================
 
 // GET /api/purchase-orders/vendors
-router.get('/vendors', async (req, res) => {
+router.get('/vendors', requireAuth(), async (req, res) => {
   try {
     const vendors = await all('SELECT * FROM vendors ORDER BY name ASC');
     res.json(vendors);
@@ -121,7 +121,7 @@ router.post('/', requireAuth('manage_purchase_orders'), async (req, res) => {
 });
 
 // GET /api/purchase-orders - list POs
-router.get('/', async (req, res) => {
+router.get('/', requireAuth(), async (req, res) => {
   try {
     const { status } = req.query;
     let query = `
@@ -147,7 +147,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/purchase-orders/:id - PO detail with items
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireAuth(), async (req, res) => {
   try {
     const { id } = req.params;
     const po = await get(`

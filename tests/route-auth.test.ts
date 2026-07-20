@@ -220,3 +220,46 @@ describe('requireAuth: session invalidation on PIN change', () => {
     expect(r.nexted).toBe(true);
   });
 });
+
+// Regression: the inventory/reports/purchase-orders/waste READ endpoints were
+// unauthenticated in production until 2026-07-20 — any anonymous caller hitting
+// a tenant subdomain could pull sales, COGS, ingredient costs, supplier lists,
+// and waste. They now mount bare requireAuth(): a valid same-tenant employee
+// token passes; no token / cross-tenant token is rejected. (The guard is the
+// shared contract; this pins the "no anonymous business-data reads" invariant.)
+describe('requireAuth(): anonymous business-data reads are rejected', () => {
+  it('rejects a missing token (401) — the anonymous-leak case', async () => {
+    const r = await runGuard(requireAuth(), { headers: {}, tenant: { id: tenant.id } });
+    expect(r.nexted).toBe(false);
+    expect(r.status).toBe(401);
+  });
+
+  it('rejects an owner-type JWT (POS reads require an employee token)', async () => {
+    const ownerJwt = jwt.sign({ tenantId: tenant.id, type: 'owner', role: 'owner' }, JWT_SECRET, { expiresIn: '1h' });
+    const r = await runGuard(requireAuth(), {
+      headers: { authorization: `Bearer ${ownerJwt}` },
+      tenant: { id: tenant.id },
+    });
+    expect(r.nexted).toBe(false);
+    expect(r.status).toBe(401);
+  });
+
+  it('rejects a valid employee token scoped to another tenant (403)', async () => {
+    const otherToken = tokenFor('some_other_tenant', cashierId, 'cashier');
+    const r = await runGuard(requireAuth(), {
+      headers: { authorization: `Bearer ${otherToken}` },
+      tenant: { id: tenant.id },
+    });
+    expect(r.nexted).toBe(false);
+    expect(r.status).toBe(403);
+  });
+
+  it('allows any authenticated same-tenant employee (even a cashier with no special perms)', async () => {
+    const r = await runGuard(requireAuth(), {
+      headers: { authorization: `Bearer ${tokenFor(tenant.id, cashierId, 'cashier')}` },
+      tenant: { id: tenant.id },
+    });
+    expect(r.nexted).toBe(true);
+    expect(r.status).toBe(200);
+  });
+});

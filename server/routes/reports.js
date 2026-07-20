@@ -137,7 +137,7 @@ const PAYMENT_SOURCE_LABELS = {
 };
 
 // GET /api/reports/sales - sales summary
-router.get('/sales', async (req, res) => {
+router.get('/sales', requireAuth(), async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
@@ -170,7 +170,7 @@ router.get('/sales', async (req, res) => {
 });
 
 // GET /api/reports/top-items - top selling items
-router.get('/top-items', async (req, res) => {
+router.get('/top-items', requireAuth(), async (req, res) => {
   try {
     const { period = 'daily', limit = 10 } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
@@ -199,7 +199,7 @@ router.get('/top-items', async (req, res) => {
 });
 
 // GET /api/reports/item-sales - exact item/category sales with operational filters
-router.get('/item-sales', async (req, res) => {
+router.get('/item-sales', requireAuth(), async (req, res) => {
   try {
     const {
       period = 'daily',
@@ -363,7 +363,7 @@ router.get('/item-sales', async (req, res) => {
 });
 
 // GET /api/reports/employee-performance - sales by employee
-router.get('/employee-performance', async (req, res) => {
+router.get('/employee-performance', requireAuth(), async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
@@ -391,7 +391,7 @@ router.get('/employee-performance', async (req, res) => {
 });
 
 // GET /api/reports/hourly - orders by hour of day
-router.get('/hourly', async (req, res) => {
+router.get('/hourly', requireAuth(), async (req, res) => {
   try {
     const tz = req.tenant?.timezone || 'UTC';
     const today = tzToday(tz);
@@ -434,7 +434,7 @@ router.get('/hourly', async (req, res) => {
 });
 
 // GET /api/reports/cash-card-breakdown - cash vs card stats
-router.get('/cash-card-breakdown', async (req, res) => {
+router.get('/cash-card-breakdown', requireAuth(), async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
@@ -486,7 +486,7 @@ router.get('/cash-card-breakdown', async (req, res) => {
 });
 
 // GET /api/reports/cogs-summary - high-level COGS + waste + margin for a period
-router.get('/cogs-summary', async (req, res) => {
+router.get('/cogs-summary', requireAuth(), async (req, res) => {
   try {
     const { period = 'today', start_date, end_date } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
@@ -554,7 +554,7 @@ router.get('/cogs-summary', async (req, res) => {
 });
 
 // GET /api/reports/cogs - per-item COGS and margin
-router.get('/cogs', async (req, res) => {
+router.get('/cogs', requireAuth(), async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
@@ -620,7 +620,7 @@ router.get('/cogs', async (req, res) => {
 });
 
 // GET /api/reports/category-margins - per-category revenue/COGS/margin
-router.get('/category-margins', async (req, res) => {
+router.get('/category-margins', requireAuth(), async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
@@ -697,7 +697,7 @@ router.get('/category-margins', async (req, res) => {
 });
 
 // GET /api/reports/contribution-margin - daily revenue minus COGS
-router.get('/contribution-margin', async (req, res) => {
+router.get('/contribution-margin', requireAuth(), async (req, res) => {
   try {
     const { period = 'weekly', group_by = 'day' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
@@ -763,7 +763,7 @@ router.get('/contribution-margin', async (req, res) => {
 });
 
 // GET /api/reports/live - today's live KPIs + hourly trend
-router.get('/live', async (req, res) => {
+router.get('/live', requireAuth(), async (req, res) => {
   try {
     const tz = req.tenant?.timezone || 'UTC';
     const today = tzToday(tz);
@@ -859,7 +859,7 @@ router.get('/live', async (req, res) => {
 });
 
 // GET /api/reports/delivery-margins - per-platform delivery margins
-router.get('/delivery-margins', async (req, res) => {
+router.get('/delivery-margins', requireAuth(), async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
@@ -899,7 +899,7 @@ router.get('/delivery-margins', async (req, res) => {
 });
 
 // GET /api/reports/channel-comparison - POS vs delivery channels
-router.get('/channel-comparison', async (req, res) => {
+router.get('/channel-comparison', requireAuth(), async (req, res) => {
   try {
     const { period = 'daily' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';
@@ -1387,7 +1387,7 @@ router.put('/financial-actuals', requireAuth('view_reports'), async (req, res) =
 });
 
 // GET /api/reports/menu-engineering - BCG matrix classification (Star/Workhorse/Puzzle/Dog)
-router.get('/menu-engineering', async (req, res) => {
+router.get('/menu-engineering', requireAuth(), async (req, res) => {
   try {
     const { period = 'monthly' } = req.query;
     const tz = req.tenant?.timezone || 'UTC';

@@ -26,7 +26,7 @@ function selectColumn(columns, columnName) {
 }
 
 // GET /api/inventory - list all inventory items
-router.get('/', async (req, res) => {
+router.get('/', requireAuth(), async (req, res) => {
   try {
     const columns = await getInventoryColumns();
     const items = await all(`
@@ -52,7 +52,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/inventory/search - fuzzy name search for inventory matching
-router.get('/search', async (req, res) => {
+router.get('/search', requireAuth(), async (req, res) => {
   try {
     const { q } = req.query;
     if (!q || typeof q !== 'string' || q.trim().length === 0) {
@@ -77,7 +77,7 @@ router.get('/search', async (req, res) => {
 });
 
 // GET /api/inventory/lookup - look up item by barcode or sku
-router.get('/lookup', async (req, res) => {
+router.get('/lookup', requireAuth(), async (req, res) => {
   try {
     const columns = await getInventoryColumns();
     const { barcode, sku } = req.query;
@@ -116,7 +116,7 @@ router.get('/lookup', async (req, res) => {
 });
 
 // GET /api/inventory/low-stock - items below threshold
-router.get('/low-stock', async (req, res) => {
+router.get('/low-stock', requireAuth(), async (req, res) => {
   try {
     const items = await all(`
       SELECT id, name, quantity, unit, low_stock_threshold, category
@@ -133,7 +133,7 @@ router.get('/low-stock', async (req, res) => {
 });
 
 // GET /api/inventory/counts - count history
-router.get('/counts', async (req, res) => {
+router.get('/counts', requireAuth(), async (req, res) => {
   try {
     const { item_id, start_date, end_date } = req.query;
     let query = `
@@ -170,7 +170,7 @@ router.get('/counts', async (req, res) => {
 });
 
 // GET /api/inventory/variance-report - aggregated variance
-router.get('/variance-report', async (req, res) => {
+router.get('/variance-report', requireAuth(), async (req, res) => {
   try {
     const report = await all(`
       SELECT
@@ -198,7 +198,7 @@ router.get('/variance-report', async (req, res) => {
 });
 
 // GET /api/inventory/shrinkage-alerts - active alerts
-router.get('/shrinkage-alerts', async (req, res) => {
+router.get('/shrinkage-alerts', requireAuth(), async (req, res) => {
   try {
     const { acknowledged } = req.query;
     let query = `
@@ -874,7 +874,7 @@ router.post('/suggest-attrs', requireAuth('manage_inventory'), async (req, res) 
 
 // GET /api/inventory/audit-status — how many items still need shelf-life data.
 // Drives the "Run AI audit" banner. Returns zeros when migration not applied.
-router.get('/audit-status', async (_req, res) => {
+router.get('/audit-status', requireAuth(), async (_req, res) => {
   try {
     const columns = await getInventoryColumns();
     if (!columns.has('shelf_life_days') || !columns.has('last_restocked_at')) {
@@ -977,7 +977,7 @@ router.post('/backfill-attrs', requireAuth('manage_inventory'), async (req, res)
 
 // GET /api/inventory/stale — items past their shelf life with quantity remaining.
 // Joins recent count history to suppress items the user already confirmed today.
-router.get('/stale', async (req, res) => {
+router.get('/stale', requireAuth(), async (req, res) => {
   try {
     const columns = await getInventoryColumns();
     if (!columns.has('shelf_life_days') || !columns.has('last_restocked_at')) {
@@ -1030,7 +1030,7 @@ router.get('/stale', async (req, res) => {
 // link a Costco purchase from yesterday TODAY, those items show as added
 // today even though last_restocked_at = yesterday (which is correct for
 // the shelf-life clock).
-router.get('/touched-today', async (req, res) => {
+router.get('/touched-today', requireAuth(), async (req, res) => {
   try {
     const columns = await getInventoryColumns();
     const hasLastRestocked = columns.has('last_restocked_at');
@@ -1060,7 +1060,7 @@ router.get('/touched-today', async (req, res) => {
 // been touched (counted, wasted, restocked) in DORMANT_DAYS or more. Useful
 // for "stuff sitting in the back you're not using" — distinct from stale,
 // which is shelf-life-based.
-router.get('/dormant', async (req, res) => {
+router.get('/dormant', requireAuth(), async (req, res) => {
   try {
     const columns = await getInventoryColumns();
     const hasLastRestocked = columns.has('last_restocked_at');
