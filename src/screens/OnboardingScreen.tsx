@@ -64,7 +64,7 @@ const OnboardingScreen: React.FC = () => {
   const [pinCopied, setPinCopied] = useState(false);
 
   // Template setup (post-registration flow)
-  type PostStep = 'success' | 'template' | 'applying' | 'done' | 'ai-input' | 'ai-parsing' | 'ai-done';
+  type PostStep = 'success' | 'template' | 'applying' | 'done' | 'ai-input' | 'ai-parsing' | 'ai-done' | 'connect';
   const [postStep, setPostStep] = useState<PostStep>('success');
   const [templates, setTemplates] = useState<MenuTemplateOption[]>([]);
   const [templateLoading, setTemplateLoading] = useState(false);
@@ -72,6 +72,11 @@ const OnboardingScreen: React.FC = () => {
   const [ownerToken, setOwnerToken] = useState('');
   const [aiText, setAiText] = useState('');
   const [aiError, setAiError] = useState('');
+
+  // Pay-first mode (arrived from Stripe Checkout success URL)
+  const [paidMode, setPaidMode] = useState(false);
+  const [paidError, setPaidError] = useState(false);
+  const [loginUrl, setLoginUrl] = useState('');
 
   // Promo
   const [promoState, setPromoState] = useState<PromoState>('idle');
@@ -84,9 +89,48 @@ const OnboardingScreen: React.FC = () => {
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
 
+  /* Pay-first claim: Stripe success URL lands here with ?paid_session=cs_… */
+  const claimPaidSession = async (sessionId: string) => {
+    setPaidMode(true);
+    setPaidError(false);
+    // Poll while Stripe finalizes / provisioning completes (~60s ceiling)
+    for (let attempt = 0; attempt < 40; attempt++) {
+      try {
+        const res = await fetch(`${API_BASE}/public/checkout/claim?session_id=${encodeURIComponent(sessionId)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.ready) {
+            setForm(p => ({ ...p, restaurant_name: data.tenant_name || '', email: data.email || '' }));
+            if (data.pin) setGeneratedPin(data.pin);
+            if (data.subdomain) setTenantSubdomain(data.subdomain);
+            if (data.login_url) setLoginUrl(data.login_url);
+            if (data.owner_token) {
+              localStorage.setItem('owner_token', data.owner_token);
+              setOwnerToken(data.owner_token);
+            }
+            if (data.tenant_id) localStorage.setItem('tenant_id', data.tenant_id);
+            if (data.tenant_name) localStorage.setItem('tenant_name', data.tenant_name);
+            setIsDone(true);
+            setPostStep('success');
+            return;
+          }
+        } else if (res.status === 404 || res.status === 400 || res.status === 410) {
+          break; // unrecoverable — fall through to error state
+        }
+      } catch { /* transient network error — keep polling */ }
+      await new Promise(r => setTimeout(r, 1500));
+    }
+    setPaidError(true);
+  };
+
   /* URL param pre-fill + promo auto-apply */
   useEffect(() => {
     const params = new URLSearchParams(location.search);
+    const paidSession = params.get('paid_session');
+    if (paidSession) {
+      claimPaidSession(paidSession);
+      return;
+    }
     const urlPromo = params.get('promo_code');
     const urlName = params.get('restaurant_name');
     const urlEmail = params.get('email');
@@ -228,7 +272,9 @@ const OnboardingScreen: React.FC = () => {
   };
 
   const handleGoToPOS = () => {
-    if (tenantSubdomain) {
+    if (loginUrl) {
+      window.location.href = loginUrl; // magic login — lands in POS signed in
+    } else if (tenantSubdomain) {
       redirectToTenant(tenantSubdomain);
     } else {
       navigate('/');
@@ -267,7 +313,7 @@ const OnboardingScreen: React.FC = () => {
       const result = await applyMenuTemplateAsOwner(tmpl.id, token, 'replace');
       setTemplateStats(result);
       setPostStep('done');
-      setTimeout(handleGoToPOS, 2500);
+      if (!paidMode) setTimeout(handleGoToPOS, 2500);
     } catch {
       // on error, go to POS anyway
       handleGoToPOS();
@@ -289,7 +335,7 @@ const OnboardingScreen: React.FC = () => {
       const result = await commitAIMenuAsOwner(parsed.data, token, 'replace');
       setTemplateStats(result);
       setPostStep('ai-done');
-      setTimeout(handleGoToPOS, 2500);
+      if (!paidMode) setTimeout(handleGoToPOS, 2500);
     } catch (err) {
       setAiError(err instanceof Error ? err.message : t('onboarding.somethingWentWrong'));
       setPostStep('ai-input');
@@ -307,25 +353,34 @@ const OnboardingScreen: React.FC = () => {
               <div style={styles.successIcon}>
                 <Check size={32} color="#fff" strokeWidth={3} />
               </div>
-              <h1 style={styles.successTitle}>{t('onboarding.youreLive')}</h1>
+              <h1 style={styles.successTitle}>{paidMode ? t('onboarding.paidLiveTitle') : t('onboarding.youreLive')}</h1>
               <p style={styles.successSub}>
                 <strong style={{ color: '#F5F1E8' }}>{form.restaurant_name}</strong> {t('onboarding.readyToTakeOrders')}
               </p>
 
-              <div style={styles.pinBlock}>
-                <p style={styles.pinLabel}>{t('onboarding.staffLoginPin')}</p>
-                <div style={styles.pinRow}>
-                  {(generatedPin || '----').split('').map((d, i) => (
-                    <div key={i} style={styles.pinDigit}>{d}</div>
-                  ))}
+              {generatedPin ? (
+                <div style={styles.pinBlock}>
+                  <p style={styles.pinLabel}>{t('onboarding.staffLoginPin')}</p>
+                  <div style={styles.pinRow}>
+                    {generatedPin.split('').map((d, i) => (
+                      <div key={i} style={styles.pinDigit}>{d}</div>
+                    ))}
+                  </div>
+                  <button style={styles.copyBtn} onClick={handleCopyPin}>
+                    {pinCopied ? <><Check size={13} /> {t('onboarding.copied')}</> : t('onboarding.copyPin')}
+                  </button>
+                  <p style={styles.pinHint}>
+                    {t('onboarding.alsoSentTo')} <span style={{ color: '#5FA47C' }}>{form.email}</span>
+                  </p>
                 </div>
-                <button style={styles.copyBtn} onClick={handleCopyPin}>
-                  {pinCopied ? <><Check size={13} /> {t('onboarding.copied')}</> : t('onboarding.copyPin')}
-                </button>
-                <p style={styles.pinHint}>
-                  {t('onboarding.alsoSentTo')} <span style={{ color: '#5FA47C' }}>{form.email}</span>
-                </p>
-              </div>
+              ) : (
+                <div style={styles.pinBlock}>
+                  <p style={styles.pinLabel}>{t('onboarding.staffLoginPin')}</p>
+                  <p style={{ ...styles.pinHint, fontSize: 14 }}>
+                    {t('onboarding.pinEmailed')} <span style={{ color: '#5FA47C' }}>{form.email}</span>
+                  </p>
+                </div>
+              )}
 
               {tenantSubdomain && (
                 <div style={styles.urlBlock}>
@@ -339,7 +394,7 @@ const OnboardingScreen: React.FC = () => {
               </button>
               <button
                 style={{ ...styles.primaryBtn, background: 'transparent', border: '1px solid #333', color: '#9ca3af', marginTop: 8 }}
-                onClick={handleGoToPOS}
+                onClick={() => (paidMode ? setPostStep('connect') : handleGoToPOS())}
               >
                 {t('onboarding.skipForNow')} <ArrowRight size={16} />
               </button>
@@ -464,7 +519,7 @@ const OnboardingScreen: React.FC = () => {
                 {templateStats.itemsCreated} {t('onboarding.items')}, {templateStats.categoriesCreated} {t('onboarding.categories')}
                 {templateStats.inventoryCreated > 0 && `, ${templateStats.inventoryCreated} ${t('onboarding.ingredients')}`}
               </p>
-              <button style={styles.primaryBtn} onClick={handleGoToPOS}>
+              <button style={styles.primaryBtn} onClick={() => (paidMode ? setPostStep('connect') : handleGoToPOS())}>
                 {t('onboarding.openMyPos')} <ArrowRight size={16} />
               </button>
             </div>
@@ -489,9 +544,68 @@ const OnboardingScreen: React.FC = () => {
                 {templateStats.itemsCreated} {t('onboarding.items')}, {templateStats.categoriesCreated} {t('onboarding.categories')}
                 {templateStats.inventoryCreated > 0 && `, ${templateStats.inventoryCreated} ${t('onboarding.ingredients')}`}
               </p>
-              <button style={styles.primaryBtn} onClick={handleGoToPOS}>
+              <button style={styles.primaryBtn} onClick={() => (paidMode ? setPostStep('connect') : handleGoToPOS())}>
                 {t('onboarding.openMyPos')} <ArrowRight size={16} />
               </button>
+            </div>
+          )}
+
+          {/* Step: Connect (paid flow) — optional last steps, all skippable */}
+          {postStep === 'connect' && (
+            <>
+              <h1 style={{ ...styles.successTitle, fontSize: 22, marginBottom: 4 }}>{t('onboarding.lastSteps')}</h1>
+              <p style={{ ...styles.successSub, marginBottom: 20 }}>{t('onboarding.lastStepsSub')}</p>
+
+              {[
+                { title: t('onboarding.stepBranding'), desc: t('onboarding.stepBrandingDesc') },
+                { title: t('onboarding.stepPayments'), desc: t('onboarding.stepPaymentsDesc') },
+                { title: t('onboarding.stepPrinter'), desc: t('onboarding.stepPrinterDesc') },
+              ].map(step => (
+                <div key={step.title} style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 12, padding: '12px 14px', marginBottom: 10, textAlign: 'left' }}>
+                  <div style={{ color: '#fff', fontSize: 14, fontWeight: 600, marginBottom: 2 }}>{step.title}</div>
+                  <div style={{ color: '#6b7280', fontSize: 12, lineHeight: 1.5 }}>{step.desc}</div>
+                </div>
+              ))}
+
+              <p style={{ color: '#5FA47C', fontSize: 12, textAlign: 'center', margin: '14px 0 4px' }}>
+                {t('onboarding.cashWorksNote')}
+              </p>
+
+              <button style={styles.primaryBtn} onClick={handleGoToPOS}>
+                {t('onboarding.enterMyPos')} <ArrowRight size={16} />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Render: Pay-first claiming / error ───────────────────────────── */
+  if (paidMode && !isDone) {
+    return (
+      <div style={styles.root}>
+        <div style={styles.card}>
+          {paidError ? (
+            <div style={{ textAlign: 'center' }}>
+              <h1 style={{ ...styles.successTitle, fontSize: 22 }}>{t('onboarding.paidClaimErrorTitle')}</h1>
+              <p style={{ ...styles.successSub, marginBottom: 20 }}>{t('onboarding.paidClaimError')}</p>
+              <button
+                style={styles.primaryBtn}
+                onClick={() => {
+                  const params = new URLSearchParams(location.search);
+                  const sessionId = params.get('paid_session');
+                  if (sessionId) claimPaidSession(sessionId);
+                }}
+              >
+                {t('onboarding.retry')}
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 0' }}>
+              <Loader2 size={36} color="#2E5EAA" style={styles.spin} />
+              <h1 style={{ ...styles.successTitle, fontSize: 22, marginTop: 20 }}>{t('onboarding.paidClaimTitle')}</h1>
+              <p style={{ color: '#9ca3af', fontSize: 14, marginTop: 4, textAlign: 'center' }}>{t('onboarding.paidClaimSub')}</p>
             </div>
           )}
         </div>

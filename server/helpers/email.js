@@ -82,6 +82,64 @@ export async function sendWelcomeEmail(email, restaurantName, subdomain, pin) {
   }
 }
 
+/**
+ * Pay-first welcome email (Spanish — founders/checkout buyers are MX).
+ * Carries everything the owner needs even if they closed the success page:
+ * magic-login link (7-day token), PIN, POS URL, and a create-password link.
+ */
+export async function sendFoundersWelcomeEmail({ email, restaurantName, subdomain, pin, loginToken, passwordToken }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const posUrl = `https://${subdomain}.desktop.kitchen`;
+  const magicUrl = loginToken ? `${posUrl}/?demo_token=${loginToken}` : posUrl;
+  const appUrl = process.env.APP_URL || 'https://pos.desktop.kitchen';
+  const passwordUrl = passwordToken ? `${appUrl}/#/reset-password?token=${passwordToken}` : null;
+  if (!apiKey) {
+    console.log(`[Email] No RESEND_API_KEY — founders welcome for ${email}: PIN ${pin}, ${magicUrl}`);
+    return;
+  }
+  try {
+    await fetchWithTimeout('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'Desktop Kitchen <hello@desktop.kitchen>',
+        to: [email],
+        subject: `Tu restaurante ya está en línea — ${restaurantName}`,
+        html: `
+          <div style="font-family:sans-serif;max-width:540px;margin:0 auto;padding:24px">
+            <h2 style="color:#0d9488;margin-bottom:4px">¡Bienvenido a Desktop Kitchen!</h2>
+            <p style="color:#666;margin-top:0">El punto de venta de <strong>${restaurantName}</strong> ya está listo. Puedes empezar a cobrar hoy mismo.</p>
+
+            <p style="margin:24px 0 16px">
+              <a href="${magicUrl}" style="display:inline-block;padding:14px 28px;background:#0d9488;color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:16px">Entrar a mi POS</a>
+            </p>
+            <p style="color:#9ca3af;font-size:12px;margin:0 0 20px">Este enlace te ingresa automáticamente y funciona por 7 días.</p>
+
+            <div style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:16px;margin:20px 0">
+              <p style="margin:0 0 8px"><strong>Tu PIN de administrador:</strong> <span style="font-size:22px;font-weight:700;letter-spacing:4px">${pin}</span></p>
+              <p style="margin:0 0 8px"><strong>La dirección de tu POS:</strong> <a href="${posUrl}" style="color:#0d9488">${posUrl.replace('https://', '')}</a></p>
+              ${passwordUrl ? `<p style="margin:0"><a href="${passwordUrl}" style="color:#0d9488;font-weight:600">Crear mi contraseña de dueño</a> <span style="color:#666;font-size:13px">(para entrar desde cualquier dispositivo)</span></p>` : ''}
+            </div>
+
+            <h3 style="color:#0d9488;margin-bottom:8px">Primeros pasos</h3>
+            <ol style="color:#374151;line-height:1.8;padding-left:20px">
+              <li>Entra con el botón de arriba (o con tu PIN)</li>
+              <li>Crea tu menú — con plantillas o descríbelo y la IA lo arma</li>
+              <li>Conecta Mercado Pago o Stripe para cobrar con tarjeta (el efectivo funciona desde ya)</li>
+              <li>Conecta tu impresora de tickets si tienes una</li>
+            </ol>
+
+            <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
+            <p style="color:#9ca3af;font-size:13px">¿Necesitas ayuda? Responde a este correo — te contesta el fundador.</p>
+          </div>
+        `,
+      }),
+    });
+  } catch (err) {
+    console.error('[Email] Failed to send founders welcome email:', err.message);
+  }
+}
+
 export async function sendSalesRepWelcomeEmail(email, fullName, password) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {

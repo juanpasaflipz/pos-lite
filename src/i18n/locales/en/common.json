@@ -379,6 +379,23 @@
     "backToTemplates": "Back to templates",
     "items": "items",
     "categories": "categories",
-    "ingredients": "ingredients"
+    "ingredients": "ingredients",
+    "paidClaimTitle": "Confirming your payment…",
+    "paidClaimSub": "We're setting up your restaurant. This takes a few seconds.",
+    "paidClaimErrorTitle": "Your payment was received",
+    "paidClaimError": "We couldn't open your account automatically, but your restaurant is being set up. Check your inbox — we sent your access link and PIN.",
+    "retry": "Retry",
+    "paidLiveTitle": "Payment confirmed!",
+    "pinEmailed": "Your login PIN is in your inbox:",
+    "lastSteps": "Last steps (optional)",
+    "lastStepsSub": "You can do all of this later, from your POS.",
+    "stepBranding": "Logo & colors",
+    "stepBrandingDesc": "Customize your brand in Settings → Branding.",
+    "stepPayments": "Card payments",
+    "stepPaymentsDesc": "Connect Mercado Pago or Stripe in Settings → Integrations.",
+    "stepPrinter": "Receipt printer",
+    "stepPrinterDesc": "Connect it in Settings → Printers.",
+    "cashWorksNote": "You can take cash starting today — the rest is optional.",
+    "enterMyPos": "Enter my POS"
   }
 }

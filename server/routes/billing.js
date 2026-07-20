@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import { requireOwner } from '../middleware/ownerAuth.js';
 import { getTenant, updateTenant } from '../tenants.js';
 import { adminSql } from '../db/index.js';
+import { provisionPaidTenant } from '../lib/provisionPaidTenant.js';
 
 const router = Router();
 
@@ -276,6 +277,28 @@ export async function stripeWebhook(req, res) {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object;
+
+        // Pay-first flow (public landing-page checkout): no tenant exists yet.
+        // Provision one from the session itself. Idempotent — the success-page
+        // claim endpoint may have provisioned already (or will shortly).
+        if (session.metadata?.flow === 'pay_first') {
+          const email = session.customer_details?.email;
+          const restaurantName = session.custom_fields?.find(f => f.key === 'restaurant_name')?.text?.value || '';
+          if (email) {
+            const { tenant, created } = await provisionPaidTenant({
+              email,
+              restaurantName,
+              plan: session.metadata?.plan || 'pro',
+              stripeCustomerId: session.customer,
+              stripeSubscriptionId: session.subscription,
+            });
+            console.log(`[Billing] Pay-first checkout ${created ? 'provisioned' : 'matched existing'} tenant ${tenant.id}`);
+          } else {
+            console.error('[Billing] Pay-first session without customer email:', session.id);
+          }
+          break;
+        }
+
         const tenantId = session.metadata?.tenant_id;
         const plan = session.metadata?.plan;
         if (tenantId && plan) {

@@ -379,6 +379,23 @@
     "backToTemplates": "Volver a plantillas",
     "items": "productos",
     "categories": "categorías",
-    "ingredients": "ingredientes"
+    "ingredients": "ingredientes",
+    "paidClaimTitle": "Confirmando tu pago…",
+    "paidClaimSub": "Estamos creando tu restaurante. Esto toma unos segundos.",
+    "paidClaimErrorTitle": "Tu pago fue recibido",
+    "paidClaimError": "No pudimos abrir tu cuenta en automático, pero tu restaurante se está creando. Revisa tu correo — te enviamos tu acceso y tu PIN.",
+    "retry": "Reintentar",
+    "paidLiveTitle": "¡Pago confirmado!",
+    "pinEmailed": "Tu PIN de acceso está en tu correo:",
+    "lastSteps": "Últimos pasos (opcionales)",
+    "lastStepsSub": "Todo esto lo puedes hacer después, desde tu POS.",
+    "stepBranding": "Logo y colores",
+    "stepBrandingDesc": "Personaliza tu marca en Ajustes → Marca.",
+    "stepPayments": "Cobros con tarjeta",
+    "stepPaymentsDesc": "Conecta Mercado Pago o Stripe en Ajustes → Integraciones.",
+    "stepPrinter": "Impresora de tickets",
+    "stepPrinterDesc": "Conéctala en Ajustes → Impresoras.",
+    "cashWorksNote": "Puedes cobrar en efectivo desde hoy — lo demás no es obligatorio.",
+    "enterMyPos": "Entrar a mi POS"
   }
 }

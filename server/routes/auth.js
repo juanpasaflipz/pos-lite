@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import { createTenant, getTenantByEmail, updateTenant } from '../tenants.js';
 import { adminSql } from '../db/index.js';
 import { sendPinEmail, sendPasswordResetEmail } from '../helpers/email.js';
+import { seedNewTenant } from '../lib/seedNewTenant.js';
 import { audit } from '../lib/auditLog.js';
 // Financing consent removed in pos-lite
 const CONSENT_VERSION = '1.0';
@@ -46,25 +47,8 @@ function signToken(payload) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_OWNER_EXPIRY });
 }
 
-/**
- * Seed a newly created tenant with 1 example category and 2 example menu items
- * so the POS isn't completely empty on first login.
- */
-async function seedNewTenant(tenantId) {
-  const catRows = await adminSql`
-    INSERT INTO menu_categories (name, sort_order, active, tenant_id)
-    VALUES ('Platillos', 1, true, ${tenantId})
-    RETURNING id
-  `;
-  const categoryId = catRows[0].id;
-
-  await adminSql`
-    INSERT INTO menu_items (category_id, name, price, description, active, is_example, tenant_id)
-    VALUES
-      (${categoryId}, 'Ejemplo: Taco de Res', 45, 'Platillo de ejemplo — edita o elimina desde el menú', true, true, ${tenantId}),
-      (${categoryId}, 'Ejemplo: Agua de Jamaica', 25, 'Bebida de ejemplo — edita o elimina desde el menú', true, true, ${tenantId})
-  `;
-}
+// seedNewTenant (example menu seeding) lives in server/lib/seedNewTenant.js —
+// shared with the pay-first provisioning flow (server/lib/provisionPaidTenant.js).
 
 /**
  * POST /api/auth/register — create a new tenant account

@@ -61,6 +61,7 @@ import adminRoutes from './routes/admin.js';
 import orgRoutes from './routes/org.js';
 import demoDataRoutes from './routes/demo-data.js';
 import demoProvisionRoutes from './routes/demo-provision.js';
+import publicCheckoutRoutes from './routes/public-checkout.js';
 
 // Invoicing (CFDI)
 import cfdiRoutes from './routes/cfdi.js';
@@ -205,6 +206,9 @@ app.use('/api/twilio', twilioInboundRoutes);
 
 // Promo code validation (public)
 app.get('/api/billing/promo/validate', promoValidateHandler);
+
+// Pay-first public checkout (landing page "Comprar" button → Stripe → auto-provision)
+app.use('/api/public/checkout', publicCheckoutRoutes);
 
 // Demo provisioning (public)
 app.use('/api/demo', demoProvisionRoutes);
