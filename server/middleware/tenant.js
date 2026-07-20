@@ -43,12 +43,16 @@ export async function tenantMiddleware(req, res, next) {
     // unauthenticated routes turns into cross-tenant reach.
     const headerTenantId = req.headers['x-tenant-id'];
     if (headerTenantId) {
-      if (process.env.NODE_ENV === 'production') {
+      // Enforce whenever we're in production OR an ADMIN_SECRET is configured.
+      // Any real or staging deploy sets ADMIN_SECRET, so a mis-set NODE_ENV on a
+      // network-reachable box can't silently unlock cross-tenant header access.
+      // Pure local dev (no ADMIN_SECRET set) stays unrestricted for convenience.
+      if (process.env.NODE_ENV === 'production' || process.env.ADMIN_SECRET) {
         const provided = req.headers['x-admin-secret'];
         const adminOk = process.env.ADMIN_SECRET && provided === process.env.ADMIN_SECRET;
         const kioskOk = hasValidKioskTokenForTenant(req, headerTenantId);
         if (!adminOk && !kioskOk) {
-          return res.status(403).json({ error: 'X-Tenant-ID header requires admin secret in production' });
+          return res.status(403).json({ error: 'X-Tenant-ID header requires admin secret' });
         }
       }
       tenant = await getTenant(headerTenantId);
