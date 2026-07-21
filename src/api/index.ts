@@ -289,7 +289,12 @@ export async function applyMenuTemplateAsOwner(templateId: string, ownerToken: s
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${ownerToken}`,
   };
-  if (!isCapacitor && window.location.hostname === 'localhost') {
+  // Always send the tenant binding when known. The onboarding wizard runs on
+  // the platform host (pos.desktop.kitchen) where subdomain resolution can't
+  // identify the tenant — without this header the request falls through to
+  // DEFAULT_TENANT_ID. The owner JWT authorizes the header server-side
+  // (tenantMiddleware.hasValidTenantBoundToken).
+  if (!isCapacitor) {
     const tenantId = localStorage.getItem('tenant_id');
     if (tenantId) headers['X-Tenant-ID'] = tenantId;
   }
@@ -366,7 +371,12 @@ export async function parseMenuWithAIAsOwner(text: string, ownerToken: string): 
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${ownerToken}`,
   };
-  if (!isCapacitor && window.location.hostname === 'localhost') {
+  // Always send the tenant binding when known. The onboarding wizard runs on
+  // the platform host (pos.desktop.kitchen) where subdomain resolution can't
+  // identify the tenant — without this header the request falls through to
+  // DEFAULT_TENANT_ID. The owner JWT authorizes the header server-side
+  // (tenantMiddleware.hasValidTenantBoundToken).
+  if (!isCapacitor) {
     const tenantId = localStorage.getItem('tenant_id');
     if (tenantId) headers['X-Tenant-ID'] = tenantId;
   }
@@ -395,7 +405,12 @@ export async function commitAIMenuAsOwner(payload: AIMenuParseResult['data'], ow
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${ownerToken}`,
   };
-  if (!isCapacitor && window.location.hostname === 'localhost') {
+  // Always send the tenant binding when known. The onboarding wizard runs on
+  // the platform host (pos.desktop.kitchen) where subdomain resolution can't
+  // identify the tenant — without this header the request falls through to
+  // DEFAULT_TENANT_ID. The owner JWT authorizes the header server-side
+  // (tenantMiddleware.hasValidTenantBoundToken).
+  if (!isCapacitor) {
     const tenantId = localStorage.getItem('tenant_id');
     if (tenantId) headers['X-Tenant-ID'] = tenantId;
   }

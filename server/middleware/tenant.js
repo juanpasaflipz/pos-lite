@@ -18,6 +18,24 @@ function hasValidKioskTokenForTenant(req, tenantId) {
   }
 }
 
+// Same idea for owner / employee JWTs: any token we signed that embeds this
+// exact tenantId proves the caller is bound to that tenant, so it can
+// authorize an X-Tenant-ID header on the platform domain. This is what lets
+// the onboarding wizard (which runs on pos.desktop.kitchen, a reserved
+// subdomain) write the new menu to the buyer's tenant instead of falling
+// through to DEFAULT_TENANT_ID.
+function hasValidTenantBoundToken(req, tenantId) {
+  const header = req.headers.authorization || '';
+  if (!header.startsWith('Bearer ')) return false;
+  try {
+    const decoded = jwt.verify(header.slice(7), JWT_SECRET);
+    if (!decoded?.tenantId || decoded.tenantId !== tenantId) return false;
+    return decoded.type === 'owner' || decoded.type === 'employee' || decoded.employeeId != null;
+  } catch {
+    return false;
+  }
+}
+
 // Subdomains that belong to the platform itself and should NOT be resolved as tenants.
 const RESERVED_SUBDOMAINS = new Set([
   'pos', 'app', 'api', 'admin', 'www', 'es', 'docs', 'staging', 'sales',
@@ -51,7 +69,8 @@ export async function tenantMiddleware(req, res, next) {
         const provided = req.headers['x-admin-secret'];
         const adminOk = process.env.ADMIN_SECRET && provided === process.env.ADMIN_SECRET;
         const kioskOk = hasValidKioskTokenForTenant(req, headerTenantId);
-        if (!adminOk && !kioskOk) {
+        const tokenOk = hasValidTenantBoundToken(req, headerTenantId);
+        if (!adminOk && !kioskOk && !tokenOk) {
           return res.status(403).json({ error: 'X-Tenant-ID header requires admin secret' });
         }
       }

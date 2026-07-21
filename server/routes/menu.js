@@ -830,6 +830,15 @@ function requireMenuAuth(req, res, next) {
   // Try owner auth first (non-destructive attempt)
   requireOwner(req, res, (ownerErr) => {
     if (!ownerErr && req.owner) {
+      // Hard guard: the resolved tenant context must be the owner's own
+      // tenant. On the platform host (pos.desktop.kitchen) resolution can
+      // fall through to DEFAULT_TENANT_ID — without this check an
+      // onboarding menu write lands in the default tenant (happened
+      // 2026-07-20; demo tenant menu had to be restored). Fail loudly
+      // instead of writing cross-tenant.
+      if (req.tenant && req.tenant.id !== req.owner.tenantId) {
+        return res.status(403).json({ error: 'Tenant mismatch' });
+      }
       return next();
     }
     // Fall back to employee auth
