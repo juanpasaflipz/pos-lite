@@ -70,6 +70,7 @@ router.get('/start', startLimiter, async (req, res) => {
         },
       ],
       allow_promotion_codes: true,
+      automatic_tax: { enabled: true }, // MX IVA 16% — price is tax_behavior='exclusive'
       metadata: {
         flow: 'pay_first',
         plan: 'pro',
