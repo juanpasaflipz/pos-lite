@@ -9,11 +9,11 @@ import { audit } from '../lib/auditLog.js';
 import { parseRecipeText } from '../helpers/recipeParse.js';
 import { matchRecipeLines } from '../helpers/recipeMatch.js';
 import { translateMenuItem } from '../helpers/menuTranslate.js';
-// Template & AI parsing stubs (full AI removed in pos-lite)
-const TEMPLATE_LIST = [];
-const getTemplate = () => null;
-const bulkInsertMenu = async () => ({ inserted: 0 });
-const parseMenuText = async () => ({ categories: [] });
+// Templates + AI menu builder (rebuilt 2026-07-20 for the pay-first
+// onboarding wizard — the pre-extraction versions were pruned as stubs).
+import { TEMPLATE_LIST, getTemplate } from '../helpers/menuTemplates.js';
+import { parseMenuText } from '../helpers/menuAiParse.js';
+import { bulkInsertMenu } from '../helpers/menuBulkInsert.js';
 
 const router = Router();
 
