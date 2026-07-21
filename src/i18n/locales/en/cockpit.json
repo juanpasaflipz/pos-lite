@@ -4,33 +4,112 @@
     "subtitle": "See what comes in, what goes out, and how the machine runs."
   },
   "sections": {
-    "in": { "title": "IN", "description": "Money and demand entering the business." },
-    "out": { "title": "OUT", "description": "Costs, labor, waste, and pressure leaving the business." },
-    "system": { "title": "SYSTEM", "description": "Reports, connections, controls, and setup." }
+    "in": {
+      "title": "IN",
+      "description": "Money and demand entering the business."
+    },
+    "out": {
+      "title": "OUT",
+      "description": "Costs, labor, waste, and pressure leaving the business."
+    },
+    "system": {
+      "title": "SYSTEM",
+      "description": "Reports, connections, controls, and setup."
+    }
   },
   "cards": {
-    "pos": { "label": "POS", "hint": "Ring up sales" },
-    "orders": { "label": "Orders", "hint": "Track every ticket" },
-    "sales": { "label": "Sales", "hint": "Daily revenue" },
-    "menu": { "label": "Menu", "hint": "Items & prices" },
-    "loyalty": { "label": "Loyalty", "hint": "Repeat customers" },
-    "qrMenu": { "label": "QR Menu", "hint": "Table QR codes" },
-    "delivery": { "label": "Delivery", "hint": "Rappi, Uber, DiDi" },
-    "menuPerformance": { "label": "Menu Performance", "hint": "Top sellers" },
-    "expenses": { "label": "Expenses", "hint": "Money going out" },
-    "staff": { "label": "Staff", "hint": "Hours & pay" },
-    "inventory": { "label": "Inventory", "hint": "Stock & COGS" },
-    "recipes": { "label": "Recipes", "hint": "Cost per item" },
-    "purchaseOrders": { "label": "Purchase Orders", "hint": "Supplier orders" },
-    "reports": { "label": "Reports", "hint": "Numbers & trends" },
-    "integrations": { "label": "Integrations", "hint": "Payments & apps" },
-    "modifiers": { "label": "Modifiers", "hint": "Sizes, extras & add-ons" },
-    "kitchenDisplay": { "label": "Kitchen Display", "hint": "Order screen for cooks" },
-    "devices": { "label": "Devices", "hint": "Paired KDS screens & TVs" },
-    "permissions": { "label": "Permissions", "hint": "Role access" },
-    "identity": { "label": "Identity", "hint": "Logo & info" },
-    "invoicing": { "label": "Invoicing", "hint": "CFDI & invoices" },
-    "account": { "label": "Account", "hint": "Plan & billing" }
+    "pos": {
+      "label": "POS",
+      "hint": "Ring up sales"
+    },
+    "orders": {
+      "label": "Orders",
+      "hint": "Track every ticket"
+    },
+    "sales": {
+      "label": "Sales",
+      "hint": "Daily revenue"
+    },
+    "menu": {
+      "label": "Menu",
+      "hint": "Items & prices"
+    },
+    "loyalty": {
+      "label": "Loyalty",
+      "hint": "Repeat customers"
+    },
+    "qrMenu": {
+      "label": "QR Menu",
+      "hint": "Table QR codes"
+    },
+    "delivery": {
+      "label": "Delivery",
+      "hint": "Rappi, Uber, DiDi"
+    },
+    "menuPerformance": {
+      "label": "Menu Performance",
+      "hint": "Top sellers"
+    },
+    "expenses": {
+      "label": "Expenses",
+      "hint": "Money going out"
+    },
+    "staff": {
+      "label": "Staff",
+      "hint": "Hours & pay"
+    },
+    "inventory": {
+      "label": "Inventory",
+      "hint": "Stock & COGS"
+    },
+    "recipes": {
+      "label": "Recipes",
+      "hint": "Cost per item"
+    },
+    "purchaseOrders": {
+      "label": "Purchase Orders",
+      "hint": "Supplier orders"
+    },
+    "reports": {
+      "label": "Reports",
+      "hint": "Numbers & trends"
+    },
+    "integrations": {
+      "label": "Integrations",
+      "hint": "Payments & apps"
+    },
+    "modifiers": {
+      "label": "Modifiers",
+      "hint": "Sizes, extras & add-ons"
+    },
+    "kitchenDisplay": {
+      "label": "Kitchen Display",
+      "hint": "Order screen for cooks"
+    },
+    "devices": {
+      "label": "Devices",
+      "hint": "Paired KDS screens & TVs"
+    },
+    "permissions": {
+      "label": "Permissions",
+      "hint": "Role access"
+    },
+    "identity": {
+      "label": "Identity",
+      "hint": "Logo & info"
+    },
+    "invoicing": {
+      "label": "Invoicing",
+      "hint": "CFDI & invoices"
+    },
+    "account": {
+      "label": "Account",
+      "hint": "Plan & billing"
+    },
+    "kiosk": {
+      "label": "Kiosk",
+      "hint": "Self-service on a tablet"
+    }
   },
   "danger": {
     "title": "Danger zone",
@@ -40,5 +119,23 @@
     "confirm": "Delete ALL unpaid and pending-terminal orders? This cannot be undone.",
     "deleted": "Deleted {{count}} order(s).",
     "failed": "Failed to purge orders"
+  },
+  "kioskAccess": {
+    "title": "Self-service kiosk",
+    "subtitle": "Open your kiosk on a tablet so customers can order themselves",
+    "scanTitle": "Scan with your tablet",
+    "copy": "Copy",
+    "copied": "Copied!",
+    "open": "Open kiosk now",
+    "howTitle": "How to set up your kiosk",
+    "howSubtitle": "Four steps, from any Android tablet or iPad.",
+    "steps": [
+      "Open the address above in your tablet browser (Chrome or Safari) — or scan the QR code.",
+      "Add the page to your home screen so it opens like an app.",
+      "Put it in full screen. On iPad use \"Guided Access\"; on Android use screen pinning to lock it on the kiosk.",
+      "Place the tablet on your counter. Paid orders go straight to your kitchen display."
+    ],
+    "downloadGuide": "Download quick-start guide (PDF)",
+    "tip": "Tip: any tablet with a browser works. No special hardware to buy."
   }
 }

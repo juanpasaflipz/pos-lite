@@ -27,6 +27,7 @@ import {
   Trash2,
   Receipt,
   QrCode,
+  MonitorSmartphone,
 } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 import { useAuth } from '../context/AuthContext';
@@ -49,6 +50,7 @@ const IN_CARDS: CockpitCard[] = [
   { to: '/admin/menu', icon: <UtensilsCrossed size={28} />, key: 'menu', intensity: 'secondary' },
   { to: '/admin/loyalty', icon: <Heart size={28} />, key: 'loyalty', intensity: 'secondary' },
   { to: '/admin/qr-menu', icon: <QrCode size={28} />, key: 'qrMenu', intensity: 'secondary' },
+  { to: '/admin/kiosk', icon: <MonitorSmartphone size={28} />, key: 'kiosk', intensity: 'secondary' },
   { to: '/admin/delivery', icon: <Truck size={28} />, key: 'delivery', intensity: 'secondary' },
   { to: '/admin/reports?tab=engineering', icon: <BarChart3 size={28} />, key: 'menuPerformance', intensity: 'secondary' },
 ];

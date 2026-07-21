@@ -4,33 +4,112 @@
     "subtitle": "Mira lo que entra, lo que sale y cómo funciona todo."
   },
   "sections": {
-    "in": { "title": "ENTRA", "description": "Dinero y demanda entrando al negocio." },
-    "out": { "title": "SALE", "description": "Costos, nómina, merma y presión saliendo del negocio." },
-    "system": { "title": "SISTEMA", "description": "Reportes, conexiones, controles y configuración." }
+    "in": {
+      "title": "ENTRA",
+      "description": "Dinero y demanda entrando al negocio."
+    },
+    "out": {
+      "title": "SALE",
+      "description": "Costos, nómina, merma y presión saliendo del negocio."
+    },
+    "system": {
+      "title": "SISTEMA",
+      "description": "Reportes, conexiones, controles y configuración."
+    }
   },
   "cards": {
-    "pos": { "label": "Punto de Venta", "hint": "Cobrar ventas" },
-    "orders": { "label": "Órdenes", "hint": "Sigue cada ticket" },
-    "sales": { "label": "Ventas", "hint": "Ingresos del día" },
-    "menu": { "label": "Menú", "hint": "Productos y precios" },
-    "loyalty": { "label": "Lealtad", "hint": "Clientes frecuentes" },
-    "qrMenu": { "label": "Menú QR", "hint": "Códigos QR de mesa" },
-    "delivery": { "label": "Delivery", "hint": "Rappi, Uber, DiDi" },
-    "menuPerformance": { "label": "Desempeño de Menú", "hint": "Más vendidos" },
-    "expenses": { "label": "Gastos", "hint": "Dinero que sale" },
-    "staff": { "label": "Personal", "hint": "Horas y pago" },
-    "inventory": { "label": "Inventario", "hint": "Stock y costos" },
-    "recipes": { "label": "Recetas", "hint": "Costo por producto" },
-    "purchaseOrders": { "label": "Órdenes de Compra", "hint": "Pedidos a proveedores" },
-    "reports": { "label": "Reportes", "hint": "Números y tendencias" },
-    "integrations": { "label": "Integraciones", "hint": "Pagos y apps" },
-    "modifiers": { "label": "Modificadores", "hint": "Tamaños, extras y complementos" },
-    "kitchenDisplay": { "label": "Pantalla de Cocina", "hint": "Pantalla de órdenes para cocineros" },
-    "devices": { "label": "Dispositivos", "hint": "Pantallas KDS y TVs vinculadas" },
-    "permissions": { "label": "Permisos", "hint": "Acceso por rol" },
-    "identity": { "label": "Identidad", "hint": "Logo e información" },
-    "invoicing": { "label": "Facturación", "hint": "CFDI y facturas" },
-    "account": { "label": "Cuenta", "hint": "Plan y facturación" }
+    "pos": {
+      "label": "Punto de Venta",
+      "hint": "Cobrar ventas"
+    },
+    "orders": {
+      "label": "Órdenes",
+      "hint": "Sigue cada ticket"
+    },
+    "sales": {
+      "label": "Ventas",
+      "hint": "Ingresos del día"
+    },
+    "menu": {
+      "label": "Menú",
+      "hint": "Productos y precios"
+    },
+    "loyalty": {
+      "label": "Lealtad",
+      "hint": "Clientes frecuentes"
+    },
+    "qrMenu": {
+      "label": "Menú QR",
+      "hint": "Códigos QR de mesa"
+    },
+    "delivery": {
+      "label": "Delivery",
+      "hint": "Rappi, Uber, DiDi"
+    },
+    "menuPerformance": {
+      "label": "Desempeño de Menú",
+      "hint": "Más vendidos"
+    },
+    "expenses": {
+      "label": "Gastos",
+      "hint": "Dinero que sale"
+    },
+    "staff": {
+      "label": "Personal",
+      "hint": "Horas y pago"
+    },
+    "inventory": {
+      "label": "Inventario",
+      "hint": "Stock y costos"
+    },
+    "recipes": {
+      "label": "Recetas",
+      "hint": "Costo por producto"
+    },
+    "purchaseOrders": {
+      "label": "Órdenes de Compra",
+      "hint": "Pedidos a proveedores"
+    },
+    "reports": {
+      "label": "Reportes",
+      "hint": "Números y tendencias"
+    },
+    "integrations": {
+      "label": "Integraciones",
+      "hint": "Pagos y apps"
+    },
+    "modifiers": {
+      "label": "Modificadores",
+      "hint": "Tamaños, extras y complementos"
+    },
+    "kitchenDisplay": {
+      "label": "Pantalla de Cocina",
+      "hint": "Pantalla de órdenes para cocineros"
+    },
+    "devices": {
+      "label": "Dispositivos",
+      "hint": "Pantallas KDS y TVs vinculadas"
+    },
+    "permissions": {
+      "label": "Permisos",
+      "hint": "Acceso por rol"
+    },
+    "identity": {
+      "label": "Identidad",
+      "hint": "Logo e información"
+    },
+    "invoicing": {
+      "label": "Facturación",
+      "hint": "CFDI y facturas"
+    },
+    "account": {
+      "label": "Cuenta",
+      "hint": "Plan y facturación"
+    },
+    "kiosk": {
+      "label": "Kiosco",
+      "hint": "Autoservicio en tablet"
+    }
   },
   "danger": {
     "title": "Zona de peligro",
@@ -40,5 +119,23 @@
     "confirm": "¿Eliminar TODAS las órdenes no pagadas y pendientes de terminal? Esto no se puede deshacer.",
     "deleted": "Se eliminaron {{count}} orden(es).",
     "failed": "No se pudieron eliminar las órdenes"
+  },
+  "kioskAccess": {
+    "title": "Kiosco de autoservicio",
+    "subtitle": "Abre tu kiosco en una tablet para que tus clientes ordenen solos",
+    "scanTitle": "Escanea con tu tablet",
+    "copy": "Copiar",
+    "copied": "¡Copiado!",
+    "open": "Abrir kiosco ahora",
+    "howTitle": "Cómo poner tu kiosco",
+    "howSubtitle": "En 4 pasos, desde cualquier tablet Android o iPad.",
+    "steps": [
+      "Abre la dirección de arriba en el navegador de tu tablet (Chrome o Safari) — o escanea el código QR.",
+      "Añade la página a la pantalla de inicio para que abra como una app.",
+      "Ponla en pantalla completa. En iPad usa \"Acceso guiado\"; en Android usa el modo de fijar pantalla para bloquearla en el kiosco.",
+      "Coloca la tablet en tu mostrador. Los pedidos pagados entran directo a tu pantalla de cocina."
+    ],
+    "downloadGuide": "Descargar guía de inicio rápido (PDF)",
+    "tip": "Tip: cualquier tablet con navegador funciona. No necesitas comprar equipo especial."
   }
 }

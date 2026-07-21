@@ -97,6 +97,20 @@ export async function sendFoundersWelcomeEmail({ email, restaurantName, subdomai
     console.log(`[Email] No RESEND_API_KEY — founders welcome for ${email}: PIN ${pin}, ${magicUrl}`);
     return;
   }
+  // Attach the quick-start guide PDF (public/guia-inicio-rapido.pdf)
+  const attachments = [];
+  try {
+    const { readFileSync } = await import('fs');
+    const { dirname, join } = await import('path');
+    const { fileURLToPath } = await import('url');
+    const here = dirname(fileURLToPath(import.meta.url));
+    attachments.push({
+      filename: 'Guia-de-inicio-Desktop-Kitchen.pdf',
+      content: readFileSync(join(here, '..', '..', 'public', 'guia-inicio-rapido.pdf')).toString('base64'),
+    });
+  } catch (err) {
+    console.error('[Email] Could not attach quick-start guide:', err.message);
+  }
   try {
     await fetchWithTimeout('https://api.resend.com/emails', {
       method: 'POST',
@@ -129,10 +143,13 @@ export async function sendFoundersWelcomeEmail({ email, restaurantName, subdomai
               <li>Conecta tu impresora de tickets si tienes una</li>
             </ol>
 
+            <p style="margin:18px 0 0"><a href="${posUrl}/guia-inicio-rapido.pdf" style="display:inline-block;padding:10px 20px;background:#0d9488;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Descargar guía de inicio (PDF)</a> <span style="color:#9ca3af;font-size:13px">— también va adjunta a este correo</span></p>
+
             <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
             <p style="color:#9ca3af;font-size:13px">¿Necesitas ayuda? Responde a este correo — te contesta el fundador.</p>
           </div>
         `,
+        attachments,
       }),
     });
   } catch (err) {
