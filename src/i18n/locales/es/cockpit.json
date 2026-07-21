@@ -90,6 +90,10 @@
       "label": "Dispositivos",
       "hint": "Pantallas KDS y TVs vinculadas"
     },
+    "printers": {
+      "label": "Impresoras",
+      "hint": "Impresoras de tickets y puente de impresión"
+    },
     "permissions": {
       "label": "Permisos",
       "hint": "Acceso por rol"

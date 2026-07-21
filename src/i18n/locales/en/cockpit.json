@@ -90,6 +90,10 @@
       "label": "Devices",
       "hint": "Paired KDS screens & TVs"
     },
+    "printers": {
+      "label": "Printers",
+      "hint": "Ticket printers & print bridge"
+    },
     "permissions": {
       "label": "Permissions",
       "hint": "Role access"

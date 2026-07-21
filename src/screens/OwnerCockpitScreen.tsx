@@ -28,6 +28,7 @@ import {
   Receipt,
   QrCode,
   MonitorSmartphone,
+  Printer,
 } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 import { useAuth } from '../context/AuthContext';
@@ -69,6 +70,7 @@ const SYSTEM_CARDS: CockpitCard[] = [
   { to: '/admin/modifiers', icon: <SlidersHorizontal size={28} />, key: 'modifiers', intensity: 'secondary' },
   { to: '/kitchen', icon: <Monitor size={28} />, key: 'kitchenDisplay', intensity: 'secondary' },
   { to: '/admin/devices', icon: <Monitor size={28} />, key: 'devices', intensity: 'secondary' },
+  { to: '/admin/printers', icon: <Printer size={28} />, key: 'printers', intensity: 'secondary' },
   { to: '/admin/permissions', icon: <Shield size={28} />, key: 'permissions', intensity: 'secondary' },
   { to: '/admin/branding', icon: <Palette size={28} />, key: 'identity', intensity: 'secondary' },
   { to: '/admin/invoicing', icon: <FileText size={28} />, key: 'invoicing', intensity: 'secondary' },
