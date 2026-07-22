@@ -48,11 +48,12 @@ import RefundsTab from '../components/reports/RefundsTab';
 import FinancialsTab from '../components/reports/FinancialsTab';
 import MenuEngineeringTab from '../components/reports/MenuEngineeringTab';
 import PayrollTab from '../components/reports/PayrollTab';
+import BreakEvenTab from '../components/reports/BreakEvenTab';
 
 type Period = 'today' | 'week' | 'month' | 'yesterday' | 'last_week' | 'last_month' | 'custom';
-type Tab = 'overview' | 'cashcard' | 'cogs' | 'categories' | 'margin' | 'delivery' | 'fees' | 'refunds' | 'financials' | 'engineering' | 'payroll';
+type Tab = 'overview' | 'cashcard' | 'cogs' | 'categories' | 'margin' | 'delivery' | 'fees' | 'refunds' | 'financials' | 'engineering' | 'payroll' | 'breakeven';
 
-const VALID_TABS: Tab[] = ['overview', 'cashcard', 'cogs', 'categories', 'margin', 'delivery', 'fees', 'refunds', 'financials', 'engineering', 'payroll'];
+const VALID_TABS: Tab[] = ['overview', 'cashcard', 'cogs', 'categories', 'margin', 'delivery', 'fees', 'refunds', 'financials', 'engineering', 'payroll', 'breakeven'];
 
 // Local YYYY-MM-DD (matches the user's wall clock; tenant tz handled server-side).
 const localYmd = (d: Date): string =>
@@ -113,8 +114,8 @@ export default function ReportsScreen() {
   }, [period, tab, financialMonth, itemSalesFilters, customStart, customEnd]);
 
   const fetchReportData = async () => {
-    if (tab === 'payroll') {
-      // PayrollTab manages its own data loading and period state.
+    if (tab === 'payroll' || tab === 'breakeven') {
+      // PayrollTab and BreakEvenTab manage their own data loading.
       setLoading(false);
       return;
     }
@@ -445,6 +446,7 @@ export default function ReportsScreen() {
     { key: 'refunds', label: t('sales.tabs.refunds') },
     { key: 'engineering', label: '⭐ ' + t('sales.tabs.menuEngineering') },
     { key: 'financials', label: t('sales.tabs.financials') },
+    { key: 'breakeven', label: '⭐ ' + t('sales.tabs.breakeven') },
     ...(canSeePayroll ? [{ key: 'payroll' as Tab, label: t('sales.tabs.payroll') }] : []),
   ];
 
@@ -600,6 +602,7 @@ export default function ReportsScreen() {
               />
             )}
             {tab === 'payroll' && canSeePayroll && <PayrollTab />}
+            {tab === 'breakeven' && <BreakEvenTab />}
           </>
         )}
       </div>

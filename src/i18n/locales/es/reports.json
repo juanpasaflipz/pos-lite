@@ -29,7 +29,8 @@
       "refunds": "Reembolsos",
       "financials": "Finanzas",
       "menuEngineering": "Ingeniería de Menú",
-      "payroll": "Nómina"
+      "payroll": "Nómina",
+      "breakeven": "Punto de Equilibrio"
     },
     "csvHeaders": {
       "metric": "Métrica",
@@ -563,5 +564,53 @@
     "loadAnalytics": "Error al cargar analíticas",
     "loadReferrals": "Error al cargar referidos",
     "loadSettings": "Error al cargar configuración"
+  },
+  "breakeven": {
+    "title": "Punto de Equilibrio",
+    "loading": "Cargando tus datos...",
+    "headline": {
+      "title": "Órdenes al día para llegar al punto de equilibrio",
+      "ordersPerDay": "órdenes / día",
+      "above": "Estás arriba del punto de equilibrio: ~{{current}} órdenes/día, {{count}} por encima de la línea.",
+      "below": "Te faltan {{count}} órdenes/día (ritmo actual: ~{{current}}/día).",
+      "fillData": "Ingresa tu ticket promedio y costos fijos para ver tu punto de equilibrio."
+    },
+    "kpi": {
+      "fixedMonthly": "Costos fijos / mes",
+      "cmPerOrder": "Contribución por orden",
+      "ofTicket": "del ticket",
+      "beRevenue": "Ventas de equilibrio",
+      "beOrders": "Órdenes de equilibrio",
+      "perMonth": "al mes"
+    },
+    "inputs": {
+      "title": "Tus números",
+      "avgTicket": "Ticket promedio",
+      "fromOrders": "De tus órdenes: {{value}}",
+      "variablePct": "% costo variable",
+      "variableHint": "Insumos + empaque por orden",
+      "openDays": "Días abiertos / mes",
+      "fromDays": "Últimos 30 días: {{count}} días con ventas",
+      "fixedCosts": "Costos fijos mensuales",
+      "addRow": "Agregar",
+      "rowPlaceholder": "p. ej. Renta",
+      "removeRow": "Eliminar",
+      "fixedTotal": "Total fijos",
+      "expensesRef": "Referencia: registraste {{value}} de gastos en los últimos 30 días."
+    },
+    "rows": {
+      "labor": "Nómina (de turnos)",
+      "otherRecurring": "Otros gastos recurrentes",
+      "rent": "Renta"
+    },
+    "chart": {
+      "title": "Ventas vs. costos por día",
+      "subtitle": "Donde se cruzan las líneas está tu punto de equilibrio.",
+      "xAxis": "órdenes/día",
+      "revenue": "Ventas",
+      "cost": "Costos",
+      "today": "hoy",
+      "beLabel": "PE = {{count}}"
+    }
   }
 }

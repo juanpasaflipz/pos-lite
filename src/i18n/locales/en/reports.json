@@ -29,7 +29,8 @@
       "refunds": "Refunds",
       "financials": "Financials",
       "menuEngineering": "Menu Engineering",
-      "payroll": "Payroll"
+      "payroll": "Payroll",
+      "breakeven": "Break-Even"
     },
     "csvHeaders": {
       "metric": "Metric",
@@ -563,5 +564,53 @@
     "loadAnalytics": "Failed to load analytics",
     "loadReferrals": "Failed to load referrals",
     "loadSettings": "Failed to load settings"
+  },
+  "breakeven": {
+    "title": "Break-Even Point",
+    "loading": "Loading your data...",
+    "headline": {
+      "title": "Orders per day to break even",
+      "ordersPerDay": "orders / day",
+      "above": "You're above break-even: ~{{current}} orders/day, {{count}} above the line.",
+      "below": "You're {{count}} orders/day short (current pace: ~{{current}}/day).",
+      "fillData": "Enter your average ticket and fixed costs to see your break-even."
+    },
+    "kpi": {
+      "fixedMonthly": "Fixed costs / month",
+      "cmPerOrder": "Contribution per order",
+      "ofTicket": "of the ticket",
+      "beRevenue": "Break-even revenue",
+      "beOrders": "Break-even orders",
+      "perMonth": "per month"
+    },
+    "inputs": {
+      "title": "Your numbers",
+      "avgTicket": "Average ticket",
+      "fromOrders": "From your orders: {{value}}",
+      "variablePct": "Variable cost %",
+      "variableHint": "Food + packaging per order",
+      "openDays": "Days open / month",
+      "fromDays": "Last 30 days: {{count}} days with sales",
+      "fixedCosts": "Monthly fixed costs",
+      "addRow": "Add",
+      "rowPlaceholder": "e.g. Rent",
+      "removeRow": "Remove",
+      "fixedTotal": "Total fixed",
+      "expensesRef": "Reference: you logged {{value}} of one-off expenses in the last 30 days."
+    },
+    "rows": {
+      "labor": "Payroll (from shifts)",
+      "otherRecurring": "Other recurring expenses",
+      "rent": "Rent"
+    },
+    "chart": {
+      "title": "Revenue vs. cost per day",
+      "subtitle": "Where the lines cross is your break-even.",
+      "xAxis": "orders/day",
+      "revenue": "Revenue",
+      "cost": "Cost",
+      "today": "today",
+      "beLabel": "BE = {{count}}"
+    }
   }
 }

@@ -270,6 +270,24 @@ async function apiRequest<T>(
   return coerceNumerics(data) as T;
 }
 
+/* ==================== Break-Even Calculator ==================== */
+
+export interface BreakEvenPrefill {
+  avg_ticket: number;
+  orders_30d: number;
+  open_days_30d: number;
+  orders_per_open_day: number;
+  variable_pct_default: number;
+  labor_monthly: number;
+  recurring: Array<{ label: string; category: string; monthly: number }>;
+  recurring_total: number;
+  expenses_30d: Array<{ category: string; total: number }>;
+}
+
+export async function getBreakEvenPrefill(): Promise<BreakEvenPrefill> {
+  return apiRequest<BreakEvenPrefill>('/reports/breakeven');
+}
+
 /* ==================== Menu Templates & Import ==================== */
 
 export async function getMenuTemplates(): Promise<MenuTemplateOption[]> {

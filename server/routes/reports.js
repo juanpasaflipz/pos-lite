@@ -1531,4 +1531,105 @@ router.get('/menu-engineering', requireAuth(), async (req, res) => {
   }
 });
 
+
+// ==================== Break-Even Calculator (Pro) ====================
+//
+// GET /api/reports/breakeven — prefill data for the tenant's break-even
+// calculator. The differentiator vs. a spreadsheet: every default comes from
+// the tenant's own live data (orders → avg ticket & pace, recurring expenses
+// → fixed costs, closed shifts × hourly rate → labor, financial target →
+// variable %). The screen lets the owner override any number; this endpoint
+// only supplies defaults, so it is strictly read-only.
+//
+// All queries run on the RLS-scoped connection (get/all) — no tenant_id
+// predicates needed or wanted here.
+router.get('/breakeven', requireAuth('view_reports'), async (req, res) => {
+  try {
+    const plan = req.tenant?.plan || 'free';
+    if (plan !== 'pro') {
+      return res.status(403).json(planUpgradeError('reports', plan));
+    }
+    const tz = req.tenant?.timezone || 'UTC';
+
+    // Sales pulse: last 30 days of real (non-draft, non-cancelled) orders.
+    const sales = await get(
+      `SELECT COALESCE(AVG(total), 0) AS avg_ticket,
+              COUNT(*)::int AS orders_30d,
+              COUNT(DISTINCT (created_at AT TIME ZONE $1)::date)::int AS open_days_30d
+       FROM orders
+       WHERE created_at >= NOW() - INTERVAL '30 days'
+         AND status NOT IN ('cancelled', 'draft_kiosk')
+         AND total > 0`,
+      [tz]
+    );
+
+    // Recurring expenses, normalized to a monthly amount.
+    const recurringRows = await all(
+      `SELECT label, category, expected_amount, frequency
+       FROM recurring_expenses
+       WHERE active = true
+       ORDER BY expected_amount DESC`
+    );
+    const PER_MONTH = {
+      daily: 30.44, weekly: 4.345, biweekly: 2.172, fortnightly: 2.172,
+      monthly: 1, bimonthly: 0.5, quarterly: 1 / 3, semiannual: 1 / 6,
+      yearly: 1 / 12, annual: 1 / 12,
+    };
+    const recurring = recurringRows.map((r) => ({
+      label: r.label,
+      category: r.category,
+      monthly: Math.round(Number(r.expected_amount) * (PER_MONTH[r.frequency] ?? 1) * 100) / 100,
+    }));
+
+    // Labor: closed shifts × employee hourly rate over the last 30 days.
+    // hourly_rate_cents defaults to 0, so tenants who don't use payroll
+    // simply get 0 here and type their own nómina number.
+    const labor = await get(
+      `SELECT COALESCE(SUM(
+                EXTRACT(EPOCH FROM (s.clock_out_at - s.clock_in_at)) / 3600.0
+                * e.hourly_rate_cents / 100.0
+              ), 0) AS labor_30d
+       FROM shifts s
+       JOIN employees e ON e.id = s.employee_id
+       WHERE s.clock_out_at IS NOT NULL
+         AND s.clock_in_at >= NOW() - INTERVAL '30 days'`
+    );
+
+    // Variable-cost % default: the tenant's food-cost target. COGS actuals
+    // would be better but require complete recipes; the target is always set
+    // (seeded at 30) and the owner can override on screen.
+    const target = await get(
+      `SELECT target_percent FROM financial_targets WHERE category = 'food_cost'`
+    );
+
+    // One-off expenses in the last 30 days, for reference in the UI.
+    const expenses30 = await all(
+      `SELECT category, COALESCE(SUM(amount), 0) AS total
+       FROM expenses
+       WHERE expense_date >= CURRENT_DATE - 30
+       GROUP BY category
+       ORDER BY total DESC
+       LIMIT 12`
+    );
+
+    const openDays = Number(sales.open_days_30d) || 0;
+    res.json({
+      avg_ticket: Math.round(Number(sales.avg_ticket) * 100) / 100,
+      orders_30d: Number(sales.orders_30d),
+      open_days_30d: openDays,
+      orders_per_open_day: openDays > 0
+        ? Math.round((Number(sales.orders_30d) / openDays) * 10) / 10
+        : 0,
+      variable_pct_default: Number(target?.target_percent) || 30,
+      labor_monthly: Math.round(Number(labor.labor_30d) * 100) / 100,
+      recurring,
+      recurring_total: Math.round(recurring.reduce((s, r) => s + r.monthly, 0) * 100) / 100,
+      expenses_30d: expenses30.map((e) => ({ category: e.category, total: Number(e.total) })),
+    });
+  } catch (error) {
+    console.error('Error fetching break-even prefill:', error);
+    res.status(500).json({ error: 'Failed to fetch break-even data' });
+  }
+});
+
 export default router;
