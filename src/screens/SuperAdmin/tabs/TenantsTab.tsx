@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, X, RefreshCw, ExternalLink } from 'lucide-react';
+import { Plus, X, RefreshCw, ExternalLink, AlertTriangle, Clock } from 'lucide-react';
 import {
-  getTenants,
+  getFleet,
   getTenantDeepDive,
   patchTenant,
+  extendTrial,
   createTenant,
   resetTenantPassword,
-  type TenantRecord,
+  type FleetRow,
   type DeepDiveData,
   type CreateTenantPayload,
 } from '../../../api/superAdmin';
@@ -18,39 +19,68 @@ const fmtNumber = (n: number) => new Intl.NumberFormat('en-US').format(n ?? 0);
 const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
 
-type Filter = 'all' | 'free' | 'pro';
+/** "3h ago"-style relative time in the viewer's locale. */
+const relTime = (iso: string | null): string => {
+  if (!iso) return '—';
+  const diffMs = new Date(iso).getTime() - Date.now();
+  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'always', style: 'narrow' });
+  const mins = Math.round(diffMs / 60_000);
+  if (Math.abs(mins) < 60) return rtf.format(mins, 'minute');
+  const hours = Math.round(diffMs / 3_600_000);
+  if (Math.abs(hours) < 48) return rtf.format(hours, 'hour');
+  const days = Math.round(diffMs / 86_400_000);
+  return rtf.format(days, 'day');
+};
+
+type Filter = 'all' | 'free' | 'trial' | 'pro' | 'suspended' | 'attention';
+
+/** A row needs operator attention: incidents, suspension, billing trouble, or a trial about to die. */
+const needsAttention = (t: FleetRow): boolean =>
+  !t.active ||
+  t.incidents.open > 0 ||
+  (t.subscription_status != null && !['active', 'trialing'].includes(t.subscription_status)) ||
+  (t.trial_active && (t.trial_days_left ?? 99) <= 3);
+
+const setupScore = (o: FleetRow['onboarding']): number =>
+  [o.has_menu, o.has_payment, o.has_printer, o.has_extra_staff, o.has_first_order].filter(Boolean).length;
 
 const TenantsTab: React.FC = () => {
   const { t } = useTranslation('superAdmin');
-  const [tenants, setTenants] = useState<TenantRecord[] | null>(null);
+  const [fleet, setFleet] = useState<FleetRow[] | null>(null);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
-  const [selected, setSelected] = useState<TenantRecord | null>(null);
+  const [selected, setSelected] = useState<FleetRow | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = () => {
     setError(null);
-    getTenants()
-      .then(setTenants)
+    getFleet()
+      .then(setFleet)
       .catch((e) => setError(e.message));
   };
 
   useEffect(load, []);
 
+  const attentionCount = useMemo(() => (fleet ? fleet.filter(needsAttention).length : 0), [fleet]);
+
   const filtered = useMemo(() => {
-    if (!tenants) return [];
+    if (!fleet) return [];
     const q = search.trim().toLowerCase();
-    return tenants.filter((t) => {
-      if (filter !== 'all' && t.plan !== filter) return false;
+    return fleet.filter((row) => {
+      if (filter === 'free' && (row.effective_plan !== 'free' || !row.active)) return false;
+      if (filter === 'trial' && !row.trial_active) return false;
+      if (filter === 'pro' && row.plan !== 'pro') return false;
+      if (filter === 'suspended' && row.active) return false;
+      if (filter === 'attention' && !needsAttention(row)) return false;
       if (!q) return true;
       return (
-        t.name.toLowerCase().includes(q) ||
-        t.id.toLowerCase().includes(q) ||
-        t.owner_email?.toLowerCase().includes(q)
+        row.name.toLowerCase().includes(q) ||
+        row.id.toLowerCase().includes(q) ||
+        (row.owner_email || '').toLowerCase().includes(q)
       );
     });
-  }, [tenants, search, filter]);
+  }, [fleet, search, filter]);
 
   return (
     <div className="space-y-4">
@@ -68,8 +98,11 @@ const TenantsTab: React.FC = () => {
             className="px-3 py-2 bg-neutral-900 border border-neutral-800 rounded-lg text-white focus:outline-none focus:border-brand-600"
           >
             <option value="all">{t('tenants.allPlans')}</option>
-            <option value="free">{t('tenants.free')}</option>
+            <option value="attention">{t('tenants.filterAttention', { count: attentionCount })}</option>
+            <option value="trial">{t('tenants.filterTrial')}</option>
             <option value="pro">{t('tenants.pro')}</option>
+            <option value="free">{t('tenants.free')}</option>
+            <option value="suspended">{t('tenants.filterSuspended')}</option>
           </select>
         </div>
         <div className="flex gap-2">
@@ -91,22 +124,23 @@ const TenantsTab: React.FC = () => {
 
       {error && <div className="text-cockpit-out-text">{error}</div>}
 
-      {!tenants ? (
+      {!fleet ? (
         <div className="text-neutral-400">{t('tenants.loading')}</div>
       ) : filtered.length === 0 ? (
         <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-8 text-center text-neutral-500">
           {t('tenants.noTenants')}
         </div>
       ) : (
-        <div className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
+        <div className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-neutral-950 border-b border-neutral-800">
               <tr className="text-left text-xs uppercase tracking-wider text-neutral-500">
                 <th className="px-4 py-3">{t('tenants.columns.name')}</th>
                 <th className="px-4 py-3">{t('tenants.columns.plan')}</th>
                 <th className="px-4 py-3">{t('tenants.columns.status')}</th>
-                <th className="px-4 py-3 text-right">{t('tenants.columns.orders')}</th>
-                <th className="px-4 py-3 text-right">{t('tenants.columns.employees')}</th>
+                <th className="px-4 py-3">{t('tenants.columns.pulse')}</th>
+                <th className="px-4 py-3">{t('tenants.columns.setup')}</th>
+                <th className="px-4 py-3">{t('tenants.columns.incidents')}</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -121,26 +155,11 @@ const TenantsTab: React.FC = () => {
                     <div className="font-medium text-white">{row.name}</div>
                     <div className="text-xs text-neutral-500">{row.subdomain || row.id} · {row.owner_email}</div>
                   </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                        row.plan === 'pro' ? 'bg-brand-900/50 text-brand-300' : 'bg-neutral-800 text-neutral-400'
-                      }`}
-                    >
-                      {row.plan}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                        row.active ? 'bg-cockpit-green/40 text-cockpit-in-text' : 'bg-cockpit-red/40 text-cockpit-out-text'
-                      }`}
-                    >
-                      {row.active ? t('tenants.active') : t('tenants.inactive')}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right text-neutral-300">{fmtNumber(row.order_count)}</td>
-                  <td className="px-4 py-3 text-right text-neutral-300">{fmtNumber(row.employee_count)}</td>
+                  <td className="px-4 py-3"><PlanBadge row={row} /></td>
+                  <td className="px-4 py-3"><StatusBadge row={row} /></td>
+                  <td className="px-4 py-3"><PulseCell row={row} /></td>
+                  <td className="px-4 py-3"><SetupCell row={row} /></td>
+                  <td className="px-4 py-3"><IncidentsCell row={row} /></td>
                   <td className="px-4 py-3 text-right">
                     <a
                       href={`https://${row.subdomain || row.id}.desktop.kitchen`}
@@ -184,10 +203,99 @@ const TenantsTab: React.FC = () => {
   );
 };
 
+/* ==================== Cells ==================== */
+
+const PlanBadge: React.FC<{ row: FleetRow }> = ({ row }) => {
+  const { t } = useTranslation('superAdmin');
+  if (row.plan === 'pro') {
+    return <span className="px-2 py-0.5 rounded text-xs font-semibold bg-brand-900/50 text-brand-300">{t('tenants.pro')}</span>;
+  }
+  if (row.trial_active) {
+    return (
+      <span className="px-2 py-0.5 rounded text-xs font-semibold bg-brand-900/30 border border-brand-800 text-brand-300 inline-flex items-center gap-1">
+        <Clock size={11} /> {t('tenants.trialBadge', { count: row.trial_days_left ?? 0 })}
+      </span>
+    );
+  }
+  return (
+    <div>
+      <span className="px-2 py-0.5 rounded text-xs font-semibold bg-neutral-800 text-neutral-400">{t('tenants.free')}</span>
+      {row.trial_ends_at && (
+        <div className="text-[10px] text-neutral-600 mt-0.5">{t('tenants.trialEnded')}</div>
+      )}
+    </div>
+  );
+};
+
+const StatusBadge: React.FC<{ row: FleetRow }> = ({ row }) => {
+  const { t } = useTranslation('superAdmin');
+  const billingOff = row.subscription_status != null && !['active', 'trialing'].includes(row.subscription_status);
+  return (
+    <div>
+      <span
+        className={`px-2 py-0.5 rounded text-xs font-semibold ${
+          row.active ? 'bg-cockpit-green/40 text-cockpit-in-text' : 'bg-cockpit-red/40 text-cockpit-out-text'
+        }`}
+      >
+        {row.active ? t('tenants.active') : t('tenants.suspended')}
+      </span>
+      {billingOff && (
+        <div className="text-[10px] text-amber-400 mt-0.5">{row.subscription_status}</div>
+      )}
+    </div>
+  );
+};
+
+const PulseCell: React.FC<{ row: FleetRow }> = ({ row }) => {
+  const { t } = useTranslation('superAdmin');
+  const { last_order_at, orders_24h, orders_7d } = row.pulse;
+  const dot = orders_24h > 0 ? 'bg-cockpit-green' : orders_7d > 0 ? 'bg-amber-400' : 'bg-neutral-600';
+  return (
+    <div className="flex items-center gap-2">
+      <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
+      <div>
+        <div className="text-neutral-300 text-xs">
+          {last_order_at ? relTime(last_order_at) : t('tenants.pulseNever')}
+        </div>
+        <div className="text-[10px] text-neutral-500">{t('tenants.pulse7d', { count: orders_7d })}</div>
+      </div>
+    </div>
+  );
+};
+
+const SetupCell: React.FC<{ row: FleetRow }> = ({ row }) => {
+  const score = setupScore(row.onboarding);
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex gap-0.5">
+        {[row.onboarding.has_menu, row.onboarding.has_payment, row.onboarding.has_printer,
+          row.onboarding.has_extra_staff, row.onboarding.has_first_order].map((done, i) => (
+          <span key={i} className={`w-1.5 h-3.5 rounded-sm ${done ? 'bg-brand-500' : 'bg-neutral-700'}`} />
+        ))}
+      </div>
+      <span className={`text-xs ${score === 5 ? 'text-cockpit-in-text' : 'text-neutral-400'}`}>{score}/5</span>
+    </div>
+  );
+};
+
+const IncidentsCell: React.FC<{ row: FleetRow }> = ({ row }) => {
+  const { open, critical } = row.incidents;
+  if (open === 0) return <span className="text-neutral-600 text-xs">—</span>;
+  return (
+    <span
+      className={`px-2 py-0.5 rounded text-xs font-semibold inline-flex items-center gap-1 ${
+        critical > 0 ? 'bg-cockpit-red/40 text-cockpit-out-text' : 'bg-amber-500/20 text-amber-300'
+      }`}
+    >
+      <AlertTriangle size={11} /> {open}
+    </span>
+  );
+};
+
 /* ==================== Tenant Detail Drawer ==================== */
 
 const TenantDrawer: React.FC<{
-  tenant: TenantRecord;
+  tenant: FleetRow;
   onClose: () => void;
   onChanged: () => void;
 }> = ({ tenant, onClose, onChanged }) => {
@@ -223,6 +331,18 @@ const TenantDrawer: React.FC<{
       onChanged();
     } catch (e: any) {
       setMsg(e.message || t('tenants.failedUpdatePlan'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleExtendTrial = async (days: number) => {
+    setBusy(true);
+    try {
+      await extendTrial(tenant.id, days);
+      onChanged();
+    } catch (e: any) {
+      setMsg(e.message || t('tenants.failed'));
     } finally {
       setBusy(false);
     }
@@ -288,6 +408,35 @@ const TenantDrawer: React.FC<{
               {t('tenants.resetPassword')}
             </button>
           </div>
+
+          {/* Trial control — only meaningful while the tenant isn't paid Pro */}
+          {tenant.plan !== 'pro' && (
+            <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs uppercase tracking-wider text-neutral-500">{t('tenants.trial.title')}</span>
+                <span className="text-sm text-neutral-300">
+                  {tenant.trial_active
+                    ? t('tenants.trial.endsIn', { count: tenant.trial_days_left ?? 0, date: fmtDate(tenant.trial_ends_at) })
+                    : tenant.trial_ends_at
+                      ? t('tenants.trial.endedOn', { date: fmtDate(tenant.trial_ends_at) })
+                      : t('tenants.trial.none')}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                {[7, 14, 30].map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => handleExtendTrial(d)}
+                    disabled={busy}
+                    className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded text-xs font-semibold disabled:opacity-50"
+                  >
+                    {t('tenants.trial.extend', { count: d })}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-neutral-600">{t('tenants.trial.hint')}</p>
+            </div>
+          )}
 
           {showPasswordReset && (
             <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-4 space-y-3">

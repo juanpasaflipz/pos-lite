@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Users, DollarSign, ShoppingBag, TrendingUp } from 'lucide-react';
-import { getOverview, getActivity, type OverviewData, type ActivityData } from '../../../api/superAdmin';
+import { Users, DollarSign, ShoppingBag, TrendingUp, Clock } from 'lucide-react';
+import { getOverview, getActivity, getFleet, type OverviewData, type ActivityData, type FleetRow } from '../../../api/superAdmin';
 
 const KPICard: React.FC<{
   label: string;
@@ -28,6 +28,7 @@ const OverviewTab: React.FC = () => {
   const { t } = useTranslation('superAdmin');
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [activity, setActivity] = useState<ActivityData | null>(null);
+  const [fleet, setFleet] = useState<FleetRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -37,6 +38,8 @@ const OverviewTab: React.FC = () => {
         setActivity(ac);
       })
       .catch((e) => setError(e.message));
+    // Trial funnel is best-effort — the overview must render even if it fails.
+    getFleet().then(setFleet).catch(() => {});
   }, []);
 
   if (error) return <div className="text-cockpit-out-text">{error}</div>;
@@ -75,6 +78,41 @@ const OverviewTab: React.FC = () => {
           icon={<DollarSign size={20} />}
         />
       </div>
+
+      {/* Trial funnel */}
+      {fleet && (() => {
+        const trials = fleet.filter((f) => f.trial_active);
+        const endingSoon = trials.filter((f) => (f.trial_days_left ?? 99) <= 3);
+        const expiredFree = fleet.filter((f) => !f.trial_active && f.trial_ends_at && f.plan !== 'pro');
+        const openIncidents = fleet.reduce((n, f) => n + f.incidents.open, 0);
+        return (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <KPICard
+              label={t('overview.kpi.activeTrials')}
+              value={fmtNumber(trials.length)}
+              sub={t('overview.kpi.endingSoon', { count: endingSoon.length })}
+              icon={<Clock size={20} />}
+            />
+            <KPICard
+              label={t('overview.kpi.trialsExpired')}
+              value={fmtNumber(expiredFree.length)}
+              sub={t('overview.kpi.trialsExpiredSub')}
+              icon={<Clock size={20} />}
+            />
+            <KPICard
+              label={t('overview.kpi.openIncidents')}
+              value={fmtNumber(openIncidents)}
+              sub={t('overview.kpi.openIncidentsSub')}
+              icon={<TrendingUp size={20} />}
+            />
+            <KPICard
+              label={t('overview.kpi.suspended')}
+              value={fmtNumber(fleet.filter((f) => !f.active).length)}
+              icon={<Users size={20} />}
+            />
+          </div>
+        );
+      })()}
 
       {/* Plan distribution */}
       <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">

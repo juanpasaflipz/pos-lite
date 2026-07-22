@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { LogOut, Gauge, Users, Activity } from 'lucide-react';
+import { LogOut, Gauge, Users, Activity, AlertTriangle } from 'lucide-react';
 import OverviewTab from './tabs/OverviewTab';
 import TenantsTab from './tabs/TenantsTab';
 import HealthTab from './tabs/HealthTab';
+import IncidentsTab from './tabs/IncidentsTab';
 
-type TabKey = 'overview' | 'tenants' | 'health';
+type TabKey = 'overview' | 'tenants' | 'incidents' | 'health';
 
 interface Props {
   onSignOut: () => void;
@@ -18,6 +19,7 @@ const SuperAdminDashboard: React.FC<Props> = ({ onSignOut }) => {
   const tabs: { key: TabKey; label: string; icon: React.ReactNode }[] = [
     { key: 'overview', label: t('tabs.overview'), icon: <Gauge size={16} /> },
     { key: 'tenants', label: t('tabs.tenants'), icon: <Users size={16} /> },
+    { key: 'incidents', label: t('tabs.incidents'), icon: <AlertTriangle size={16} /> },
     { key: 'health', label: t('tabs.health'), icon: <Activity size={16} /> },
   ];
 
@@ -64,6 +66,7 @@ const SuperAdminDashboard: React.FC<Props> = ({ onSignOut }) => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         {tab === 'overview' && <OverviewTab />}
         {tab === 'tenants' && <TenantsTab />}
+        {tab === 'incidents' && <IncidentsTab />}
         {tab === 'health' && <HealthTab />}
       </main>
     </div>

@@ -8,6 +8,7 @@ import { run, adminSql, TENANT_POOL_MAX, ADMIN_POOL_MAX } from '../db/index.js';
 import { sendPinEmail, sendWelcomeEmail } from '../helpers/email.js';
 import { audit } from '../lib/auditLog.js';
 import { purgeTenant, dryRunPurge } from '../helpers/tenantPurge.js';
+import { getFleetOverview, listAllIncidents, sanitizeTenant } from '../helpers/controlTower.js';
 import { BCRYPT_ROUNDS } from '../lib/constants.js';
 import os from 'os';
 // Monitoring stubs (full monitoring removed in pos-lite)
@@ -375,6 +376,39 @@ router.get('/analytics/activity', async (req, res) => {
   }
 });
 
+// GET /admin/tenants/fleet — Control-tower overview: one row per tenant with
+// identity + billing state, trial-aware effective plan, activity pulse,
+// onboarding progress, and open sentinel-incident counts. One set-based
+// query; safe under the admin rate limiter regardless of tenant count.
+// NOTE: must stay registered before GET /tenants/:id or Express will treat
+// 'fleet' as a tenant id.
+router.get('/tenants/fleet', async (req, res) => {
+  try {
+    res.json(await getFleetOverview());
+  } catch (error) {
+    console.error('Fleet overview error:', error);
+    res.status(500).json({ error: 'Failed to fetch fleet overview' });
+  }
+});
+
+// GET /admin/sentinel/incidents — cross-tenant incident feed (read-only).
+// ?status=<status> for an exact filter (default: everything, active first),
+// ?tenant_id=<id> to scope to one tenant, ?limit=<n> (max 300).
+router.get('/sentinel/incidents', async (req, res) => {
+  try {
+    const incidents = await listAllIncidents({
+      status: req.query.status,
+      tenantId: req.query.tenant_id,
+      limit: req.query.limit,
+    });
+    res.json(incidents);
+  } catch (error) {
+    if (error.expose) return res.status(error.status || 400).json({ error: error.message });
+    console.error('Admin incidents error:', error);
+    res.status(500).json({ error: 'Failed to fetch incidents' });
+  }
+});
+
 // GET /admin/tenants/:id/deep-dive — Per-tenant detailed stats
 router.get('/tenants/:id/deep-dive', async (req, res) => {
   try {
@@ -396,11 +430,8 @@ router.get('/tenants/:id/deep-dive', async (req, res) => {
         (SELECT MAX(created_at) FROM orders WHERE tenant_id = ${tenant.id}) AS last_order_at
     `;
 
-    // Strip sensitive fields
-    const { owner_password_hash, ...safeTenant } = tenant;
-
     res.json({
-      tenant: safeTenant,
+      tenant: sanitizeTenant(tenant),
       stats: {
         total_orders: Number(stats.total_orders),
         total_revenue: Number(stats.total_revenue),
@@ -486,10 +517,7 @@ router.post('/tenants', async (req, res) => {
       ip: req.ip,
     });
 
-    // Strip sensitive field from response
-    const { owner_password_hash: _, ...safeTenant } = tenant;
-
-    res.status(201).json({ ...safeTenant, pin });
+    res.status(201).json({ ...sanitizeTenant(tenant), pin });
   } catch (error) {
     console.error('Error creating tenant:', error);
     res.status(500).json({ error: 'Failed to create tenant' });
@@ -536,7 +564,7 @@ router.get('/tenants', async (req, res) => {
       });
     }
 
-    res.json(tenants);
+    res.json(tenants.map(sanitizeTenant));
   } catch (error) {
     console.error('Error listing tenants:', error);
     res.status(500).json({ error: 'Failed to list tenants' });
@@ -548,7 +576,7 @@ router.get('/tenants/:id', async (req, res) => {
   try {
     const tenant = await getTenant(req.params.id);
     if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
-    res.json(tenant);
+    res.json(sanitizeTenant(tenant));
   } catch (error) {
     res.status(500).json({ error: 'Failed to get tenant' });
   }
@@ -561,7 +589,7 @@ router.patch('/tenants/:id', async (req, res) => {
     if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
 
     const allowed = ['name', 'subdomain', 'owner_email', 'plan', 'active', 'subscription_status',
-      'stripe_customer_id', 'stripe_subscription_id', 'branding_json'];
+      'stripe_customer_id', 'stripe_subscription_id', 'branding_json', 'trial_ends_at'];
     const updates = {};
     for (const key of allowed) {
       if (req.body[key] !== undefined) {
@@ -569,6 +597,16 @@ router.patch('/tenants/:id', async (req, res) => {
           ? JSON.stringify(req.body[key])
           : req.body[key];
       }
+    }
+
+    // trial_ends_at: ISO timestamp or null (null clears the trial). Guard the
+    // cast here so a bad value 400s instead of bubbling a Postgres error.
+    if ('trial_ends_at' in updates && updates.trial_ends_at !== null) {
+      const ts = new Date(updates.trial_ends_at);
+      if (Number.isNaN(ts.getTime())) {
+        return res.status(400).json({ error: 'trial_ends_at must be an ISO timestamp or null' });
+      }
+      updates.trial_ends_at = ts.toISOString();
     }
 
     if (Object.keys(updates).length === 0) {
@@ -599,7 +637,7 @@ router.patch('/tenants/:id', async (req, res) => {
       ip: req.ip,
     });
 
-    res.json(await getTenant(req.params.id));
+    res.json(sanitizeTenant(await getTenant(req.params.id)));
   } catch (error) {
     console.error('Error updating tenant:', error);
     res.status(500).json({ error: 'Failed to update tenant' });
@@ -666,9 +704,8 @@ router.get('/tenants/:id/export', async (req, res) => {
     const results = await Promise.all(queries);
     const data = Object.fromEntries(results);
 
-    // Add tenant metadata (strip password hash)
-    const { owner_password_hash, ...safeTenant } = tenant;
-    data._tenant = safeTenant;
+    // Add tenant metadata (credential-bearing columns stripped)
+    data._tenant = sanitizeTenant(tenant);
 
     res.setHeader('Content-Disposition', `attachment; filename="${tid}-export-${new Date().toISOString().slice(0, 10)}.json"`);
     res.json(data);

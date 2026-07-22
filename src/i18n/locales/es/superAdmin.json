@@ -10,7 +10,8 @@
     "revenue": "Ingresos",
     "health": "Salud",
     "financing": "Financiamiento",
-    "stressTest": "Prueba de Carga"
+    "stressTest": "Prueba de Carga",
+    "incidents": "Incidentes"
   },
   "login": {
     "title": "Super Admin",
@@ -27,7 +28,14 @@
       "mrr": "MRR",
       "totalOrders": "Total de Órdenes",
       "platformRevenue": "Ingresos de Plataforma",
-      "activeCount": "{{count}} activos"
+      "activeCount": "{{count}} activos",
+      "activeTrials": "Pruebas Activas",
+      "endingSoon": "{{count}} terminan en ≤3d",
+      "trialsExpired": "Pruebas Vencidas",
+      "trialsExpiredSub": "sin convertir a Pro",
+      "openIncidents": "Incidentes Abiertos",
+      "openIncidentsSub": "en todos los tenants",
+      "suspended": "Suspendidos"
     },
     "planDistribution": "Distribución de Planes",
     "monthlySignups": "Registros Mensuales",
@@ -55,7 +63,10 @@
       "status": "Estado",
       "orders": "Órdenes",
       "employees": "Empleados",
-      "actions": "Acciones"
+      "actions": "Acciones",
+      "pulse": "Pulso",
+      "setup": "Setup",
+      "incidents": "Incidentes"
     },
     "active": "Activo",
     "inactive": "Inactivo",
@@ -92,7 +103,23 @@
     "saved": "Guardado",
     "setPin": "Asignar PIN",
     "pinPlaceholder": "PIN",
-    "failed": "Error"
+    "failed": "Error",
+    "suspended": "Suspendido",
+    "filterAttention": "Requiere atención ({{count}})",
+    "filterTrial": "En prueba",
+    "filterSuspended": "Suspendidos",
+    "trialBadge": "Prueba · {{count}}d",
+    "trialEnded": "prueba terminada",
+    "pulseNever": "Sin órdenes aún",
+    "pulse7d": "{{count}} órdenes / 7d",
+    "trial": {
+      "title": "Prueba Pro",
+      "endsIn": "Quedan {{count}}d (termina {{date}})",
+      "endedOn": "Terminó {{date}}",
+      "none": "Sin prueba",
+      "extend": "+{{count}}d",
+      "hint": "Fija el acceso Pro de prueba para terminar en esos días a partir de hoy."
+    }
   },
   "revenue": {
     "loading": "Cargando datos de ingresos...",
@@ -289,5 +316,28 @@
     "typeToConfirm": "Escribe",
     "toConfirm": "para confirmar",
     "deletePermanently": "Eliminar Permanentemente"
+  },
+  "incidents": {
+    "loading": "Cargando incidentes...",
+    "filters": {
+      "active": "Activos",
+      "all": "Todos",
+      "resolved": "Resueltos",
+      "dismissed": "Descartados"
+    },
+    "allClear": "Todo en orden",
+    "allClearSub": "Ningún incidente coincide con este filtro en ningún tenant.",
+    "columns": {
+      "severity": "Severidad",
+      "tenant": "Tenant",
+      "sensor": "Sensor",
+      "status": "Estado",
+      "lastSeen": "Última detección"
+    },
+    "evidence": "Evidencia",
+    "diagnosis": "Diagnóstico",
+    "noDiagnosis": "Sin diagnóstico aún",
+    "firstSeen": "Primera detección",
+    "resolvedAt": "Resuelto"
   }
 }

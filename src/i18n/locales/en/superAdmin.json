@@ -10,7 +10,8 @@
     "revenue": "Revenue",
     "health": "Health",
     "financing": "Financing",
-    "stressTest": "Stress Test"
+    "stressTest": "Stress Test",
+    "incidents": "Incidents"
   },
   "login": {
     "title": "Super Admin",
@@ -27,7 +28,14 @@
       "mrr": "MRR",
       "totalOrders": "Total Orders",
       "platformRevenue": "Platform Revenue",
-      "activeCount": "{{count}} active"
+      "activeCount": "{{count}} active",
+      "activeTrials": "Active Trials",
+      "endingSoon": "{{count}} ending in ≤3d",
+      "trialsExpired": "Trials Expired",
+      "trialsExpiredSub": "not converted to Pro",
+      "openIncidents": "Open Incidents",
+      "openIncidentsSub": "across all tenants",
+      "suspended": "Suspended"
     },
     "planDistribution": "Plan Distribution",
     "monthlySignups": "Monthly Signups",
@@ -55,7 +63,10 @@
       "status": "Status",
       "orders": "Orders",
       "employees": "Employees",
-      "actions": "Actions"
+      "actions": "Actions",
+      "pulse": "Pulse",
+      "setup": "Setup",
+      "incidents": "Incidents"
     },
     "active": "Active",
     "inactive": "Inactive",
@@ -92,7 +103,23 @@
     "saved": "Saved",
     "setPin": "Set PIN",
     "pinPlaceholder": "PIN",
-    "failed": "Failed"
+    "failed": "Failed",
+    "suspended": "Suspended",
+    "filterAttention": "Needs attention ({{count}})",
+    "filterTrial": "On trial",
+    "filterSuspended": "Suspended",
+    "trialBadge": "Trial · {{count}}d",
+    "trialEnded": "trial ended",
+    "pulseNever": "No orders yet",
+    "pulse7d": "{{count}} orders / 7d",
+    "trial": {
+      "title": "Pro trial",
+      "endsIn": "{{count}}d left (ends {{date}})",
+      "endedOn": "Ended {{date}}",
+      "none": "No trial",
+      "extend": "+{{count}}d",
+      "hint": "Sets full-Pro trial access to end that many days from today."
+    }
   },
   "revenue": {
     "loading": "Loading revenue data...",
@@ -319,5 +346,28 @@
     "typeToConfirm": "Type",
     "toConfirm": "to confirm",
     "deletePermanently": "Delete Permanently"
+  },
+  "incidents": {
+    "loading": "Loading incidents...",
+    "filters": {
+      "active": "Active",
+      "all": "All",
+      "resolved": "Resolved",
+      "dismissed": "Dismissed"
+    },
+    "allClear": "All clear",
+    "allClearSub": "No incidents match this filter across any tenant.",
+    "columns": {
+      "severity": "Severity",
+      "tenant": "Tenant",
+      "sensor": "Sensor",
+      "status": "Status",
+      "lastSeen": "Last seen"
+    },
+    "evidence": "Evidence",
+    "diagnosis": "Diagnosis",
+    "noDiagnosis": "No diagnosis yet",
+    "firstSeen": "First seen",
+    "resolvedAt": "Resolved"
   }
 }

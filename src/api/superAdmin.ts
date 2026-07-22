@@ -323,6 +323,87 @@ export function deleteTenant(id: string, confirm: string) {
   });
 }
 
+// ==================== Control Tower (fleet + incidents) ====================
+
+export interface FleetRow {
+  id: string;
+  name: string;
+  subdomain: string | null;
+  owner_email: string;
+  plan: string;
+  active: boolean;
+  subscription_status: string | null;
+  subscription_cancelled_at: string | null;
+  trial_ends_at: string | null;
+  signup_promo_code: string | null;
+  timezone: string;
+  created_at: string;
+  has_stripe_customer: boolean;
+  has_stripe_subscription: boolean;
+  effective_plan: 'free' | 'pro';
+  trial_active: boolean;
+  trial_days_left: number | null;
+  pulse: {
+    last_order_at: string | null;
+    orders_24h: number;
+    orders_7d: number;
+    orders_30d: number;
+    revenue_30d: number;
+  };
+  onboarding: {
+    has_menu: boolean;
+    has_payment: boolean;
+    has_printer: boolean;
+    has_extra_staff: boolean;
+    has_first_order: boolean;
+    real_order_count: number;
+    employee_count: number;
+    menu_item_count: number;
+  };
+  incidents: {
+    open: number;
+    critical: number;
+    high: number;
+    last_seen_at: string | null;
+  };
+}
+
+export function getFleet() {
+  return adminRequest<FleetRow[]>('/tenants/fleet');
+}
+
+export interface AdminIncident {
+  id: number;
+  tenant_id: string;
+  tenant_name: string | null;
+  tenant_subdomain: string | null;
+  sensor: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  status: string;
+  subject_table: string | null;
+  subject_id: string | null;
+  evidence: Record<string, any> | null;
+  diagnosis: Record<string, any> | null;
+  first_seen_at: string;
+  last_seen_at: string;
+  resolved_at: string | null;
+}
+
+export function getAdminIncidents(params?: { status?: string; tenant_id?: string; limit?: number }) {
+  const s = new URLSearchParams();
+  if (params?.status) s.set('status', params.status);
+  if (params?.tenant_id) s.set('tenant_id', params.tenant_id);
+  if (params?.limit) s.set('limit', String(params.limit));
+  const q = s.toString();
+  return adminRequest<AdminIncident[]>(`/sentinel/incidents${q ? `?${q}` : ''}`);
+}
+
+/** Extend (or set) a tenant's full-Pro trial to end `days` from now. */
+export function extendTrial(tenantId: string, days: number) {
+  const ends = new Date(Date.now() + days * 86_400_000).toISOString();
+  return patchTenant(tenantId, { trial_ends_at: ends });
+}
+
 // ==================== Employee PIN Management ====================
 
 export interface TenantEmployee {
