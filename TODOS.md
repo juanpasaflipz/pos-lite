@@ -3,6 +3,33 @@
 Deferred work with explicit triggers. Nothing here is hidden or silently de-scoped —
 every item has a **why** and a condition that makes it real.
 
+---
+
+## Handoff 2026-07-22 — print bridge USB + one-command installer (Cowork session)
+
+State, for whichever agent/session picks this up next:
+
+- **Shipped to master:** USB thermal printer support in `print-bridge/`
+  (`usb:<queue>` addresses → raw CUPS queue via pass-through PPD;
+  `setup-usb-macos.sh` generates the PPD because recent macOS removed
+  `lpadmin -m raw`). Verified live at the pilot site: GHIA GTP801 USB on the
+  store Mac, queue `termica`, bridge polling `juanbertos.desktop.kitchen`,
+  direct test ticket prints. Bridge was left running manually — **pending:**
+  confirm the owner ran `./install-macos.sh` (LaunchAgent) + set auto-login /
+  no-sleep on the store Mac.
+- **Open PR (branch `feat/print-bridge-installer`):** one-command tenant
+  onboarding. UI button "Instalar puente" (PrinterManagement) → POST
+  `/api/print-jobs/install-code` (one-time code, 10 min) → tenant pastes
+  `curl -fsSL https://<tenant>/api/print-jobs/install.sh?code=… | bash` on the
+  store Mac. Installer: portable Node (no sudo), downloads
+  `/api/print-jobs/bridge.js`, USB detect + PPD queue, config.json with agent
+  token embedded (reuses existing token), LaunchAgent, local test print.
+  New file: `server/lib/installScript.js`. Tested against stubbed macOS tools
+  + real cupsd in sandbox; `tsc --noEmit` clean. **Pending:** merge PR, then
+  smoke-test the button on the pilot tenant. No automated tests were added for
+  the new endpoints (follow-up candidate: `tests/print-jobs-install.test.ts`).
+- Windows/Linux installer variants: not started (macOS-only by design for now).
+
 Generated from /plan-ceo-review (2026-04-20) + /plan-eng-review (2026-04-21).
 
 ---
