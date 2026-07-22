@@ -23,8 +23,11 @@ Zero npm dependencies. Needs Node 18+.
    ./setup-usb-macos.sh            # creates queue "termica"
    ```
 
-   The script finds the USB printer, creates a pass-through (raw) queue and
-   enables it. macOS may warn that raw queues are deprecated — it still works.
+   The script finds the USB printer and creates a pass-through queue using a
+   minimal PPD (`raw-passthrough.ppd`) whose filter line disables all
+   filtering — recent macOS removed `-m raw` queues, so this is the supported
+   route to byte-exact ESC/POS output. macOS may warn that PPD drivers are
+   deprecated — it still works.
 3. Verify hardware (no server needed):
 
    ```bash
