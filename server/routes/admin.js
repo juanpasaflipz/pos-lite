@@ -11,11 +11,34 @@ import { purgeTenant, dryRunPurge } from '../helpers/tenantPurge.js';
 import { getFleetOverview, listAllIncidents, sanitizeTenant } from '../helpers/controlTower.js';
 import { BCRYPT_ROUNDS } from '../lib/constants.js';
 import os from 'os';
-// Monitoring stubs (full monitoring removed in pos-lite)
-const getPoolMetrics = () => ({ tenant: {}, admin: {} });
-const getRequestMetrics = () => ({});
-const runServiceChecks = async () => ({});
-const getAIStatus = () => ({ enabled: false });
+// Lightweight monitoring (full monitoring removed in pos-lite). These used to
+// be empty-object stubs, which crashed the Health tab: HealthTab.tsx reads
+// services.postgres.latency_ms, requests.totalRequests, scheduler.running,
+// and per-pool counters, so every shape below must stay complete even when
+// the underlying value is "we don't track this" (zeros / unconfigured).
+const EMPTY_POOL = { active: 0, peakActive: 0, totalReserves: 0, successes: 0, failures: 0, avgWaitMs: 0 };
+const getPoolMetrics = () => ({ tenant: { ...EMPTY_POOL }, admin: { ...EMPTY_POOL } });
+const getRequestMetrics = () => ({
+  totalRequests: 0, totalErrors: 0, errorRate: 0, latencyBuckets: {}, recentErrors: [],
+});
+const envService = (configured) => ({ status: configured ? 'ok' : 'unconfigured', latency_ms: 0 });
+const runServiceChecks = async () => {
+  let postgres;
+  const t0 = Date.now();
+  try {
+    await adminSql`SELECT 1`;
+    postgres = { status: 'ok', latency_ms: Date.now() - t0 };
+  } catch {
+    postgres = { status: 'down', latency_ms: 0 };
+  }
+  return {
+    postgres,
+    stripe: envService(Boolean(process.env.STRIPE_SECRET_KEY)),
+    twilio: envService(Boolean(process.env.TWILIO_ACCOUNT_SID)),
+    grok: envService(Boolean(process.env.XAI_API_KEY || process.env.GROK_API_KEY)),
+  };
+};
+const getAIStatus = () => ({ enabled: false, scheduler: { running: false, jobs: [] } });
 
 const router = Router();
 

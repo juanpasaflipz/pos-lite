@@ -174,16 +174,18 @@ export interface DetailedHealthData {
   memory: { rss_mb: number; heap_used_mb: number; heap_total_mb: number; external_mb: number };
   os: { total_mem_mb: number; free_mem_mb: number; cpus: number; load_avg: number[] };
   postgres_version: string;
-  pools: { tenant: PoolMetrics; admin: PoolMetrics };
-  requests: RequestMetrics;
-  services: {
-    postgres: ServiceStatus;
-    stripe: ServiceStatus;
-    twilio: ServiceStatus;
-    grok: ServiceStatus;
-    dns: Record<string, ServiceStatus>;
+  pools: { tenant: Partial<PoolMetrics>; admin: Partial<PoolMetrics> };
+  // The three blocks below come from lightweight monitoring that older server
+  // builds stubbed to {} — treat them as optional/partial at runtime.
+  requests?: Partial<RequestMetrics>;
+  services?: {
+    postgres?: ServiceStatus;
+    stripe?: ServiceStatus;
+    twilio?: ServiceStatus;
+    grok?: ServiceStatus;
+    dns?: Record<string, ServiceStatus>;
   };
-  scheduler: { running: boolean; jobs: SchedulerJob[] };
+  scheduler?: { running: boolean; jobs: SchedulerJob[] };
 }
 
 export interface MetricsSnapshot {

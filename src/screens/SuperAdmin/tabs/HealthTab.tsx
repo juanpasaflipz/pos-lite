@@ -13,12 +13,12 @@ const fmtUptime = (s: number) => {
   return `${m}m`;
 };
 
-const statusColor = (s: ServiceStatus['status']) => ({
+const statusColor = (s: ServiceStatus['status'] | undefined) => ({
   ok: 'bg-cockpit-green/40 text-cockpit-in-text',
   degraded: 'bg-cockpit-yellow/40 text-cockpit-attention-text',
   down: 'bg-cockpit-red/40 text-cockpit-out-text',
   unconfigured: 'bg-neutral-800 text-neutral-400',
-}[s]);
+}[s ?? 'unconfigured'] || 'bg-neutral-800 text-neutral-400');
 
 const HealthTab: React.FC = () => {
   const { t } = useTranslation('superAdmin');
@@ -44,6 +44,18 @@ const HealthTab: React.FC = () => {
   const heapPct = (data.memory.heap_used_mb / data.memory.heap_total_mb) * 100;
   const osUsed = data.os.total_mem_mb - data.os.free_mem_mb;
   const osPct = (osUsed / data.os.total_mem_mb) * 100;
+
+  // Older server builds returned empty objects for these — normalize so a
+  // partial payload degrades to zeros/unconfigured instead of crashing.
+  const services = data.services || ({} as DetailedHealthData['services']);
+  const scheduler = data.scheduler || { running: false, jobs: [] };
+  const requests = {
+    totalRequests: 0,
+    totalErrors: 0,
+    errorRate: 0,
+    ...(data.requests || {}),
+    recentErrors: data.requests?.recentErrors || [],
+  };
 
   return (
     <div className="space-y-6">
@@ -81,19 +93,19 @@ const HealthTab: React.FC = () => {
       <Card title={t('health.externalServices')}>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {Object.entries({
-            postgres: data.services.postgres,
-            stripe: data.services.stripe,
-            twilio: data.services.twilio,
-            grok: data.services.grok,
+            postgres: services.postgres,
+            stripe: services.stripe,
+            twilio: services.twilio,
+            grok: services.grok,
           }).map(([name, svc]) => (
             <div key={name} className="bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 flex items-center justify-between">
               <div>
                 <div className="text-sm text-neutral-200 capitalize">{name}</div>
-                {svc.latency_ms > 0 && (
-                  <div className="text-xs text-neutral-500">{t('health.latency', { value: svc.latency_ms })}</div>
+                {(svc?.latency_ms ?? 0) > 0 && (
+                  <div className="text-xs text-neutral-500">{t('health.latency', { value: svc?.latency_ms })}</div>
                 )}
               </div>
-              <span className={`px-2 py-0.5 rounded text-xs font-semibold ${statusColor(svc.status)}`}>{svc.status}</span>
+              <span className={`px-2 py-0.5 rounded text-xs font-semibold ${statusColor(svc?.status)}`}>{svc?.status ?? '—'}</span>
             </div>
           ))}
         </div>
@@ -102,9 +114,9 @@ const HealthTab: React.FC = () => {
       {/* Scheduler */}
       <Card
         title={t('health.aiScheduler')}
-        subtitle={data.scheduler.running ? t('health.schedulerRunning') : t('health.schedulerStopped')}
+        subtitle={scheduler.running ? t('health.schedulerRunning') : t('health.schedulerStopped')}
       >
-        {data.scheduler.jobs.length === 0 ? (
+        {scheduler.jobs.length === 0 ? (
           <p className="text-sm text-neutral-500">—</p>
         ) : (
           <div className="overflow-x-auto">
@@ -119,7 +131,7 @@ const HealthTab: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {data.scheduler.jobs.map((job) => (
+                {scheduler.jobs.map((job) => (
                   <tr key={job.name} className="border-b border-neutral-800/60">
                     <td className="py-2 pr-4 text-neutral-200">{job.name}</td>
                     <td className="py-2 pr-4 text-neutral-400">{Math.round(job.intervalMs / 1000)}s</td>
@@ -145,17 +157,17 @@ const HealthTab: React.FC = () => {
       {/* Requests */}
       <Card title={t('health.errorRate')}>
         <div className="grid grid-cols-3 gap-3 mb-4">
-          <MiniKpi label={t('health.totalRequests')} value={data.requests.totalRequests.toLocaleString()} />
-          <MiniKpi label={t('health.totalErrors')} value={data.requests.totalErrors.toLocaleString()} />
-          <MiniKpi label={t('health.currentErrorRate')} value={`${(data.requests.errorRate * 100).toFixed(2)}%`} />
+          <MiniKpi label={t('health.totalRequests')} value={requests.totalRequests.toLocaleString()} />
+          <MiniKpi label={t('health.totalErrors')} value={requests.totalErrors.toLocaleString()} />
+          <MiniKpi label={t('health.currentErrorRate')} value={`${(requests.errorRate * 100).toFixed(2)}%`} />
         </div>
         <div>
           <div className="text-xs text-neutral-400 mb-2">{t('health.recentErrors')}</div>
-          {data.requests.recentErrors.length === 0 ? (
+          {requests.recentErrors.length === 0 ? (
             <p className="text-sm text-neutral-500">{t('health.noErrors')}</p>
           ) : (
             <ul className="space-y-1 text-xs font-mono max-h-64 overflow-y-auto">
-              {data.requests.recentErrors.slice(0, 20).map((e, i) => (
+              {requests.recentErrors.slice(0, 20).map((e, i) => (
                 <li key={i} className="flex gap-3 text-neutral-400">
                   <span className="text-neutral-600">{new Date(e.timestamp).toLocaleTimeString()}</span>
                   <span className="text-cockpit-out-text">{e.status}</span>
@@ -211,8 +223,9 @@ const Bar: React.FC<{ pct: number; label: string }> = ({ pct, label }) => (
   </div>
 );
 
-const PoolCard: React.FC<{ label: string; pool: DetailedHealthData['pools']['tenant'] }> = ({ label, pool }) => {
+const PoolCard: React.FC<{ label: string; pool: Partial<DetailedHealthData['pools']['tenant']> | undefined }> = ({ label, pool: rawPool }) => {
   const { t } = useTranslation('superAdmin');
+  const pool = { active: 0, peakActive: 0, totalReserves: 0, successes: 0, failures: 0, avgWaitMs: 0, max: 0, ...(rawPool || {}) };
   const pct = pool.max > 0 ? (pool.active / pool.max) * 100 : 0;
   const successRate = pool.totalReserves > 0 ? (pool.successes / pool.totalReserves) * 100 : 100;
   return (
