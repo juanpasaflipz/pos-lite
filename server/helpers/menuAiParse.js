@@ -7,7 +7,9 @@
 //   { success: false, error: '...' }
 
 const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
-const CLAUDE_MODEL = 'claude-sonnet-4-6';
+import { modelFor } from '../lib/aiModels.js';
+
+const CLAUDE_MODEL = modelFor('menu_parse');
 
 const SYSTEM_PROMPT = `Eres un experto en menús de restaurantes en México. El usuario te da texto libre: puede ser un menú pegado, una lista de platillos, o solo una descripción del negocio (p. ej. "taquería de pastor").
 

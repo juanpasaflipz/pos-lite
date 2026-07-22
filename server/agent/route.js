@@ -25,6 +25,7 @@ import { getConn, getTenantId } from '../db/index.js';
 import { CLAUDE_TOOLS, ACTION_TOOLS } from './tools.js';
 import { TOOL_HANDLERS } from './handlers.js';
 import { getPlanLimits } from '../planLimits.js';
+import { modelFor } from '../lib/aiModels.js';
 
 const router = Router();
 
@@ -82,7 +83,7 @@ async function callClaude(messages, tools, toolChoice = null) {
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
 
-  const model = 'claude-sonnet-4-6';
+  const model = modelFor('agent_chat');
 
   const body = {
     model,

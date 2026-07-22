@@ -31,10 +31,11 @@ import {
   getDeviceLiveness,
 } from './playbooks.js';
 import { notifyIncident } from './notify.js';
+import { modelFor } from '../lib/aiModels.js';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const MODEL = 'claude-sonnet-4-6'; // keep in sync with server/agent/route.js
+const MODEL = modelFor('sentinel_triage'); // routing lives in server/lib/aiModels.js
 const MAX_ITERATIONS = 5;
 
 const TRIAGE_DAILY_CAP = Number(process.env.SENTINEL_TRIAGE_DAILY_CAP) || 20;

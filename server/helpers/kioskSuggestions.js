@@ -21,6 +21,7 @@
 
 import { get, all } from '../db/index.js';
 import { fetchWithTimeout } from '../lib/http.js';
+import { modelFor } from '../lib/aiModels.js';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const PAID = "('paid','completed')";
@@ -429,7 +430,7 @@ Devuelve exactamente esta estructura:
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
+        model: modelFor('kiosk_suggestions'),
         max_tokens: 1024,
         system,
         messages: [{ role: 'user', content: user }],

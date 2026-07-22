@@ -10,7 +10,9 @@ import { fetchWithTimeout } from '../lib/http.js';
 // without an LLM call.
 
 const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
-const CLAUDE_MODEL = 'claude-sonnet-4-6';
+import { modelFor } from '../lib/aiModels.js';
+
+const CLAUDE_MODEL = modelFor('recipe_parse');
 
 const SYSTEM_PROMPT = `You parse a restaurant recipe written in Spanish or English into structured ingredient lines.
 

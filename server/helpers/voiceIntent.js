@@ -16,7 +16,9 @@ import { all, get, run, getTenantId } from '../db/index.js';
 import { detectOverpay, detectCostAnomaly } from './inventory.js';
 
 const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
-const CLAUDE_MODEL = 'claude-sonnet-4-6';
+import { modelFor } from '../lib/aiModels.js';
+
+const CLAUDE_MODEL = modelFor('voice_intent');
 
 const VOICE_INTENT_PROMPT = `You parse a restaurant staff voice/text note (Spanish or English) into a structured action. The note will be one of:
 

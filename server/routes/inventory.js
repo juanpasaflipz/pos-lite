@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { all, get, run, getTenantId } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { checkLimit, planUpgradeError } from '../planLimits.js';
+import { modelFor } from '../lib/aiModels.js';
 // AI data pipeline removed in pos-lite
 const logRestockEvent = () => {};
 
@@ -810,7 +811,7 @@ async function inferShelfLife(name, categoryHint) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
+        model: modelFor('inventory_attrs'),
         max_tokens: 256,
         system: SHELF_LIFE_PROMPT,
         messages: [{ role: 'user', content: userText }],

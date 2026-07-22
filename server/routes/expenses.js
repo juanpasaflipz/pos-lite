@@ -8,6 +8,7 @@ import { all, get, run, getTenantId } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { detectOverpay } from '../helpers/inventory.js';
 import { matchAndCheckVariance } from './recurring-expenses.js';
+import { modelFor } from '../lib/aiModels.js';
 // AI modules removed in pos-lite
 const getConfig = () => ({});
 const logRestockEvent = () => {};
@@ -919,7 +920,7 @@ router.post('/scan-receipt', requireAuth('manage_inventory'), upload.single('rec
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
+        model: modelFor('receipt_vision'),
         max_tokens: 2048,
         system: RECEIPT_PARSER_PROMPT,
         messages: [

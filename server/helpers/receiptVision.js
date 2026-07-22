@@ -26,7 +26,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RECEIPTS_DIR = path.join(__dirname, '../../data/uploads/receipts');
 
 const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
-const CLAUDE_MODEL = 'claude-sonnet-4-6';
+import { modelFor } from '../lib/aiModels.js';
+
+const CLAUDE_MODEL = modelFor('receipt_vision');
 
 const ALLOWED_MEDIA = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 

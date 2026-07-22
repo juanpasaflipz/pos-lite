@@ -8,7 +8,9 @@
 // original when a translation hasn't landed yet.
 
 const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
-const CLAUDE_MODEL = 'claude-sonnet-4-6';
+import { modelFor } from '../lib/aiModels.js';
+
+const CLAUDE_MODEL = modelFor('menu_translate');
 
 const SYSTEM_PROMPT = `You translate one Mexican restaurant menu item from Spanish to natural, appetizing US English.
 
