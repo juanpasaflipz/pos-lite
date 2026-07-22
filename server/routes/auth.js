@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 import { createTenant, getTenantByEmail, updateTenant } from '../tenants.js';
 import { adminSql } from '../db/index.js';
-import { sendPinEmail, sendPasswordResetEmail } from '../helpers/email.js';
+import { sendPasswordResetEmail, sendTrialWelcomeEmail } from '../helpers/email.js';
 import { seedNewTenant } from '../lib/seedNewTenant.js';
 import { audit } from '../lib/auditLog.js';
 // Financing consent removed in pos-lite
@@ -46,6 +46,11 @@ const forgotPasswordLimiter = rateLimit({
 function signToken(payload) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_OWNER_EXPIRY });
 }
+
+// Freemium: every self-serve signup starts a full-Pro trial (no card).
+// Access is computed from trial_ends_at (planLimits.effectivePlan) — the
+// stored plan stays 'free', so expiry is automatic.
+const TRIAL_DAYS = Number(process.env.TRIAL_DAYS) || 14;
 
 // seedNewTenant (example menu seeding) lives in server/lib/seedNewTenant.js —
 // shared with the pay-first provisioning flow (server/lib/provisionPaidTenant.js).
@@ -107,6 +112,15 @@ router.post('/register', registerLimiter, async (req, res) => {
       branding_json,
     });
 
+    // Start the full-Pro trial clock (freemium: free forever after it ends)
+    const trialRows = await adminSql`
+      UPDATE tenants
+      SET trial_ends_at = NOW() + make_interval(days => ${TRIAL_DAYS})
+      WHERE id = ${slug}
+      RETURNING trial_ends_at
+    `;
+    const trialEndsAt = trialRows[0]?.trial_ends_at || null;
+
     // Save promo code if provided (will be applied when they subscribe)
     if (promo_code) {
       await updateTenant(slug, { signup_promo_code: promo_code.trim().toUpperCase() });
@@ -158,8 +172,14 @@ router.post('/register', registerLimiter, async (req, res) => {
       });
     }
 
-    // Fire-and-forget email with PIN (include tenant subdomain for login URL)
-    sendPinEmail(email, pin, restaurant_name, slug).catch(() => {});
+    // Fire-and-forget welcome email: PIN + login URL + trial explainer
+    sendTrialWelcomeEmail({
+      email,
+      restaurantName: restaurant_name,
+      subdomain: slug,
+      pin,
+      trialDays: TRIAL_DAYS,
+    }).catch(() => {});
 
     // Convert any matching lead (fire-and-forget)
     adminSql`
@@ -179,6 +199,7 @@ router.post('/register', registerLimiter, async (req, res) => {
     res.status(201).json({
       token,
       pin,
+      trial_ends_at: trialEndsAt,
       tenant: {
         id: tenant.id,
         name: tenant.name,

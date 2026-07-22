@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import { tenantContext, tenantSql } from '../db/index.js';
 import { getTenant, getTenantBySubdomain } from '../tenants.js';
 import { JWT_SECRET } from '../lib/constants.js';
+import { effectivePlan } from '../planLimits.js';
 
 // A valid kiosk JWT already proves the caller is bound to that specific tenant,
 // so it can stand in for ADMIN_SECRET when authorizing an X-Tenant-ID header
@@ -161,12 +162,17 @@ export async function tenantMiddleware(req, res, next) {
       return res.status(503).json({ error: 'Service temporarily unavailable. Please try again.' });
     }
 
-    const plan = (tenant.plan === 'free' || tenant.plan === 'pro') ? tenant.plan : 'free';
+    // Effective plan: paid 'pro' wins; an active signup trial also grants
+    // 'pro' (freemium launch). Everything downstream (planLimits gates,
+    // /api/branding → PlanContext) reads this computed value.
+    const plan = effectivePlan(tenant);
 
     req.tenant = {
       id: tenant.id,
       name: tenant.name,
       plan,
+      stored_plan: (tenant.plan === 'pro') ? 'pro' : 'free',
+      trial_ends_at: tenant.trial_ends_at || null,
       subscription_status: tenant.subscription_status,
       branding: tenant.branding_json ? JSON.parse(tenant.branding_json) : null,
       owner_email: tenant.owner_email || null,

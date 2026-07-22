@@ -28,6 +28,11 @@ export interface PlanLimits {
 interface PlanContextType {
   plan: PlanTier;
   limits: PlanLimits;
+  /** Non-null while the signup's full-Pro trial is active (plan reads 'pro'). */
+  trialEndsAt: string | null;
+  /** Whole days left in the trial (>= 1 while active), or null. */
+  trialDaysLeft: number | null;
+  isTrial: boolean;
   ownerEmail: string | null;
   mpUserId: string | null;
   mpDefaultTerminalId: string | null;
@@ -68,6 +73,7 @@ const PlanContext = createContext<PlanContextType | undefined>(undefined);
 export function PlanProvider({ children }: { children: ReactNode }) {
   const [plan, setPlan] = useState<PlanTier>('free');
   const [limits, setLimits] = useState<PlanLimits>(DEFAULT_LIMITS);
+  const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
   const [ownerEmail, setOwnerEmail] = useState<string | null>(null);
   const [mpUserId, setMpUserId] = useState<string | null>(null);
   const [mpDefaultTerminalId, setMpDefaultTerminalId] = useState<string | null>(null);
@@ -92,6 +98,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
         const data = await res.json();
         if (data.plan) setPlan(data.plan === 'pro' ? 'pro' : 'free');
         if (data.limits) setLimits(data.limits);
+        setTrialEndsAt(typeof data.trialEndsAt === 'string' ? data.trialEndsAt : null);
         if (data.ownerEmail !== undefined) setOwnerEmail(data.ownerEmail);
         if (data.mpUserId !== undefined) setMpUserId(data.mpUserId);
         if (data.mpDefaultTerminalId !== undefined) setMpDefaultTerminalId(data.mpDefaultTerminalId);
@@ -112,6 +119,9 @@ export function PlanProvider({ children }: { children: ReactNode }) {
 
   const isPaid = plan === 'pro';
   const isFree = plan === 'free';
+  const trialMsLeft = trialEndsAt ? new Date(trialEndsAt).getTime() - Date.now() : 0;
+  const isTrial = plan === 'pro' && trialMsLeft > 0;
+  const trialDaysLeft = isTrial ? Math.max(1, Math.ceil(trialMsLeft / 86_400_000)) : null;
   const isMpConnected = !!mpUserId && plan === 'pro';
   const isGetnetConfigured = getnetConfigured;
   const isGetnetEnabled = getnetEnabled;
@@ -135,7 +145,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   }, [limits]);
 
   return (
-    <PlanContext.Provider value={{ plan, limits, ownerEmail, mpUserId, mpDefaultTerminalId, timezone, weekStartDow, isPaid, isFree, isMpConnected, isGetnetConfigured, isGetnetEnabled, isClipConfigured, isAtLimit, isFeatureLocked, refresh: fetchPlan }}>
+    <PlanContext.Provider value={{ plan, limits, trialEndsAt, trialDaysLeft, isTrial, ownerEmail, mpUserId, mpDefaultTerminalId, timezone, weekStartDow, isPaid, isFree, isMpConnected, isGetnetConfigured, isGetnetEnabled, isClipConfigured, isAtLimit, isFeatureLocked, refresh: fetchPlan }}>
       {children}
     </PlanContext.Provider>
   );

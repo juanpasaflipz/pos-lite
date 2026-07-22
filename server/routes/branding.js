@@ -147,6 +147,9 @@ router.get('/', async (req, res) => {
     address: branding.address || '',
     plan,
     limits: getPlanLimits(plan),
+    // Non-null only while plan==='pro' comes from a signup trial rather than
+    // a paid subscription — the UI uses it for the countdown banner.
+    trialEndsAt: (tenant.stored_plan !== 'pro' && tenant.trial_ends_at) ? tenant.trial_ends_at : null,
     ownerEmail: tenant.owner_email || null,
     mpUserId: tenant.mp_user_id || null,
     mpDefaultTerminalId: tenant.mp_default_terminal_id || null,

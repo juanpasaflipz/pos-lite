@@ -130,11 +130,11 @@
   },
   "upgrade": {
     "title": "Actualizar a Pro",
-    "cta": "Actualizar a Pro — $350 MXN/mes",
+    "cta": "Actualizar a Pro — $799 MXN/mes de por vida",
     "ctaShort": "Actualizar a Pro",
-    "ctaPrice": "Actualizar a Pro — $350 MXN/mes",
+    "ctaPrice": "Actualizar a Pro — $799 MXN/mes de por vida",
     "description": "Desbloquea IA, delivery, facturación y más",
-    "unlimitedAccess": "Actualiza a <strong>Pro a $350 MXN/mes</strong> para acceso completo",
+    "unlimitedAccess": "Actualiza a <strong>Pro Fundador por $799 MXN/mes de por vida</strong> para acceso completo",
     "redirecting": "Redirigiendo...",
     "upgradeNow": "Actualizar ahora",
     "featureRequiresPro": "{{feature}} requiere el plan Pro.",
@@ -158,8 +158,13 @@
     "dismiss": "Cerrar"
   },
   "freePlan": {
-    "banner": "Estás en el plan Gratis — Actualiza a Pro para IA, delivery y más",
+    "banner": "Estás en el plan Gratis para siempre — Actualiza a Pro para IA, delivery, CFDI y más",
     "upgrade": "Actualizar"
+  },
+  "trial": {
+    "banner": "Pro gratis — te quedan {{days}} días de prueba",
+    "bannerLastDay": "Último día de tu prueba Pro gratis",
+    "cta": "Quedarme con Pro"
   },
   "ai": {
     "lite": {
@@ -232,12 +237,12 @@
     "menuItems": "Productos del Menú",
     "unlimited": "Ilimitado",
     "billing": "Facturación",
-    "freePlanMessage": "Estás en el plan Gratis. Actualiza a Pro para IA, delivery, facturación y más.",
+    "freePlanMessage": "Estás en el plan Gratis para siempre. La oferta de fundadores: Pro por $799 MXN/mes de por vida — IA, delivery, facturación CFDI y más.",
     "monthly": "Mensual",
     "havePromo": "¿Tienes un código promocional?",
     "enterCode": "Ingresa código",
     "currentPlan": "Plan actual",
-    "proMonthly": "Pro — $350 MXN/mes",
+    "proMonthly": "Pro Fundador — $799 MXN/mes de por vida",
     "manageSubscription": "Administrar Suscripción",
     "billingSuccess": "Tu actualización a Pro ya está activa.",
     "billingPending": "El pago se completó. Estamos confirmando tu suscripción.",
@@ -305,7 +310,8 @@
     "revokeRetention": "Los datos históricos se conservan por cumplimiento regulatorio.",
     "revoking": "Revocando...",
     "loadingTerms": "Cargando términos...",
-    "consentVersion": "Versión del consentimiento: {{version}}"
+    "consentVersion": "Versión del consentimiento: {{version}}",
+    "trialNote": "Tu prueba Pro gratis termina el {{date}} — después tu POS sigue gratis para siempre."
   },
   "resetPassword": {
     "passwordReset": "Contraseña restablecida",

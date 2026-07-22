@@ -19,6 +19,7 @@ interface AccountData {
   name: string;
   email: string;
   plan: string;
+  trial_ends_at?: string | null;
   subscription_status: string | null;
   created_at: string;
   usage: {
@@ -450,8 +451,13 @@ export default function AccountScreen() {
                 <CreditCard className="text-brand-500" size={22} />
                 <h2 className="text-lg font-bold text-white">{t('account.billing')}</h2>
               </div>
-              {account.plan === 'free' ? (
+              {(account.plan === 'free' || account.trial_ends_at) ? (
                 <div className="space-y-3">
+                  {account.trial_ends_at && (
+                    <p className="text-amber-400 text-sm font-medium">
+                      {t('account.trialNote', { date: new Date(account.trial_ends_at).toLocaleDateString() })}
+                    </p>
+                  )}
                   <p className="text-neutral-400 text-sm">{t('account.freePlanMessage')}</p>
 
                   <div className="flex gap-3">

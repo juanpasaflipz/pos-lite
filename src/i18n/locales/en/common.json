@@ -130,11 +130,11 @@
   },
   "upgrade": {
     "title": "Upgrade to Pro",
-    "cta": "Upgrade to Pro — $350 MXN/month",
+    "cta": "Upgrade to Pro — $799 MXN/mo for life",
     "ctaShort": "Upgrade to Pro",
-    "ctaPrice": "Upgrade to Pro — $350 MXN/mo",
+    "ctaPrice": "Upgrade to Pro — $799 MXN/mo for life",
     "description": "Unlock AI, delivery, invoicing, and more",
-    "unlimitedAccess": "Upgrade to <strong>Pro at $350 MXN/mo</strong> for full access",
+    "unlimitedAccess": "Upgrade to <strong>Founders Pro at $799 MXN/mo for life</strong> for full access",
     "redirecting": "Redirecting...",
     "upgradeNow": "Upgrade now",
     "featureRequiresPro": "{{feature}} requires Pro plan.",
@@ -158,8 +158,13 @@
     "dismiss": "Dismiss"
   },
   "freePlan": {
-    "banner": "You're on the Free plan — Upgrade to Pro for AI, delivery & more",
+    "banner": "You're on the Free-forever plan — Upgrade to Pro for AI, delivery, CFDI & more",
     "upgrade": "Upgrade"
+  },
+  "trial": {
+    "banner": "Free Pro trial — {{days}} days left",
+    "bannerLastDay": "Last day of your free Pro trial",
+    "cta": "Keep Pro"
   },
   "ai": {
     "lite": {
@@ -232,12 +237,12 @@
     "menuItems": "Menu Items",
     "unlimited": "Unlimited",
     "billing": "Billing",
-    "freePlanMessage": "You're on the Free plan. Upgrade to Pro for AI, delivery, invoicing, and more.",
+    "freePlanMessage": "You're on the Free-forever plan. Founders offer: Pro at $799 MXN/mo for life — AI, delivery, CFDI invoicing & more.",
     "monthly": "Monthly",
     "havePromo": "Have a promo code?",
     "enterCode": "Enter code",
     "currentPlan": "Current plan",
-    "proMonthly": "Pro — $350 MXN/mes",
+    "proMonthly": "Founders Pro — $799 MXN/mo for life",
     "manageSubscription": "Manage Subscription",
     "billingSuccess": "Your Pro upgrade is active.",
     "billingPending": "Payment completed. We're confirming your subscription now.",
@@ -305,7 +310,8 @@
     "revokeRetention": "Historical data is retained for regulatory compliance.",
     "revoking": "Revoking...",
     "loadingTerms": "Loading terms...",
-    "consentVersion": "Consent version: {{version}}"
+    "consentVersion": "Consent version: {{version}}",
+    "trialNote": "Your free Pro trial ends on {{date}} — after that your POS stays free forever."
   },
   "resetPassword": {
     "passwordReset": "Password reset",

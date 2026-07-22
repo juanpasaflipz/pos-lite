@@ -309,3 +309,144 @@ export async function sendPinEmail(email, pin, restaurantName, subdomain) {
     console.error('[Email] Failed to send PIN email:', err.message);
   }
 }
+
+/**
+ * Freemium signup welcome (Spanish — self-serve signups are MX).
+ * PIN + login URL + what the 14-day full-Pro trial includes and what
+ * happens after (free forever, Pro features lock).
+ */
+export async function sendTrialWelcomeEmail({ email, restaurantName, subdomain, pin, trialDays = 14 }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const posUrl = subdomain ? `https://${subdomain}.desktop.kitchen` : 'https://pos.desktop.kitchen';
+  if (!apiKey) {
+    console.log(`[Email] No RESEND_API_KEY — trial welcome for ${email}: PIN ${pin}, ${posUrl}`);
+    return;
+  }
+  try {
+    await fetchWithTimeout('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'Desktop Kitchen <hello@desktop.kitchen>',
+        to: [email],
+        subject: `Tu punto de venta está listo — ${restaurantName}`,
+        html: `
+          <div style="font-family:sans-serif;max-width:540px;margin:0 auto;padding:24px">
+            <h2 style="color:#0d9488;margin-bottom:4px">¡Bienvenido a Desktop Kitchen!</h2>
+            <p style="color:#666;margin-top:0">El punto de venta de <strong>${restaurantName}</strong> ya está listo — gratis para siempre.</p>
+
+            <div style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:16px;margin:20px 0">
+              <p style="margin:0 0 8px"><strong>Tu PIN de administrador:</strong> <span style="font-size:22px;font-weight:700;letter-spacing:4px">${pin}</span></p>
+              <p style="margin:0"><strong>La dirección de tu POS:</strong> <a href="${posUrl}" style="color:#0d9488">${posUrl.replace('https://', '')}</a></p>
+            </div>
+
+            <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:20px 0">
+              <p style="margin:0"><strong>🎁 Tienes ${trialDays} días de Pro completo, gratis:</strong> IA para tu menú, delivery, facturación CFDI y más. Al terminar, tu POS sigue funcionando gratis para siempre — solo se pausan las funciones Pro.</p>
+            </div>
+
+            <h3 style="color:#0d9488;margin-bottom:8px">Primeros pasos</h3>
+            <ol style="color:#374151;line-height:1.8;padding-left:20px">
+              <li>Entra con tu PIN en la dirección de arriba</li>
+              <li>Crea tu menú — con plantillas o descríbelo y la IA lo arma</li>
+              <li>El efectivo funciona desde ya; conecta Mercado Pago o Stripe para tarjeta</li>
+              <li>Conecta tu impresora de tickets si tienes una</li>
+            </ol>
+
+            <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
+            <p style="color:#9ca3af;font-size:13px">¿Necesitas ayuda? Responde a este correo — te contesta el fundador.</p>
+          </div>
+        `,
+      }),
+    });
+  } catch (err) {
+    console.error('[Email] Failed to send trial welcome email:', err.message);
+  }
+}
+
+/**
+ * Sent ~3 days before the signup trial ends: what locks, founders offer CTA.
+ */
+export async function sendTrialEndingSoonEmail({ email, restaurantName, subdomain, daysLeft }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const accountUrl = subdomain
+    ? `https://${subdomain}.desktop.kitchen/#/admin/account`
+    : 'https://pos.desktop.kitchen/#/admin/account';
+  if (!apiKey) {
+    console.log(`[Email] No RESEND_API_KEY — trial-ending email for ${email} skipped`);
+    return;
+  }
+  const dias = daysLeft === 1 ? 'mañana' : `en ${daysLeft} días`;
+  try {
+    await fetchWithTimeout('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'Desktop Kitchen <hello@desktop.kitchen>',
+        to: [email],
+        subject: `Tu prueba Pro termina ${dias} — ${restaurantName}`,
+        html: `
+          <div style="font-family:sans-serif;max-width:540px;margin:0 auto;padding:24px">
+            <h2 style="color:#0d9488;margin-bottom:4px">Tu prueba Pro termina ${dias}</h2>
+            <p style="color:#666;margin-top:0">Tu POS de <strong>${restaurantName}</strong> seguirá funcionando gratis para siempre. Lo que se pausa al terminar la prueba: IA, delivery, facturación CFDI, lealtad por SMS y exportación de datos.</p>
+
+            <div style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:16px;margin:20px 0">
+              <p style="margin:0 0 8px"><strong>Oferta de fundadores:</strong> quédate con Pro por <strong>$799 MXN al mes, de por vida</strong>. El precio nunca sube mientras sigas suscrito.</p>
+              <p style="margin:12px 0 0">
+                <a href="${accountUrl}" style="display:inline-block;padding:12px 24px;background:#0d9488;color:#fff;text-decoration:none;border-radius:8px;font-weight:700">Quedarme con Pro</a>
+              </p>
+            </div>
+
+            <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
+            <p style="color:#9ca3af;font-size:13px">¿Dudas? Responde a este correo — te contesta el fundador.</p>
+          </div>
+        `,
+      }),
+    });
+  } catch (err) {
+    console.error('[Email] Failed to send trial-ending email:', err.message);
+  }
+}
+
+/**
+ * Sent once the trial has ended: reassurance (POS keeps working, data intact)
+ * + founders offer CTA.
+ */
+export async function sendTrialEndedEmail({ email, restaurantName, subdomain }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const accountUrl = subdomain
+    ? `https://${subdomain}.desktop.kitchen/#/admin/account`
+    : 'https://pos.desktop.kitchen/#/admin/account';
+  if (!apiKey) {
+    console.log(`[Email] No RESEND_API_KEY — trial-ended email for ${email} skipped`);
+    return;
+  }
+  try {
+    await fetchWithTimeout('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'Desktop Kitchen <hello@desktop.kitchen>',
+        to: [email],
+        subject: `Tu POS sigue siendo gratis — ${restaurantName}`,
+        html: `
+          <div style="font-family:sans-serif;max-width:540px;margin:0 auto;padding:24px">
+            <h2 style="color:#0d9488;margin-bottom:4px">Tu prueba Pro terminó — y tu POS sigue igual de tuyo</h2>
+            <p style="color:#666;margin-top:0">El punto de venta de <strong>${restaurantName}</strong> sigue funcionando <strong>gratis para siempre</strong>: menú, ventas, empleados, impresoras y tu historial completo están intactos. Solo se pausaron las funciones Pro (IA, delivery, facturación CFDI, lealtad por SMS y exportación).</p>
+
+            <div style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:16px;margin:20px 0">
+              <p style="margin:0 0 8px"><strong>¿Las extrañas?</strong> La oferta de fundadores sigue abierta: Pro por <strong>$799 MXN al mes, de por vida</strong>.</p>
+              <p style="margin:12px 0 0">
+                <a href="${accountUrl}" style="display:inline-block;padding:12px 24px;background:#0d9488;color:#fff;text-decoration:none;border-radius:8px;font-weight:700">Reactivar Pro</a>
+              </p>
+            </div>
+
+            <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
+            <p style="color:#9ca3af;font-size:13px">¿Dudas? Responde a este correo — te contesta el fundador.</p>
+          </div>
+        `,
+      }),
+    });
+  } catch (err) {
+    console.error('[Email] Failed to send trial-ended email:', err.message);
+  }
+}

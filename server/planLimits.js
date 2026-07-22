@@ -1,7 +1,13 @@
 /**
- * POS Lite — Two-tier plan system ($350 MXN/mo Pro, Free forever)
+ * POS Lite — Two-tier plan system (Pro paid, Free forever)
  * Free: fully functional POS, no artificial caps
  * Pro: AI, delivery, CFDI, SMS loyalty, data export, banking
+ *
+ * Freemium launch (2026-07): new self-serve signups keep plan='free' in the
+ * DB but get full Pro for 14 days via tenants.trial_ends_at. Always resolve
+ * access through effectivePlan(tenantRow) — never read tenant.plan directly
+ * for gating. Expiry is implicit (the clock passes trial_ends_at), so there
+ * is no downgrade job to run or fail.
  */
 
 export const PLAN_LIMITS = {
@@ -47,6 +53,24 @@ export const PLAN_TIERS = ['free', 'pro'];
 
 export function getPlanLimits(plan) {
   return PLAN_LIMITS[plan] || PLAN_LIMITS.free;
+}
+
+/** True while a signup's full-Pro trial window is still open. */
+export function isTrialActive(tenant) {
+  if (!tenant?.trial_ends_at) return false;
+  const ends = new Date(tenant.trial_ends_at).getTime();
+  return Number.isFinite(ends) && ends > Date.now();
+}
+
+/**
+ * The plan a tenant should be treated as RIGHT NOW.
+ * Paid 'pro' always wins; otherwise an active trial grants 'pro';
+ * everything else (including unknown values) is 'free'.
+ */
+export function effectivePlan(tenant) {
+  if (!tenant) return 'free';
+  if (tenant.plan === 'pro') return 'pro';
+  return isTrialActive(tenant) ? 'pro' : 'free';
 }
 
 export function getRequiredPlan(feature, subKey) {

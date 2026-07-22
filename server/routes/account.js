@@ -3,7 +3,7 @@ import bcrypt from 'bcrypt';
 import { requireOwner } from '../middleware/ownerAuth.js';
 import { getTenant, updateTenant } from '../tenants.js';
 import { adminSql } from '../db/index.js';
-import { getPlanLimits } from '../planLimits.js';
+import { getPlanLimits, effectivePlan } from '../planLimits.js';
 
 const router = Router();
 
@@ -19,13 +19,15 @@ router.get('/', requireOwner, async (req, res) => {
         (SELECT COUNT(*) FROM menu_items WHERE tenant_id = ${tenant.id} AND active = true) AS menu_item_count
     `;
 
-    const limits = getPlanLimits(tenant.plan);
+    const plan = effectivePlan(tenant); // trial signups count as 'pro' until trial_ends_at
+    const limits = getPlanLimits(plan);
 
     res.json({
       id: tenant.id,
       name: tenant.name,
       email: tenant.owner_email,
-      plan: tenant.plan,
+      plan,
+      trial_ends_at: tenant.plan !== 'pro' ? (tenant.trial_ends_at || null) : null,
       subscription_status: tenant.subscription_status,
       created_at: tenant.created_at,
       mp_user_id: tenant.mp_user_id || null,

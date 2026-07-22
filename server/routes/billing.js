@@ -4,13 +4,19 @@ import { requireOwner } from '../middleware/ownerAuth.js';
 import { getTenant, updateTenant } from '../tenants.js';
 import { adminSql } from '../db/index.js';
 import { provisionPaidTenant } from '../lib/provisionPaidTenant.js';
+import { effectivePlan } from '../planLimits.js';
 
 const router = Router();
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_dummy');
 
+// While the founders offer is live, in-app upgrades sell the same
+// $799 MXN/mes-de-por-vida price as the landing page (Juan's call,
+// 2026-07-22) — one coherent price everywhere. To retire the offer,
+// unset STRIPE_PRICE_FOUNDERS (or remove the fallback here) and
+// in-app upgrades revert to the standard Pro price.
 const PRICE_IDS = {
-  pro: process.env.STRIPE_PRICE_PRO || null,
+  pro: process.env.STRIPE_PRICE_FOUNDERS || process.env.STRIPE_PRICE_PRO || null,
 };
 
 const BASE_URL = process.env.APP_URL || 'https://pos.desktop.kitchen';
@@ -100,7 +106,9 @@ router.get('/', requireOwner, async (req, res) => {
     if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
 
     res.json({
-      plan: tenant.plan,
+      plan: effectivePlan(tenant),
+      stored_plan: tenant.plan,
+      trial_ends_at: tenant.plan !== 'pro' ? (tenant.trial_ends_at || null) : null,
       subscription_status: tenant.subscription_status,
       stripe_customer_id: tenant.stripe_customer_id || null,
       stripe_subscription_id: tenant.stripe_subscription_id || null,
