@@ -4,6 +4,6 @@
   "agent_id": "macmini-cocina",
   "poll_ms": 3000,
   "printers": {
-    "default": "192.168.1.200:9100"
+    "default": "usb:termica"
   }
 }

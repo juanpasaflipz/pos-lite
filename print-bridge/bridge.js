@@ -3,7 +3,8 @@
  * pos-lite print bridge — runs on-site (Mac mini) next to the thermal printer.
  *
  * Polls the cloud server for queued print jobs and sends the raw ESC/POS
- * bytes to the printer over the LAN (raw TCP, port 9100).
+ * bytes to the printer — over the LAN (raw TCP, port 9100) or over USB
+ * through a raw CUPS queue (macOS/Linux).
  *
  * Zero dependencies. Requires Node 18+ (built-in fetch).
  *
@@ -17,13 +18,15 @@
  *   "agent_id": "macmini-cocina",
  *   "poll_ms": 3000,
  *   "printers": {
- *     "default": "192.168.1.200:9100"        // GHIA GTP801 Ethernet IP
+ *     "default": "192.168.1.200:9100"        // network printer (raw TCP 9100)
+ *     // "default": "usb:termica"            // USB printer via raw CUPS queue (see setup-usb-macos.sh)
  *     // "2": "192.168.1.201:9100"           // optional: printer_id → address overrides
  *   }
  * }
  */
 
 import net from 'node:net';
+import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -61,11 +64,76 @@ function loadConfig() {
 
 const cfg = loadConfig();
 
-// ==================== Printer transport (raw TCP 9100) ====================
+// ==================== Printer transport ====================
+//
+// Two address schemes:
+//   "192.168.1.200:9100"  → raw TCP to a network printer
+//   "usb:QUEUE" / "cups:QUEUE" → pipe bytes through `lp -o raw` to a local
+//                                CUPS queue (USB printers on macOS/Linux)
+
+function isCupsAddress(addr) {
+  return /^(usb|cups):/i.test(String(addr));
+}
+
+function cupsQueue(addr) {
+  return String(addr).replace(/^(usb|cups):/i, '').trim();
+}
 
 function parseAddress(addr) {
   const [host, port] = String(addr).split(':');
   return { host, port: Number(port) || 9100 };
+}
+
+/**
+ * Send raw bytes to a local CUPS queue (`lp -d <queue> -o raw`). The queue
+ * must be a RAW queue (created by setup-usb-macos.sh) so CUPS passes the
+ * ESC/POS bytes through untouched.
+ */
+function sendToCups(queue, buffer) {
+  return new Promise((resolve, reject) => {
+    const lp = spawn('lp', ['-d', queue, '-o', 'raw', '-s'], { stdio: ['pipe', 'ignore', 'pipe'] });
+    let stderr = '';
+    let settled = false;
+    const fail = (err) => {
+      if (settled) return;
+      settled = true;
+      lp.kill();
+      reject(err);
+    };
+
+    const timer = setTimeout(() => fail(new Error(`CUPS queue "${queue}" timed out`)), 15_000);
+    lp.stderr.on('data', (d) => { stderr += d; });
+    lp.once('error', (err) => fail(new Error(`lp not available: ${err.message}`)));
+    lp.once('close', (code) => {
+      clearTimeout(timer);
+      if (settled) return;
+      settled = true;
+      if (code === 0) resolve();
+      else reject(new Error(`CUPS queue "${queue}": lp exited ${code}${stderr ? ` — ${stderr.trim().slice(0, 200)}` : ''}`));
+    });
+
+    lp.stdin.on('error', () => {}); // EPIPE if lp dies first; close handler reports it
+    lp.stdin.end(buffer);
+  });
+}
+
+/**
+ * Connectivity check for a CUPS queue: the queue must exist and be enabled
+ * (not paused). Catches "printer unplugged → CUPS paused the queue".
+ */
+function pingCups(queue) {
+  return new Promise((resolve, reject) => {
+    execFile('lpstat', ['-p', queue], { timeout: 5_000 }, (err, stdout) => {
+      if (err) {
+        return reject(new Error(`CUPS queue "${queue}" not found — run setup-usb-macos.sh (${String(err.message).split('\n')[0].slice(0, 120)})`));
+      }
+      const out = String(stdout).toLowerCase();
+      if (out.includes('disabled') || out.includes('deshabilitad')) {
+        return reject(new Error(`CUPS queue "${queue}" is paused — check the USB cable/power, then run: cupsenable ${queue}`));
+      }
+      resolve();
+    });
+  });
 }
 
 /**
@@ -155,7 +223,8 @@ async function processJob(job) {
   // Connectivity check requested from the POS (Impresoras → Probar):
   // TCP connect only, nothing sent, nothing printed.
   if (payload?.format === 'ping' || job.job_type === 'ping') {
-    await pingPrinter(address);
+    if (isCupsAddress(address)) await pingCups(cupsQueue(address));
+    else await pingPrinter(address);
     console.log(`[bridge] ✓ ping ok → ${address}`);
     return;
   }
@@ -165,7 +234,8 @@ async function processJob(job) {
   }
   const bytes = Buffer.from(payload.data, 'base64');
 
-  await sendToPrinter(address, bytes);
+  if (isCupsAddress(address)) await sendToCups(cupsQueue(address), bytes);
+  else await sendToPrinter(address, bytes);
   printedTotal++;
   console.log(`[bridge] ✓ printed job ${job.id} (${job.source || job.job_type}) → ${address}`);
 }
