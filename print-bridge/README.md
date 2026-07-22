@@ -1,18 +1,45 @@
 # Print Bridge
 
 Runs on the restaurant's Mac mini. Polls the pos-lite cloud server for queued
-kitchen tickets and prints them on the local thermal printer (GHIA GTP801 or
-any Epson-ESC/POS-compatible printer) over Ethernet, raw TCP port 9100.
+kitchen tickets and prints them on the local thermal printer (GHIA or any
+Epson-ESC/POS-compatible printer) — over Ethernet (raw TCP 9100) or over
+**USB** through a raw CUPS queue.
 
 ```
 Didi/Rappi/Uber → pos-lite (Railway) → print_jobs queue
                                             ↑ poll every 3s
-                              Mac mini (bridge.js) → GHIA GTP801 @ 192.168.x.x:9100
+                              Mac mini (bridge.js) ─┬→ Ethernet: 192.168.x.x:9100
+                                                    └→ USB: cola CUPS raw (lp -o raw)
 ```
 
 Zero npm dependencies. Needs Node 18+.
 
-## 1. Printer hardware setup (GHIA GTP801)
+## 1-USB. Printer hardware setup (USB thermal, e.g. GHIA)
+
+1. Connect the printer to the Mac by **USB** and power it on with paper loaded.
+2. Create a raw CUPS queue (one-time):
+
+   ```bash
+   ./setup-usb-macos.sh            # creates queue "termica"
+   ```
+
+   The script finds the USB printer, creates a pass-through (raw) queue and
+   enables it. macOS may warn that raw queues are deprecated — it still works.
+3. Verify hardware (no server needed):
+
+   ```bash
+   node test-printer.js usb:termica
+   ```
+
+   If a "PRUEBA DIRECTA" ticket prints, the printer + queue are good.
+4. In `config.json` use `"default": "usb:termica"` and continue at step 3
+   (Configure the bridge) below.
+
+> If the USB cable is unplugged, macOS pauses the queue and jobs error out.
+> Re-plug and run `cupsenable termica`. "Probar conexión" in the POS surfaces
+> this state ("queue is paused").
+
+## 1-Ethernet. Printer hardware setup (GHIA GTP801, network)
 
 1. Connect the printer to the router/switch with an **Ethernet cable** (the
    USB cable is not needed for this setup).
@@ -45,7 +72,9 @@ Edit `config.json`:
 - `server_url` — the tenant URL, e.g. `https://mirestaurante.desktop.kitchen`
 - `agent_token` — generate it in the POS: **Admin → Impresoras → Print Bridge →
   Generar token**. It is shown once; paste it here.
-- `printers.default` — the printer's IP from step 1, e.g. `192.168.1.200:9100`
+- `printers.default` — `usb:termica` for USB (the CUPS queue from
+  `setup-usb-macos.sh`), or the printer's IP for Ethernet, e.g.
+  `192.168.1.200:9100`
 
 Run it manually first to confirm:
 
@@ -73,6 +102,8 @@ Logs: `tail -f ~/Library/Logs/print-bridge/bridge.log`
 | Symptom | Fix |
 |---|---|
 | `test-printer.js` times out | Wrong IP, printer off, or different network/VLAN. Re-print self-test page. |
+| USB: `lp exited 1` / queue not found | Run `./setup-usb-macos.sh`; check `lpstat -p`. |
+| USB: job "sent" but nothing prints | Queue paused (unplugged cable pauses it): `cupsenable termica`. Stuck jobs: `cancel -a termica`. |
 | Bridge logs `HTTP 401` | Token wrong/rotated. Generate a new token in the POS and update config.json. |
 | Tickets queue but don't print | Is the bridge running? `launchctl list \| grep print-bridge`; check logs. |
 | Accents print as `?` | The printer isn't honoring CP850 — tell the dev, we can switch codepage per printer. |

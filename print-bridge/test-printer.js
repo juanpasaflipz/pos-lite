@@ -1,23 +1,28 @@
 #!/usr/bin/env node
 /**
  * Direct printer hardware test — no server involved.
- * Sends a test ticket straight to the printer over TCP 9100.
+ * Sends a test ticket straight to the printer: over TCP 9100 (network
+ * printers) or through a raw CUPS queue (USB printers).
  *
  * Usage:
- *   node test-printer.js 192.168.1.200
+ *   node test-printer.js 192.168.1.200         # network printer
  *   node test-printer.js 192.168.1.200:9100
+ *   node test-printer.js usb:termica           # USB printer (CUPS queue)
  *
- * If this prints, the printer + network are fine and any remaining issue
+ * If this prints, the printer hardware is fine and any remaining issue
  * is in the bridge config or the server.
  */
 
 import net from 'node:net';
+import { spawn } from 'node:child_process';
 
 const arg = process.argv[2];
 if (!arg) {
-  console.error('Usage: node test-printer.js <printer-ip>[:port]');
+  console.error('Usage: node test-printer.js <printer-ip>[:port] | usb:<cups-queue>');
   process.exit(1);
 }
+const isUsb = /^(usb|cups):/i.test(arg);
+const queue = arg.replace(/^(usb|cups):/i, '').trim();
 const [host, portStr] = arg.split(':');
 const port = Number(portStr) || 9100;
 
@@ -36,7 +41,7 @@ const ticket = Buffer.concat([
   Buffer.from([GS, 0x21, 0x11]),       // double size
   enc('PRUEBA DIRECTA'), LF,
   Buffer.from([GS, 0x21, 0x00]),       // normal size
-  enc(`${host}:${port}`), LF,
+  enc(isUsb ? `USB (cola CUPS: ${queue})` : `${host}:${port}`), LF,
   enc(new Date().toLocaleString('es-MX')), LF,
   Buffer.from([ESC, 0x61, 0x00]),      // left
   enc('='.repeat(42)), LF,
@@ -47,6 +52,26 @@ const ticket = Buffer.concat([
   Buffer.from([ESC, 0x64, 0x03]),      // feed 3
   Buffer.from([GS, 0x56, 0x42, 0x00]), // partial cut
 ]);
+
+if (isUsb) {
+  console.log(`Sending to CUPS queue "${queue}" (lp -o raw)...`);
+  const lp = spawn('lp', ['-d', queue, '-o', 'raw', '-s'], { stdio: ['pipe', 'inherit', 'inherit'] });
+  lp.once('error', (err) => {
+    console.error(`FAILED: lp not available: ${err.message}`);
+    process.exit(1);
+  });
+  lp.once('close', (code) => {
+    if (code === 0) {
+      console.log('OK — ticket sent to CUPS. Check the printer.');
+      console.log('If nothing prints: is the USB cable in? Queue paused? Run: lpstat -p ' + queue);
+      process.exit(0);
+    }
+    console.error(`FAILED: lp exited ${code}. Does the queue exist? Run: lpstat -p`);
+    console.error('To create a raw USB queue, run: ./setup-usb-macos.sh');
+    process.exit(1);
+  });
+  lp.stdin.end(ticket);
+} else {
 
 console.log(`Connecting to ${host}:${port}...`);
 const socket = new net.Socket();
@@ -68,3 +93,5 @@ socket.connect(port, host, () => {
     }, 500);
   });
 });
+
+}
