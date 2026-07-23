@@ -43,7 +43,7 @@ async function findSystemEmployee() {
 }
 
 // GET /api/customer-order/settings — public, returns payment requirement
-router.get('/settings', async (_req, res) => {
+router.get('/settings', async (req, res) => {
   try {
     const brand = await get(`
       SELECT board_settings FROM virtual_brands WHERE active = true ORDER BY id LIMIT 1
