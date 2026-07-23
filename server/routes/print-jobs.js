@@ -1,10 +1,17 @@
 import { Router } from 'express';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { all, get, run, getConn, getTenantId } from '../db/index.js';
 import { adminSql } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireAgentToken } from '../middleware/agentAuth.js';
 import { enqueueTestTicket, enqueuePingJob, getBridgeHealth } from '../lib/printQueue.js';
+import { renderInstallScript } from '../lib/installScript.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const BRIDGE_JS_PATH = path.join(__dirname, '..', '..', 'print-bridge', 'bridge.js');
 
 const router = Router();
 
@@ -108,6 +115,105 @@ router.post('/agent-token', requireAuth('manage_printers'), async (req, res) => 
   } catch (error) {
     console.error('[PrintJobs] Token generation error:', error);
     res.status(500).json({ error: 'Failed to generate agent token' });
+  }
+});
+
+/**
+ * POST /api/print-jobs/install-code
+ * Generates a one-time, 10-minute install code. The Printer Management UI
+ * turns it into a copy-paste one-liner:
+ *   curl -fsSL https://<tenant>/api/print-jobs/install.sh?code=XXXX | bash
+ */
+router.post('/install-code', requireAuth('manage_printers'), async (req, res) => {
+  try {
+    const tenantId = getTenantId();
+    const code = crypto.randomBytes(8).toString('hex');
+    const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+    await adminSql`
+      INSERT INTO tenant_credentials (tenant_id, service, key, value)
+      VALUES (${tenantId}, 'print_agent', 'install_code', ${code}),
+             (${tenantId}, 'print_agent', 'install_code_expires', ${expires})
+      ON CONFLICT (tenant_id, service, key)
+      DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+    `;
+
+    const command = `curl -fsSL "https://${req.get('host')}/api/print-jobs/install.sh?code=${code}" | bash`;
+    res.json({ code, command, expires_at: expires });
+  } catch (error) {
+    console.error('[PrintJobs] Install code error:', error);
+    res.status(500).json({ error: 'Failed to generate install code' });
+  }
+});
+
+/**
+ * GET /api/print-jobs/install.sh?code=...
+ * Gated by the one-time install code (no JWT — this is fetched by curl on
+ * the store's Mac). Consumes the code, reuses-or-creates the agent token,
+ * and serves a bash installer with the tenant URL + token embedded.
+ */
+router.get('/install.sh', async (req, res) => {
+  try {
+    const tenantId = getTenantId();
+    const provided = String(req.query.code || '');
+
+    const rows = await adminSql`
+      SELECT key, value FROM tenant_credentials
+      WHERE tenant_id = ${tenantId} AND service = 'print_agent'
+    `;
+    const creds = Object.fromEntries(rows.map(r => [r.key, r.value]));
+
+    const stored = creds.install_code;
+    const expired = !creds.install_code_expires || new Date(creds.install_code_expires).getTime() < Date.now();
+    const a = Buffer.from(provided);
+    const b = Buffer.from(stored || '');
+    const match = stored && a.length === b.length && crypto.timingSafeEqual(a, b);
+    if (!match || expired) {
+      return res.status(401).type('text/plain').send(
+        'echo "Codigo de instalacion invalido o vencido. Genera uno nuevo en el POS (Gestion de Impresoras)."; exit 1\n'
+      );
+    }
+
+    // Consume the code (single use)
+    await adminSql`
+      DELETE FROM tenant_credentials
+      WHERE tenant_id = ${tenantId} AND service = 'print_agent'
+        AND key IN ('install_code', 'install_code_expires')
+    `;
+
+    // Reuse the existing agent token so an already-running bridge at the same
+    // store keeps working; create one only if none exists yet.
+    let token = creds.token;
+    if (!token) {
+      token = 'pb_' + crypto.randomBytes(24).toString('hex');
+      await adminSql`
+        INSERT INTO tenant_credentials (tenant_id, service, key, value)
+        VALUES (${tenantId}, 'print_agent', 'token', ${token})
+        ON CONFLICT (tenant_id, service, key)
+        DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+      `;
+    }
+
+    const serverUrl = `https://${req.get('host')}`;
+    res.type('text/x-shellscript').send(renderInstallScript({ serverUrl, token }));
+  } catch (error) {
+    console.error('[PrintJobs] Install script error:', error);
+    res.status(500).type('text/plain').send('echo "Error del servidor generando el instalador."; exit 1\n');
+  }
+});
+
+/**
+ * GET /api/print-jobs/bridge.js
+ * Serves the bridge client so the installer (and manual updates) can fetch
+ * it from the tenant's own server. No secrets inside — safe to be public.
+ */
+router.get('/bridge.js', async (_req, res) => {
+  try {
+    const source = await fs.promises.readFile(BRIDGE_JS_PATH, 'utf8');
+    res.type('application/javascript').send(source);
+  } catch (error) {
+    console.error('[PrintJobs] Bridge source error:', error);
+    res.status(500).json({ error: 'Bridge source unavailable' });
   }
 });
 

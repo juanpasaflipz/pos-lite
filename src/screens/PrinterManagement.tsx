@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Plus, Printer as PrinterIcon, Wifi, WifiOff, KeyRound, FileCheck, Activity, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Plus, Printer as PrinterIcon, Wifi, WifiOff, KeyRound, FileCheck, Activity, CheckCircle2, XCircle, Loader2, TerminalSquare } from 'lucide-react';
 import {
   getPrinters,
   createPrinter,
@@ -11,6 +11,7 @@ import {
   getCategories,
   getPrintBridgeStatus,
   generatePrintAgentToken,
+  createBridgeInstallCommand,
   sendTestPrint,
   pingPrinter,
   getPrintJobStatus,
@@ -32,6 +33,8 @@ export default function PrinterManagement() {
   const [newAddress, setNewAddress] = useState('');
   const [bridge, setBridge] = useState<PrintBridgeStatus | null>(null);
   const [newToken, setNewToken] = useState<string | null>(null);
+  const [installCommand, setInstallCommand] = useState<string | null>(null);
+  const [installCopied, setInstallCopied] = useState(false);
   const [testSent, setTestSent] = useState(false);
   // Connectivity checks keyed by printer id ('default' = bridge default printer)
   const [pingResults, setPingResults] = useState<Record<string, { state: 'running' | 'ok' | 'fail'; message?: string }>>({});
@@ -56,9 +59,21 @@ export default function PrinterManagement() {
     try {
       const { token } = await generatePrintAgentToken();
       setNewToken(token);
+      setInstallCommand(null);
       fetchBridge();
     } catch (err) {
       console.error('Failed to generate token:', err);
+    }
+  };
+
+  const handleInstallCommand = async () => {
+    try {
+      const { command } = await createBridgeInstallCommand();
+      setInstallCommand(command);
+      setNewToken(null); // one box at a time — the installer embeds the token itself
+      setInstallCopied(false);
+    } catch (err) {
+      console.error('Failed to create install command:', err);
     }
   };
 
@@ -241,6 +256,12 @@ export default function PrinterManagement() {
                   </div>
                   <div className="flex gap-2 flex-wrap">
                     <button
+                      onClick={handleInstallCommand}
+                      className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg font-medium hover:bg-brand-700 transition-colors min-h-[40px]"
+                    >
+                      <TerminalSquare size={18} /> {t('printers.bridge.installButton')}
+                    </button>
+                    <button
                       onClick={handleGenerateToken}
                       className="flex items-center gap-2 px-4 py-2 bg-neutral-800 text-white rounded-lg font-medium hover:bg-neutral-700 transition-colors min-h-[40px]"
                     >
@@ -265,6 +286,26 @@ export default function PrinterManagement() {
                     {bridge.errors_24h > 0 && (
                       <span className="text-red-400">{t('printers.bridge.errors24h')}: {bridge.errors_24h}</span>
                     )}
+                  </div>
+                )}
+
+                {installCommand && (
+                  <div className="bg-neutral-800 rounded-lg p-3 space-y-2">
+                    <p className="text-sm text-amber-400 font-medium">{t('printers.bridge.installTitle')}</p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-sm text-green-300 break-all select-all">{installCommand}</code>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard?.writeText(installCommand);
+                          setInstallCopied(true);
+                          setTimeout(() => setInstallCopied(false), 3000);
+                        }}
+                        className="px-3 py-2 bg-neutral-700 text-white rounded-lg text-sm font-medium hover:bg-neutral-600 min-h-[40px]"
+                      >
+                        {installCopied ? t('common:buttons.copied', 'Copied!') : t('common:buttons.copy', 'Copy')}
+                      </button>
+                    </div>
+                    <p className="text-xs text-neutral-500">{t('printers.bridge.installHint')}</p>
                   </div>
                 )}
 

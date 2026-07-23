@@ -1725,6 +1725,13 @@ export async function generatePrintAgentToken(): Promise<{ token: string }> {
   return apiRequest<{ token: string }>('/print-jobs/agent-token', { method: 'POST' });
 }
 
+/** One-time install code → copy-paste one-liner for the store's Mac. */
+export async function createBridgeInstallCommand(): Promise<{ code: string; command: string; expires_at: string }> {
+  return apiRequest<{ code: string; command: string; expires_at: string }>('/print-jobs/install-code', {
+    method: 'POST',
+  });
+}
+
 export async function sendTestPrint(printerId: number | null): Promise<{ job_id: number }> {
   return apiRequest<{ job_id: number }>('/print-jobs/test', {
     method: 'POST',
