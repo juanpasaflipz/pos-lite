@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import { adminSql, withTenant, get } from '../db/index.js';
 import { JWT_SECRET } from '../lib/constants.js';
 import { getTenant } from '../tenants.js';
+import { getPlanLimits, planUpgradeError, effectivePlan } from '../planLimits.js';
 import { tzDate } from '../lib/tz.js';
 import { deductInventoryForOrder } from '../helpers/inventory.js';
 import { generateInvoiceToken } from '../helpers/facturapi.js';
@@ -144,6 +145,31 @@ function verifyKioskToken(req, res, next) {
     next();
   } catch {
     res.status(401).json({ error: 'Invalid or expired kiosk token' });
+  }
+}
+
+// Kiosk is a Pro feature (repackaged 2026-07-23). /api/kiosk mounts BEFORE
+// tenantMiddleware (bind is cross-tenant), so req.tenant does NOT exist here
+// — resolve the tenant from the verified kiosk token's tenantId and compute
+// the EFFECTIVE plan (paid Pro or active signup trial both read 'pro').
+// Endpoints that only finish an in-flight payment (status poll, terminal
+// charge, terminal list) are deliberately NOT gated, so a customer standing
+// at the terminal when the trial expires can still complete their payment.
+// Everything that starts/extends an order or serves kiosk UX data is gated —
+// the kiosk app shows its "no disponible" screen on the first 403 (see
+// kiosk/src/lib/kioskApi.ts planLockHandler).
+async function requireKioskPlan(req, res, next) {
+  try {
+    const tenant = await getTenant(req.kioskTenantId);
+    if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+    const plan = effectivePlan(tenant);
+    if (!getPlanLimits(plan).kiosk?.functional) {
+      return res.status(403).json(planUpgradeError('kiosk', plan));
+    }
+    next();
+  } catch (err) {
+    console.error('[kiosk] plan check failed:', err.message);
+    res.status(500).json({ error: 'Plan check failed' });
   }
 }
 
@@ -545,7 +571,7 @@ router.post('/admin/bind', bindLimiter, async (req, res) => {
 });
 
 // POST /api/kiosk/orders — create an order from a bound customer tablet
-router.post('/orders', verifyKioskToken, async (req, res) => {
+router.post('/orders', verifyKioskToken, requireKioskPlan, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
     const { items, payment_choice = 'counter_cash', customer_token, customer_call_name, fulfillment_type } = req.body || {};
@@ -608,7 +634,7 @@ router.post('/orders', verifyKioskToken, async (req, res) => {
 // POST /api/kiosk/orders/hold — park a kiosk cart server-side (status='draft_kiosk')
 // so the POS can claim it and the customer can come back to add more items.
 // Identified customer (token) or anonymous (call name) are both accepted.
-router.post('/orders/hold', verifyKioskToken, async (req, res) => {
+router.post('/orders/hold', verifyKioskToken, requireKioskPlan, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
     const { items, customer_token, customer_call_name, fulfillment_type } = req.body || {};
@@ -721,7 +747,7 @@ router.post('/orders/hold', verifyKioskToken, async (req, res) => {
 // match the requesting customer (loyalty_customer_id OR case-insensitive
 // customer_call_name). This last check is the ownership boundary — without it
 // anyone who knew an order number could amend someone else's tab.
-router.post('/orders/:id/append-items', verifyKioskToken, async (req, res) => {
+router.post('/orders/:id/append-items', verifyKioskToken, requireKioskPlan, async (req, res) => {
   const tenantId = req.kioskTenantId;
   const orderId = Number(req.params.id);
   try {
@@ -858,7 +884,7 @@ router.post('/orders/:id/append-items', verifyKioskToken, async (req, res) => {
 // Either way the kitchen never sees an unpaid ticket. Unlike /hold this does
 // NOT supersede prior orders — same customer can legitimately have a paid
 // earlier order and a new pending one (second round of micheladas).
-router.post('/orders/send-to-kitchen', verifyKioskToken, async (req, res) => {
+router.post('/orders/send-to-kitchen', verifyKioskToken, requireKioskPlan, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
     const { items, customer_token, customer_call_name, fulfillment_type } = req.body || {};
@@ -926,7 +952,7 @@ router.post('/orders/send-to-kitchen', verifyKioskToken, async (req, res) => {
 // POST /api/kiosk/delivery/quote
 // Body: { dropoff_address, dropoff_phone_number, manifest_total_value? }
 // Returns Uber Direct quote { id, fee, currency, duration, dropoff_eta, expires }
-router.post('/delivery/quote', verifyKioskToken, async (req, res) => {
+router.post('/delivery/quote', verifyKioskToken, requireKioskPlan, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
     const { dropoff_address, dropoff_phone_number, manifest_total_value } = req.body || {};
@@ -980,7 +1006,7 @@ router.post('/delivery/quote', verifyKioskToken, async (req, res) => {
 // Cash payment isn't supported for delivery from the kiosk: by the time the
 // customer walks to the cashier they're not at home to receive the courier.
 // The /pay-existing screen hides the cash button when fulfillment is delivery.
-router.post('/orders/send-to-delivery', verifyKioskToken, async (req, res) => {
+router.post('/orders/send-to-delivery', verifyKioskToken, requireKioskPlan, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
     const {
@@ -1228,7 +1254,7 @@ export async function dispatchPendingCourier(orderId, tenantId) {
 //     refuses non-kiosk orders (counter cashier owns those tabs).
 // 6-hour rolling window prevents day-old name collisions ("Juan from yesterday").
 // Name match uses unaccent() so "Jose" finds "José".
-router.get('/orders/open', verifyKioskToken, async (req, res) => {
+router.get('/orders/open', verifyKioskToken, requireKioskPlan, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
     const rawName = typeof req.query.name === 'string' ? req.query.name.trim() : '';
@@ -1352,7 +1378,7 @@ router.get('/orders/open', verifyKioskToken, async (req, res) => {
 });
 
 // GET /api/kiosk/orders/active?customer_token=... — does this customer have a held draft?
-router.get('/orders/active', verifyKioskToken, async (req, res) => {
+router.get('/orders/active', verifyKioskToken, requireKioskPlan, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
     const customerToken = req.query.customer_token;
@@ -1401,7 +1427,7 @@ router.get('/orders/active', verifyKioskToken, async (req, res) => {
 
 // POST /api/kiosk/orders/:id/resume — restore items to kiosk and delete the draft.
 // The kiosk treats the restored items as a fresh local cart; next hold creates a new draft.
-router.post('/orders/:id/resume', verifyKioskToken, async (req, res) => {
+router.post('/orders/:id/resume', verifyKioskToken, requireKioskPlan, async (req, res) => {
   const tenantId = req.kioskTenantId;
   const orderId = Number(req.params.id);
   try {
@@ -1630,7 +1656,7 @@ router.get('/orders/:id/status', verifyKioskToken, async (req, res) => {
 //   - known phone        → returns customer + suggestions
 //   - unknown + name     → enrolls a new loyalty customer
 //   - unknown, no name   → { found: false } so the kiosk can ask for a name
-router.post('/identify', verifyKioskToken, async (req, res) => {
+router.post('/identify', verifyKioskToken, requireKioskPlan, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
     const { phone, country_code = 'MX', name, sms_opt_in = true } = req.body || {};
@@ -1779,7 +1805,7 @@ router.post('/identify', verifyKioskToken, async (req, res) => {
 // URL the kiosk embeds in a post-payment QR. Anyone with the URL can enroll
 // their phone against this order (idempotent — see loyalty-join-public.js).
 // Used on the confirmation screen for un-identified customers.
-router.post('/orders/:orderId/loyalty-join-url', verifyKioskToken, async (req, res) => {
+router.post('/orders/:orderId/loyalty-join-url', verifyKioskToken, requireKioskPlan, async (req, res) => {
   const tenantId = req.kioskTenantId;
   const orderId = Number(req.params.orderId);
   if (!Number.isFinite(orderId)) {
@@ -1819,7 +1845,7 @@ router.post('/orders/:orderId/loyalty-join-url', verifyKioskToken, async (req, r
 // enroll_url is built from the TENANT's subdomain, not req.get('host'):
 // kiosks talk to the platform host (VITE_API_BASE=pos.desktop.kitchen), but
 // the pass download must resolve tenant + RLS via the tenant's own subdomain.
-router.post('/wallet-enroll', verifyKioskToken, async (req, res) => {
+router.post('/wallet-enroll', verifyKioskToken, requireKioskPlan, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
     if (!isAppleWalletConfigured()) {
@@ -1860,7 +1886,7 @@ router.post('/wallet-enroll', verifyKioskToken, async (req, res) => {
 
 // GET /api/kiosk/modifier-map — full {menu_item_id: ModifierGroup[]} map for the kiosk
 // so the customer-facing modal opens instantly without per-tap network calls.
-router.get('/modifier-map', verifyKioskToken, async (req, res) => {
+router.get('/modifier-map', verifyKioskToken, requireKioskPlan, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
     const rows = await adminSql`
@@ -1919,7 +1945,7 @@ router.get('/modifier-map', verifyKioskToken, async (req, res) => {
 });
 
 // GET /api/kiosk/popular — time-of-day popular items (anonymous customers)
-router.get('/popular', verifyKioskToken, async (req, res) => {
+router.get('/popular', verifyKioskToken, requireKioskPlan, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
     const tenant = await getTenant(tenantId);
@@ -1943,7 +1969,7 @@ router.get('/popular', verifyKioskToken, async (req, res) => {
 
 // POST /api/kiosk/suggestion-event — log a tap/order on a suggestion
 // Body: { customer_token?, events: [{ menu_item_id, lane, source, event_type, reason }] }
-router.post('/suggestion-event', verifyKioskToken, async (req, res) => {
+router.post('/suggestion-event', verifyKioskToken, requireKioskPlan, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
     const { customer_token, events } = req.body || {};

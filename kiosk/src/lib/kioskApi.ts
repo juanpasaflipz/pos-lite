@@ -78,6 +78,17 @@ export function setKioskAuthFailureHandler(handler: (() => void) | null): void {
   authFailureHandler = handler;
 }
 
+// Triggered when the server answers 403 PLAN_UPGRADE_REQUIRED (kiosk is a Pro
+// feature — repackaged 2026-07-23). This is NOT an auth failure: the token is
+// valid and the binding must survive, so that upgrading (or trial → paid)
+// brings the kiosk back without re-pairing the tablet. Registered by
+// KioskBindingProvider; App.tsx swaps the UI for KioskUnavailableScreen.
+let planLockHandler: (() => void) | null = null;
+
+export function setKioskPlanLockHandler(handler: (() => void) | null): void {
+  planLockHandler = handler;
+}
+
 async function authedFetch(
   auth: AuthHeaders,
   input: string,
@@ -85,10 +96,34 @@ async function authedFetch(
 ): Promise<Response> {
   const headers = { ...authHeaders(auth), ...(init.headers || {}) };
   const res = await fetch(input, { ...init, headers });
+  if (res.status === 403) {
+    // Peek: plan lock (keep binding) vs real auth failure (unbind).
+    try {
+      const peek = await res.clone().json();
+      if (peek?.error === 'PLAN_UPGRADE_REQUIRED') {
+        planLockHandler?.();
+        return res;
+      }
+    } catch { /* body not JSON — treat as auth failure below */ }
+  }
   if ((res.status === 401 || res.status === 403) && authFailureHandler) {
     authFailureHandler();
   }
   return res;
+}
+
+/**
+ * True when the kiosk feature is available for this tenant's current plan.
+ * Probes a cheap gated endpoint; used by KioskUnavailableScreen's retry
+ * loop so an upgrade mid-service brings the kiosk back automatically.
+ */
+export async function probeKioskPlan(auth: AuthHeaders): Promise<boolean> {
+  try {
+    const res = await authedFetch(auth, `${API_BASE}/api/kiosk/popular`);
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 export type KioskFulfillmentType = 'for_here' | 'to_go' | 'delivery';

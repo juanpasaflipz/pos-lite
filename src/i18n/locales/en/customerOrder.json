@@ -3,7 +3,8 @@
     "brandFallback": "Menu",
     "empty": "No menu items available",
     "loadError": "Failed to load menu",
-    "tryAgain": "Try again"
+    "tryAgain": "Try again",
+    "viewOnlyNotice": "Digital menu — order and pay at the counter"
   },
   "cart": {
     "openLabel": "Cart",

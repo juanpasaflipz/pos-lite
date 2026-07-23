@@ -62,7 +62,12 @@ const localYmd = (d: Date): string =>
 export default function ReportsScreen() {
   const { t } = useTranslation('reports');
   const { currentEmployee } = useAuth();
-  const { limits, timezone: tenantTz, weekStartDow } = usePlan();
+  const { limits, timezone: tenantTz, weekStartDow, isFree } = usePlan();
+  // Repackaged 2026-07-23: free plan keeps a rolling report window
+  // (limits.reportsHistoryDays, server-clamped in resolveDateRange); full
+  // history + break-even + cost variables are Pro. The chip below is the
+  // only client change needed — the server clamp keeps old presets working.
+  const historyLimited = Number.isFinite(limits.reportsHistoryDays);
   const [searchParams, setSearchParams] = useSearchParams();
   const [period, setPeriod] = useState<Period>('today');
   // Custom range — initialized to "last 7 days" so the picker has sensible defaults.
@@ -481,6 +486,15 @@ export default function ReportsScreen() {
             <button onClick={() => setError(null)} className="text-brand-400 hover:text-brand-300">
               <X size={20} />
             </button>
+          </div>
+        )}
+
+        {historyLimited && isFree && (
+          <div className="bg-amber-900/20 border border-amber-800/50 rounded-lg px-4 py-3 mb-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-amber-300 text-sm">{t('sales.freeHistoryNotice', { days: limits.reportsHistoryDays })}</p>
+            <Link to="/account" className="text-amber-200 text-sm font-bold underline underline-offset-2 hover:text-amber-100">
+              {t('sales.upgradeCta')}
+            </Link>
           </div>
         )}
 

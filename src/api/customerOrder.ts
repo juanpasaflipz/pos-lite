@@ -18,6 +18,9 @@ const API_BASE = getApiBase();
 
 export interface CustomerOrderSettings {
   requirePayment: boolean;
+  /** False when the tenant's plan doesn't include QR table ordering
+   *  (free plan keeps the QR menu as view-only). Absent on old servers → true. */
+  orderingEnabled?: boolean;
 }
 
 export interface CustomerOrderItem {

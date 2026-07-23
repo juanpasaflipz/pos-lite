@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useBranding } from '../context/BrandingContext';
 import {
+  getCustomerOrderSettings,
   placeCustomerOrder,
   getCustomerOrderStatus,
   type CustomerOrderItem,
@@ -328,6 +329,16 @@ export default function CustomerOrderScreen() {
   // Scroll-spy refs
   const categoryRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const isManualScroll = useRef(false);
+
+  // QR table ORDERING is plan-gated (repackaged 2026-07-23): free tenants
+  // keep this page as a view-only digital menu. Default true so old servers
+  // (no orderingEnabled field) and fetch failures never brick ordering.
+  const [orderingEnabled, setOrderingEnabled] = useState(true);
+  useEffect(() => {
+    getCustomerOrderSettings()
+      .then(s => setOrderingEnabled(s.orderingEnabled !== false))
+      .catch(() => { /* keep default */ });
+  }, []);
 
   // Check for existing active order on mount
   useEffect(() => {
@@ -675,8 +686,17 @@ export default function CustomerOrderScreen() {
         )}
       </div>
 
+      {/* View-only notice (plan without QR ordering) */}
+      {!orderingEnabled && (
+        <div className="fixed bottom-0 left-0 right-0 z-30 p-4 max-w-lg mx-auto">
+          <div className="w-full bg-neutral-900 border border-neutral-700 text-neutral-300 text-center font-medium py-3.5 px-6 rounded-xl">
+            {t('menu.viewOnlyNotice')}
+          </div>
+        </div>
+      )}
+
       {/* Floating cart bar */}
-      {cartItemCount > 0 && !cartOpen && (
+      {orderingEnabled && cartItemCount > 0 && !cartOpen && (
         <div className="fixed bottom-0 left-0 right-0 z-30 p-4 max-w-lg mx-auto">
           <button
             onClick={() => setCartOpen(true)}
@@ -807,7 +827,10 @@ export default function CustomerOrderScreen() {
                 </button>
               </div>
 
-              <button
+              {!orderingEnabled && (
+                <p className="text-neutral-400 text-sm text-center py-2">{t('menu.viewOnlyNotice')}</p>
+              )}
+              {orderingEnabled && <button
                 onClick={addToCart}
                 className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 rounded-xl transition-colors flex items-center justify-center gap-2 active:scale-[0.98]"
               >
@@ -825,7 +848,7 @@ export default function CustomerOrderScreen() {
                       }, 0)
                   ) * itemQty
                 )}
-              </button>
+              </button>}
             </div>
           </div>
         </div>

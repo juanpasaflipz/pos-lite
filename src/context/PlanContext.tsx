@@ -10,8 +10,12 @@ export interface PlanLimits {
   combos: number;
   maxBankConnections: number;
   reports: { editVariables: boolean };
+  reportsHistoryDays: number;
   ai: { mode: 'none' | 'full'; dailySuggestions: number; monthlyAnalyses: number };
   printers: { functional: boolean; max: number };
+  kiosk: { functional: boolean };
+  qrOrdering: { functional: boolean };
+  kdsDevices: { max: number; stations: string[] };
   delivery: { functional: boolean };
   permissions: { locked: boolean };
   loyalty: { locked: boolean; smsEnabled: boolean };
@@ -45,16 +49,20 @@ interface PlanContextType {
   isGetnetEnabled: boolean;
   isClipConfigured: boolean;
   isAtLimit: (resource: 'menuItems' | 'inventoryItems' | 'employees' | 'modifierGroups' | 'combos', currentCount: number) => boolean;
-  isFeatureLocked: (feature: 'printers' | 'delivery' | 'permissions' | 'loyalty' | 'prepForecast' | 'banking' | 'bankReconciliation' | 'dataExport' | 'cfdi' | 'ai') => boolean;
+  isFeatureLocked: (feature: 'printers' | 'delivery' | 'permissions' | 'loyalty' | 'prepForecast' | 'banking' | 'bankReconciliation' | 'dataExport' | 'cfdi' | 'ai' | 'kiosk' | 'qrOrdering') => boolean;
   refresh: () => Promise<void>;
 }
 
 const DEFAULT_LIMITS: PlanLimits = {
-  menuItems: Infinity, inventoryItems: Infinity, employees: Infinity,
+  menuItems: Infinity, inventoryItems: Infinity, employees: 3,
   modifierGroups: Infinity, combos: Infinity, maxBankConnections: 0,
   reports: { editVariables: false },
+  reportsHistoryDays: 7,
   ai: { mode: 'none', dailySuggestions: 0, monthlyAnalyses: 0 },
   printers: { functional: true, max: Infinity },
+  kiosk: { functional: false },
+  qrOrdering: { functional: false },
+  kdsDevices: { max: 1, stations: ['kds'] },
   delivery: { functional: false },
   permissions: { locked: false },
   loyalty: { locked: false, smsEnabled: false },

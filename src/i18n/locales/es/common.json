@@ -133,7 +133,7 @@
     "cta": "Actualizar a Pro — $799 MXN/mes de por vida",
     "ctaShort": "Actualizar a Pro",
     "ctaPrice": "Actualizar a Pro — $799 MXN/mes de por vida",
-    "description": "Desbloquea IA, delivery, facturación y más",
+    "description": "Desbloquea el kiosco de autoservicio, facturación CFDI, IA y más",
     "unlimitedAccess": "Actualiza a <strong>Pro Fundador por $799 MXN/mes de por vida</strong> para acceso completo",
     "redirecting": "Redirigiendo...",
     "upgradeNow": "Actualizar ahora",
@@ -158,7 +158,7 @@
     "dismiss": "Cerrar"
   },
   "freePlan": {
-    "banner": "Estás en el plan Gratis para siempre — Actualiza a Pro para IA, delivery, CFDI y más",
+    "banner": "Estás en el plan Gratis para siempre — Actualiza a Pro para kiosco de autoservicio, CFDI, IA y más",
     "upgrade": "Actualizar"
   },
   "trial": {

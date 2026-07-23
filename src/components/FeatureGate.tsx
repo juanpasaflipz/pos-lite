@@ -3,7 +3,7 @@ import { usePlan } from '../context/PlanContext';
 import UpgradePrompt from './UpgradePrompt';
 
 interface FeatureGateProps {
-  feature: 'printers' | 'delivery' | 'permissions' | 'loyalty' | 'prepForecast' | 'banking' | 'bankReconciliation' | 'dataExport' | 'cfdi' | 'ai';
+  feature: 'printers' | 'delivery' | 'permissions' | 'loyalty' | 'prepForecast' | 'banking' | 'bankReconciliation' | 'dataExport' | 'cfdi' | 'ai' | 'kiosk' | 'qrOrdering';
   featureLabel?: string;
   children: ReactNode;
 }

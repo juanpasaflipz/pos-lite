@@ -15,9 +15,10 @@ import KioskCartScreen from './screens/KioskCartScreen';
 import KioskPayExistingScreen from './screens/KioskPayExistingScreen';
 import KioskHoldConfirmationScreen from './screens/KioskHoldConfirmationScreen';
 import KioskTerminalSettingsScreen from './screens/KioskTerminalSettingsScreen';
+import KioskUnavailableScreen from './screens/KioskUnavailableScreen';
 
 const Routed: React.FC = () => {
-  const { tenantId, kioskToken } = useKioskBinding();
+  const { tenantId, kioskToken, planLocked } = useKioskBinding();
 
   if (!tenantId || !kioskToken) {
     return (
@@ -27,6 +28,13 @@ const Routed: React.FC = () => {
         <Route path="*" element={<Navigate to="/bind" replace />} />
       </Routes>
     );
+  }
+
+  // Kiosk is a Pro feature (repackaged 2026-07-23). While the plan doesn't
+  // include it, park the whole app on the unavailable screen — binding stays,
+  // so upgrading brings it back without re-pairing.
+  if (planLocked) {
+    return <KioskUnavailableScreen />;
   }
 
   return (

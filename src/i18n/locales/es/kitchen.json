@@ -5,7 +5,8 @@
     "all": "Todo",
     "kitchen": "Cocina",
     "bar": "Bar",
-    "fullscreen": "Pantalla Completa"
+    "fullscreen": "Pantalla Completa",
+    "barRequiresPro": "La estación de barra es parte del plan Pro"
   },
   "orders": {
     "loadingOrders": "Cargando órdenes...",

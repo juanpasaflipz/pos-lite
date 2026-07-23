@@ -6,6 +6,7 @@ import { all, get, run, getConn, getTenantId } from '../db/index.js';
 import { insertOrderWithNumber, estimatePrepTime } from './orders.js';
 import { audit } from '../lib/auditLog.js';
 import { cleanBoardSettings } from '../lib/boardSettings.js';
+import { getPlanLimits, planUpgradeError } from '../planLimits.js';
 import { createPaymentIntent, getPaymentIntent } from '../stripe.js';
 
 const router = Router();
@@ -51,7 +52,12 @@ router.get('/settings', async (_req, res) => {
     const settings = cleanBoardSettings(brand?.board_settings);
     const requirePayment = !!settings.qrRequirePayment;
 
-    res.json({ requirePayment });
+    // QR table ORDERING is Pro (repackaged 2026-07-23); the QR menu VIEW
+    // stays free (it carries the watermark — that's the viral surface).
+    // req.tenant.plan is the effective plan (tenant middleware).
+    const orderingEnabled = !!getPlanLimits(req.tenant?.plan || 'free').qrOrdering?.functional;
+
+    res.json({ requirePayment, orderingEnabled });
   } catch (error) {
     console.error('Error fetching customer order settings:', error);
     res.status(500).json({ error: 'Failed to fetch settings' });
@@ -187,9 +193,16 @@ router.get('/menu', async (req, res) => {
   }
 });
 
-// POST /api/customer-order — public, rate-limited, creates an order
+// POST /api/customer-order — public, rate-limited, creates an order.
+// Pro-gated (repackaged 2026-07-23): free tenants keep the QR menu as a
+// viewable digital menu; ordering from the table requires Pro.
 router.post('/', customerOrderLimiter, async (req, res) => {
   try {
+    const plan = req.tenant?.plan || 'free';
+    if (!getPlanLimits(plan).qrOrdering?.functional) {
+      return res.status(403).json(planUpgradeError('qrOrdering', plan));
+    }
+
     const { items, table_number } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {

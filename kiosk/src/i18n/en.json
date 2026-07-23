@@ -160,5 +160,12 @@
     "second_one": "second",
     "second_other": "seconds",
     "stillHere": "I'm still here"
+  },
+  "unavailable": {
+    "title": "The kiosk is not available",
+    "subtitle": "Please order at the counter — we are happy to help",
+    "retry": "Retry",
+    "checking": "Checking…",
+    "staffNote": "Staff: the self-service kiosk is part of the Pro plan. Activate it from your POS under Account → Plan and this screen recovers on its own."
   }
 }

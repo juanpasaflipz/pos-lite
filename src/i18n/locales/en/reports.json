@@ -225,7 +225,9 @@
       "fees": "Fees",
       "amount": "Amount",
       "count": "Count"
-    }
+    },
+    "freeHistoryNotice": "Free plan: reports for the last {{days}} days. Pro unlocks full history, margins and your break-even point.",
+    "upgradeCta": "Upgrade to Pro"
   },
   "dashboard": {
     "title": "LIVE DASHBOARD",

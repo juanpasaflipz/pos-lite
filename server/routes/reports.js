@@ -91,14 +91,43 @@ function getDateRange(period, tz = 'UTC', weekStartDow = 1) {
 function resolveDateRange(req, tz = 'UTC') {
   const { start_date, end_date, period = 'today', week_start_dow } = req.query || {};
   const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+  let range;
   if (typeof start_date === 'string' && typeof end_date === 'string'
       && dateRe.test(start_date) && dateRe.test(end_date)) {
     const start = start_date <= end_date ? start_date : end_date;
     const end = start_date <= end_date ? end_date : start_date;
-    return { start, end };
+    range = { start, end };
+  } else {
+    const dow = week_start_dow !== undefined ? Number(week_start_dow) : 1;
+    range = getPeriodRange(String(period), tz, Number.isFinite(dow) ? dow : 1);
   }
-  const dow = week_start_dow !== undefined ? Number(week_start_dow) : 1;
-  return getPeriodRange(String(period), tz, Number.isFinite(dow) ? dow : 1);
+  return clampRangeToPlan(req, range, tz);
+}
+
+/**
+ * Free-plan report history is capped (repackaged 2026-07-23): the free tier
+ * keeps a rolling reportsHistoryDays window (7 days incl. today, tenant tz);
+ * full history + break-even + cost variables are the Pro reports story.
+ * Clamping (not 403ing) keeps every screen working on free — old presets
+ * just collapse toward the window edge. When a clamp fires we set the
+ * X-Reports-Range-Clamped header so the client can show the upgrade chip.
+ * req.tenant.plan is the effective plan (paid Pro or active trial → 'pro').
+ */
+function clampRangeToPlan(req, range, tz = 'UTC') {
+  const historyDays = getPlanLimits(req.tenant?.plan || 'free').reportsHistoryDays;
+  if (!Number.isFinite(historyDays)) return range; // pro: unlimited
+  const { start: todayStr } = getPeriodRange('today', tz, 1);
+  const min = new Date(`${todayStr}T00:00:00Z`);
+  min.setUTCDate(min.getUTCDate() - (historyDays - 1));
+  const minStart = min.toISOString().slice(0, 10);
+  let { start, end } = range;
+  let clamped = false;
+  if (start < minStart) { start = minStart; clamped = true; }
+  if (end < minStart) { end = minStart; clamped = true; }
+  if (clamped && req.res && !req.res.headersSent) {
+    req.res.set('X-Reports-Range-Clamped', '1');
+  }
+  return { start, end };
 }
 
 function paymentSourceSql(alias = '') {

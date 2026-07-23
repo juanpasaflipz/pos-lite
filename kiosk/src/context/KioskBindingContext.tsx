@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { setKioskAuthFailureHandler } from '../lib/kioskApi';
+import { setKioskAuthFailureHandler, setKioskPlanLockHandler } from '../lib/kioskApi';
 
 interface BindingPayload {
   tenant_id: string;
@@ -21,6 +21,10 @@ interface BindingState {
   kioskToken: string | null;
   terminalId: string | null;
   terminalLabel: string | null;
+  /** True when the server said the kiosk is not in the tenant's plan
+   *  (403 PLAN_UPGRADE_REQUIRED). Binding is kept; UI shows unavailable. */
+  planLocked: boolean;
+  clearPlanLock: () => void;
   bind: (payload: BindingPayload) => void;
   unbind: () => void;
   setTerminal: (pairing: TerminalPairing | null) => void;
@@ -44,6 +48,7 @@ function readStored<T>(key: string): T | null {
 export const KioskBindingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [stored, setStored] = useState<BindingPayload | null>(() => readStored<BindingPayload>(BINDING_KEY));
   const [terminal, setTerminalState] = useState<TerminalPairing | null>(() => readStored<TerminalPairing>(TERMINAL_KEY));
+  const [planLocked, setPlanLocked] = useState(false);
 
   const bind = useCallback((payload: BindingPayload) => {
     localStorage.setItem(BINDING_KEY, JSON.stringify(payload));
@@ -64,7 +69,11 @@ export const KioskBindingProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setStored(null);
       setTerminalState(null);
     });
-    return () => setKioskAuthFailureHandler(null);
+    setKioskPlanLockHandler(() => setPlanLocked(true));
+    return () => {
+      setKioskAuthFailureHandler(null);
+      setKioskPlanLockHandler(null);
+    };
   }, []);
 
   const setTerminal = useCallback((pairing: TerminalPairing | null) => {
@@ -84,6 +93,8 @@ export const KioskBindingProvider: React.FC<{ children: React.ReactNode }> = ({ 
         kioskToken: stored?.kiosk_token ?? null,
         terminalId: terminal?.id ?? null,
         terminalLabel: terminal?.label ?? null,
+        planLocked,
+        clearPlanLock: () => setPlanLocked(false),
         bind,
         unbind,
         setTerminal,

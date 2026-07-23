@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getKitchenOrders, updateOrderStatus, getCategoryRoles } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { usePlan } from '../context/PlanContext';
 import { Order, OrderItem, CategoryRole } from '../types';
 import { getTimeTier, type TimeTier } from '../lib/orderUrgency';
 import { formatTime, formatDate } from '../utils/dateFormat';
@@ -48,9 +49,17 @@ export default function KitchenDisplay() {
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [lastSuccessAt, setLastSuccessAt] = useState<number | null>(null);
+  const { limits } = usePlan();
+  // Repackaged 2026-07-23: free = one combined kitchen screen; the dedicated
+  // bar station view is Pro (kdsDevices.stations). Server-side, pairing a
+  // 2nd device or a bar/expo device is also blocked at /devices/pair/claim.
+  const barStationLocked = !limits.kdsDevices?.stations?.includes('bar');
   const [displayFilter, setDisplayFilter] = useState<'all' | 'kitchen' | 'bar'>(
     currentEmployee?.role === 'bar' ? 'bar' : 'all'
   );
+  useEffect(() => {
+    if (barStationLocked && displayFilter === 'bar') setDisplayFilter('all');
+  }, [barStationLocked, displayFilter]);
   const [categoryRoles, setCategoryRoles] = useState<CategoryRole[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -381,10 +390,12 @@ export default function KitchenDisplay() {
               <ChefHat size={isTvMode ? 18 : 14} /> {t('header.kitchen')}
             </button>
             <button
-              onClick={() => setDisplayFilter('bar')}
-              className={`rounded-lg font-bold transition-colors flex items-center gap-1.5 ${isTvMode ? 'px-5 py-3 text-lg' : 'px-3 py-1.5 text-sm'} ${displayFilter === 'bar' ? 'bg-brand-600 text-white' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'}`}
+              onClick={() => { if (!barStationLocked) setDisplayFilter('bar'); }}
+              disabled={barStationLocked}
+              title={barStationLocked ? t('header.barRequiresPro') : undefined}
+              className={`rounded-lg font-bold transition-colors flex items-center gap-1.5 ${isTvMode ? 'px-5 py-3 text-lg' : 'px-3 py-1.5 text-sm'} ${displayFilter === 'bar' ? 'bg-brand-600 text-white' : barStationLocked ? 'bg-neutral-900 text-neutral-600 cursor-not-allowed' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'}`}
             >
-              <Wine size={isTvMode ? 18 : 14} /> {t('header.bar')}
+              <Wine size={isTvMode ? 18 : 14} /> {t('header.bar')}{barStationLocked ? ' ·  Pro' : ''}
             </button>
           </div>
         </div>

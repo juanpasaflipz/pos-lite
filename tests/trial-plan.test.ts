@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 // @ts-ignore — server files are plain JS
-import { effectivePlan, isTrialActive, getPlanLimits } from '../server/planLimits.js';
+import { effectivePlan, isTrialActive, getPlanLimits, getRequiredPlan } from '../server/planLimits.js';
 
 const inDays = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString();
 
@@ -44,20 +44,50 @@ describe('effectivePlan', () => {
     expect(effectivePlan({ plan: 'free', trial_ends_at: 'not-a-date' })).toBe('free');
   });
 
-  it('trial grants the full pro limit set (AI, delivery, CFDI unlock)', () => {
+  it('trial grants the full pro limit set (kiosk, AI, CFDI unlock)', () => {
     const limits = getPlanLimits(effectivePlan({ plan: 'free', trial_ends_at: inDays(14) }));
     expect(limits.ai.mode).toBe('full');
+    expect(limits.kiosk.functional).toBe(true);
+    expect(limits.qrOrdering.functional).toBe(true);
+    expect(limits.employees).toBe(Infinity);
+    expect(limits.kdsDevices.max).toBe(Infinity);
+    expect(limits.reportsHistoryDays).toBe(Infinity);
     expect(limits.delivery.functional).toBe(true);
     expect(limits.cfdi.locked).toBe(false);
     expect(limits.branding.watermark).toBe(false);
   });
 
+  // Repackaged 2026-07-23: free = "la caja" (counter POS, never order-capped);
+  // the growth features — kiosk, QR ordering, extra staff/stations, report
+  // history — are the Pro upgrade pressure. Trial expiry must flip them off.
   it('after expiry the POS core stays functional on free', () => {
     const limits = getPlanLimits(effectivePlan({ plan: 'free', trial_ends_at: inDays(-1) }));
     expect(limits.menuItems).toBe(Infinity);
-    expect(limits.employees).toBe(Infinity);
+    expect(limits.inventoryItems).toBe(Infinity);
+    expect(limits.combos).toBe(Infinity);
     expect(limits.printers.functional).toBe(true);
+    expect(limits.loyalty.locked).toBe(false);
+  });
+
+  it('after expiry the growth features lock (kiosk is the upgrade incentive)', () => {
+    const limits = getPlanLimits(effectivePlan({ plan: 'free', trial_ends_at: inDays(-1) }));
+    expect(limits.kiosk.functional).toBe(false);
+    expect(limits.qrOrdering.functional).toBe(false);
+    expect(limits.employees).toBe(3);
+    expect(limits.kdsDevices.max).toBe(1);
+    expect(limits.kdsDevices.stations).toEqual(['kds']);
+    expect(limits.reportsHistoryDays).toBe(7);
     expect(limits.cfdi.locked).toBe(true);
     expect(limits.branding.watermark).toBe(true);
+  });
+
+  it('getRequiredPlan puts the repackaged gates on the right tier', () => {
+    expect(getRequiredPlan('kiosk')).toBe('pro');
+    expect(getRequiredPlan('qrOrdering')).toBe('pro');
+    expect(getRequiredPlan('cfdi')).toBe('pro');
+    // Numeric caps and functional-on-free features resolve to free.
+    expect(getRequiredPlan('employees')).toBe('free');
+    expect(getRequiredPlan('printers')).toBe('free');
+    expect(getRequiredPlan('kdsDevices')).toBe('free');
   });
 });

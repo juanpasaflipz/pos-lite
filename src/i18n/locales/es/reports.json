@@ -225,7 +225,9 @@
       "fees": "Comisiones",
       "amount": "Monto",
       "count": "Cantidad"
-    }
+    },
+    "freeHistoryNotice": "Plan gratis: reportes de los últimos {{days}} días. Con Pro tienes historial completo, márgenes y tu punto de equilibrio.",
+    "upgradeCta": "Actualizar a Pro"
   },
   "dashboard": {
     "title": "DASHBOARD EN VIVO",

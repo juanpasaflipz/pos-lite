@@ -160,5 +160,12 @@
     "second_one": "segundo",
     "second_other": "segundos",
     "stillHere": "Sigo aquí"
+  },
+  "unavailable": {
+    "title": "El kiosco no está disponible",
+    "subtitle": "Ordena en el mostrador — con gusto te atendemos",
+    "retry": "Reintentar",
+    "checking": "Verificando…",
+    "staffNote": "Staff: el kiosco de autoservicio es parte del plan Pro. Actívalo desde tu POS en Cuenta → Plan y esta pantalla se reactiva sola."
   }
 }

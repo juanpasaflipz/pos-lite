@@ -3,7 +3,8 @@
     "brandFallback": "Menú",
     "empty": "No hay productos disponibles",
     "loadError": "No se pudo cargar el menú",
-    "tryAgain": "Reintentar"
+    "tryAgain": "Reintentar",
+    "viewOnlyNotice": "Menú digital — ordena y paga en el mostrador"
   },
   "cart": {
     "openLabel": "Carrito",

@@ -133,7 +133,7 @@
     "cta": "Upgrade to Pro — $799 MXN/mo for life",
     "ctaShort": "Upgrade to Pro",
     "ctaPrice": "Upgrade to Pro — $799 MXN/mo for life",
-    "description": "Unlock AI, delivery, invoicing, and more",
+    "description": "Unlock the self-service kiosk, CFDI invoicing, AI and more",
     "unlimitedAccess": "Upgrade to <strong>Founders Pro at $799 MXN/mo for life</strong> for full access",
     "redirecting": "Redirecting...",
     "upgradeNow": "Upgrade now",
@@ -158,7 +158,7 @@
     "dismiss": "Dismiss"
   },
   "freePlan": {
-    "banner": "You're on the Free-forever plan — Upgrade to Pro for AI, delivery, CFDI & more",
+    "banner": "You're on the Free forever plan — Upgrade to Pro for the self-service kiosk, CFDI, AI and more",
     "upgrade": "Upgrade"
   },
   "trial": {

@@ -5,7 +5,8 @@
     "all": "All",
     "kitchen": "Kitchen",
     "bar": "Bar",
-    "fullscreen": "Fullscreen"
+    "fullscreen": "Fullscreen",
+    "barRequiresPro": "The bar station is part of the Pro plan"
   },
   "orders": {
     "loadingOrders": "Loading orders...",

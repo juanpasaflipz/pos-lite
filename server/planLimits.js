@@ -1,9 +1,20 @@
 /**
  * POS Lite — Two-tier plan system (Pro paid, Free forever)
- * Free: fully functional POS, no artificial caps
- * Pro: AI, delivery, CFDI, SMS loyalty, data export, banking
  *
- * Freemium launch (2026-07): new self-serve signups keep plan='free' in the
+ * Free = "la caja": full counter POS forever — unlimited products/modifiers/
+ * combos/inventory, up to 3 employee PINs, one paired KDS device (kitchen
+ * station), QR menu VIEW, loyalty stamps, last-7-days reports.
+ * Pro = "lo que te hace vender más": self-service kiosk, QR table ORDERING,
+ * unlimited employees + extra KDS stations (bar/expo), full report history +
+ * cost variables + break-even, CFDI, AI, SMS loyalty, data export, banking.
+ *
+ * Repackaged 2026-07-23 (Juan): the original freemium split gave the growth
+ * features away — kiosk/KDS/unlimited staff were free and Pro was mostly
+ * compliance. Kiosk is now the flagship upgrade incentive; trial expiry
+ * ("your kiosk turns off") is the conversion moment. Orders are NEVER
+ * capped — a POS that stops selling mid-service is not a lever, it's churn.
+ *
+ * Freemium trial (2026-07): new self-serve signups keep plan='free' in the
  * DB but get full Pro for 14 days via tenants.trial_ends_at. Always resolve
  * access through effectivePlan(tenantRow) — never read tenant.plan directly
  * for gating. Expiry is implicit (the clock passes trial_ends_at), so there
@@ -14,12 +25,16 @@ export const PLAN_LIMITS = {
   free: {
     menuItems: Infinity,
     inventoryItems: Infinity,
-    employees: Infinity,
+    employees: 3,
     modifierGroups: Infinity,
     combos: Infinity,
     reports: { editVariables: false },
+    reportsHistoryDays: 7,
     printers: { functional: true, max: Infinity },
     ai: { mode: 'none', dailySuggestions: 0, monthlyAnalyses: 0 },
+    kiosk: { functional: false },
+    qrOrdering: { functional: false },
+    kdsDevices: { max: 1, stations: ['kds'] },
     delivery: { functional: false },
     permissions: { locked: false },
     loyalty: { locked: false, smsEnabled: false },
@@ -36,8 +51,12 @@ export const PLAN_LIMITS = {
     modifierGroups: Infinity,
     combos: Infinity,
     reports: { editVariables: true },
+    reportsHistoryDays: Infinity,
     printers: { functional: true, max: Infinity },
     ai: { mode: 'full', dailySuggestions: Infinity, monthlyAnalyses: Infinity },
+    kiosk: { functional: true },
+    qrOrdering: { functional: true },
+    kdsDevices: { max: Infinity, stations: ['kds', 'bar', 'expo'] },
     delivery: { functional: true },
     permissions: { locked: false },
     loyalty: { locked: false, smsEnabled: true },

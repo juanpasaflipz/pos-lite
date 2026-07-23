@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 import { all, get, run } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
+import { getPlanLimits, planUpgradeError } from '../planLimits.js';
 import { JWT_SECRET } from '../lib/constants.js';
 
 const router = Router();
@@ -159,7 +160,7 @@ router.post('/pair/claim', claimLimiter, requireAuth('manage_devices'), async (r
     }
 
     const row = await get(
-      `SELECT id, claimed_at, pairing_code_expires_at, revoked_at
+      `SELECT id, device_type, claimed_at, pairing_code_expires_at, revoked_at
        FROM kds_devices
        WHERE pairing_code = $1`,
       [code]
@@ -169,6 +170,22 @@ router.post('/pair/claim', claimLimiter, requireAuth('manage_devices'), async (r
     if (row.claimed_at) return res.status(409).json({ error: 'Code already used' });
     if (row.pairing_code_expires_at && new Date(row.pairing_code_expires_at) < new Date()) {
       return res.status(410).json({ error: 'Code expired' });
+    }
+
+    // Plan gate (repackaged 2026-07-23): free = ONE claimed KDS device, and
+    // only the kitchen station. Extra screens / bar / expo stations are Pro.
+    // req.tenant.plan is the effective plan (paid Pro or active trial).
+    const plan = req.tenant?.plan || 'free';
+    const kdsLimits = getPlanLimits(plan).kdsDevices || { max: Infinity, stations: ['kds', 'bar', 'expo'] };
+    if (!kdsLimits.stations.includes(row.device_type)) {
+      return res.status(403).json(planUpgradeError('kdsDevices', plan, { station: row.device_type }));
+    }
+    const { cnt } = await get(
+      `SELECT COUNT(*) AS cnt FROM kds_devices
+       WHERE claimed_at IS NOT NULL AND revoked_at IS NULL`
+    ) || { cnt: 0 };
+    if (Number(cnt) >= kdsLimits.max) {
+      return res.status(403).json(planUpgradeError('kdsDevices', plan, { limit: kdsLimits.max, current: Number(cnt) }));
     }
 
     const jti = crypto.randomUUID();
