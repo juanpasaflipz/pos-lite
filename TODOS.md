@@ -28,6 +28,14 @@ State, for whichever agent/session picks this up next:
   + real cupsd in sandbox; `tsc --noEmit` clean. **Pending:** merge PR, then
   smoke-test the button on the pilot tenant. No automated tests were added for
   the new endpoints (follow-up candidate: `tests/print-jobs-install.test.ts`).
+- **Web printing (Chrome → GTP801) shipped & verified on-site:** the Gainscha
+  Mac driver emits Star raster (incompatible); replaced with our own CUPS
+  filter (`print-bridge/install-ghia-web.sh` → `/Library/Printers/POSLite/`,
+  Python, ESC/POS `GS v 0`, trims blank paper, partial cut). Queue `ghia-web`
+  prints DiDi-portal tickets from Chrome (Paper size 72mm). Queue `termica`
+  stays bridge-only (raw). Gotcha hit twice: stale jobs + a stray
+  generic-driver queue print gibberish — `cancel -a` + delete extra queues.
+  `print-bridge/diag-raster.sh` diagnoses raster dialect support.
 - Windows/Linux installer variants: not started (macOS-only by design for now).
 
 Generated from /plan-ceo-review (2026-04-20) + /plan-eng-review (2026-04-21).
