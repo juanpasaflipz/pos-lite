@@ -1,7 +1,7 @@
 #!/bin/bash
-# Instala el driver "POSLite ESC/POS 80mm" (filtro propio, lenguaje ESC/POS
-# verificado con la GTP801) y crea/reemplaza la cola ghia-web para imprimir
-# desde Chrome/Safari/cualquier app en la Mac del local.
+# Instala el driver "POSLite ESC/POS 80mm" (filtro propio en Python del
+# sistema — sin dependencias) y crea/reemplaza la cola ghia-web para
+# imprimir desde Chrome/Safari/cualquier app en la Mac del local.
 #
 # Uso:  sudo bash install-ghia-web.sh
 set -euo pipefail
@@ -12,155 +12,168 @@ DIR="/Library/Printers/POSLite"
 mkdir -p "$DIR"
 
 echo "==> Instalando filtro y PPD en $DIR"
-cat > "$DIR/rastertoescpos.js" <<'FILTER_JS_EOF'
-#!/usr/bin/env node
-/**
- * rastertoescpos — CUPS raster (v2/v3) → ESC/POS GS v 0 raster.
- *
- * Written for the GHIA GTP801 (Gainscha GP-80300 rebrand) and any 80mm
- * Epson-ESC/POS-compatible thermal printer. 203dpi, 576 dots (72 bytes) max.
- *
- * CUPS filter contract: argv = jobid user title copies options [file]
- * Input: CUPS raster on stdin (or file argv[6]). Output: ESC/POS on stdout.
- *
- * Features:
- *  - Accepts 8-bit gray (W or K) and 1-bit input, any endianness/sync v2-v3
- *  - Threshold at 128 (text/receipts want crisp black, not dithering mush)
- *  - Trims trailing blank rows per page, so a "200mm" page from Chrome only
- *    feeds as much paper as it has content
- *  - Feed + partial cut (GS V B) at the end of each page
- */
+cat > "$DIR/rastertoescpos.py" <<'FILTER_PY_EOF'
+#!/usr/bin/env python3
+"""rastertoescpos — CUPS raster (v2/v3) → ESC/POS GS v 0 raster.
 
-'use strict';
+For the GHIA GTP801 (Gainscha GP-80300 rebrand) and any 80mm Epson-ESC/POS
+thermal printer. 203dpi, 576 dots (72 bytes) max width. Pure stdlib — runs
+under macOS's sandboxed CUPS filter environment with /usr/bin/python3.
 
-const fs = require('fs');
+CUPS filter contract: argv = jobid user title copies options [file]
+Input: CUPS raster on stdin (or file argv[6]). Output: ESC/POS on stdout.
 
-const MAX_BYTES_PER_LINE = 72; // 576 dots @ 203dpi on 80mm paper
-const HEADER_SIZE = 1796;
-const CHUNK_ROWS = 256;
+- Accepts 8-bit gray (W or K) and 1-bit input, both endiannesses
+- Threshold at 128 (crisp receipts, no dithering mush)
+- Trims trailing blank rows per page (a 200mm Chrome page only feeds content)
+- Feed + partial cut (GS V B) per page
+"""
 
-function die(msg) {
-  process.stderr.write(`ERROR: rastertoescpos: ${msg}\n`);
-  process.exit(1);
-}
+import sys
+import os
 
-// ---------- read all input ----------
-const inputPath = process.argv[7]; // argv: [node, script, job, user, title, copies, options, file?]
-let data;
-try {
-  data = inputPath ? fs.readFileSync(inputPath) : fs.readFileSync(0);
-} catch (e) {
-  die(`cannot read input: ${e.message}`);
-}
-if (data.length < 4 + HEADER_SIZE) die(`input too short (${data.length} bytes) — not CUPS raster`);
+MAX_BYTES_PER_LINE = 72  # 576 dots @ 203dpi on 80mm paper
+HEADER_SIZE = 1796
+CHUNK_ROWS = 256
 
-// ---------- sync word / endianness ----------
-const magic = data.toString('latin1', 0, 4);
-let littleEndian;
-if (magic === 'RaS2' || magic === 'RaS3') littleEndian = false;
-else if (magic === '2SaR' || magic === '3SaR') littleEndian = true;
-else if (magic === 'RaSt' || magic === 'tSaR') die('CUPS raster v1 not supported (expected v2/v3)');
-else die(`bad magic "${magic}" — input is not CUPS raster`);
+# Bit-reverse-free packing helpers ------------------------------------------
+# For 1-bit input we can operate on whole bytes; for 8-bit we pack manually.
 
-const u32 = (buf, off) => (littleEndian ? buf.readUInt32LE(off) : buf.readUInt32BE(off));
+_INVERT = bytes(255 - i for i in range(256))
 
-// ---------- ESC/POS output ----------
-const out = [];
-out.push(Buffer.from([0x1b, 0x40])); // ESC @ init
 
-let pos = 4;
-let pages = 0;
+def die(msg):
+    sys.stderr.write("ERROR: rastertoescpos: %s\n" % msg)
+    sys.exit(1)
 
-while (pos + HEADER_SIZE <= data.length) {
-  const h = data.subarray(pos, pos + HEADER_SIZE);
-  const width = u32(h, 372);
-  const height = u32(h, 376);
-  const bitsPerColor = u32(h, 384);
-  const bitsPerPixel = u32(h, 388);
-  const bytesPerLine = u32(h, 392);
-  const colorSpace = u32(h, 400);
-  pos += HEADER_SIZE;
 
-  if (!width || !height || width > 4096 || height > 100000) {
-    die(`implausible page header (w=${width} h=${height}) — endianness/offset bug?`);
-  }
-  if (bitsPerPixel !== bitsPerColor || (bitsPerColor !== 1 && bitsPerColor !== 8)) {
-    die(`unsupported format: ${bitsPerColor} bits/color, ${bitsPerPixel} bits/pixel (need 1 or 8-bit gray)`);
-  }
-  const pageBytes = bytesPerLine * height;
-  if (pos + pageBytes > data.length) die(`truncated page data (need ${pageBytes}, have ${data.length - pos})`);
-  const pixels = data.subarray(pos, pos + pageBytes);
-  pos += pageBytes;
-  pages++;
+def main():
+    in_path = sys.argv[6] if len(sys.argv) > 6 else None
+    try:
+        if in_path:
+            with open(in_path, "rb") as f:
+                data = f.read()
+        else:
+            data = sys.stdin.buffer.read()
+    except OSError as e:
+        die("cannot read input: %s" % e)
 
-  // CUPS_CSPACE_W = 0 (max = white) | CUPS_CSPACE_SW = 18 | CUPS_CSPACE_K = 3 (max = black)
-  const whiteIsMax = colorSpace !== 3;
+    if len(data) < 4 + HEADER_SIZE:
+        die("input too short (%d bytes) — not CUPS raster" % len(data))
 
-  const outBytesPerLine = Math.min(Math.ceil(width / 8), MAX_BYTES_PER_LINE);
-  const outWidth = Math.min(width, outBytesPerLine * 8);
+    magic = data[0:4]
+    if magic in (b"RaS2", b"RaS3"):
+        endian = "big"
+    elif magic in (b"2SaR", b"3SaR"):
+        endian = "little"
+    elif magic in (b"RaSt", b"tSaR"):
+        die("CUPS raster v1 not supported (expected v2/v3)")
+    else:
+        die("bad magic %r — input is not CUPS raster" % magic)
 
-  // ---- convert to 1-bit rows (1 = black), find last non-blank row ----
-  const rows = [];
-  let lastInk = -1;
-  for (let y = 0; y < height; y++) {
-    const row = Buffer.alloc(outBytesPerLine);
-    const base = y * bytesPerLine;
-    let ink = false;
-    if (bitsPerColor === 8) {
-      for (let x = 0; x < outWidth; x++) {
-        const v = pixels[base + x];
-        const black = whiteIsMax ? v < 128 : v >= 128;
-        if (black) {
-          row[x >> 3] |= 0x80 >> (x & 7);
-          ink = true;
-        }
-      }
-    } else {
-      // 1-bit input: bit set = max value (white for W, black for K)
-      for (let b = 0; b < outBytesPerLine; b++) {
-        const v = pixels[base + b] ?? 0;
-        row[b] = whiteIsMax ? ~v & 0xff : v;
-      }
-      // mask bits beyond width in the final byte
-      const extra = outBytesPerLine * 8 - outWidth;
-      if (extra > 0) row[outBytesPerLine - 1] &= 0xff << extra;
-      ink = row.some((v) => v !== 0);
-    }
-    rows.push(row);
-    if (ink) lastInk = y;
-  }
+    def u32(buf, off):
+        return int.from_bytes(buf[off:off + 4], endian)
 
-  if (lastInk < 0) continue; // fully blank page: no paper wasted
+    out = bytearray()
+    out += b"\x1b\x40"  # ESC @ init
 
-  // ---- emit in chunks: GS v 0 m xL xH yL yH data ----
-  const usedRows = lastInk + 1;
-  for (let y0 = 0; y0 < usedRows; y0 += CHUNK_ROWS) {
-    const n = Math.min(CHUNK_ROWS, usedRows - y0);
-    out.push(Buffer.from([
-      0x1d, 0x76, 0x30, 0x00,
-      outBytesPerLine & 0xff, (outBytesPerLine >> 8) & 0xff,
-      n & 0xff, (n >> 8) & 0xff,
-    ]));
-    out.push(Buffer.concat(rows.slice(y0, y0 + n)));
-  }
+    pos = 4
+    pages = 0
 
-  out.push(Buffer.from([0x1b, 0x64, 0x04])); // ESC d 4 — feed past the tear bar
-  out.push(Buffer.from([0x1d, 0x56, 0x42, 0x00])); // GS V B 0 — partial cut
-  process.stderr.write(`INFO: rastertoescpos: page ${pages}: ${outWidth}x${usedRows} dots (trimmed from ${height})\n`);
-}
+    while pos + HEADER_SIZE <= len(data):
+        h = data[pos:pos + HEADER_SIZE]
+        width = u32(h, 372)
+        height = u32(h, 376)
+        bits_per_color = u32(h, 384)
+        bits_per_pixel = u32(h, 388)
+        bytes_per_line = u32(h, 392)
+        color_space = u32(h, 400)
+        pos += HEADER_SIZE
 
-if (!pages) die('no pages found in raster stream');
+        if not width or not height or width > 4096 or height > 100000:
+            die("implausible page header (w=%d h=%d)" % (width, height))
+        if bits_per_pixel != bits_per_color or bits_per_color not in (1, 8):
+            die("unsupported format: %d bits/color, %d bits/pixel" % (bits_per_color, bits_per_pixel))
 
-process.stdout.write(Buffer.concat(out));
-FILTER_JS_EOF
+        page_bytes = bytes_per_line * height
+        if pos + page_bytes > len(data):
+            die("truncated page data (need %d, have %d)" % (page_bytes, len(data) - pos))
+        pixels = data[pos:pos + page_bytes]
+        pos += page_bytes
+        pages += 1
+
+        # CUPS_CSPACE_W = 0 / SW = 18 (max = white) | CUPS_CSPACE_K = 3 (max = black)
+        white_is_max = color_space != 3
+
+        out_bpl = min((width + 7) // 8, MAX_BYTES_PER_LINE)
+        out_width = min(width, out_bpl * 8)
+
+        rows = []
+        last_ink = -1
+
+        if bits_per_color == 1:
+            extra = out_bpl * 8 - out_width
+            mask_last = (0xFF << extra) & 0xFF if extra > 0 else 0xFF
+            for y in range(height):
+                base = y * bytes_per_line
+                raw = pixels[base:base + out_bpl]
+                if len(raw) < out_bpl:
+                    raw = raw + b"\x00" * (out_bpl - len(raw))
+                row = bytearray(raw.translate(_INVERT) if white_is_max else raw)
+                row[-1] &= mask_last
+                rows.append(bytes(row))
+                if any(row):
+                    last_ink = y
+        else:
+            for y in range(height):
+                base = y * bytes_per_line
+                line = pixels[base:base + out_width]
+                row = bytearray(out_bpl)
+                ink = False
+                for x, v in enumerate(line):
+                    black = (v < 128) if white_is_max else (v >= 128)
+                    if black:
+                        row[x >> 3] |= 0x80 >> (x & 7)
+                        ink = True
+                rows.append(bytes(row))
+                if ink:
+                    last_ink = y
+
+        if last_ink < 0:
+            continue  # fully blank page — no paper wasted
+
+        used = last_ink + 1
+        y0 = 0
+        while y0 < used:
+            n = min(CHUNK_ROWS, used - y0)
+            out += bytes((0x1D, 0x76, 0x30, 0x00,
+                          out_bpl & 0xFF, (out_bpl >> 8) & 0xFF,
+                          n & 0xFF, (n >> 8) & 0xFF))
+            out += b"".join(rows[y0:y0 + n])
+            y0 += n
+
+        out += b"\x1b\x64\x04"          # ESC d 4 — feed past the tear bar
+        out += b"\x1d\x56\x42\x00"      # GS V B 0 — partial cut
+        sys.stderr.write("INFO: rastertoescpos: page %d: %dx%d dots (trimmed from %d)\n"
+                         % (pages, out_width, used, height))
+
+    if not pages:
+        die("no pages found in raster stream")
+
+    os.write(1, bytes(out))
+
+
+if __name__ == "__main__":
+    main()
+FILTER_PY_EOF
 
 cat > "$DIR/rastertoescpos" <<'WRAPPER_EOF'
 #!/bin/bash
-# CUPS corre este wrapper como usuario _lp: localiza node y ejecuta el filtro.
-for N in /opt/homebrew/bin/node /usr/local/bin/node /usr/bin/node /Users/*/.pos-print-bridge/node-*/bin/node; do
-  [ -x "$N" ] && exec "$N" /Library/Printers/POSLite/rastertoescpos.js "$@"
+# CUPS ejecuta este wrapper (sandbox, usuario _lp): usa python3 del sistema.
+for P in /usr/bin/python3 /opt/homebrew/bin/python3 /usr/local/bin/python3; do
+  [ -x "$P" ] && exec "$P" /Library/Printers/POSLite/rastertoescpos.py "$@"
 done
-echo "ERROR: rastertoescpos: no encontre node en esta Mac" >&2
+echo "ERROR: rastertoescpos: no encontre python3" >&2
 exit 1
 WRAPPER_EOF
 
@@ -247,9 +260,10 @@ cat > "$DIR/POSLite_ESCPOS.ppd" <<'PPD_EOF'
 *CloseUI: *Resolution
 PPD_EOF
 
-chmod 755 "$DIR/rastertoescpos" "$DIR/rastertoescpos.js"
+chmod 755 "$DIR/rastertoescpos" "$DIR/rastertoescpos.py"
 chmod 644 "$DIR/POSLite_ESCPOS.ppd"
 chown -R root:wheel "$DIR"
+rm -f "$DIR/rastertoescpos.js" 2>/dev/null || true
 
 echo "==> Buscando impresora USB..."
 URI="$(lpinfo -v 2>/dev/null | awk '$1 == "direct" && $2 ~ /^usb:/ { print $2; exit }')"
