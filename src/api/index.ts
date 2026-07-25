@@ -4276,6 +4276,9 @@ export interface ManualSalesImportRow {
 export interface ManualSalesImportPreview {
   headers: string[];
   mapping: Record<string, string | null>;
+  /** Sheet names in the workbook (empty for CSV) and which one was read. */
+  sheets: string[];
+  sheet: string | null;
   /** true when the file is one row per DAY, so rows fan out into many orders. */
   is_daily: boolean;
   /** One row per day but no order count — importing as-is skews avg ticket. */
@@ -4331,13 +4334,14 @@ export async function createItemizedManualSale(payload: {
 
 export async function previewManualSalesImport(
   file: File,
-  opts: { business_date?: string; mapping?: Record<string, string | null> } = {}
+  opts: { business_date?: string; mapping?: Record<string, string | null>; sheet?: string } = {}
 ): Promise<ManualSalesImportPreview> {
   const base = FALLBACK_URLS.length ? await resolveBaseUrl() : activeBaseUrl;
   const formData = new FormData();
   formData.append('file', file);
   if (opts.business_date) formData.append('business_date', opts.business_date);
   if (opts.mapping) formData.append('mapping', JSON.stringify(opts.mapping));
+  if (opts.sheet) formData.append('sheet', opts.sheet);
   const headers: Record<string, string> = {};
   const auth = authHeader();
   if (auth) headers['Authorization'] = auth;

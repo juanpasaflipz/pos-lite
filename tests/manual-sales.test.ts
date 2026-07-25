@@ -332,6 +332,83 @@ describe("DiDi settlement receipt — Recibo/Resumen diario (real juanbertos exp
   });
 });
 
+describe("Rappi Relación de ventas (real juanbertos export, 2026-06-25..07-25)", () => {
+  // Rappi's workbook ships FIVE sheets and the first is "Indice" — a 129-row
+  // data dictionary. Taking worksheets[0] parsed the glossary and imported
+  // nothing at all. Sheet selection is XLSX-only (exceljs), so the sheet
+  // picker itself is covered by the CSV-shaped assertions below plus the
+  // detection rules that bit us on the real file:
+  //   - "Uso y alquiler de plataforma Rappi" has no "la", and the sheet also
+  //     carries "Ventas base por Uso y alquiler…", "…Prime" and "IVA Uso y
+  //     alquiler…" — a loose match grabs the sales base instead of the fee.
+  //   - dates are "jue. 25 jun. 2026, 1:08:47 p. m."
+  //   - order ids arrive as floats ("2452095771.0")
+  const HEAD = [
+    'Fecha de creación orden', 'ID de la órden', 'ID del paidlot', 'ID de la tienda',
+    'Ventas base por Uso y alquiler de plataforma Rappi (base)', 'Venta Bruta',
+    'Uso y alquiler de plataforma Rappi', 'Uso y alquiler de plataforma Rappi Prime',
+    'IVA Uso y alquiler de plataforma Rappi', 'Valor a transferir',
+  ].join(',');
+  const CSV = [
+    HEAD,
+    '"jue. 25 jun. 2026, 1:08:47 p. m.",2452095771.0,58386118.0,1930452656.0,0.0,389.00,0.00,0.0,0.0,0.0',
+    '"vie. 10 jul. 2026, 8:12:00 p. m.",2455833427.0,58386118.0,1930452656.0,0.0,250.00,-75.00,0.0,0.0,0.0',
+    '"sáb. 18 jul. 2026, 2:30:00 p. m.",2457996171.0,58386118.0,1930452656.0,0.0,870.00,-234.90,0.0,0.0,0.0',
+  ].join('\n');
+
+  it('picks the fee column, not the sales base / Prime / IVA lookalikes', async () => {
+    const { headers } = await parseUpload(Buffer.from(CSV, 'utf8'), 'rappi.csv');
+    const m = detectMapping(headers);
+    expect(m.commission).toBe('Uso y alquiler de plataforma Rappi');
+    expect(m.gross).toBe('Venta Bruta');
+    expect(m.external_order_id).toBe('ID de la órden');
+  });
+
+  it('parses Spanish long-form dates with day names and clock times', async () => {
+    const { headers, rows } = await parseUpload(Buffer.from(CSV, 'utf8'), 'rappi.csv');
+    const { rows: norm } = normalizeRows(rows, detectMapping(headers), null);
+    expect(norm.map((r: any) => r.business_date))
+      .toEqual(['2026-06-25', '2026-07-10', '2026-07-18']);
+  });
+
+  it('strips the float suffix off numeric order ids so re-imports dedup', async () => {
+    const { headers, rows } = await parseUpload(Buffer.from(CSV, 'utf8'), 'rappi.csv');
+    const { rows: norm } = normalizeRows(rows, detectMapping(headers), null);
+    expect(norm[0].external_order_id).toBe('2452095771');
+    expect(norm[0].external_order_id).not.toContain('.0');
+  });
+
+  it('reads negative commission as a positive cost', async () => {
+    const { headers, rows } = await parseUpload(Buffer.from(CSV, 'utf8'), 'rappi.csv');
+    const { rows: norm } = normalizeRows(rows, detectMapping(headers), null);
+    expect(norm[1].commission).toBe(75);
+    expect(norm[2].commission).toBe(234.9);
+    expect(norm[0].commission).toBeNull(); // zero-commission order, not yet charged
+  });
+
+  it('treats every row as its own order (no order-count column here)', async () => {
+    const { headers, rows } = await parseUpload(Buffer.from(CSV, 'utf8'), 'rappi.csv');
+    const m = detectMapping(headers);
+    expect(m.order_count).toBeNull();
+    const { rows: norm } = normalizeRows(rows, m, null);
+    expect(norm.every((r: any) => r.order_count === 1)).toBe(true);
+  });
+});
+
+describe('abbreviated month-name dates', () => {
+  it('handles Spanish and English abbreviations', () => {
+    expect(parseBusinessDate('jue. 25 jun. 2026, 1:08:47 p. m.')).toBe('2026-06-25');
+    expect(parseBusinessDate('mié. 03 sept. 2026')).toBe('2026-09-03');
+    expect(parseBusinessDate('lun. 07 dic. 2026')).toBe('2026-12-07');
+    expect(parseBusinessDate('Fri 10 Apr 2026')).toBe('2026-04-10');
+    expect(parseBusinessDate('01 ene. 2027')).toBe('2027-01-01');
+  });
+
+  it('does not fire on a month name it does not know', () => {
+    expect(parseBusinessDate('xxx. 25 zzz. 2026')).toBeNull();
+  });
+});
+
 // ==================== 2. Fan-out write path (real tenant, RLS) ====================
 
 let tenant: TestTenant;

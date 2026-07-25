@@ -530,7 +530,8 @@
       "avgTicket": "Ticket promedio",
       "field_order_count": "Órdenes",
       "field_avg_ticket": "Ticket promedio",
-      "field_commission_rebate": "Reembolso de comisión"
+      "field_commission_rebate": "Reembolso de comisión",
+      "sheet": "Hoja"
     }
   },
   "modifiers": {

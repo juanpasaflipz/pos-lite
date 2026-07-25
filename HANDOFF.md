@@ -89,6 +89,39 @@ Regression status: 22-assertion parser suite green across all four real/syntheti
 shapes (ops report, settlement receipt, Rappi relación, DiDi detalle de pagos).
 Typecheck 0.
 
+**UPDATE 3 — Rappi's real "Relación de ventas" broke four more things.**
+
+- **Multi-sheet workbooks.** Rappi ships FIVE sheets and the first is `Indice`,
+  a 129-row data dictionary. `parseUpload` took `worksheets[0]`, parsed the
+  glossary and imported **zero rows**. It now scores sheets by rows x columns
+  (a glossary is tall and narrow, a detail tab is wide) with name bias
+  (`detalle|orden|pedido|…` x3, `indice|glosario|…` x0.1) and returns
+  `{ sheets, sheet }`; the client can override via a new `sheet` form field
+  and a sheet dropdown in the preview.
+- **Spanish long-form dates.** `"jue. 25 jun. 2026, 1:08:47 p. m."` — new
+  `MONTH_ABBR` table (ES + EN) matched on the `DD MON YYYY` core, ignoring day
+  name and clock time.
+- **`Uso y alquiler de plataforma Rappi` has no "la"**, so the existing
+  candidate missed it — and the same sheet carries `Ventas base por Uso y
+  alquiler…`, `…Prime` and `IVA Uso y alquiler…`, any of which a loose
+  substring match would grab instead. The exact form now leads the list.
+- **Numeric order ids arrive as floats** (`2452095771.0`). Stripped, so a
+  re-import dedups against the same key.
+
+**Rappi numbers (juanbertos, 2026-06-25..07-25):** 18 orders, **$7,365 gross,
+$409 average ticket** — a very different shape from DiDi (248 orders, $159
+avg). Commission $919.05, but only 9 of the 18 orders were charged anything:
+those 9 ran at **28.1%**, and everything before 2026-07-10 was charged **zero**.
+`Valor Neto` and `Valor a transferir` are 0.00 across the board and every order
+is `pending_review` — **this paidlot has not settled**, which is also why the
+`Resumen` tab is all zeros. Don't read those columns as "Rappi paid nothing".
+One $620 order is `Método de pago: cash` — Rappi never remits that; it is
+inside gross but outside any deposit.
+
+Parser regression suite is now **30 assertions across four real exports**
+(Rappi relación, DiDi operations, DiDi settlement receipt, DiDi detalle de
+pagos) plus the synthetic CSVs. Typecheck 0.
+
 **Caveat to carry forward:** the operations report contains NO commission
 column — its second "Ganancias" column is net-of-**promo**, not net of DiDi's
 service fee, so it is NOT the bank deposit. Daily imports therefore fall back

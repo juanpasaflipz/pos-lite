@@ -437,7 +437,13 @@ router.post('/import/preview', requireAuth('manage_delivery'), (req, res, next) 
   try {
     if (!req.file?.buffer?.length) return res.status(400).json({ error: 'No file uploaded' });
 
-    const { headers, rows } = await parseUpload(req.file.buffer, req.file.originalname);
+    // A workbook can carry several sheets (Rappi ships five, the first being a
+    // glossary). parseUpload auto-picks the likeliest data sheet; the client
+    // can override once it sees the list.
+    const requestedSheet = typeof req.body?.sheet === 'string' && req.body.sheet ? req.body.sheet : null;
+    const { headers, rows, sheets, sheet } = await parseUpload(
+      req.file.buffer, req.file.originalname, requestedSheet
+    );
     if (!rows.length) return res.status(400).json({ error: 'That file has columns but no data rows.' });
     if (rows.length > MAX_IMPORT_ROWS) {
       return res.status(400).json({ error: `That file has ${rows.length} rows; the limit is ${MAX_IMPORT_ROWS} per import. Split it by week and import each part.` });
@@ -500,12 +506,15 @@ router.post('/import/preview', requireAuth('manage_delivery'), (req, res, next) 
     }
     if (!mapping.commission) warnings.push("No commission column was recognized — the platform's configured commission % will be used instead.");
     if (skipped.length) warnings.push(`${skipped.length} row(s) will be skipped (${isDaily ? 'days with no sales, or unreadable values' : 'unreadable amount or date'}).`);
+    if (sheets && sheets.length > 1) warnings.push(`This workbook has ${sheets.length} sheets; reading "${sheet}". Switch below if that is the wrong one.`);
     if (duplicates.length) warnings.push(`${duplicates.length} order(s) are already in the system and will be skipped.`);
     if (totalOrders > MAX_IMPORT_ORDERS) warnings.push(`That is ${totalOrders} orders, over the ${MAX_IMPORT_ORDERS} limit for one import. Split the file by week.`);
 
     res.json({
       headers,
       mapping,
+      sheets: sheets || [],
+      sheet: sheet || null,
       is_daily: isDaily,
       looks_daily_without_counts: looksDailyWithoutCounts,
       total_orders: totalOrders,

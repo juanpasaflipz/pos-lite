@@ -530,7 +530,8 @@
       "avgTicket": "Avg ticket",
       "field_order_count": "Orders",
       "field_avg_ticket": "Avg ticket",
-      "field_commission_rebate": "Commission rebate"
+      "field_commission_rebate": "Commission rebate",
+      "sheet": "Sheet"
     }
   },
   "modifiers": {

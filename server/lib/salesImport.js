@@ -52,6 +52,14 @@ export function parseAmount(raw) {
   return negative ? -n : n;
 }
 
+// Abbreviated month names, Spanish and English. Keyed on the first 3-4 letters
+// so "sep", "sept", "sepr" and "september" all land on the same month.
+const MONTH_ABBR = {
+  ene: '01', jan: '01', feb: '02', mar: '03', abr: '04', apr: '04',
+  may: '05', jun: '06', jul: '07', ago: '08', aug: '08',
+  sep: '09', sept: '09', oct: '10', nov: '11', dic: '12', dec: '12',
+};
+
 /**
  * Coerce a portal date cell to YYYY-MM-DD. Handles ISO, "DD/MM/YYYY" (the
  * Mexican convention both portals use), "YYYY/MM/DD", and Excel serial dates
@@ -72,6 +80,15 @@ export function parseBusinessDate(raw) {
   // DD/MM/YYYY or DD-MM-YYYY. Day-first: both portals are es-MX.
   const dmy = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
   if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+
+  // "jue. 25 jun. 2026, 1:08:47 p. m." — Rappi's Detalle tab writes dates as
+  // localized long form with an abbreviated day and month name. Match on the
+  // DD MON YYYY core and ignore the day name and clock time entirely.
+  const named = normalizeHeader(s).match(/(?:^|\s)(\d{1,2})\s+([a-z]{3,10})\.?\s+(\d{4})/);
+  if (named) {
+    const mon = MONTH_ABBR[named[2].slice(0, 4)] ?? MONTH_ABBR[named[2].slice(0, 3)];
+    if (mon) return `${named[3]}-${mon}-${named[1].padStart(2, '0')}`;
+  }
 
   // Compact YYYYMMDD — DiDi's settlement receipt writes "20260724".
   const compact = s.match(/^(\d{4})(\d{2})(\d{2})$/);
@@ -141,9 +158,14 @@ const COLUMN_CANDIDATES = {
     // 'comision y distribucion' must lead: on DiDi's settlement receipt the
     // looser 'tarifa de servicio' substring-matches "Tarifa de servicio de
     // penalización" — the penalty column, not the commission.
-    'comision y distribucion', 'uso y alquiler de la plataforma', 'tarifa de servicio',
-    'comision de la plataforma', 'comision', 'tarifa transaccional',
-    'service fee', 'commission',
+    // Rappi's Detalle tab writes "Uso y alquiler de plataforma Rappi" (no
+    // "la"), and the sheet also carries "Ventas base por Uso y alquiler...",
+    // "...Prime" and "IVA Uso y alquiler..." — so the exact form must lead or
+    // a substring match grabs the sales base instead of the fee.
+    'comision y distribucion', 'uso y alquiler de plataforma rappi',
+    'uso y alquiler de la plataforma', 'uso y alquiler de plataforma',
+    'tarifa de servicio', 'comision de la plataforma', 'comision',
+    'tarifa transaccional', 'service fee', 'commission',
   ],
   // Platforms that charge commission and hand it straight back during a
   // promo period. DiDi's "Premio de comisión ... para la tienda" cancels
@@ -191,6 +213,34 @@ export function detectMapping(headers) {
 }
 
 // ==================== File parsing ====================
+
+/**
+ * Choose which sheet actually holds the records.
+ *
+ * Rappi's "Relación de ventas" ships five sheets and the FIRST one is
+ * "Indice" — a 129-row data dictionary. Blindly taking worksheets[0] parsed
+ * the glossary and imported nothing. Score on data volume (rows x columns,
+ * since a glossary is tall and narrow while a detail tab is wide), then bias
+ * by sheet name.
+ */
+function pickDataSheet(worksheets) {
+  const PREFER = /(detalle|detail|orden|order|pedido|transaccion|transaction|resumen diario|daily)/;
+  const AVOID = /(indice|index|glosario|diccionario|definicion|instruccion|readme|portada|cover)/;
+
+  let best = 0;
+  let bestScore = -1;
+  worksheets.forEach((w, i) => {
+    const rows = Math.max(0, (w.actualRowCount ?? w.rowCount ?? 0) - 1);
+    const cols = w.actualColumnCount ?? w.columnCount ?? 0;
+    if (!rows || !cols) return;
+    const name = normalizeHeader(w.name);
+    let score = rows * Math.min(cols, 60);
+    if (PREFER.test(name)) score *= 3;
+    if (AVOID.test(name)) score *= 0.1;
+    if (score > bestScore) { bestScore = score; best = i; }
+  });
+  return best;
+}
 
 /**
  * Make a header list safe to use as object keys.
@@ -258,7 +308,7 @@ function matrixToRows(matrix) {
  * Both formats go through matrixToRows so duplicate-header handling and
  * title-row skipping behave identically either way.
  */
-export async function parseUpload(buffer, filename) {
+export async function parseUpload(buffer, filename, sheetName = null) {
   const isZip = buffer.length > 1 && buffer[0] === 0x50 && buffer[1] === 0x4b; // 'PK' -> xlsx
   const looksXlsx = isZip || /\.xlsx?$/i.test(filename || '');
 
@@ -274,8 +324,20 @@ export async function parseUpload(buffer, filename) {
     }
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(buffer);
-    const ws = wb.worksheets[0];
-    if (!ws) throw Object.assign(new Error('That spreadsheet has no sheets.'), { statusCode: 400 });
+    if (!wb.worksheets.length) {
+      throw Object.assign(new Error('That spreadsheet has no sheets.'), { statusCode: 400 });
+    }
+
+    const sheets = wb.worksheets.map((w) => w.name);
+    const ws = sheetName
+      ? wb.worksheets.find((w) => w.name === sheetName)
+      : wb.worksheets[pickDataSheet(wb.worksheets)];
+    if (!ws) {
+      throw Object.assign(
+        new Error(`That workbook has no sheet named "${sheetName}". Available: ${sheets.join(', ')}`),
+        { statusCode: 400 }
+      );
+    }
 
     const matrix = [];
     ws.eachRow({ includeEmpty: false }, (row) => {
@@ -288,7 +350,7 @@ export async function parseUpload(buffer, filename) {
       });
       matrix.push(vals);
     });
-    return matrixToRows(matrix);
+    return { ...matrixToRows(matrix), sheets, sheet: ws.name };
   }
 
   const text = buffer.toString('utf8').replace(/^\uFEFF/, '');
@@ -299,7 +361,7 @@ export async function parseUpload(buffer, filename) {
   if (!matrix.length) {
     throw Object.assign(new Error('Could not read any rows from that file.'), { statusCode: 400 });
   }
-  return matrixToRows(matrix);
+  return { ...matrixToRows(matrix), sheets: [], sheet: null };
 }
 
 /**
@@ -335,7 +397,11 @@ export function normalizeRows(rows, mapping, fallbackDate) {
     }
     const net = mapping.net ? parseAmount(raw[mapping.net]) : null;
     const date = (mapping.business_date ? parseBusinessDate(raw[mapping.business_date]) : null) || fallbackDate;
-    const extId = mapping.external_order_id ? String(raw[mapping.external_order_id] ?? '').trim() : '';
+    // Numeric order ids come back as floats ("2452095771.0"); keep the id
+    // stable so re-imports dedup against the same string.
+    const extId = mapping.external_order_id
+      ? String(raw[mapping.external_order_id] ?? '').trim().replace(/^(\d+)\.0+$/, '$1')
+      : '';
 
     // A daily file's closed/zero days are normal, not errors.
     if (mapping.order_count && !(count > 0)) { skipped.push({ row: rowNo, reason: 'no orders that day' }); return; }

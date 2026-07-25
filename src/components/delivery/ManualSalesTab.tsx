@@ -130,11 +130,11 @@ export default function ManualSalesTab() {
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
 
-  async function runPreview(f: File, mapping?: Record<string, string | null>) {
+  async function runPreview(f: File, mapping?: Record<string, string | null>, sheet?: string) {
     setBusy(true); setError(null);
     try {
       setPreview(await previewManualSalesImport(f, {
-        business_date: businessDate, mapping,
+        business_date: businessDate, mapping, sheet,
       }));
     } catch (e) { fail(e); setPreview(null); } finally { setBusy(false); }
   }
@@ -394,6 +394,19 @@ export default function ManualSalesTab() {
                 </p>
               )}
 
+              {/* Workbooks can hold a glossary sheet plus the real data. */}
+              {preview.sheets.length > 1 && (
+                <div>
+                  <label className={labelCls} htmlFor="ms-sheet">{k('sheet', 'Sheet')}</label>
+                  <select
+                    id="ms-sheet" className={inputCls} value={preview.sheet ?? ''}
+                    onChange={(e) => { if (file) void runPreview(file, undefined, e.target.value); }}
+                  >
+                    {preview.sheets.map((sh) => <option key={sh} value={sh}>{sh}</option>)}
+                  </select>
+                </div>
+              )}
+
               {/* Column mapping — detection is a guess; let the user correct it. */}
               <div>
                 <p className={labelCls}>{k('mapping', 'Which column is which')}</p>
@@ -408,7 +421,7 @@ export default function ManualSalesTab() {
                         value={preview.mapping[field] ?? ''}
                         onChange={(e) => {
                           const next = { ...preview.mapping, [field]: e.target.value || null };
-                          if (file) void runPreview(file, next);
+                          if (file) void runPreview(file, next, preview.sheet ?? undefined);
                         }}
                       >
                         <option value="">{k('ignore', '— ignore —')}</option>
