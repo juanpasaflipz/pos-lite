@@ -87,6 +87,9 @@ import sentinelRoutes from './sentinel/route.js';
 // Twilio inbound (WhatsApp voice ops — platform-level webhook)
 import twilioInboundRoutes from './routes/twilio-inbound.js';
 
+// Meta Cloud API inbound (coexistence WhatsApp number — platform-level webhook)
+import waCloudInboundRoutes from './routes/wa-cloud-inbound.js';
+
 // ==================== App Setup ====================
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -126,7 +129,8 @@ app.use(express.json({
   verify: (req, _res, buf) => {
     if (
       req.url?.startsWith('/api/delivery/webhook') ||
-      req.url?.startsWith('/api/uber-direct/webhook')
+      req.url?.startsWith('/api/uber-direct/webhook') ||
+      req.url?.startsWith('/api/wa-cloud/webhook')
     ) {
       req.rawBody = buf;
     }
@@ -205,6 +209,10 @@ app.use('/webhooks/getnet', getnetWebhook);
 
 // Twilio inbound (WhatsApp voice ops — uses urlencoded body, no tenant)
 app.use('/api/twilio', twilioInboundRoutes);
+
+// Meta Cloud API inbound (coexistence number voice ops — JSON body with
+// X-Hub-Signature-256 over the raw bytes; rawBody captured above, no tenant)
+app.use('/api/wa-cloud', waCloudInboundRoutes);
 
 // Promo code validation (public)
 app.get('/api/billing/promo/validate', promoValidateHandler);
