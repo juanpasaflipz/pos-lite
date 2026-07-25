@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft, Truck, RefreshCw, BarChart3, Tag, MessageSquare,
-  TrendingUp, DollarSign, Users, Plus, Trash2, Send, Store,
+  TrendingUp, DollarSign, Users, Plus, Trash2, Send, Store, ClipboardPlus,
 } from 'lucide-react';
 import {
   getDeliveryPlatforms,
@@ -25,9 +25,10 @@ import { formatPrice } from '../utils/currency';
 import BrandLogo from '../components/BrandLogo';
 import FeatureGate from '../components/FeatureGate';
 import DeliverySetupModal from '../components/delivery/DeliverySetupModal';
+import ManualSalesTab from '../components/delivery/ManualSalesTab';
 import BackToSetupButton from '../components/BackToSetupButton';
 
-type Tab = 'orders' | 'analytics' | 'markups' | 'brands' | 'recapture' | 'platforms';
+type Tab = 'orders' | 'analytics' | 'manual' | 'markups' | 'brands' | 'recapture' | 'platforms';
 
 export default function DeliveryScreen() {
   const { t } = useTranslation('inventory');
@@ -173,6 +174,7 @@ export default function DeliveryScreen() {
   const tabs: { id: Tab; icon: React.ReactNode; label: string }[] = [
     { id: 'analytics', icon: <BarChart3 size={16} />, label: t('delivery.tabs.analytics') },
     { id: 'orders', icon: <Truck size={16} />, label: t('delivery.tabs.orders') },
+    { id: 'manual', icon: <ClipboardPlus size={16} />, label: t('delivery.tabs.manual', { defaultValue: 'Manual Sales' }) },
     { id: 'markups', icon: <Tag size={16} />, label: t('delivery.tabs.markups') },
     { id: 'brands', icon: <Store size={16} />, label: t('delivery.tabs.brands') },
     { id: 'recapture', icon: <MessageSquare size={16} />, label: t('delivery.tabs.recapture') },
@@ -226,6 +228,9 @@ export default function DeliveryScreen() {
           </div>
         ) : (
           <>
+            {/* ===== Manual Sales Tab ===== */}
+            {tab === 'manual' && <ManualSalesTab />}
+
             {/* ===== Analytics Tab ===== */}
             {tab === 'analytics' && platforms.length === 0 && (
               <div className="bg-neutral-900 rounded-lg border border-neutral-800 p-12 text-center">

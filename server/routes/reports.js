@@ -162,6 +162,12 @@ const PAYMENT_SOURCE_LABELS = {
   transfer: 'Transfer',
   oxxo: 'OXXO',
   spei: 'SPEI',
+  // Delivery channels: manual/imported sales set payment_method to the
+  // platform name, so they surface here as their own payment source rather
+  // than as a raw slug.
+  rappi: 'Rappi',
+  didi_food: 'DiDi Food',
+  uber_eats: 'Uber Eats',
   unknown: 'Unknown',
 };
 

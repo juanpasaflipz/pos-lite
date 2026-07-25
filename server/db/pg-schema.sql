@@ -165,7 +165,8 @@ CREATE TABLE IF NOT EXISTS orders (
   discount_reason TEXT,
   discount_authorized_by INTEGER REFERENCES employees(id),
   customer_call_name TEXT,
-  order_fulfillment_type TEXT DEFAULT 'to_go'
+  order_fulfillment_type TEXT DEFAULT 'to_go',
+  manual_batch_id INTEGER DEFAULT NULL
 );
 
 CREATE TABLE IF NOT EXISTS order_items (
@@ -365,6 +366,29 @@ CREATE TABLE IF NOT EXISTS delivery_orders (
   courier_phone TEXT,
   courier_vehicle TEXT,
   raw_webhook_data TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Manual / imported sales entry (migration 0091). Header row for a batch of
+-- orders that were recorded by hand or imported from a delivery platform's
+-- settlement export, rather than rung up on the POS. Every order created this
+-- way carries orders.manual_batch_id pointing here, so an entry can be
+-- reversed as a unit. See server/routes/manual-sales.js.
+CREATE TABLE IF NOT EXISTS manual_sales_batches (
+  id SERIAL PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
+  channel TEXT NOT NULL,
+  platform_id INTEGER REFERENCES delivery_platforms(id),
+  entry_mode TEXT NOT NULL DEFAULT 'aggregate',
+  business_date DATE NOT NULL,
+  order_count INTEGER NOT NULL DEFAULT 1,
+  gross_total NUMERIC(10,2) NOT NULL DEFAULT 0,
+  commission_total NUMERIC(10,2) NOT NULL DEFAULT 0,
+  net_total NUMERIC(10,2) NOT NULL DEFAULT 0,
+  commission_percent REAL DEFAULT 0,
+  source_filename TEXT,
+  note TEXT,
+  created_by INTEGER REFERENCES employees(id),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

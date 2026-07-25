@@ -4231,3 +4231,138 @@ export async function renamePairedDevice(id: string, deviceLabel: string): Promi
 export async function revokePairedDevice(id: string): Promise<{ ok: true }> {
   return apiRequest<{ ok: true }>(`/devices/${id}`, { method: 'DELETE' });
 }
+
+// ==================== Manual & imported sales ====================
+// Delivery-app revenue that never touches the POS. See
+// server/routes/manual-sales.js for the three entry modes.
+
+export interface ManualSalesChannel {
+  id: number | null;
+  name: string;
+  display_name: string;
+  commission_percent: number;
+  active: boolean;
+}
+
+export interface ManualSalesBatch {
+  id: number;
+  channel: string;
+  platform_id: number | null;
+  platform_display_name: string | null;
+  entry_mode: 'aggregate' | 'itemized' | 'import';
+  business_date: string;
+  order_count: number;
+  gross_total: number;
+  commission_total: number;
+  net_total: number;
+  commission_percent: number;
+  source_filename: string | null;
+  note: string | null;
+  created_by_name: string | null;
+  created_at: string;
+  live_order_count: number;
+}
+
+export interface ManualSalesImportRow {
+  external_order_id: string | null;
+  business_date: string;
+  gross: number;
+  commission: number | null;
+  net: number | null;
+}
+
+export interface ManualSalesImportPreview {
+  headers: string[];
+  mapping: Record<string, string | null>;
+  row_count: number;
+  importable_count: number;
+  skipped: { row: number; reason: string }[];
+  skipped_count: number;
+  duplicate_count: number;
+  totals: { gross: number; commission: number };
+  date_range: { from: string; to: string } | null;
+  sample: ManualSalesImportRow[];
+  rows: ManualSalesImportRow[];
+  warnings: string[];
+}
+
+export async function getManualSalesChannels(): Promise<{ platforms: ManualSalesChannel[] }> {
+  return apiRequest('/manual-sales/channels');
+}
+
+export async function getManualSalesBatches(limit = 50): Promise<{ batches: ManualSalesBatch[] }> {
+  return apiRequest(`/manual-sales/batches?limit=${limit}`);
+}
+
+export async function createAggregateManualSale(payload: {
+  channel: string;
+  business_date: string;
+  order_count: number;
+  gross_total: number;
+  note?: string;
+}): Promise<{
+  success: boolean; batch_id: number; orders_created: number;
+  gross_total: number; commission_total: number; net_total: number;
+}> {
+  return apiRequest('/manual-sales/aggregate', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function createItemizedManualSale(payload: {
+  channel: string;
+  business_date: string;
+  items: { menu_item_id?: number | null; item_name?: string; quantity: number; unit_price?: number; notes?: string }[];
+  note?: string;
+  customer_name?: string;
+  external_order_id?: string;
+  deduct_inventory?: boolean;
+}): Promise<{
+  success: boolean; batch_id: number; order_id: number; items: number;
+  gross_total: number; commission_total: number; net_total: number; inventory_deducted: boolean;
+}> {
+  return apiRequest('/manual-sales/itemized', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function previewManualSalesImport(
+  file: File,
+  opts: { business_date?: string; mapping?: Record<string, string | null> } = {}
+): Promise<ManualSalesImportPreview> {
+  const base = FALLBACK_URLS.length ? await resolveBaseUrl() : activeBaseUrl;
+  const formData = new FormData();
+  formData.append('file', file);
+  if (opts.business_date) formData.append('business_date', opts.business_date);
+  if (opts.mapping) formData.append('mapping', JSON.stringify(opts.mapping));
+  const headers: Record<string, string> = {};
+  const auth = authHeader();
+  if (auth) headers['Authorization'] = auth;
+  if (!isCapacitor && window.location.hostname === 'localhost') {
+    const tenantId = localStorage.getItem('tenant_id');
+    if (tenantId) headers['X-Tenant-ID'] = tenantId;
+  }
+  const response = await fetch(`${base}/manual-sales/import/preview`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to read that file');
+  }
+  return response.json();
+}
+
+export async function commitManualSalesImport(payload: {
+  channel: string;
+  rows: ManualSalesImportRow[];
+  source_filename?: string;
+  note?: string;
+}): Promise<{
+  success: boolean; batch_id: number | null; orders_created: number;
+  skipped_duplicates: number; gross_total?: number; commission_total?: number;
+  net_total?: number; date_range?: { from: string; to: string }; message?: string;
+}> {
+  return apiRequest('/manual-sales/import/commit', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function deleteManualSalesBatch(id: number): Promise<{ success: boolean; batch_id: number; orders_deleted: number }> {
+  return apiRequest(`/manual-sales/batches/${id}`, { method: 'DELETE' });
+}

@@ -43,6 +43,7 @@ import walletRoutes from './routes/wallet.js';
 
 // Delivery
 import deliveryRoutes from './routes/delivery.js';
+import manualSalesRoutes from './routes/manual-sales.js';
 import deliveryIntelRoutes from './routes/delivery-intelligence.js';
 import uberDirectRoutes from './routes/uber-direct.js';
 import getnetRoutes from './routes/getnet.js';
@@ -285,6 +286,7 @@ app.use('/api/wallet', walletRoutes);
 
 // Delivery
 app.use('/api/delivery', deliveryRoutes);
+app.use('/api/manual-sales', manualSalesRoutes);
 app.use('/api/delivery-intel', deliveryIntelRoutes);
 app.use('/api/uber-direct', uberDirectRoutes);
 // Getnet is still under processor approval. Keep the code, but leave the
