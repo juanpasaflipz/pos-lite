@@ -567,7 +567,10 @@ router.post('/import/commit', requireAuth('manage_delivery'), async (req, res) =
       const date = parseBusinessDate(r?.business_date);
       if (!(gross > 0) || !isValidDate(date)) continue;
 
-      const commission = r?.commission != null && parseAmount(r.commission) > 0
+      // Trust a parsed 0 as a real 0 (Rappi promo period, DiDi fully-rebated
+       // commission), only fall back to the platform default when the client
+       // omitted the field entirely.
+      const commission = r?.commission != null
         ? Math.round(Math.abs(parseAmount(r.commission)) * 100) / 100
         : Math.round(gross * (commissionPct / 100) * 100) / 100;
 

@@ -185,6 +185,33 @@ describe('parseUpload + normalizeRows', () => {
     expect(norm.every((r: { business_date: string }) => r.business_date === '2026-07-19')).toBe(true);
   });
 
+  it('preserves a real 0 commission — a Rappi promo row is not a fallback to 25%', async () => {
+    // Regression: pre-Jul-10 2026 Rappi orders carry a genuine 0 in the
+    // commission column. Collapsing 0 -> null made the commit path fall back
+    // to platform_commission_percent (25%) and invent a charge Rappi never
+    // made. The fixture pairs a promo row (0) with a post-promo row (28.1%).
+    const csv = [
+      'ID de la orden,Fecha de la orden,Venta Bruta,Uso y alquiler de plataforma Rappi',
+      'PROMO,25/06/2026,389.00,0',
+      'PAID,15/07/2026,300.00,84.30',
+    ].join('\n');
+    const { headers, rows } = await parseUpload(Buffer.from(csv, 'utf8'), 'rappi.csv');
+    const mapping = detectMapping(headers);
+    expect(mapping.commission).toBe('Uso y alquiler de plataforma Rappi');
+    const { rows: norm } = normalizeRows(rows, mapping, null);
+    expect(norm[0]).toMatchObject({ external_order_id: 'PROMO', commission: 0 });
+    expect(norm[1]).toMatchObject({ external_order_id: 'PAID', commission: 84.30 });
+  });
+
+  it('leaves commission null only when the column was never mapped, so the fallback can kick in', async () => {
+    const csv = 'ID de la orden,Fecha,Venta bruta\nA,20/07/2026,100.00';
+    const { headers, rows } = await parseUpload(Buffer.from(csv, 'utf8'), 'x.csv');
+    const mapping = detectMapping(headers);
+    expect(mapping.commission).toBeNull();
+    const { rows: norm } = normalizeRows(rows, mapping, null);
+    expect(norm[0].commission).toBeNull();
+  });
+
   it('rejects an xlsx with an actionable message when exceljs is absent', async () => {
     // PK.. zip magic → detected as xlsx. If exceljs IS installed this parses
     // (and throws a different error for a truncated file); either way the
@@ -328,7 +355,10 @@ describe("DiDi settlement receipt — Recibo/Resumen diario (real juanbertos exp
     const csv = [HEAD, 'X,Y,20260724,"1,000.00",0.00,0.00,-100.00,250.00,0.00,0.00,900.00'].join('\n');
     const { headers, rows } = await parseUpload(Buffer.from(csv, 'utf8'), 'r.csv');
     const { rows: norm } = normalizeRows(rows, detectMapping(headers), null);
-    expect(norm[0].commission).toBe(null); // clamped to 0 -> stored as "no commission"
+    // Clamped to 0 and stored as 0 (not null) — the column IS mapped, so
+    // the commit path must trust the parsed 0 rather than falling back to
+    // the platform default.
+    expect(norm[0].commission).toBe(0);
   });
 });
 
@@ -378,12 +408,14 @@ describe("Rappi Relación de ventas (real juanbertos export, 2026-06-25..07-25)"
     expect(norm[0].external_order_id).not.toContain('.0');
   });
 
-  it('reads negative commission as a positive cost', async () => {
+  it('reads negative commission as a positive cost, and preserves a real 0', async () => {
     const { headers, rows } = await parseUpload(Buffer.from(CSV, 'utf8'), 'rappi.csv');
     const { rows: norm } = normalizeRows(rows, detectMapping(headers), null);
     expect(norm[1].commission).toBe(75);
     expect(norm[2].commission).toBe(234.9);
-    expect(norm[0].commission).toBeNull(); // zero-commission order, not yet charged
+    // 0 must survive as 0 — pre-promo-end rows genuinely carry no commission,
+    // and null would fall back to the platform's default 25% at commit time.
+    expect(norm[0].commission).toBe(0);
   });
 
   it('treats every row as its own order (no order-count column here)', async () => {

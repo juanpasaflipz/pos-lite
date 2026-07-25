@@ -323,7 +323,16 @@ export async function parseUpload(buffer, filename, sheetName = null) {
       );
     }
     const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(buffer);
+    try {
+      await wb.xlsx.load(buffer);
+    } catch {
+      // ExcelJS throws bare Errors on truncated / corrupt archives; wrap so
+      // the route returns a 400 with an actionable message rather than a 500.
+      throw Object.assign(
+        new Error('That file is not a readable spreadsheet. Re-download and try again, or save it as CSV.'),
+        { statusCode: 400 }
+      );
+    }
     if (!wb.worksheets.length) {
       throw Object.assign(new Error('That spreadsheet has no sheets.'), { statusCode: 400 });
     }
@@ -414,7 +423,12 @@ export function normalizeRows(rows, mapping, fallbackDate) {
       business_date: date,
       order_count: count != null ? count : 1,
       gross: Math.round(gross * 100) / 100,
-      commission: commission != null && commission > 0 ? Math.round(commission * 100) / 100 : null,
+      // Preserve a real 0 when the column was mapped — a promo-period Rappi
+      // row genuinely carries 0 commission, and collapsing that to null makes
+      // the commit path fall back to the platform default (25%) and book a
+      // charge the platform never made. Only leave commission null when the
+      // column wasn't mapped at all.
+      commission: mapping.commission ? (commission != null ? Math.round(commission * 100) / 100 : 0) : null,
       net: net != null && net !== 0 ? Math.round(net * 100) / 100 : null,
     });
   });
