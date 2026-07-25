@@ -56,15 +56,19 @@ router.get('/analytics', requireAuth('view_reports'), async (req, res) => {
         AND status NOT IN ('cancelled')
     `, [startDate, endDate]);
 
+    // "Delivery" = has a delivery_orders row (Rappi / DiDi / Uber Eats / Uber
+    // Direct). The looser `source != 'pos'` counted customer_kiosk in-house
+    // orders as delivery, which made this KPI ~3x larger than the per-platform
+    // breakdown right below it. Now they reconcile.
     const deliveryStats = await get(`
       SELECT
         COUNT(*) as order_count,
         COALESCE(SUM(total), 0) as revenue,
         COALESCE(AVG(total), 0) as avg_order
-      FROM orders
-      WHERE source != 'pos'
-        AND created_at::date >= $1 AND created_at::date <= $2
-        AND status NOT IN ('cancelled')
+      FROM orders o
+      WHERE EXISTS (SELECT 1 FROM delivery_orders WHERE order_id = o.id)
+        AND o.created_at::date >= $1 AND o.created_at::date <= $2
+        AND o.status NOT IN ('cancelled')
     `, [startDate, endDate]);
 
     // Daily trend
