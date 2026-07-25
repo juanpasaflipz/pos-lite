@@ -415,7 +415,16 @@ router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
       await run(`DELETE FROM delivery_orders WHERE order_id = $1`, [orderId]);
       await run(`DELETE FROM order_items WHERE order_id = $1`, [orderId]);
       await run(`DELETE FROM orders WHERE id = $1`, [orderId]);
-      audit(req, 'order.discarded_from_kiosk_claim', { order_id: orderId });
+      audit({
+        tenantId: req.tenant?.id || 'default',
+        actorType: 'employee',
+        actorId: employeeId != null ? String(employeeId) : null,
+        action: 'delete',
+        resource: 'order',
+        resourceId: String(orderId),
+        details: { reason: 'discarded_from_kiosk_claim', source: existing.source },
+        ip: req.ip,
+      });
       return res.json({ id: orderId, status: 'discarded' });
     }
 
@@ -430,7 +439,20 @@ router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
        WHERE id = $2`,
       [employeeId, orderId],
     );
-    audit(req, isDeniedCharge ? 'order.rescued_from_denied_charge' : 'order.rescued_from_terminal', { order_id: orderId });
+    audit({
+      tenantId: req.tenant?.id || 'default',
+      actorType: 'employee',
+      actorId: employeeId != null ? String(employeeId) : null,
+      action: 'update',
+      resource: 'order',
+      resourceId: String(orderId),
+      details: {
+        edit: isDeniedCharge ? 'rescued_from_denied_charge' : 'rescued_from_terminal',
+        prior_status: existing.status,
+        prior_payment_status: existing.payment_status,
+      },
+      ip: req.ip,
+    });
     res.json({ id: orderId, status: 'active' });
   } catch (error) {
     console.error('Error claiming kiosk order:', error);
@@ -1869,7 +1891,15 @@ router.delete('/:id', requireAuth('void_orders'), async (req, res) => {
     if (deleted.length === 0) {
       return res.status(404).json({ error: 'Order not found' });
     }
-    audit('order.deleted', req, { order_id: id });
+    audit({
+      tenantId: req.tenant?.id || 'default',
+      actorType: 'employee',
+      actorId: req.employee?.id != null ? String(req.employee.id) : null,
+      action: 'delete',
+      resource: 'order',
+      resourceId: String(id),
+      ip: req.ip,
+    });
     res.json({ success: true, deleted_id: id });
   } catch (error) {
     console.error('Error deleting order:', error);
@@ -1905,7 +1935,15 @@ router.post('/purge-unpaid', requireAuth('void_orders'), async (req, res) => {
     await conn.unsafe(`DELETE FROM order_items WHERE order_id = ANY($1::int[])`, [ids]);
     const deleted = await conn.unsafe(`DELETE FROM orders WHERE id = ANY($1::int[]) RETURNING id`, [ids]);
 
-    audit('orders.purged_unpaid', req, { deleted_count: deleted.length });
+    audit({
+      tenantId: req.tenant?.id || 'default',
+      actorType: 'employee',
+      actorId: req.employee?.id != null ? String(req.employee.id) : null,
+      action: 'delete',
+      resource: 'order',
+      details: { bulk: 'purge_unpaid', deleted_count: deleted.length },
+      ip: req.ip,
+    });
     res.json({ success: true, deleted_count: deleted.length });
   } catch (error) {
     console.error('Error purging unpaid orders:', error);
