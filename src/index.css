@@ -92,6 +92,41 @@ html.light [class*="bg-blue-"] .text-white {
   color: rgb(255 255 255 / var(--tw-text-opacity, 1));
 }
 
+/* Un-exception: cockpit zone-tint backgrounds below ~50 percent opacity are
+   pale washes (card badges, low-emphasis alerts) rather than solid colored
+   surfaces — white text on them is unreadable in light mode (e.g. the
+   secondary cards on the Centro de Control / cockpit screen, or a
+   bg-cockpit-red/20 inline error banner). Flip those back to dark text.
+   Uses exact class-token matching (~=) so only the specific low-opacity
+   tokens in use are caught — opacity 50 and up (solid-ish), and bare
+   bg-cockpit-COLOR with no opacity suffix (solid buttons), still fall
+   through to the white-text rules above. Same-element and descendant
+   cases both need this; source order (after the rules above, same
+   specificity) is what makes it win. */
+html.light :is(
+  [class~="bg-cockpit-blue/5"], [class~="bg-cockpit-blue/10"], [class~="bg-cockpit-blue/15"], [class~="bg-cockpit-blue/20"], [class~="bg-cockpit-blue/25"], [class~="bg-cockpit-blue/30"], [class~="bg-cockpit-blue/35"], [class~="bg-cockpit-blue/40"], [class~="bg-cockpit-blue/45"],
+  [class~="bg-cockpit-red/5"], [class~="bg-cockpit-red/10"], [class~="bg-cockpit-red/15"], [class~="bg-cockpit-red/20"], [class~="bg-cockpit-red/25"], [class~="bg-cockpit-red/30"], [class~="bg-cockpit-red/35"], [class~="bg-cockpit-red/40"], [class~="bg-cockpit-red/45"],
+  [class~="bg-cockpit-green/5"], [class~="bg-cockpit-green/10"], [class~="bg-cockpit-green/15"], [class~="bg-cockpit-green/20"], [class~="bg-cockpit-green/25"], [class~="bg-cockpit-green/30"], [class~="bg-cockpit-green/35"], [class~="bg-cockpit-green/40"], [class~="bg-cockpit-green/45"],
+  [class~="bg-cockpit-yellow/5"], [class~="bg-cockpit-yellow/10"], [class~="bg-cockpit-yellow/15"], [class~="bg-cockpit-yellow/20"], [class~="bg-cockpit-yellow/25"], [class~="bg-cockpit-yellow/30"], [class~="bg-cockpit-yellow/35"], [class~="bg-cockpit-yellow/40"], [class~="bg-cockpit-yellow/45"],
+  [class~="bg-cockpit-in/5"], [class~="bg-cockpit-in/10"], [class~="bg-cockpit-in/15"], [class~="bg-cockpit-in/20"], [class~="bg-cockpit-in/25"], [class~="bg-cockpit-in/30"], [class~="bg-cockpit-in/35"], [class~="bg-cockpit-in/40"], [class~="bg-cockpit-in/45"],
+  [class~="bg-cockpit-out/5"], [class~="bg-cockpit-out/10"], [class~="bg-cockpit-out/15"], [class~="bg-cockpit-out/20"], [class~="bg-cockpit-out/25"], [class~="bg-cockpit-out/30"], [class~="bg-cockpit-out/35"], [class~="bg-cockpit-out/40"], [class~="bg-cockpit-out/45"],
+  [class~="bg-cockpit-system/5"], [class~="bg-cockpit-system/10"], [class~="bg-cockpit-system/15"], [class~="bg-cockpit-system/20"], [class~="bg-cockpit-system/25"], [class~="bg-cockpit-system/30"], [class~="bg-cockpit-system/35"], [class~="bg-cockpit-system/40"], [class~="bg-cockpit-system/45"],
+  [class~="bg-cockpit-attention/5"], [class~="bg-cockpit-attention/10"], [class~="bg-cockpit-attention/15"], [class~="bg-cockpit-attention/20"], [class~="bg-cockpit-attention/25"], [class~="bg-cockpit-attention/30"], [class~="bg-cockpit-attention/35"], [class~="bg-cockpit-attention/40"], [class~="bg-cockpit-attention/45"]
+).text-white,
+html.light :is(
+  [class~="bg-cockpit-blue/5"], [class~="bg-cockpit-blue/10"], [class~="bg-cockpit-blue/15"], [class~="bg-cockpit-blue/20"], [class~="bg-cockpit-blue/25"], [class~="bg-cockpit-blue/30"], [class~="bg-cockpit-blue/35"], [class~="bg-cockpit-blue/40"], [class~="bg-cockpit-blue/45"],
+  [class~="bg-cockpit-red/5"], [class~="bg-cockpit-red/10"], [class~="bg-cockpit-red/15"], [class~="bg-cockpit-red/20"], [class~="bg-cockpit-red/25"], [class~="bg-cockpit-red/30"], [class~="bg-cockpit-red/35"], [class~="bg-cockpit-red/40"], [class~="bg-cockpit-red/45"],
+  [class~="bg-cockpit-green/5"], [class~="bg-cockpit-green/10"], [class~="bg-cockpit-green/15"], [class~="bg-cockpit-green/20"], [class~="bg-cockpit-green/25"], [class~="bg-cockpit-green/30"], [class~="bg-cockpit-green/35"], [class~="bg-cockpit-green/40"], [class~="bg-cockpit-green/45"],
+  [class~="bg-cockpit-yellow/5"], [class~="bg-cockpit-yellow/10"], [class~="bg-cockpit-yellow/15"], [class~="bg-cockpit-yellow/20"], [class~="bg-cockpit-yellow/25"], [class~="bg-cockpit-yellow/30"], [class~="bg-cockpit-yellow/35"], [class~="bg-cockpit-yellow/40"], [class~="bg-cockpit-yellow/45"],
+  [class~="bg-cockpit-in/5"], [class~="bg-cockpit-in/10"], [class~="bg-cockpit-in/15"], [class~="bg-cockpit-in/20"], [class~="bg-cockpit-in/25"], [class~="bg-cockpit-in/30"], [class~="bg-cockpit-in/35"], [class~="bg-cockpit-in/40"], [class~="bg-cockpit-in/45"],
+  [class~="bg-cockpit-out/5"], [class~="bg-cockpit-out/10"], [class~="bg-cockpit-out/15"], [class~="bg-cockpit-out/20"], [class~="bg-cockpit-out/25"], [class~="bg-cockpit-out/30"], [class~="bg-cockpit-out/35"], [class~="bg-cockpit-out/40"], [class~="bg-cockpit-out/45"],
+  [class~="bg-cockpit-system/5"], [class~="bg-cockpit-system/10"], [class~="bg-cockpit-system/15"], [class~="bg-cockpit-system/20"], [class~="bg-cockpit-system/25"], [class~="bg-cockpit-system/30"], [class~="bg-cockpit-system/35"], [class~="bg-cockpit-system/40"], [class~="bg-cockpit-system/45"],
+  [class~="bg-cockpit-attention/5"], [class~="bg-cockpit-attention/10"], [class~="bg-cockpit-attention/15"], [class~="bg-cockpit-attention/20"], [class~="bg-cockpit-attention/25"], [class~="bg-cockpit-attention/30"], [class~="bg-cockpit-attention/35"], [class~="bg-cockpit-attention/40"], [class~="bg-cockpit-attention/45"]
+) .text-white {
+  --tw-text-opacity: 1;
+  color: rgb(23 23 23 / var(--tw-text-opacity));
+}
+
 /* ==================== Theme: Body Defaults ==================== */
 
 body {
