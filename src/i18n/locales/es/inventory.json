@@ -500,7 +500,7 @@
       "saving": "Guardando…",
       "importing": "Importando…",
       "file": "Reporte de ventas del portal de la plataforma",
-      "fileHint": "Rappi: Financiero → Relación de ventas. DiDi: Finanzas → Detalle de pagos. CSV funciona siempre; si rechaza un .xlsx, expórtalo como CSV.",
+      "fileHint": "Rappi: Financiero → Relación de ventas. DiDi: Finanzas → Detalle de pagos, o el reporte diario de operaciones. Los archivos por orden traen la comisión real; los reportes diarios usan el % de la plataforma.",
       "rowsFound": "Filas leídas",
       "willImport": "Se importarán",
       "dateRange": "Cubre {{from}} → {{to}}",
@@ -524,7 +524,13 @@
       "savedAggregate": "{{count}} órdenes registradas — {{net}} neto después de comisión",
       "savedItemized": "Orden registrada — {{net}} neto después de comisión",
       "savedImport": "{{count}} órdenes importadas ({{skipped}} duplicadas omitidas)",
-      "allDuplicates": "Todo lo del archivo ya estaba registrado — no se agregó nada."
+      "allDuplicates": "Todo lo del archivo ya estaba registrado — no se agregó nada.",
+      "daysFound": "Días con ventas",
+      "ordersToCreate": "Órdenes",
+      "avgTicket": "Ticket promedio",
+      "field_order_count": "Órdenes",
+      "field_avg_ticket": "Ticket promedio",
+      "field_commission_rebate": "Reembolso de comisión"
     }
   },
   "modifiers": {

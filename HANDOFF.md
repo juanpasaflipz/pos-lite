@@ -9,6 +9,94 @@ See "Agent handoff" section in CLAUDE.md.
 
 ## 2026-07-25 (Manual & imported sales entry) — Cowork agent — **NEEDS `npm test` + PUSH**
 
+**UPDATE, same day — validated against a REAL DiDi export and materially
+changed as a result.** Juan uploaded juanbertos' actual
+"Reporte diario de operaciones" (2026-07-01..24). Running it through the real
+parser (with `exceljs` installed in a scratch container) exposed three traps
+that the synthetic fixtures could never have caught:
+
+1. **Duplicate header names.** That file has TWO columns literally named
+   `Ganancias diarias promedio` — the first is gross, the second is
+   net-of-promo. Building row objects from raw header names let the LAST
+   duplicate win, so the file read **$29,158 instead of $39,506 — 26% low, and
+   entirely plausible-looking.** `parseUpload` now runs every file (CSV and
+   XLSX alike) through `uniquifyHeaders`, suffixing repeats " (2)", " (3)".
+   The CSV branch moved to `header:false` + shared `matrixToRows` for this
+   reason — papaparse's header mode collapses duplicates the same way.
+2. **`id` was too loose a candidate.** It matched
+   `Núm. de id. de la tienda` — the STORE id, identical on all 24 rows — which
+   would have deduped the entire file down to one order. Bare `id` removed from
+   `external_order_id` candidates.
+3. **DiDi's operations report is one row per DAY, not per order.** Importing it
+   through the per-order path would have created 24 orders instead of 248 and
+   reported a **$1,646 average ticket instead of $159** — precisely the
+   distortion the aggregate fan-out exists to prevent.
+
+So the importer now understands **daily-summary files**: new `order_count` and
+`avg_ticket` fields in `COLUMN_CANDIDATES`, `normalizeRows` returns
+`order_count` per row (1 for per-order files), `gross` falls back to
+`count x avg_ticket`, and `/import/commit` expands each day-row into that many
+orders via `splitAmount` (new `MAX_IMPORT_ORDERS = 20000` cap). Preview returns
+`is_daily` + `total_orders`; the UI stat row, sample table and button switch to
+day/order framing. Rows standing for N orders carry `external_order_id: null` —
+one platform id cannot identify N orders.
+
+End-to-end against the real file: **248 orders across 10 days, $39,506.00
+gross, $159.30 avg ticket — matches the spreadsheet to the cent.** Per-order
+Rappi/DiDi-payments fixtures all still pass unchanged (19-assertion regression
+run). Typecheck 0. New tests in `tests/manual-sales.test.ts` under
+"DiDi daily operations report" pin all three traps.
+
+**UPDATE 2 — the DiDi settlement receipt ("Recibo … Resumen diario") broke
+three MORE assumptions, and changed what we believe about the economics.**
+
+Parser fixes (all pinned by tests, all found only by running the real file):
+- **Two-row headers.** The receipt opens with a sparse GROUP header
+  ("Ingresos por ventas", "Impuestos", … over merged columns) with the real
+  column names on row 2. `findHeaderRow` took row 1 and the file parsed to
+  literally zero rows. It now picks the *densest* of the first 5 rows
+  (earliest wins on a tie), which keeps row 0 for every normal file.
+- **`Tarifa de servicio` is ambiguous.** It substring-matched
+  "Tarifa de servicio de **penalización**" — the penalty column. Commission
+  candidates now lead with `comision y distribucion`.
+- **Compact `YYYYMMDD` dates** (`20260724`) — added to `parseBusinessDate`.
+- **NEW `commission_rebate` field.** DiDi charges commission and then rebates
+  essentially all of it: `Comisión y distribución` -$8,265.40 against
+  `Premio de comisión … para la tienda` +$8,264.94 for July. Commission is now
+  recorded net of any rebate column (clamped at 0). Without this the importer
+  books a ~25% platform fee **that was never charged**.
+- `/import/preview` now warns when a file looks like one row per day with no
+  order count (few rows, all dates distinct, no order-id column) — imported
+  as-is that books one giant order per day and skews average ticket ~20x.
+
+**The economics this revealed (juanbertos, DiDi, July 2026):**
+gross $39,756 → **net commission $0.46 (0.001%)** → net promo cost $10,238
+(25.8% of gross) → tax withholding $1,069.68 → refunds $359 → bank deposit
+$24,788.83, plus $3,300 cash already collected at the door = $28,089 kept
+(70.7% of gross). **DiDi is charging this tenant essentially no commission;
+the entire channel cost is promo spend Juan is choosing.** Worth deciding
+deliberately whether `delivery_platforms.commission_percent` for DiDi should be
+0% (true commission, promo booked as a marketing expense) or ~27% (channel cost
+in one number, but mislabels marketing as commission). Currently defaults to 25%
+in `PLATFORM_DEFAULTS`, which is wrong on both counts for this tenant.
+
+Note the two DiDi reports disagree slightly on gross: ops report $39,506 vs
+settlement $39,756 for the same 10 days (the $250 delta is on 07-23, which also
+carries a -$175 refund). The settlement is authoritative for money; the ops
+report is the only one with order counts.
+
+Regression status: 22-assertion parser suite green across all four real/synthetic
+shapes (ops report, settlement receipt, Rappi relación, DiDi detalle de pagos).
+Typecheck 0.
+
+**Caveat to carry forward:** the operations report contains NO commission
+column — its second "Ganancias" column is net-of-**promo**, not net of DiDi's
+service fee, so it is NOT the bank deposit. Daily imports therefore fall back
+to the platform's configured commission %. For true commission we need DiDi's
+*Detalle de pagos* (Finanzas -> enviar recibo can email it). Worth telling
+tenants explicitly before they reconcile against a bank statement.
+
+
 Juan: juanbertos has substantial Rappi/DiDi revenue that never enters the
 system, so revenue, channel mix and break-even all under-report. Delivery API
 credentials aren't in place, so this is the manual bridge — and the same tables

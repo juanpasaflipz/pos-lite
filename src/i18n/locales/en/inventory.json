@@ -500,7 +500,7 @@
       "saving": "Saving…",
       "importing": "Importing…",
       "file": "Sales export from the platform portal",
-      "fileHint": "Rappi: Financiero → Relación de ventas. DiDi: Finanzas → Detalle de pagos. CSV works everywhere; if an .xlsx is rejected, export it as CSV first.",
+      "fileHint": "Rappi: Financiero → Relación de ventas. DiDi: Finanzas → Detalle de pagos, or the daily operations report. Per-order files carry real commission; daily reports get the platform % instead.",
       "rowsFound": "Rows read",
       "willImport": "Will import",
       "dateRange": "Covers {{from}} → {{to}}",
@@ -524,7 +524,13 @@
       "savedAggregate": "{{count}} orders recorded — {{net}} net after commission",
       "savedItemized": "Order recorded — {{net}} net after commission",
       "savedImport": "{{count}} orders imported ({{skipped}} duplicates skipped)",
-      "allDuplicates": "Everything in that file was already recorded — nothing added."
+      "allDuplicates": "Everything in that file was already recorded — nothing added.",
+      "daysFound": "Days with sales",
+      "ordersToCreate": "Orders",
+      "avgTicket": "Avg ticket",
+      "field_order_count": "Orders",
+      "field_avg_ticket": "Avg ticket",
+      "field_commission_rebate": "Commission rebate"
     }
   },
   "modifiers": {

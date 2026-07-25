@@ -45,6 +45,8 @@ const router = Router();
 
 const MAX_AGGREGATE_ORDERS = 2000; // one day of orders for a very busy store
 const MAX_IMPORT_ROWS = 5000;
+// A daily-summary file expands: one row can become hundreds of orders.
+const MAX_IMPORT_ORDERS = 20000;
 
 // Service window used to spread aggregate rows across the day. Without this
 // every synthetic order lands on the same hour and /reports/live's hourly
@@ -465,17 +467,48 @@ router.post('/import/preview', requireAuth('manage_delivery'), (req, res, next) 
     const dupSet = new Set(duplicates);
     const importable = normalized.filter((r) => !r.external_order_id || !dupSet.has(r.external_order_id));
 
+    // A file with an order-count column is one row per DAY, not per order
+    // (DiDi's "Reporte diario de operaciones"). Each row fans out into that
+    // many orders so average ticket and orders/day stay truthful.
+    const totalOrders = importable.reduce((s, r) => s + (r.order_count || 1), 0);
+    const isDaily = !!mapping.order_count && totalOrders > importable.length;
+
+    // A settlement/receipt export is also one row per day, but carries no
+    // order count (DiDi's "Recibo — Resumen diario"). Symptom: few rows, every
+    // date distinct, no order-id column. Importing it as-is books one giant
+    // order per day and the average ticket goes off by ~20x, so say so loudly
+    // rather than letting the numbers quietly lie.
+    const distinctDates = new Set(importable.map((r) => r.business_date)).size;
+    const looksDailyWithoutCounts = !mapping.order_count
+      && !mapping.external_order_id
+      && importable.length > 0
+      && importable.length <= 62
+      && distinctDates === importable.length;
+
     const warnings = [];
     if (!mapping.gross) warnings.push('No gross-sales column was recognized — pick one below or nothing can be imported.');
     if (!mapping.business_date) warnings.push('No date column was recognized — pick one, or set a single business date for the whole file.');
-    if (!mapping.external_order_id) warnings.push('No order-id column was recognized. Without it, re-importing an overlapping file will create duplicate sales.');
+    if (isDaily) {
+      warnings.push(`This is a daily summary: ${importable.length} day(s) covering ${totalOrders} orders. Each day will be expanded into its individual orders so average ticket and orders/day stay correct.`);
+    } else if (looksDailyWithoutCounts) {
+      warnings.push(`This looks like a daily settlement summary: ${importable.length} rows, one per day, with no order count. Imported as-is each day becomes ONE order, so your average ticket will be far too high. Map an order-count column if the file has one — otherwise import the platform's daily OPERATIONS report instead, which carries order counts.`);
+    } else if (!mapping.external_order_id) {
+      warnings.push('No order-id column was recognized. Without it, re-importing an overlapping file will create duplicate sales.');
+    }
+    if (mapping.commission_rebate) {
+      warnings.push('A commission-rebate column was found; commission is recorded net of it. If the platform rebates all commission during a promo, the true commission here is near zero and your real cost is promo spend.');
+    }
     if (!mapping.commission) warnings.push("No commission column was recognized — the platform's configured commission % will be used instead.");
-    if (skipped.length) warnings.push(`${skipped.length} row(s) will be skipped (unreadable amount or date).`);
+    if (skipped.length) warnings.push(`${skipped.length} row(s) will be skipped (${isDaily ? 'days with no sales, or unreadable values' : 'unreadable amount or date'}).`);
     if (duplicates.length) warnings.push(`${duplicates.length} order(s) are already in the system and will be skipped.`);
+    if (totalOrders > MAX_IMPORT_ORDERS) warnings.push(`That is ${totalOrders} orders, over the ${MAX_IMPORT_ORDERS} limit for one import. Split the file by week.`);
 
     res.json({
       headers,
       mapping,
+      is_daily: isDaily,
+      looks_daily_without_counts: looksDailyWithoutCounts,
+      total_orders: totalOrders,
       row_count: rows.length,
       importable_count: importable.length,
       skipped: skipped.slice(0, 25),
@@ -519,15 +552,37 @@ router.post('/import/commit', requireAuth('manage_delivery'), async (req, res) =
     // is convenience, not a trust boundary, and rows could be stale if two
     // people imported overlapping files.
     const clean = [];
+    let expandedOrders = 0;
     for (const r of rows) {
       const gross = parseAmount(r?.gross);
       const date = parseBusinessDate(r?.business_date);
       if (!(gross > 0) || !isValidDate(date)) continue;
-      const extId = r?.external_order_id ? String(r.external_order_id).trim().slice(0, 120) : null;
+
       const commission = r?.commission != null && parseAmount(r.commission) > 0
         ? Math.round(Math.abs(parseAmount(r.commission)) * 100) / 100
         : Math.round(gross * (commissionPct / 100) * 100) / 100;
-      clean.push({ total: Math.round(gross * 100) / 100, business_date: date, external_order_id: extId, commission });
+
+      // A daily-summary row stands for N orders. Expand it here rather than
+      // writing one fat order: every report that divides by order count
+      // (average ticket, orders/day, break-even) would otherwise be wrong by
+      // a factor of N.
+      const count = Math.max(1, Math.round(Number(r?.order_count) || 1));
+      expandedOrders += count;
+      if (expandedOrders > MAX_IMPORT_ORDERS) {
+        return res.status(400).json({ error: `That file expands to more than ${MAX_IMPORT_ORDERS} orders. Split it by week and import each part.` });
+      }
+
+      if (count === 1) {
+        const extId = r?.external_order_id ? String(r.external_order_id).trim().slice(0, 120) : null;
+        clean.push({ total: Math.round(gross * 100) / 100, business_date: date, external_order_id: extId, commission });
+      } else {
+        // One platform order id cannot identify N orders, so these carry none.
+        const totals = splitAmount(gross, count);
+        const comms = splitAmount(commission, count);
+        for (let i = 0; i < count; i++) {
+          clean.push({ total: totals[i], business_date: date, external_order_id: null, commission: comms[i] });
+        }
+      }
     }
     if (!clean.length) return res.status(400).json({ error: 'None of the submitted rows had a usable amount and date' });
 

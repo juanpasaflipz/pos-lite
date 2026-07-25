@@ -369,17 +369,23 @@ export default function ManualSalesTab() {
               }}
             />
             <p className="mt-1.5 text-xs text-neutral-500">
-              {k('fileHint', 'Rappi: Financiero → Relación de ventas. DiDi: Finanzas → Detalle de pagos. CSV works everywhere; if an .xlsx is rejected, export it as CSV first.')}
+              {k('fileHint', 'Rappi: Financiero → Relación de ventas. DiDi: Finanzas → Detalle de pagos, or the daily operations report. Per-order files carry real commission; daily reports get the platform % instead.')}
             </p>
           </div>
 
           {preview && (
             <div className="space-y-3">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <Stat label={k('rowsFound', 'Rows read')} value={String(preview.row_count)} />
-                <Stat label={k('willImport', 'Will import')} value={String(preview.importable_count)} highlight />
+                <Stat
+                  label={preview.is_daily ? k('daysFound', 'Days with sales') : k('rowsFound', 'Rows read')}
+                  value={String(preview.is_daily ? preview.importable_count : preview.row_count)}
+                />
+                <Stat label={k('ordersToCreate', 'Orders')} value={String(preview.total_orders)} highlight />
                 <Stat label={k('grossLabel', 'Gross')} value={formatPrice(preview.totals.gross)} />
-                <Stat label={k('commissionLabel', 'Commission')} value={formatPrice(preview.totals.commission)} />
+                <Stat
+                  label={preview.total_orders > 0 ? k('avgTicket', 'Avg ticket') : k('commissionLabel', 'Commission')}
+                  value={formatPrice(preview.total_orders > 0 ? preview.totals.gross / preview.total_orders : preview.totals.commission)}
+                />
               </div>
 
               {preview.date_range && (
@@ -392,7 +398,7 @@ export default function ManualSalesTab() {
               <div>
                 <p className={labelCls}>{k('mapping', 'Which column is which')}</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {(['external_order_id', 'business_date', 'gross', 'commission', 'net'] as const).map((field) => (
+                  {(['business_date', 'order_count', 'gross', 'avg_ticket', 'commission', 'commission_rebate', 'external_order_id', 'net'] as const).map((field) => (
                     <div key={field} className="flex items-center gap-2">
                       <span className="w-28 shrink-0 text-xs text-neutral-400">
                         {k(`field_${field}`, field.replace(/_/g, ' '))}
@@ -426,17 +432,21 @@ export default function ManualSalesTab() {
                   <table className="w-full text-xs">
                     <thead className="bg-neutral-900 text-neutral-400">
                       <tr>
-                        <th className="text-left px-3 py-2">{k('field_external_order_id', 'Order id')}</th>
-                        <th className="text-left px-3 py-2">{k('field_business_date', 'Date')}</th>
+                        <th className="text-left px-3 py-2">
+                          {preview.is_daily ? k('field_business_date', 'Date') : k('field_external_order_id', 'Order id')}
+                        </th>
+                        <th className="text-left px-3 py-2">
+                          {preview.is_daily ? k('field_order_count', 'Orders') : k('field_business_date', 'Date')}
+                        </th>
                         <th className="text-right px-3 py-2">{k('field_gross', 'Gross')}</th>
                         <th className="text-right px-3 py-2">{k('field_commission', 'Commission')}</th>
                       </tr>
                     </thead>
                     <tbody className="text-neutral-300">
                       {preview.sample.map((r, i) => (
-                        <tr key={`${r.external_order_id ?? 'row'}-${i}`} className="border-t border-neutral-800">
-                          <td className="px-3 py-1.5">{r.external_order_id ?? '—'}</td>
-                          <td className="px-3 py-1.5">{r.business_date}</td>
+                        <tr key={`${r.external_order_id ?? r.business_date}-${i}`} className="border-t border-neutral-800">
+                          <td className="px-3 py-1.5">{preview.is_daily ? r.business_date : (r.external_order_id ?? '—')}</td>
+                          <td className="px-3 py-1.5">{preview.is_daily ? r.order_count : r.business_date}</td>
                           <td className="px-3 py-1.5 text-right">{formatPrice(r.gross)}</td>
                           <td className="px-3 py-1.5 text-right">{r.commission != null ? formatPrice(r.commission) : '—'}</td>
                         </tr>
@@ -450,7 +460,7 @@ export default function ManualSalesTab() {
               <button disabled={busy || preview.importable_count === 0} onClick={submitImport}
                       className="min-h-[40px] px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium text-sm flex items-center gap-2">
                 <Upload size={15} />
-                {busy ? k('importing', 'Importing…') : k('importN', 'Import {{count}} orders', { count: preview.importable_count })}
+                {busy ? k('importing', 'Importing…') : k('importN', 'Import {{count}} orders', { count: preview.total_orders })}
               </button>
             </div>
           )}

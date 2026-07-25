@@ -164,7 +164,7 @@ describe('parseUpload + normalizeRows', () => {
 
   it('skips rows with no usable amount or date instead of importing zeroes', async () => {
     const csv = [
-      'ID,Fecha,Venta bruta',
+      'ID de la orden,Fecha,Venta bruta',
       'A,20/07/2026,100.00',
       'B,20/07/2026,',        // no amount
       'C,not-a-date,50.00',   // no date, no fallback
@@ -178,7 +178,7 @@ describe('parseUpload + normalizeRows', () => {
   });
 
   it('uses the fallback date only where the file has none', async () => {
-    const csv = 'ID,Venta bruta\nA,100.00\nB,250.00';
+    const csv = 'ID de la orden,Venta bruta\nA,100.00\nB,250.00';
     const { headers, rows } = await parseUpload(Buffer.from(csv, 'utf8'), 'x.csv');
     const { rows: norm } = normalizeRows(rows, detectMapping(headers), '2026-07-19');
     expect(norm).toHaveLength(2);
@@ -194,6 +194,141 @@ describe('parseUpload + normalizeRows', () => {
     await parseUpload(bogus, 'export.xlsx').catch((e: Error & { statusCode?: number }) => {
       expect(e.statusCode).toBe(400);
     });
+  });
+});
+
+describe("DiDi daily operations report (real juanbertos export, 2026-07-01..24)", () => {
+  // Fixture transcribed from the actual file Juan uploaded 2026-07-25. Every
+  // trap it exposed is pinned here:
+  //   - TWO columns literally named "Ganancias diarias promedio" (gross, then
+  //     net-of-promo). Naive object-keying let the second win and read 26% low.
+  //   - "Núm. de id. de la tienda" is the STORE id, identical on every row —
+  //     detecting it as the order id would collapse the file to one order.
+  //   - One row per DAY, so rows must fan out by "Pedidos válidos".
+  const HEADER = [
+    'Ciudad', 'Nombre de la tienda', 'Núm. de id. de la tienda', 'Fecha',
+    'Ganancias diarias promedio', 'Ganancias diarias promedio',
+    'Pedidos válidos', 'Valor promedio de un pedido', 'Total de recompensas de la plataforma',
+  ].join(',');
+  const CSV = [
+    HEADER,
+    'Mexico City,Juanbertos,5764614120993983259,2026-07-24,2924.00,2176.12,14,208.86,1901.00',
+    'Mexico City,Juanbertos,5764614120993983259,2026-07-21,7180.00,5571.62,46,156.09,4647.00',
+    'Mexico City,Juanbertos,5764614120993983259,2026-07-20,0.00,0.00,0,0.00,0.00',
+    'Mexico City,Juanbertos,5764614120993983259,2026-07-17,9365.00,6879.79,65,144.08,7145.40',
+  ].join('\n');
+
+  it('disambiguates duplicate headers instead of letting the last one win', async () => {
+    const { headers } = await parseUpload(Buffer.from(CSV, 'utf8'), 'ops.csv');
+    expect(headers.filter((h: string) => h.startsWith('Ganancias diarias')))
+      .toEqual(['Ganancias diarias promedio', 'Ganancias diarias promedio (2)']);
+  });
+
+  it('detects the daily shape and picks GROSS, not the net column', async () => {
+    const { headers } = await parseUpload(Buffer.from(CSV, 'utf8'), 'ops.csv');
+    const m = detectMapping(headers);
+    expect(m.business_date).toBe('Fecha');
+    expect(m.order_count).toBe('Pedidos válidos');
+    expect(m.avg_ticket).toBe('Valor promedio de un pedido');
+    expect(m.gross).toBe('Ganancias diarias promedio');       // the FIRST one
+    expect(m.gross).not.toBe('Ganancias diarias promedio (2)');
+    expect(m.external_order_id).toBeNull();                    // never the store id
+    expect(m.commission).toBeNull();                           // this report has none
+  });
+
+  it('fans days out into orders, matching the spreadsheet exactly', async () => {
+    const { headers, rows } = await parseUpload(Buffer.from(CSV, 'utf8'), 'ops.csv');
+    const { rows: norm, skipped } = normalizeRows(rows, detectMapping(headers), null);
+
+    expect(norm).toHaveLength(3);                 // the zero-sales day drops out
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0].reason).toBe('no orders that day');
+
+    const orders = norm.reduce((s: number, r: any) => s + r.order_count, 0);
+    const gross = Math.round(norm.reduce((s: number, r: any) => s + r.gross, 0) * 100) / 100;
+    expect(orders).toBe(125);                     // 14 + 46 + 65
+    expect(gross).toBe(19469);                    // 2924 + 7180 + 9365
+    expect(Math.round((gross / orders) * 100) / 100).toBe(155.75);
+
+    // A day standing for many orders cannot carry one platform order id.
+    expect(norm.every((r: any) => r.external_order_id === null)).toBe(true);
+  });
+
+  it('derives gross from count x avg ticket when no gross column is mapped', async () => {
+    const { headers, rows } = await parseUpload(Buffer.from(CSV, 'utf8'), 'ops.csv');
+    const m = { ...detectMapping(headers), gross: null };
+    const { rows: norm } = normalizeRows(rows, m, null);
+    expect(norm[0].gross).toBeCloseTo(14 * 208.86, 2);
+  });
+});
+
+describe("DiDi settlement receipt — Recibo/Resumen diario (real juanbertos export)", () => {
+  // Transcribed from the real "Recibo DiDi 202607 — Resumen diario" Juan
+  // uploaded 2026-07-25. Three more traps, none of which any synthetic
+  // fixture would have produced:
+  //   - a sparse GROUP header row ABOVE the real header row
+  //   - dates as compact YYYYMMDD integers
+  //   - commission charged and then rebated back in full, so the headline
+  //     commission column overstates the real cost by ~100%
+  const GROUP = 'Información de factura básica,,,Ingresos por ventas,Costos de promoción de ventas,,Tarifas cobradas a tienda por plataforma,,,Impuestos,Monto de facturación';
+  const HEAD = [
+    'ID de la tienda', 'Nombre de la tienda', 'Fecha de facturación',
+    'Precio total del producto sin promoción',
+    'Inversión de promoción de productos de la tienda',
+    'Contribución para promoción de productos de Didi Food',
+    'Comisión y distribución', 'Premio de comisión de Didi Food para la tienda',
+    'Tarifa de servicio de penalización', 'Retención de impuestos', 'Monto de facturación',
+  ].join(',');
+  const CSV = [
+    GROUP, HEAD,
+    '5764614120993983259,Juanbertos,20260724,"2,924.00","-1,741.00",993.20,-609.40,609.32,0.00,0.00,"1,721.12"',
+    '5764614120993983259,Juanbertos,20260721,"7,180.00","-4,467.00","2,858.70","-1,560.14","1,560.06",0.00,0.00,"4,836.62"',
+    '5764614120993983259,Juanbertos,20260718,730.00,-219.00,0.00,-143.08,143.08,0.00,0.00,511.00',
+  ].join('\n');
+
+  it('skips the sparse group header and uses the real header row', async () => {
+    const { headers, rows } = await parseUpload(Buffer.from(CSV, 'utf8'), 'recibo.csv');
+    expect(headers[0]).toBe('ID de la tienda');
+    expect(headers).toContain('Comisión y distribución');
+    expect(rows).toHaveLength(3); // the group row must NOT become a data row
+  });
+
+  it('reads compact YYYYMMDD billing dates', async () => {
+    const { headers, rows } = await parseUpload(Buffer.from(CSV, 'utf8'), 'recibo.csv');
+    const { rows: norm } = normalizeRows(rows, detectMapping(headers), null);
+    expect(norm.map((r: any) => r.business_date)).toEqual(['2026-07-24', '2026-07-21', '2026-07-18']);
+  });
+
+  it('does not mistake the penalty fee for the commission column', async () => {
+    const { headers } = await parseUpload(Buffer.from(CSV, 'utf8'), 'recibo.csv');
+    const m = detectMapping(headers);
+    expect(m.commission).toBe('Comisión y distribución');
+    expect(m.commission).not.toBe('Tarifa de servicio de penalización');
+    expect(m.gross).toBe('Precio total del producto sin promoción');
+    expect(m.net).toBe('Monto de facturación');
+  });
+
+  it('nets the rebate off commission — the real cost here is ~0, not 25%', async () => {
+    // DiDi charged $2,312.62 and rebated $2,312.46 across these three days.
+    // Booking the headline figure would invent a cost that was never charged.
+    const { headers, rows } = await parseUpload(Buffer.from(CSV, 'utf8'), 'recibo.csv');
+    const m = detectMapping(headers);
+    expect(m.commission_rebate).toBe('Premio de comisión de Didi Food para la tienda');
+
+    const { rows: norm } = normalizeRows(rows, m, null);
+    const commission = norm.reduce((s: number, r: any) => s + (r.commission ?? 0), 0);
+    expect(commission).toBeLessThan(1);
+
+    // ...and without the rebate mapped, it would have been ~$2,312.
+    const { rows: naive } = normalizeRows(rows, { ...m, commission_rebate: null }, null);
+    expect(naive.reduce((s: number, r: any) => s + (r.commission ?? 0), 0)).toBeGreaterThan(2000);
+  });
+
+  it('never lets commission go negative when a rebate exceeds the charge', async () => {
+    const csv = [HEAD, 'X,Y,20260724,"1,000.00",0.00,0.00,-100.00,250.00,0.00,0.00,900.00'].join('\n');
+    const { headers, rows } = await parseUpload(Buffer.from(csv, 'utf8'), 'r.csv');
+    const { rows: norm } = normalizeRows(rows, detectMapping(headers), null);
+    expect(norm[0].commission).toBe(null); // clamped to 0 -> stored as "no commission"
   });
 });
 
@@ -321,6 +456,37 @@ describe('aggregate fan-out', () => {
 });
 
 describe('import fan-out', () => {
+  it('expands a daily-summary row into its individual orders', async () => {
+    // Guards the regression that motivated the whole daily path: writing one
+    // fat order per day would report avg ticket 14x too high.
+    await asTenant(tenant.id, async () => {
+      const platform = await resolvePlatform('didi_food');
+      const batchId = await createBatch({
+        channel: 'didi_food', platform_id: platform.id, entry_mode: 'import',
+        business_date: '2026-06-24', order_count: 14, gross_total: 2924,
+        commission_total: 731, net_total: 2193, commission_percent: 25,
+        source_filename: 'reporte-diario.xlsx', created_by: employeeId,
+      });
+      const totals = splitAmount(2924, 14);
+      const comms = splitAmount(731, 14);
+      await insertSaleOrders(
+        totals.map((total: number, i: number) => ({
+          total, business_date: '2026-06-24', external_order_id: null, commission: comms[i],
+        })),
+        { batchId, channel: 'didi_food', platformId: platform.id, employeeId, tz: 'America/Mexico_City' }
+      );
+
+      const row = await get(
+        `SELECT COUNT(*)::int AS n, ROUND(SUM(total), 2)::float8 AS total,
+                ROUND(AVG(total), 2)::float8 AS avg
+         FROM orders WHERE manual_batch_id = $1`, [batchId]
+      );
+      expect(row.n).toBe(14);
+      expect(row.total).toBe(2924);
+      expect(row.avg).toBeCloseTo(208.86, 1); // the report's real avg ticket
+    });
+  });
+
   it('pairs each order with its OWN external id and commission', async () => {
     // The regression this guards: insertSaleOrders builds its rows with
     // unnest() and matches RETURNING back by order_number. If that join were

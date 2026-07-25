@@ -4266,6 +4266,8 @@ export interface ManualSalesBatch {
 export interface ManualSalesImportRow {
   external_order_id: string | null;
   business_date: string;
+  /** 1 for a per-order file; the day's order count for a daily-summary file. */
+  order_count: number;
   gross: number;
   commission: number | null;
   net: number | null;
@@ -4274,6 +4276,11 @@ export interface ManualSalesImportRow {
 export interface ManualSalesImportPreview {
   headers: string[];
   mapping: Record<string, string | null>;
+  /** true when the file is one row per DAY, so rows fan out into many orders. */
+  is_daily: boolean;
+  /** One row per day but no order count — importing as-is skews avg ticket. */
+  looks_daily_without_counts: boolean;
+  total_orders: number;
   row_count: number;
   importable_count: number;
   skipped: { row: number; reason: string }[];

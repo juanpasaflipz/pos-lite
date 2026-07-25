@@ -73,6 +73,13 @@ export function parseBusinessDate(raw) {
   const dmy = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
   if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
 
+  // Compact YYYYMMDD — DiDi's settlement receipt writes "20260724".
+  const compact = s.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (compact) {
+    const [, y, mo, d] = compact;
+    if (+mo >= 1 && +mo <= 12 && +d >= 1 && +d <= 31) return `${y}-${mo}-${d}`;
+  }
+
   // Excel serial (days since 1899-12-30).
   if (/^\d{5}(\.\d+)?$/.test(s)) {
     const ms = (parseFloat(s) - 25569) * 86400000;
@@ -99,25 +106,56 @@ export const normalizeHeader = (h) => String(h ?? '')
 // returned to the client for confirmation because neither real file has been
 // inspected end-to-end and both portals change columns without notice.
 const COLUMN_CANDIDATES = {
+  // Field order matters: detection claims columns first-come, so the most
+  // specific fields run before the loosest ('gross' ends with 'total', which
+  // would otherwise steal a column a narrower field wanted).
   external_order_id: [
     'id de la orden', 'id de la order', 'id orden', 'id del pedido', 'id de pedido',
-    'numero de pedido', 'no de pedido', 'folio', 'order id', 'order number', 'id',
+    'numero de pedido', 'no de pedido', 'folio', 'order id', 'order number',
+    // NOTE: bare 'id' was deliberately removed. On DiDi's daily operations
+    // report it matched "Núm. de id. de la tienda" — the STORE id, identical
+    // on every row — which would have collapsed the whole file to one
+    // deduped order. A wrong order id is worse than no order id.
   ],
   business_date: [
-    'fecha de la orden', 'fecha del pedido', 'fecha de creacion', 'fecha de entrega',
-    'fecha de pago', 'fecha', 'order date', 'date', 'created at',
+    'fecha de la orden', 'fecha del pedido', 'fecha de facturacion', 'fecha de creacion',
+    'fecha de entrega', 'fecha de pago', 'fecha', 'order date', 'date', 'created at',
+  ],
+  // Presence of this column is what marks a file as one-row-per-DAY rather
+  // than one-row-per-order (DiDi's "Reporte diario de operaciones").
+  order_count: [
+    'pedidos validos', 'pedidos completados', 'total de pedidos', 'numero de pedidos',
+    'cantidad de pedidos', 'ordenes completadas', 'valid orders', 'order count',
+    'ordenes', 'orders',
+  ],
+  avg_ticket: [
+    'valor promedio de un pedido', 'valor promedio del pedido', 'ticket promedio',
+    'average order value', 'avg order value',
   ],
   gross: [
-    'venta bruta', 'precio original del producto', 'valor bruto', 'total de la orden',
-    'subtotal de productos', 'importe total', 'total', 'importe', 'gross sales', 'gross',
+    'venta bruta', 'precio total del producto sin promocion', 'ganancias diarias promedio',
+    'precio original del producto', 'valor bruto', 'ventas totales', 'total de la orden',
+    'subtotal de productos', 'importe total', 'gross sales', 'gross', 'importe', 'total',
   ],
   commission: [
-    'uso y alquiler de la plataforma', 'tarifa de servicio', 'comision de la plataforma',
-    'comision', 'tarifa transaccional', 'service fee', 'commission',
+    // 'comision y distribucion' must lead: on DiDi's settlement receipt the
+    // looser 'tarifa de servicio' substring-matches "Tarifa de servicio de
+    // penalización" — the penalty column, not the commission.
+    'comision y distribucion', 'uso y alquiler de la plataforma', 'tarifa de servicio',
+    'comision de la plataforma', 'comision', 'tarifa transaccional',
+    'service fee', 'commission',
+  ],
+  // Platforms that charge commission and hand it straight back during a
+  // promo period. DiDi's "Premio de comisión ... para la tienda" cancels
+  // "Comisión y distribución" to within a few centavos — booking the gross
+  // commission without this would invent a ~25% cost that was never charged.
+  commission_rebate: [
+    'premio de comision', 'bonificacion de comision', 'reembolso de comision',
+    'commission rebate', 'commission credit',
   ],
   net: [
-    'valor a transferir', 'ganancias por pedidos', 'valor neto', 'total a depositar',
-    'neto', 'net payout', 'net',
+    'monto de facturacion', 'valor a transferir', 'ganancias por pedidos',
+    'valor neto', 'total a depositar', 'neto', 'net payout', 'net',
   ],
 };
 
@@ -155,14 +193,73 @@ export function detectMapping(headers) {
 // ==================== File parsing ====================
 
 /**
+ * Make a header list safe to use as object keys.
+ *
+ * Real exports repeat header names — DiDi's daily operations report has TWO
+ * columns literally called "Ganancias diarias promedio" (the first is gross,
+ * the second is net-of-promo). Building row objects from those raw names makes
+ * the LAST duplicate silently win, which read that file 26% low while looking
+ * completely plausible. Duplicates get a " (2)", " (3)" suffix so both columns
+ * survive and the user can pick between them.
+ */
+function uniquifyHeaders(cells) {
+  const seen = new Map();
+  return cells.map((h, i) => {
+    const base = (h == null || String(h).trim() === '') ? `col_${i + 1}` : String(h).trim();
+    const n = seen.get(base) || 0;
+    seen.set(base, n + 1);
+    return n === 0 ? base : `${base} (${n + 1})`;
+  });
+}
+
+/**
+ * Locate the real header row.
+ *
+ * "First row with 2+ non-empty cells" is not enough: DiDi's settlement receipt
+ * opens with a sparse GROUP header ("Ingresos por ventas", "Impuestos", …)
+ * spanning merged columns, with the actual column names on row 2. Taking row 1
+ * made every real header get read as data and the file parsed to nothing.
+ *
+ * So: among the first few rows, take the densest one, earliest wins on a tie.
+ * A group header is by construction sparser than the header it spans, while a
+ * normal single-header file ties with its data rows and keeps row 0.
+ */
+function findHeaderRow(matrix) {
+  const LOOKAHEAD = 5;
+  const density = (r) => r.filter((c) => c != null && String(c).trim() !== '').length;
+  let best = -1;
+  let bestDensity = 1; // require 2+ non-empty cells to qualify
+  for (let i = 0; i < Math.min(LOOKAHEAD, matrix.length); i++) {
+    const d = density(matrix[i]);
+    if (d > bestDensity) { best = i; bestDensity = d; }
+  }
+  return best;
+}
+
+function matrixToRows(matrix) {
+  const headerIdx = findHeaderRow(matrix);
+  if (headerIdx < 0) {
+    throw Object.assign(new Error('Could not find a header row in that file.'), { statusCode: 400 });
+  }
+  const headers = uniquifyHeaders(matrix[headerIdx]);
+  const rows = matrix.slice(headerIdx + 1)
+    .filter((r) => r.some((c) => c != null && String(c).trim() !== ''))
+    .map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ''])));
+  return { headers, rows };
+}
+
+/**
  * Turn an uploaded buffer into { headers, rows } of raw cell values.
  * CSV/TSV parses natively via papaparse. XLSX needs `exceljs`, which is
  * imported dynamically: if the dependency isn't installed the endpoint returns
  * an actionable 400 (save-as-CSV) instead of a 500, and the XLSX path lights
  * up on its own once `npm install exceljs` lands.
+ *
+ * Both formats go through matrixToRows so duplicate-header handling and
+ * title-row skipping behave identically either way.
  */
 export async function parseUpload(buffer, filename) {
-  const isZip = buffer.length > 1 && buffer[0] === 0x50 && buffer[1] === 0x4b; // 'PK' → xlsx
+  const isZip = buffer.length > 1 && buffer[0] === 0x50 && buffer[1] === 0x4b; // 'PK' -> xlsx
   const looksXlsx = isZip || /\.xlsx?$/i.test(filename || '');
 
   if (looksXlsx) {
@@ -170,16 +267,15 @@ export async function parseUpload(buffer, filename) {
     try {
       ExcelJS = (await import('exceljs')).default;
     } catch {
-      const err = new Error(
-        'XLSX support is not installed on this server yet. Open the file in Excel / Numbers / Google Sheets and export it as CSV, then upload that.'
+      throw Object.assign(
+        new Error('XLSX support is not installed on this server yet. Open the file in Excel / Numbers / Google Sheets and export it as CSV, then upload that.'),
+        { statusCode: 400 }
       );
-      err.statusCode = 400;
-      throw err;
     }
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(buffer);
     const ws = wb.worksheets[0];
-    if (!ws) throw Object.assign(new Error('The spreadsheet has no sheets.'), { statusCode: 400 });
+    if (!ws) throw Object.assign(new Error('That spreadsheet has no sheets.'), { statusCode: 400 });
 
     const matrix = [];
     ws.eachRow({ includeEmpty: false }, (row) => {
@@ -192,43 +288,65 @@ export async function parseUpload(buffer, filename) {
       });
       matrix.push(vals);
     });
-
-    // Header row = first row with 2+ non-empty cells (portals like a title row).
-    const headerIdx = matrix.findIndex((r) => r.filter((c) => c != null && String(c).trim() !== '').length >= 2);
-    if (headerIdx < 0) throw Object.assign(new Error('Could not find a header row in the spreadsheet.'), { statusCode: 400 });
-
-    const headers = matrix[headerIdx].map((h, i) => (h == null || String(h).trim() === '' ? `col_${i + 1}` : String(h).trim()));
-    const rows = matrix.slice(headerIdx + 1)
-      .filter((r) => r.some((c) => c != null && String(c).trim() !== ''))
-      .map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ''])));
-    return { headers, rows };
+    return matrixToRows(matrix);
   }
 
   const text = buffer.toString('utf8').replace(/^\uFEFF/, '');
-  const parsed = Papa.parse(text, { header: true, skipEmptyLines: 'greedy', dynamicTyping: false });
-  const headers = (parsed.meta?.fields || []).map((h) => String(h).trim());
-  if (!headers.length) throw Object.assign(new Error('Could not read any columns from that file.'), { statusCode: 400 });
-  return { headers, rows: parsed.data || [] };
+  // header:false + our own header handling, so CSV and XLSX share one code
+  // path (papaparse's header mode collapses duplicate names).
+  const parsed = Papa.parse(text, { header: false, skipEmptyLines: 'greedy', dynamicTyping: false });
+  const matrix = (parsed.data || []).filter((r) => Array.isArray(r));
+  if (!matrix.length) {
+    throw Object.assign(new Error('Could not read any rows from that file.'), { statusCode: 400 });
+  }
+  return matrixToRows(matrix);
 }
 
-/** Apply a mapping to raw rows → normalized sale rows. */
+/**
+ * Apply a mapping to raw rows -> normalized sale rows.
+ *
+ * A row carries `order_count`. It is 1 for a per-order file, and the day's
+ * real order count for a daily-summary file (DiDi's operations report). The
+ * caller fans each row out into that many orders — importing a 248-order month
+ * as 24 day-rows would report a $1,646 average ticket instead of $159 and
+ * wreck the break-even calculator.
+ */
 export function normalizeRows(rows, mapping, fallbackDate) {
   const out = [];
   const skipped = [];
 
   rows.forEach((raw, i) => {
-    const gross = mapping.gross ? parseAmount(raw[mapping.gross]) : 0;
-    const commission = mapping.commission ? Math.abs(parseAmount(raw[mapping.commission])) : null;
+    const rowNo = i + 2; // 1-indexed, +1 for the header row
+
+    const count = mapping.order_count
+      ? Math.max(0, Math.round(parseAmount(raw[mapping.order_count])))
+      : null;
+
+    let gross = mapping.gross ? parseAmount(raw[mapping.gross]) : 0;
+    const avg = mapping.avg_ticket ? parseAmount(raw[mapping.avg_ticket]) : 0;
+    // Daily reports sometimes carry avg ticket but no gross column.
+    if (!(gross > 0) && avg > 0 && count > 0) gross = Math.round(avg * count * 100) / 100;
+
+    let commission = mapping.commission ? Math.abs(parseAmount(raw[mapping.commission])) : null;
+    // A rebate column cancels part (often all) of the headline commission.
+    if (commission != null && mapping.commission_rebate) {
+      const rebate = Math.abs(parseAmount(raw[mapping.commission_rebate]));
+      commission = Math.max(0, Math.round((commission - rebate) * 100) / 100);
+    }
     const net = mapping.net ? parseAmount(raw[mapping.net]) : null;
     const date = (mapping.business_date ? parseBusinessDate(raw[mapping.business_date]) : null) || fallbackDate;
     const extId = mapping.external_order_id ? String(raw[mapping.external_order_id] ?? '').trim() : '';
 
-    if (!(gross > 0)) { skipped.push({ row: i + 2, reason: 'no positive gross amount' }); return; }
-    if (!isValidDate(date)) { skipped.push({ row: i + 2, reason: 'unreadable date' }); return; }
+    // A daily file's closed/zero days are normal, not errors.
+    if (mapping.order_count && !(count > 0)) { skipped.push({ row: rowNo, reason: 'no orders that day' }); return; }
+    if (!(gross > 0)) { skipped.push({ row: rowNo, reason: 'no positive gross amount' }); return; }
+    if (!isValidDate(date)) { skipped.push({ row: rowNo, reason: 'unreadable date' }); return; }
 
     out.push({
-      external_order_id: extId || null,
+      // One external id cannot identify N orders, so a daily row carries none.
+      external_order_id: (count != null && count > 1) ? null : (extId || null),
       business_date: date,
+      order_count: count != null ? count : 1,
       gross: Math.round(gross * 100) / 100,
       commission: commission != null && commission > 0 ? Math.round(commission * 100) / 100 : null,
       net: net != null && net !== 0 ? Math.round(net * 100) / 100 : null,
@@ -238,10 +356,6 @@ export function normalizeRows(rows, mapping, fallbackDate) {
   return { rows: out, skipped };
 }
 
-/**
- * Split `total` into `count` parts that sum back to `total` exactly.
- * Remainder cents ride on the first parts, so no penny evaporates.
- */
 export function splitAmount(total, count) {
   const cents = Math.round(total * 100);
   const base = Math.floor(cents / count);
