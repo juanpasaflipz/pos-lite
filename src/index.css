@@ -246,30 +246,33 @@ input {
     min-height: 0 !important;
   }
 
-  /* Scoped with :has() so this only fires while the receipt modal is open.
-     Other print surfaces (PublicReceiptScreen) carry no .receipt-print and
-     must keep printing normally. On a browser without :has() support the
-     rule is simply dropped — the clipping/no-print fixes below still apply. */
-  body:has(.receipt-print) * {
-    visibility: hidden;
+  /* The receipt modal renders through a portal as a direct child of <body>,
+     so the rest of the document can be hidden outright.
+
+     An earlier version used visibility:hidden on everything + visibility:
+     visible on the ticket. Chrome does not reliably repaint inline SVG that
+     is re-shown that way during print rasterization, which silently dropped
+     the loyalty QR from every printed ticket. display:none on the siblings
+     has no such failure mode.
+
+     Gated on the body class — set only while the receipt modal is mounted —
+     so other print surfaces (PublicReceiptScreen) keep printing normally.
+     Targets body's direct children rather than a specific app-root id so it
+     holds regardless of how the app is mounted. */
+  body.receipt-modal-open > *:not(.receipt-print-overlay) {
+    display: none !important;
   }
 
-  body:has(.receipt-print) .receipt-print,
-  body:has(.receipt-print) .receipt-print * {
-    visibility: visible;
-  }
-
+  /* Now the only thing in flow, so it can sit statically at the top of page 1
+     — no absolute/fixed positioning, which browsers repeat across pages. */
   .receipt-print-overlay {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: auto !important;
-    bottom: auto !important;
+    position: static !important;
+    display: block !important;
     width: auto !important;
     height: auto !important;
-    display: block !important;
     padding: 0 !important;
     background: none !important;
+    overflow: visible !important;
   }
 
   .receipt-print {
@@ -286,9 +289,10 @@ input {
     print-color-adjust: exact !important;
   }
 
+  /* Cap width only — height stays with the logo's own h-12 class. Forcing
+     height:auto here would print the tenant logo at its natural pixel size. */
   .receipt-print img {
     max-width: 100% !important;
-    height: auto !important;
   }
 
   .receipt {

@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { QRCodeSVG } from 'qrcode.react';
 import { Clock, Coins } from 'lucide-react';
@@ -71,6 +72,14 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
     setSmsPhone(phone);
     setSmsName(name || '');
   }, [order.loyalty_customer_id, order.loyalty_customer_phone, order.loyalty_customer_name, linkedCustomer]);
+
+  // Flags the document while the ticket is on screen so the print stylesheet
+  // can hide everything except the portaled ticket. Scoped to mount/unmount so
+  // other print surfaces are never affected.
+  useEffect(() => {
+    document.body.classList.add('receipt-modal-open');
+    return () => document.body.classList.remove('receipt-modal-open');
+  }, []);
 
   // Loyalty sign-up QR printed at the bottom of the ticket — same "scan to
   // join" flow the kiosk shows on-screen after payment, minted fresh here so
@@ -148,7 +157,10 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
 
   return (
     <>
-      <div className="receipt-print-overlay fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      {/* Portaled to <body> so the print stylesheet can display:none the rest
+          of the document without also hiding the ticket. */}
+      {createPortal(
+        <div className="receipt-print-overlay fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
         <div className="receipt-print bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] overflow-auto">
           <div className="p-6 text-center border-b-2 border-gray-300">
             <BrandLogo className="h-12 mx-auto mb-2" />
@@ -381,8 +393,10 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
               {t('common:buttons.done')}
             </button>
           </div>
-        </div>
-      </div>
+          </div>
+        </div>,
+        document.body,
+      )}
 
       {showInvoiceModal && (
         <React.Suspense fallback={null}>
