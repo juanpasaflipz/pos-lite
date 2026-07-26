@@ -40,30 +40,35 @@ const AttractScreen: React.FC = () => {
     <div className="relative h-full w-full">
       <button
         onClick={() => navigate('/fulfillment')}
-        className="h-full w-full bg-brand-700 flex flex-col items-center justify-center text-white touch-manipulation px-8"
+        className="h-full w-full bg-brand-700 flex flex-col items-center justify-center text-white touch-manipulation px-6 sm:px-8 pt-safe pb-safe"
       >
         {tenantName && (
-          <div className="text-2xl text-white/75 mb-4 uppercase tracking-widest font-black">
+          <div className="text-base sm:text-2xl text-white/75 mb-2 sm:mb-4 uppercase tracking-widest font-black">
             {tenantName}
           </div>
         )}
-        <div className="text-[96px] font-black tracking-tight mb-6 text-center leading-none">
+        {/* Fixed 96px was tablet-only — on a phone that either clips off the
+            top/bottom of the screen (html/body use overflow:hidden) or forces
+            multi-line wraps that push the tap circle off-screen. Scale down
+            through the phone/small-tablet range, keep the original size from
+            lg (1024px) up where the tablet kiosk actually lives. */}
+        <div className="text-5xl sm:text-6xl md:text-7xl lg:text-[96px] font-black tracking-tight mb-3 sm:mb-6 text-center leading-none">
           {t('attract.orderHere')}
         </div>
-        <div className="text-4xl font-black text-white/85 mb-16">{t('attract.tapToStart')}</div>
-        <div className="w-36 h-36 rounded-full border-4 border-white/45 flex items-center justify-center motion-safe:animate-pulse">
-          <Hand className="h-20 w-20" />
+        <div className="text-xl sm:text-2xl md:text-4xl font-black text-white/85 mb-6 sm:mb-16">{t('attract.tapToStart')}</div>
+        <div className="w-20 h-20 sm:w-28 sm:h-28 lg:w-36 lg:h-36 rounded-full border-4 border-white/45 flex items-center justify-center motion-safe:animate-pulse">
+          <Hand className="h-10 w-10 sm:h-14 sm:w-14 lg:h-20 lg:w-20" />
         </div>
       </button>
       {/* Bottom-left, away from the hidden admin corner (top-right). */}
-      <div className="absolute bottom-8 left-8">
+      <div className="absolute bottom-4 left-4 sm:bottom-8 sm:left-8 pb-safe">
         <LanguageToggle size="large" />
       </div>
       <button
         type="button"
         aria-label="Admin"
         onClick={onAdminTap}
-        className="absolute top-0 right-0 w-48 h-48 flex items-start justify-end p-3"
+        className="absolute top-0 right-0 w-32 h-32 sm:w-48 sm:h-48 flex items-start justify-end p-3 pt-safe"
       >
         <span className="block w-2 h-2 rounded-full bg-white/30" aria-hidden="true" />
       </button>

@@ -83,22 +83,22 @@ const KioskDeliveryAddressScreen: React.FC = () => {
 
   return (
     <div className="h-full w-full bg-neutral-950 text-white flex flex-col">
-      <header className="px-6 py-4 border-b border-neutral-800 grid grid-cols-[auto_1fr_auto] items-center gap-4">
+      <header className="px-4 sm:px-6 py-3 sm:py-4 border-b border-neutral-800 grid grid-cols-[auto_1fr_auto] items-center gap-2 sm:gap-4 pt-safe">
         <button
           onClick={() => navigate('/fulfillment')}
-          className="h-16 px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 text-lg font-bold touch-manipulation inline-flex items-center gap-2"
+          className="h-11 sm:h-16 px-3 sm:px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 text-sm sm:text-lg font-bold touch-manipulation inline-flex items-center gap-2"
         >
-          <ArrowLeft className="h-6 w-6" />
+          <ArrowLeft className="h-4 w-4 sm:h-6 sm:w-6" />
           {t('common.back')}
         </button>
-        <h1 className="text-3xl xl:text-4xl font-black text-center leading-none inline-flex items-center justify-center gap-3">
-          <Truck className="h-8 w-8" />
+        <h1 className="text-lg sm:text-3xl xl:text-4xl font-black text-center leading-none inline-flex items-center justify-center gap-2 sm:gap-3">
+          <Truck className="h-5 w-5 sm:h-8 sm:w-8" />
           {t('delivery.title')}
         </h1>
         <div />
       </header>
 
-      <main className="flex-1 min-h-0 overflow-y-auto px-8 py-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+      <main className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-8 py-4 sm:py-6 pb-safe grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
         <div className="space-y-5">
           <div>
             <label className="block text-lg font-bold text-neutral-400 mb-2">{t('common.yourName')}</label>

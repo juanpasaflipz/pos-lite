@@ -34,20 +34,20 @@ const KioskUnavailableScreen: React.FC = () => {
   }, [retry]);
 
   return (
-    <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center px-10 text-center select-none">
+    <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center px-6 sm:px-10 pt-safe pb-safe text-center select-none">
       {tenantName && (
-        <p className="text-neutral-500 text-lg font-semibold tracking-[0.25em] uppercase mb-6">{tenantName}</p>
+        <p className="text-neutral-500 text-base sm:text-lg font-semibold tracking-[0.25em] uppercase mb-4 sm:mb-6">{tenantName}</p>
       )}
-      <h1 className="text-white text-5xl font-black mb-4">{t('unavailable.title')}</h1>
-      <p className="text-neutral-400 text-2xl mb-12">{t('unavailable.subtitle')}</p>
+      <h1 className="text-white text-3xl sm:text-5xl font-black mb-3 sm:mb-4">{t('unavailable.title')}</h1>
+      <p className="text-neutral-400 text-lg sm:text-2xl mb-8 sm:mb-12">{t('unavailable.subtitle')}</p>
       <button
         onClick={retry}
         disabled={checking}
-        className="px-8 py-4 rounded-2xl border border-neutral-700 text-neutral-300 text-lg font-semibold hover:bg-neutral-900 transition-colors disabled:opacity-50"
+        className="px-6 sm:px-8 py-3 sm:py-4 rounded-2xl border border-neutral-700 text-neutral-300 text-base sm:text-lg font-semibold hover:bg-neutral-900 transition-colors disabled:opacity-50"
       >
         {checking ? t('unavailable.checking') : t('unavailable.retry')}
       </button>
-      <p className="text-neutral-600 text-sm mt-14 max-w-md">{t('unavailable.staffNote')}</p>
+      <p className="text-neutral-600 text-sm mt-10 sm:mt-14 max-w-md">{t('unavailable.staffNote')}</p>
     </div>
   );
 };

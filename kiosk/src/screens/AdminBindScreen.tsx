@@ -46,8 +46,8 @@ const AdminBindScreen: React.FC = () => {
   };
 
   return (
-    <div className="h-full w-full bg-neutral-950 text-white flex flex-col p-8 overflow-y-auto">
-      <header className="mb-8 flex items-center justify-between">
+    <div className="h-full w-full bg-neutral-950 text-white flex flex-col p-5 sm:p-8 pt-safe pb-safe overflow-y-auto">
+      <header className="mb-6 sm:mb-8 flex items-center justify-between gap-3">
         <h1 className="text-3xl md:text-4xl font-bold">Super Admin Setup</h1>
         <button
           onClick={() => navigate('/bind')}

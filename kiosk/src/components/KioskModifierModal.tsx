@@ -74,52 +74,56 @@ const KioskModifierModal: React.FC<Props> = ({ item, groups, onCancel, onConfirm
   const canConfirm = isValid(groups, selection);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6">
-      <div className="bg-neutral-900 border border-neutral-800 rounded-3xl w-full max-w-3xl max-h-[88vh] flex flex-col overflow-hidden">
-        <div className="flex items-start justify-between p-6 border-b border-neutral-800 gap-4">
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-3 sm:p-6">
+      <div className="bg-neutral-900 border border-neutral-800 rounded-2xl sm:rounded-3xl w-full max-w-3xl max-h-[88vh] flex flex-col overflow-hidden">
+        <div className="flex items-start justify-between p-4 sm:p-6 border-b border-neutral-800 gap-4">
           <div className="min-w-0">
-            <h2 className="text-3xl font-black leading-tight">{display.name}</h2>
+            <h2 className="text-xl sm:text-3xl font-black leading-tight">{display.name}</h2>
             {display.description && (
-              <p className="text-base text-neutral-400 font-bold mt-1 line-clamp-2">{display.description}</p>
+              <p className="text-sm sm:text-base text-neutral-400 font-bold mt-1 line-clamp-2">{display.description}</p>
             )}
           </div>
           <button
             onClick={onCancel}
             aria-label={t('common.close')}
-            className="h-14 w-14 rounded-full bg-neutral-800 active:bg-neutral-700 flex items-center justify-center shrink-0"
+            className="h-10 w-10 sm:h-14 sm:w-14 rounded-full bg-neutral-800 active:bg-neutral-700 flex items-center justify-center shrink-0"
           >
-            <X className="h-7 w-7" />
+            <X className="h-5 w-5 sm:h-7 sm:w-7" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
           {groups.map((group) => {
             const picked = selection[group.id] || new Set<number>();
             const max = group.max_selections;
             return (
               <section key={group.id}>
-                <header className="mb-3 flex items-baseline justify-between gap-3">
-                  <h3 className="text-2xl font-black">{group.name}</h3>
-                  <p className="text-sm font-bold text-neutral-400 shrink-0">
+                <header className="mb-2 sm:mb-3 flex items-baseline justify-between gap-3">
+                  <h3 className="text-lg sm:text-2xl font-black">{group.name}</h3>
+                  <p className="text-xs sm:text-sm font-bold text-neutral-400 shrink-0">
                     {group.required ? t('modifier.required') : t('modifier.optional')}
                     {group.selection_type === 'multiple' && max > 0 && ` · ${t('modifier.upTo', { max })}`}
                   </p>
                 </header>
-                <div className="grid grid-cols-2 gap-3">
+                {/* 2 columns of min-h-64px cards get very tight on a phone
+                    (name + price squeezed against the check circle) —
+                    single column below sm (640px), 2 columns from sm up
+                    (tablet's original layout, unchanged). */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                   {group.modifiers.map((mod) => {
                     const isOn = picked.has(mod.id);
                     return (
                       <button
                         key={mod.id}
                         onClick={() => togglePick(group, mod.id)}
-                        className={`min-h-[64px] rounded-2xl border-2 px-5 py-3 text-left flex items-center justify-between gap-3 touch-manipulation transition-transform duration-100 active:scale-95 ${
+                        className={`min-h-[56px] sm:min-h-[64px] rounded-xl sm:rounded-2xl border-2 px-4 sm:px-5 py-2.5 sm:py-3 text-left flex items-center justify-between gap-3 touch-manipulation transition-transform duration-100 active:scale-95 ${
                           isOn
                             ? 'border-brand-400 bg-brand-600 text-white shadow-lg shadow-brand-900/40 scale-[1.02]'
                             : 'border-neutral-800 bg-neutral-800/40 active:bg-neutral-800'
                         }`}
                       >
                         <div className="min-w-0">
-                          <p className="text-lg font-black leading-tight">{mod.name}</p>
+                          <p className="text-base sm:text-lg font-black leading-tight">{mod.name}</p>
                           {Number(mod.price_adjustment) !== 0 && (
                             <p className={`text-sm font-bold ${isOn ? 'text-brand-100' : 'text-neutral-400'}`}>
                               {Number(mod.price_adjustment) > 0 ? '+' : ''}
@@ -133,11 +137,11 @@ const KioskModifierModal: React.FC<Props> = ({ item, groups, onCancel, onConfirm
                           )}
                         </div>
                         <span
-                          className={`h-10 w-10 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                          className={`h-8 w-8 sm:h-10 sm:w-10 rounded-full border-2 flex items-center justify-center shrink-0 ${
                             isOn ? 'border-white bg-white text-brand-700' : 'border-neutral-700'
                           }`}
                         >
-                          {isOn && <Check className="h-6 w-6 stroke-[3]" />}
+                          {isOn && <Check className="h-5 w-5 sm:h-6 sm:w-6 stroke-[3]" />}
                         </span>
                       </button>
                     );
@@ -148,10 +152,10 @@ const KioskModifierModal: React.FC<Props> = ({ item, groups, onCancel, onConfirm
           })}
         </div>
 
-        <div className="p-6 border-t border-neutral-800 grid grid-cols-[1fr_auto] gap-4">
+        <div className="p-4 sm:p-6 border-t border-neutral-800 grid grid-cols-[1fr_auto] gap-3 sm:gap-4 pb-safe">
           <button
             onClick={onCancel}
-            className="h-16 rounded-2xl bg-neutral-800 active:bg-neutral-700 text-lg font-black touch-manipulation"
+            className="h-12 sm:h-16 rounded-2xl bg-neutral-800 active:bg-neutral-700 text-base sm:text-lg font-black touch-manipulation"
           >
             {t('common.cancel')}
           </button>
@@ -162,7 +166,7 @@ const KioskModifierModal: React.FC<Props> = ({ item, groups, onCancel, onConfirm
               onConfirm(flatPicks);
             }}
             disabled={!canConfirm}
-            className="h-16 px-8 rounded-2xl bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-600 text-lg font-black touch-manipulation inline-flex items-center justify-center transition-transform duration-100 active:scale-95"
+            className="h-12 sm:h-16 px-6 sm:px-8 rounded-2xl bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-600 text-base sm:text-lg font-black touch-manipulation inline-flex items-center justify-center transition-transform duration-100 active:scale-95"
           >
             {money.format(total)}
           </button>

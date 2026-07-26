@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { QRCodeSVG } from 'qrcode.react';
-import { ArrowLeft, MonitorSmartphone, ExternalLink, Copy, Check, FileDown } from 'lucide-react';
+import { ArrowLeft, MonitorSmartphone, ExternalLink, Copy, Check, FileDown, QrCode } from 'lucide-react';
 import { useTenant } from '../App';
 import { tenantUrl } from '../lib/tenantResolver';
 import BrandLogo from '../components/BrandLogo';
@@ -117,6 +117,26 @@ const KioskAccessScreen: React.FC = () => {
             </a>
             <p className="text-neutral-500 text-xs mt-2">{t('kioskAccess.tip')}</p>
           </div>
+        </div>
+
+        {/* Zero-hardware alternative — a solo/one-person shop doesn't have to
+            buy or mount anything at all: QR takeaway ordering (already a Pro
+            feature, see QRMenuScreen) lets customers order from their own
+            phone. Surfaced here so owners looking at "kiosk" discover it. */}
+        <div className="md:col-span-2 bg-neutral-900 border border-neutral-800 rounded-2xl p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          <div className="w-10 h-10 rounded-lg bg-brand-600/20 text-brand-500 flex items-center justify-center shrink-0">
+            <QrCode size={20} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base font-bold">{t('kioskAccess.noHardwareTitle')}</h2>
+            <p className="text-neutral-400 text-sm mt-1">{t('kioskAccess.noHardwareBody')}</p>
+          </div>
+          <Link
+            to="/admin/qr-menu"
+            className="w-full sm:w-auto shrink-0 min-h-11 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
+          >
+            {t('kioskAccess.noHardwareCta')}
+          </Link>
         </div>
       </main>
     </div>

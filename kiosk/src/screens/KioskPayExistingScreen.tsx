@@ -148,21 +148,26 @@ const KioskPayExistingScreen: React.FC = () => {
 
   return (
     <div className="h-full w-full bg-neutral-950 text-white flex flex-col">
-      <header className="px-6 py-4 border-b border-neutral-800 flex items-center justify-between">
+      <header className="px-4 sm:px-6 py-3 sm:py-4 border-b border-neutral-800 flex items-center justify-between pt-safe">
         <button
           disabled={!!busy}
           onClick={() => navigate('/')}
-          className="h-16 px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 disabled:opacity-50 text-lg font-bold touch-manipulation inline-flex items-center gap-2"
+          className="h-11 sm:h-16 px-3 sm:px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 disabled:opacity-50 text-sm sm:text-lg font-bold touch-manipulation inline-flex items-center gap-2"
         >
-          <ArrowLeft className="h-6 w-6" />
+          <ArrowLeft className="h-4 w-4 sm:h-6 sm:w-6" />
           {t('common.home')}
         </button>
-        <h1 className="text-4xl font-black leading-none">{t('pay.yourTab')}</h1>
-        <div className="w-32" />
+        <h1 className="text-xl sm:text-4xl font-black leading-none">{t('pay.yourTab')}</h1>
+        <div className="w-16 sm:w-32" />
       </header>
 
-      <main className="flex-1 grid grid-cols-[1fr_460px] gap-6 p-6 min-h-0">
-        <section className="rounded-lg bg-neutral-900 border border-neutral-800 p-6 overflow-y-auto">
+      {/* Fixed 460px second column only fits a tablet: a fixed grid track
+          doesn't shrink, so on a phone it forced the whole layout wider than
+          the viewport. Stack order-list-over-payment below lg (1024px), where
+          the whole main needs to scroll as one column instead of two
+          independently-scrolling panes. */}
+      <main className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_460px] gap-4 sm:gap-6 p-3 sm:p-6 pb-safe min-h-0 overflow-y-auto lg:overflow-hidden">
+        <section className="rounded-lg bg-neutral-900 border border-neutral-800 p-4 sm:p-6 lg:overflow-y-auto">
           <div className="flex items-baseline justify-between mb-4">
             <p className="text-2xl font-black">#{order.order_number}</p>
             {customerName && (
@@ -194,9 +199,9 @@ const KioskPayExistingScreen: React.FC = () => {
         </section>
 
         <aside className="flex flex-col">
-          <div className="text-center mb-6">
-            <p className="text-neutral-400 text-xl font-bold uppercase tracking-wider">{t('common.total')}</p>
-            <p className="text-[64px] font-black leading-none mt-2">{money.format(Number(order.total))}</p>
+          <div className="text-center mb-4 sm:mb-6">
+            <p className="text-neutral-400 text-base sm:text-xl font-bold uppercase tracking-wider">{t('common.total')}</p>
+            <p className="text-4xl sm:text-[64px] font-black leading-none mt-2">{money.format(Number(order.total))}</p>
             <p className="text-sm text-neutral-500 mt-2 font-bold">
               {t('pay.includesTax', { subtotal: money.format(Number(order.subtotal)) })}
             </p>
@@ -251,23 +256,23 @@ const KioskPayExistingScreen: React.FC = () => {
             </div>
           )}
 
-          <div className="space-y-4 mt-auto">
+          <div className="space-y-3 sm:space-y-4 mt-auto">
             <button
               disabled={!!busy}
               onClick={handleCard}
-              className="w-full min-h-[160px] bg-brand-600 active:bg-brand-700 disabled:opacity-50 rounded-lg text-3xl font-black touch-manipulation flex flex-col items-center justify-center gap-2"
+              className="w-full min-h-[100px] sm:min-h-[160px] bg-brand-600 active:bg-brand-700 disabled:opacity-50 rounded-lg text-xl sm:text-3xl font-black touch-manipulation flex flex-col items-center justify-center gap-1 sm:gap-2"
             >
-              {busy === 'card' ? <Loader2 className="h-16 w-16 animate-spin" /> : <CreditCard className="h-16 w-16" />}
+              {busy === 'card' ? <Loader2 className="h-9 w-9 sm:h-16 sm:w-16 animate-spin" /> : <CreditCard className="h-9 w-9 sm:h-16 sm:w-16" />}
               {t('pay.payWithCard')}
-              <span className="text-base font-bold text-white/75">{t('pay.atTerminal')}</span>
+              <span className="text-sm sm:text-base font-bold text-white/75">{t('pay.atTerminal')}</span>
             </button>
             {!isDelivery && (
               <button
                 disabled={!!busy}
                 onClick={handleCash}
-                className="w-full min-h-[120px] bg-neutral-800 active:bg-neutral-700 disabled:opacity-50 rounded-lg text-2xl font-black touch-manipulation flex flex-col items-center justify-center gap-1"
+                className="w-full min-h-[80px] sm:min-h-[120px] bg-neutral-800 active:bg-neutral-700 disabled:opacity-50 rounded-lg text-lg sm:text-2xl font-black touch-manipulation flex flex-col items-center justify-center gap-1"
               >
-                <Banknote className="h-12 w-12" />
+                <Banknote className="h-7 w-7 sm:h-12 sm:w-12" />
                 {t('pay.payCash')}
                 <span className="text-sm font-bold text-neutral-400">{t('pay.atCounter')}</span>
               </button>

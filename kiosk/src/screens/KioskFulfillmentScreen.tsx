@@ -21,26 +21,29 @@ const KioskFulfillmentScreen: React.FC = () => {
 
   return (
     <div className="h-full w-full bg-neutral-950 text-white flex flex-col">
-      <main className="flex-1 px-10 py-10 flex flex-col items-center justify-center">
-        <h1 className="text-5xl xl:text-6xl font-black text-center leading-none mb-10">
+      <main className="flex-1 px-5 py-6 sm:px-10 sm:py-10 flex flex-col items-center justify-center pt-safe pb-safe">
+        <h1 className="text-3xl sm:text-5xl xl:text-6xl font-black text-center leading-tight sm:leading-none mb-6 sm:mb-10">
           {t('fulfillment.howDoYouWantIt')}
         </h1>
 
-        <div className="grid grid-cols-2 gap-6 w-full max-w-4xl">
+        {/* Two side-by-side 360px-tall boxes were designed for the tablet's
+            wide viewport. On a phone, stack them so each still reads as a big
+            tap target instead of squeezing two into ~150px each. */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 w-full max-w-4xl">
           <button
             onClick={() => choose('for_here')}
-            className="min-h-[360px] rounded-lg bg-brand-600 active:bg-brand-700 text-white touch-manipulation flex flex-col items-center justify-center gap-7 px-6"
+            className="min-h-[140px] sm:min-h-[360px] rounded-lg bg-brand-600 active:bg-brand-700 text-white touch-manipulation flex flex-col items-center justify-center gap-3 sm:gap-7 px-6"
           >
-            <Utensils className="h-24 w-24" />
-            <span className="text-4xl xl:text-5xl font-black leading-none text-center">{t('fulfillment.forHere')}</span>
+            <Utensils className="h-10 w-10 sm:h-24 sm:w-24" />
+            <span className="text-2xl sm:text-4xl xl:text-5xl font-black leading-none text-center">{t('fulfillment.forHere')}</span>
           </button>
 
           <button
             onClick={() => choose('to_go')}
-            className="min-h-[360px] rounded-lg bg-neutral-800 active:bg-neutral-700 text-white touch-manipulation flex flex-col items-center justify-center gap-7 px-6"
+            className="min-h-[140px] sm:min-h-[360px] rounded-lg bg-neutral-800 active:bg-neutral-700 text-white touch-manipulation flex flex-col items-center justify-center gap-3 sm:gap-7 px-6"
           >
-            <ShoppingBag className="h-24 w-24" />
-            <span className="text-4xl xl:text-5xl font-black leading-none text-center">{t('fulfillment.toGo')}</span>
+            <ShoppingBag className="h-10 w-10 sm:h-24 sm:w-24" />
+            <span className="text-2xl sm:text-4xl xl:text-5xl font-black leading-none text-center">{t('fulfillment.toGo')}</span>
           </button>
         </div>
       </main>

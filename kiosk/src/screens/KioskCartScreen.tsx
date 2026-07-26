@@ -174,22 +174,22 @@ const KioskCartScreen: React.FC = () => {
 
   return (
     <div className="h-full w-full bg-neutral-950 text-white flex flex-col">
-      <header className="px-6 py-4 border-b border-neutral-800 grid grid-cols-[auto_1fr_auto] items-center gap-4">
+      <header className="px-4 sm:px-6 py-3 sm:py-4 border-b border-neutral-800 grid grid-cols-[auto_1fr_auto] items-center gap-2 sm:gap-4 pt-safe">
         <button
           onClick={() => navigate('/menu')}
-          className="h-16 px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 text-lg font-bold touch-manipulation inline-flex items-center gap-2"
+          className="h-11 sm:h-16 px-3 sm:px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 text-sm sm:text-lg font-bold touch-manipulation inline-flex items-center gap-2"
         >
-          <ArrowLeft className="h-6 w-6" />
+          <ArrowLeft className="h-4 w-4 sm:h-6 sm:w-6" />
           {t('common.menu')}
         </button>
-        <h1 className="text-4xl font-black text-center leading-none">{t('cart.title')}</h1>
+        <h1 className="text-xl sm:text-4xl font-black text-center leading-none">{t('cart.title')}</h1>
         <div className="text-right">
-          <p className="text-sm text-neutral-500 font-bold uppercase">{t('common.total')}</p>
-          <p className="text-2xl font-black text-brand-300">{money.format(total)}</p>
+          <p className="text-xs sm:text-sm text-neutral-500 font-bold uppercase">{t('common.total')}</p>
+          <p className="text-lg sm:text-2xl font-black text-brand-300">{money.format(total)}</p>
         </div>
       </header>
 
-      <main className="flex-1 min-h-0 p-5 overflow-y-auto">
+      <main className="flex-1 min-h-0 p-3 sm:p-5 overflow-y-auto">
         {lines.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center gap-6 text-neutral-400">
             <p className="text-3xl font-black">{t('cart.empty')}</p>
@@ -201,44 +201,47 @@ const KioskCartScreen: React.FC = () => {
             </button>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             {lines.map((line) => (
-              <div key={line.line_key} className="rounded-lg bg-neutral-900 border border-neutral-800 p-5 grid grid-cols-[1fr_256px] gap-4 items-center">
+              // A fixed 256px control column was tablet-only — on a phone it
+              // left almost no room for the item name. Stack name-over-controls
+              // below sm (640px), restore the side-by-side layout above it.
+              <div key={line.line_key} className="rounded-lg bg-neutral-900 border border-neutral-800 p-4 sm:p-5 flex flex-col gap-3 sm:grid sm:grid-cols-[1fr_256px] sm:gap-4 sm:items-center">
                 <div className="min-w-0">
-                  <h2 className="text-[32px] font-black leading-[1.05]">{line.name}</h2>
+                  <h2 className="text-xl sm:text-[32px] font-black leading-tight sm:leading-[1.05]">{line.name}</h2>
                   {line.modifiers.length > 0 && (
-                    <p className="text-base text-neutral-400 mt-1">
+                    <p className="text-sm sm:text-base text-neutral-400 mt-1">
                       {line.modifiers.map((m) => m.name).join(' · ')}
                     </p>
                   )}
-                  <p className="text-xl text-neutral-400 mt-2">
+                  <p className="text-base sm:text-xl text-neutral-400 mt-1 sm:mt-2">
                     {money.format(line.price)} {t('cart.perUnit')} · {money.format(line.price * line.quantity)}
                   </p>
                 </div>
-                <div className="grid grid-cols-[64px_72px_64px] gap-3 justify-end">
+                <div className="grid grid-cols-[56px_64px_56px] sm:grid-cols-[64px_72px_64px] gap-2 sm:gap-3 justify-end">
                   <button
                     onClick={() => decrementLine(line.line_key)}
-                    className="h-16 w-16 rounded-lg bg-neutral-800 active:bg-neutral-700 flex items-center justify-center"
+                    className="h-12 w-14 sm:h-16 sm:w-16 rounded-lg bg-neutral-800 active:bg-neutral-700 flex items-center justify-center"
                     aria-label={t('cart.less')}
                   >
-                    <Minus className="h-8 w-8" />
+                    <Minus className="h-5 w-5 sm:h-8 sm:w-8" />
                   </button>
-                  <div className="h-16 w-[72px] rounded-lg bg-neutral-950 flex items-center justify-center text-3xl font-black">
+                  <div className="h-12 w-16 sm:h-16 sm:w-[72px] rounded-lg bg-neutral-950 flex items-center justify-center text-xl sm:text-3xl font-black">
                     {line.quantity}
                   </div>
                   <button
                     onClick={() => incrementLine(line.line_key)}
-                    className="h-16 w-16 rounded-lg bg-neutral-800 active:bg-neutral-700 flex items-center justify-center"
+                    className="h-12 w-14 sm:h-16 sm:w-16 rounded-lg bg-neutral-800 active:bg-neutral-700 flex items-center justify-center"
                     aria-label={t('cart.more')}
                   >
-                    <Plus className="h-8 w-8" />
+                    <Plus className="h-5 w-5 sm:h-8 sm:w-8" />
                   </button>
                   <button
                     onClick={() => removeLine(line.line_key)}
-                    className="col-span-3 h-14 rounded-lg bg-cockpit-red/30 active:bg-cockpit-red/50 flex items-center justify-center gap-2 text-lg font-black"
+                    className="col-span-3 h-11 sm:h-14 rounded-lg bg-cockpit-red/30 active:bg-cockpit-red/50 flex items-center justify-center gap-2 text-base sm:text-lg font-black"
                     aria-label={t('cart.remove')}
                   >
-                    <Trash2 className="h-6 w-6" />
+                    <Trash2 className="h-5 w-5 sm:h-6 sm:w-6" />
                     {t('cart.remove')}
                   </button>
                 </div>
@@ -249,7 +252,7 @@ const KioskCartScreen: React.FC = () => {
         )}
       </main>
 
-      <footer className="p-4 border-t border-neutral-800 bg-neutral-950 space-y-3">
+      <footer className="p-3 sm:p-4 border-t border-neutral-800 bg-neutral-950 space-y-3 pb-safe">
         {holdError && (
           <p className="text-cockpit-out-text text-base font-bold text-center">{holdError}</p>
         )}
@@ -266,10 +269,10 @@ const KioskCartScreen: React.FC = () => {
         <button
           disabled={count === 0 || holding}
           onClick={handlePrimary}
-          className="w-full min-h-20 bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-500 rounded-lg py-4 px-6 text-3xl font-black touch-manipulation flex items-center justify-between gap-4"
+          className="w-full min-h-16 sm:min-h-20 bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-500 rounded-lg py-3 sm:py-4 px-4 sm:px-6 text-xl sm:text-3xl font-black touch-manipulation flex items-center justify-between gap-4"
         >
           <span className="inline-flex items-center gap-3">
-            {isDelivery ? <Truck className="h-7 w-7" /> : <Utensils className="h-7 w-7" />}
+            {isDelivery ? <Truck className="h-5 w-5 sm:h-7 sm:w-7" /> : <Utensils className="h-5 w-5 sm:h-7 sm:w-7" />}
             {holding
               ? (isDelivery ? t('cart.requestingCourier') : t('cart.oneMoment'))
               : (isDelivery ? t('cart.orderAndPay') : t('cart.continueToPay'))}

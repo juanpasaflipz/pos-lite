@@ -186,11 +186,11 @@ const KioskMenuScreen: React.FC = () => {
 
   return (
     <div className="h-full w-full bg-neutral-950 text-white flex flex-col">
-      <header className="px-6 py-4 border-b border-neutral-800 flex items-center justify-between gap-4">
+      <header className="px-4 sm:px-6 py-3 sm:py-4 border-b border-neutral-800 flex items-center justify-between gap-4 pt-safe">
         <div className="min-w-0">
           {session ? (
             <>
-              <h1 className="text-4xl font-black leading-none truncate">
+              <h1 className="text-2xl sm:text-4xl font-black leading-none truncate">
                 {t('menu.hello', { name: session.firstName })}
               </h1>
               <div className="mt-2">
@@ -206,41 +206,41 @@ const KioskMenuScreen: React.FC = () => {
               <p className="text-sm text-neutral-500 font-bold uppercase tracking-wider">
                 {t('menu.welcome')}
               </p>
-              <h1 className="text-4xl font-black leading-none">{t('menu.placeYourOrder')}</h1>
+              <h1 className="text-2xl sm:text-4xl font-black leading-none">{t('menu.placeYourOrder')}</h1>
             </>
           )}
         </div>
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <LanguageToggle />
           <button
             onClick={() => navigate('/')}
-            className="h-16 px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 text-lg font-bold touch-manipulation inline-flex items-center gap-2 shrink-0"
+            className="h-11 sm:h-16 px-3 sm:px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 text-sm sm:text-lg font-bold touch-manipulation inline-flex items-center gap-2 shrink-0"
           >
-            <ArrowLeft className="h-6 w-6" />
+            <ArrowLeft className="h-4 w-4 sm:h-6 sm:w-6" />
             {t('common.exit')}
           </button>
         </div>
       </header>
 
       <main className="flex-1 min-h-0 flex flex-col">
-        <nav className="border-b border-neutral-800 px-4 py-3 overflow-x-auto">
-          <div className="flex gap-3 min-w-max">
+        <nav className="border-b border-neutral-800 px-4 py-2 sm:py-3 overflow-x-auto">
+          <div className="flex gap-2 sm:gap-3 min-w-max">
             <button
               onClick={() => setActiveCategory(SUGGEST_TAB)}
-              className={`h-16 px-6 rounded-lg text-xl font-black touch-manipulation whitespace-nowrap inline-flex items-center gap-2 ${
+              className={`h-11 sm:h-16 px-4 sm:px-6 rounded-lg text-base sm:text-xl font-black touch-manipulation whitespace-nowrap inline-flex items-center gap-2 ${
                 activeCategory === SUGGEST_TAB
                   ? 'bg-brand-600 text-white'
                   : 'bg-neutral-900 text-neutral-200 active:bg-neutral-800'
               }`}
             >
-              <Sparkles className="h-5 w-5" />
+              <Sparkles className="h-4 w-4 sm:h-5 sm:w-5" />
               {session ? t('menu.forYou') : t('menu.popular')}
             </button>
             {categories.map((category) => (
               <button
                 key={category.id}
                 onClick={() => setActiveCategory(category.id)}
-                className={`h-16 px-6 rounded-lg text-xl font-black touch-manipulation whitespace-nowrap ${
+                className={`h-11 sm:h-16 px-4 sm:px-6 rounded-lg text-base sm:text-xl font-black touch-manipulation whitespace-nowrap ${
                   activeCategory === category.id
                     ? 'bg-brand-600 text-white'
                     : 'bg-neutral-900 text-neutral-200 active:bg-neutral-800'
@@ -252,7 +252,7 @@ const KioskMenuScreen: React.FC = () => {
           </div>
         </nav>
 
-        <section className="flex-1 min-h-0 p-5 overflow-y-auto">
+        <section className="flex-1 min-h-0 p-3 sm:p-5 overflow-y-auto">
           {loading && (
             <div className="h-full flex items-center justify-center text-2xl text-neutral-400">
               {t('menu.loading')}
@@ -273,7 +273,9 @@ const KioskMenuScreen: React.FC = () => {
             />
           )}
           {!loading && !error && activeCategory !== SUGGEST_TAB && (
-            <div className="grid grid-cols-3 gap-4 pb-4">
+            // Fixed 3-column grid assumed a tablet-width screen; 2 columns
+            // keeps cards legible on a phone, 3+ kicks back in from sm/lg up.
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 pb-4">
               {visibleItems.map((item) => {
                 const hasModifiers = !!(modifierMap[item.id] && modifierMap[item.id].length);
                 const isFlashing = flashItemId === item.id;
@@ -299,14 +301,14 @@ const KioskMenuScreen: React.FC = () => {
                         }}
                       />
                     ) : (
-                      <UtensilsCrossed className="h-12 w-12 text-neutral-600" />
+                      <UtensilsCrossed className="h-8 w-8 sm:h-12 sm:w-12 text-neutral-600" />
                     )}
                   </div>
-                  <div className="p-4 flex-1 flex flex-col">
+                  <div className="p-2.5 sm:p-4 flex-1 flex flex-col">
                     <div className="flex-1">
-                      <h2 className="text-xl font-black leading-tight mb-1">{localizeMenuItem(item, i18n.language).name}</h2>
+                      <h2 className="text-base sm:text-xl font-black leading-tight mb-1">{localizeMenuItem(item, i18n.language).name}</h2>
                       {localizeMenuItem(item, i18n.language).description && (
-                        <p className="text-neutral-400 text-sm leading-snug line-clamp-2">
+                        <p className="hidden sm:block text-neutral-400 text-sm leading-snug line-clamp-2">
                           {localizeMenuItem(item, i18n.language).description}
                         </p>
                       )}
@@ -314,12 +316,12 @@ const KioskMenuScreen: React.FC = () => {
                         <p className="text-xs font-bold text-brand-300 mt-1">{t('menu.customize')}</p>
                       )}
                     </div>
-                    <div className="flex items-center justify-between mt-3">
-                      <span className="text-2xl font-black text-brand-300">
+                    <div className="flex items-center justify-between mt-2 sm:mt-3">
+                      <span className="text-lg sm:text-2xl font-black text-brand-300">
                         {money.format(Number(item.price))}
                       </span>
-                      <span className="h-11 w-11 rounded-lg bg-brand-600 flex items-center justify-center">
-                        <Plus className="h-6 w-6" />
+                      <span className="h-8 w-8 sm:h-11 sm:w-11 rounded-lg bg-brand-600 flex items-center justify-center">
+                        <Plus className="h-4 w-4 sm:h-6 sm:w-6" />
                       </span>
                     </div>
                   </div>
@@ -331,17 +333,17 @@ const KioskMenuScreen: React.FC = () => {
         </section>
       </main>
 
-      <footer className="p-4 border-t border-neutral-800 bg-neutral-950">
+      <footer className="p-3 sm:p-4 border-t border-neutral-800 bg-neutral-950 pb-safe">
         <button
           disabled={count === 0}
           onClick={() => {
             tap('medium');
             navigate('/cart');
           }}
-          className="w-full min-h-20 bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-500 rounded-lg py-4 px-6 text-2xl font-black touch-manipulation flex items-center justify-between gap-4 transition-transform duration-100 active:scale-[0.99]"
+          className="w-full min-h-14 sm:min-h-20 bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-500 rounded-lg py-3 sm:py-4 px-4 sm:px-6 text-lg sm:text-2xl font-black touch-manipulation flex items-center justify-between gap-4 transition-transform duration-100 active:scale-[0.99]"
         >
-          <span className="inline-flex items-center gap-3">
-            <ShoppingCart className="h-8 w-8" />
+          <span className="inline-flex items-center gap-2 sm:gap-3">
+            <ShoppingCart className="h-5 w-5 sm:h-8 sm:w-8" />
             {t('menu.yourOrder')}
           </span>
           <span className="text-right">

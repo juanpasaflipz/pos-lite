@@ -53,26 +53,26 @@ const KioskTerminalSettingsScreen: React.FC = () => {
 
   return (
     <div className="h-full w-full bg-neutral-950 text-white flex flex-col">
-      <header className="px-6 py-4 border-b border-neutral-800 flex items-center justify-between">
+      <header className="px-4 sm:px-6 py-3 sm:py-4 border-b border-neutral-800 flex items-center justify-between gap-2 pt-safe">
         <button
           onClick={() => navigate('/')}
-          className="h-16 px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 text-lg font-bold touch-manipulation inline-flex items-center gap-2"
+          className="h-11 sm:h-16 px-3 sm:px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 text-sm sm:text-lg font-bold touch-manipulation inline-flex items-center gap-2 shrink-0"
         >
-          <ArrowLeft className="h-6 w-6" />
+          <ArrowLeft className="h-4 w-4 sm:h-6 sm:w-6" />
           Salir
         </button>
-        <h1 className="text-3xl font-black leading-none">Terminal de este kiosko</h1>
+        <h1 className="text-base sm:text-3xl font-black leading-none text-center">Terminal de este kiosko</h1>
         <button
           onClick={() => void load()}
           disabled={loading}
-          className="h-16 px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 disabled:opacity-50 text-lg font-bold touch-manipulation inline-flex items-center gap-2"
+          className="h-11 sm:h-16 px-3 sm:px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 disabled:opacity-50 text-sm sm:text-lg font-bold touch-manipulation inline-flex items-center gap-2 shrink-0"
         >
           {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCcw className="h-5 w-5" />}
-          Recargar
+          <span className="hidden sm:inline">Recargar</span>
         </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-6 py-6 max-w-3xl w-full mx-auto">
+      <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-6 pb-safe max-w-3xl w-full mx-auto">
         <p className="text-base text-neutral-400 mb-2">
           {tenantName ? `Conectado a ${tenantName}.` : null} Cada iPad debe vincularse a su terminal MP Point más cercana.
         </p>

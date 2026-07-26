@@ -26,10 +26,10 @@ const KioskIdentifyScreen: React.FC = () => {
   };
 
   return (
-    <div className="h-full w-full bg-neutral-950 text-white flex flex-col items-center justify-center px-10 py-8">
-      <div className="text-center mb-8">
-        <h1 className="text-4xl xl:text-5xl font-black leading-tight">{t('identify.whatsYourName')}</h1>
-        <p className="text-xl text-neutral-400 font-bold mt-3 max-w-xl">
+    <div className="h-full w-full bg-neutral-950 text-white flex flex-col items-center justify-center px-6 sm:px-10 py-6 sm:py-8 pt-safe pb-safe">
+      <div className="text-center mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-4xl xl:text-5xl font-black leading-tight">{t('identify.whatsYourName')}</h1>
+        <p className="text-base sm:text-xl text-neutral-400 font-bold mt-3 max-w-xl">
           {t('identify.weCallYou')}
         </p>
       </div>
@@ -43,13 +43,13 @@ const KioskIdentifyScreen: React.FC = () => {
         }}
         placeholder={t('common.yourName')}
         maxLength={40}
-        className="w-[520px] max-w-full h-20 rounded-2xl bg-neutral-900 border-2 border-neutral-700 focus:border-brand-500 outline-none text-center text-3xl font-black px-6"
+        className="w-[520px] max-w-full h-14 sm:h-20 rounded-2xl bg-neutral-900 border-2 border-neutral-700 focus:border-brand-500 outline-none text-center text-xl sm:text-3xl font-black px-6"
       />
 
       <button
         onClick={onSubmitName}
         disabled={!name.trim()}
-        className="mt-8 w-[520px] max-w-full h-16 rounded-2xl bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-600 text-xl font-black touch-manipulation"
+        className="mt-6 sm:mt-8 w-[520px] max-w-full h-12 sm:h-16 rounded-2xl bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-600 text-lg sm:text-xl font-black touch-manipulation"
       >
         {t('common.continue')}
       </button>

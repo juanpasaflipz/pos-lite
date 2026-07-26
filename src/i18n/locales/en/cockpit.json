@@ -126,20 +126,23 @@
   },
   "kioskAccess": {
     "title": "Self-service kiosk",
-    "subtitle": "Open your kiosk on a tablet so customers can order themselves",
-    "scanTitle": "Scan with your tablet",
+    "subtitle": "Open your kiosk on a tablet or phone so customers can order themselves",
+    "scanTitle": "Scan with your tablet or phone",
     "copy": "Copy",
     "copied": "Copied!",
     "open": "Open kiosk now",
     "howTitle": "How to set up your kiosk",
-    "howSubtitle": "Four steps, from any Android tablet or iPad.",
+    "howSubtitle": "Four steps, from any Android tablet, iPad, or phone.",
     "steps": [
-      "Open the address above in your tablet browser (Chrome or Safari) — or scan the QR code.",
+      "Open the address above in your tablet or phone browser (Chrome or Safari) — or scan the QR code.",
       "Add the page to your home screen so it opens like an app.",
-      "Put it in full screen. On iPad use \"Guided Access\"; on Android use screen pinning to lock it on the kiosk.",
-      "Place the tablet on your counter. Paid orders go straight to your kitchen display."
+      "Put it in full screen. On iPad/iPhone use \"Guided Access\"; on Android use screen pinning to lock it on the kiosk.",
+      "Place the tablet or phone on your counter. Paid orders go straight to your kitchen display."
     ],
     "downloadGuide": "Download quick-start guide (PDF)",
-    "tip": "Tip: any tablet with a browser works. No special hardware to buy."
+    "tip": "Tip: any tablet or Android/iPhone with a browser works. No special hardware to buy.",
+    "noHardwareTitle": "One-person taco shop? You don't even need a kiosk",
+    "noHardwareBody": "With QR Menu, customers order and pay from their own phone by scanning a code at the counter — zero hardware to buy or set up.",
+    "noHardwareCta": "Generate a takeaway QR code →"
   }
 }

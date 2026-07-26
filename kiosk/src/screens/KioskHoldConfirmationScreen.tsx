@@ -164,45 +164,50 @@ const KioskHoldConfirmationScreen: React.FC = () => {
   }
 
   return (
-    <div className="h-full w-full bg-neutral-950 text-white flex flex-col items-center justify-center p-10 text-center">
+    <div className="h-full w-full bg-neutral-950 text-white flex flex-col items-center justify-center overflow-y-auto p-6 sm:p-10 pt-safe pb-safe text-center">
       {isKitchen || isAppended ? (
-        <Utensils className="h-28 w-28 text-cockpit-in-text mb-6" />
+        <Utensils className="h-16 w-16 sm:h-28 sm:w-28 text-cockpit-in-text mb-4 sm:mb-6" />
       ) : (
-        <CheckCircle2 className="h-28 w-28 text-cockpit-in-text mb-6" />
+        <CheckCircle2 className="h-16 w-16 sm:h-28 sm:w-28 text-cockpit-in-text mb-4 sm:mb-6" />
       )}
-      <h1 className="text-5xl font-black leading-tight">{heading}</h1>
-      <p className="text-2xl text-neutral-300 font-bold mt-4 max-w-2xl">{subheading}</p>
+      <h1 className="text-3xl sm:text-5xl font-black leading-tight">{heading}</h1>
+      <p className="text-lg sm:text-2xl text-neutral-300 font-bold mt-3 sm:mt-4 max-w-2xl">{subheading}</p>
 
       {showsBigOrderCard && (
-        <div className="mt-10 grid grid-cols-2 gap-6 max-w-xl w-full">
-          <div className="rounded-2xl bg-neutral-900 border border-neutral-800 p-6 min-w-0">
-            <p className="text-sm text-neutral-500 font-bold uppercase tracking-wider">{t('confirm.order')}</p>
-            <p className="text-4xl font-black text-brand-300 mt-1 tabular-nums truncate">#{state.orderNumber}</p>
+        <div className="mt-6 sm:mt-10 grid grid-cols-2 gap-3 sm:gap-6 max-w-xl w-full">
+          <div className="rounded-2xl bg-neutral-900 border border-neutral-800 p-4 sm:p-6 min-w-0">
+            <p className="text-xs sm:text-sm text-neutral-500 font-bold uppercase tracking-wider">{t('confirm.order')}</p>
+            <p className="text-2xl sm:text-4xl font-black text-brand-300 mt-1 tabular-nums truncate">#{state.orderNumber}</p>
           </div>
-          <div className="rounded-2xl bg-neutral-900 border border-neutral-800 p-6 min-w-0">
-            <p className="text-sm text-neutral-500 font-bold uppercase tracking-wider">{t('common.total')}</p>
-            <p className="text-4xl font-black mt-1 tabular-nums truncate">{money.format(state.total)}</p>
+          <div className="rounded-2xl bg-neutral-900 border border-neutral-800 p-4 sm:p-6 min-w-0">
+            <p className="text-xs sm:text-sm text-neutral-500 font-bold uppercase tracking-wider">{t('common.total')}</p>
+            <p className="text-2xl sm:text-4xl font-black mt-1 tabular-nums truncate">{money.format(state.total)}</p>
           </div>
         </div>
       )}
 
+      {/* QR cards were a fixed 240px image next to text in a row — on a phone
+          that alone can exceed the viewport width. Stack vertically below sm,
+          and render a smaller QR there (CSS-only swap; QRCodeSVG's `size` prop
+          isn't a Tailwind class so two instances handle the two breakpoints). */}
       {walletUrl && (
-        <div className="mt-8 rounded-2xl bg-neutral-900 border border-neutral-800 p-6 max-w-2xl w-full flex items-center gap-6 text-left">
+        <div className="mt-6 sm:mt-8 rounded-2xl bg-neutral-900 border border-neutral-800 p-4 sm:p-6 max-w-2xl w-full flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-center sm:text-left">
           <div className="bg-white rounded-xl p-3 shrink-0">
-            <QRCodeSVG value={walletUrl} size={240} level="M" />
+            <div className="sm:hidden"><QRCodeSVG value={walletUrl} size={160} level="M" /></div>
+            <div className="hidden sm:block"><QRCodeSVG value={walletUrl} size={240} level="M" /></div>
           </div>
           <div className="min-w-0">
-            <p className="text-xl font-black inline-flex items-center gap-2">
-              <Wallet className="h-6 w-6 text-brand-300 shrink-0" />
+            <p className="text-lg sm:text-xl font-black inline-flex items-center gap-2">
+              <Wallet className="h-5 w-5 sm:h-6 sm:w-6 text-brand-300 shrink-0" />
               {t('confirm.walletTitle')}
             </p>
-            <p className="text-neutral-300 font-bold mt-2">
+            <p className="text-neutral-300 font-bold mt-2 text-sm sm:text-base">
               {t('confirm.walletScan')}
               {session?.stamp
                 ? ` ${t('confirm.walletStamps', { earned: session.stamp.earned, required: session.stamp.required })}`
                 : ''}
             </p>
-            <p className="text-neutral-500 text-sm font-bold mt-2">
+            <p className="text-neutral-500 text-xs sm:text-sm font-bold mt-2">
               {t('confirm.walletAuto')}
             </p>
           </div>
@@ -210,19 +215,20 @@ const KioskHoldConfirmationScreen: React.FC = () => {
       )}
 
       {joinUrl && !walletUrl && (
-        <div className="mt-8 rounded-2xl bg-neutral-900 border border-neutral-800 p-6 max-w-2xl w-full flex items-center gap-6 text-left">
+        <div className="mt-6 sm:mt-8 rounded-2xl bg-neutral-900 border border-neutral-800 p-4 sm:p-6 max-w-2xl w-full flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-center sm:text-left">
           <div className="bg-white rounded-xl p-3 shrink-0">
-            <QRCodeSVG value={joinUrl} size={240} level="M" />
+            <div className="sm:hidden"><QRCodeSVG value={joinUrl} size={160} level="M" /></div>
+            <div className="hidden sm:block"><QRCodeSVG value={joinUrl} size={240} level="M" /></div>
           </div>
           <div className="min-w-0">
-            <p className="text-xl font-black inline-flex items-center gap-2">
-              <Gift className="h-6 w-6 text-brand-300 shrink-0" />
+            <p className="text-lg sm:text-xl font-black inline-flex items-center gap-2">
+              <Gift className="h-5 w-5 sm:h-6 sm:w-6 text-brand-300 shrink-0" />
               {tenantName ? t('confirm.joinTitleTenant', { tenant: tenantName }) : t('confirm.joinTitle')}
             </p>
-            <p className="text-neutral-300 font-bold mt-2">
+            <p className="text-neutral-300 font-bold mt-2 text-sm sm:text-base">
               {t('confirm.joinScan')}
             </p>
-            <p className="text-neutral-500 text-sm font-bold mt-2">
+            <p className="text-neutral-500 text-xs sm:text-sm font-bold mt-2">
               {t('confirm.joinAnyone')}
             </p>
           </div>
@@ -234,29 +240,29 @@ const KioskHoldConfirmationScreen: React.FC = () => {
         // Adding more requires going back through Agregar a mi orden from
         // Welcome, so we don't expose a misleading "Agregar más" here that
         // would silently create a separate order.
-        <div className="mt-10 w-full max-w-xl">
+        <div className="mt-6 sm:mt-10 w-full max-w-xl">
           <button
             onClick={handleDone}
-            className="w-full h-20 rounded-2xl bg-brand-600 active:bg-brand-700 text-2xl font-black touch-manipulation inline-flex items-center justify-center gap-3"
+            className="w-full h-14 sm:h-20 rounded-2xl bg-brand-600 active:bg-brand-700 text-lg sm:text-2xl font-black touch-manipulation inline-flex items-center justify-center gap-3"
           >
-            <Store className="h-7 w-7" />
+            <Store className="h-5 w-5 sm:h-7 sm:w-7" />
             {t('confirm.done')} · {seconds}s
           </button>
         </div>
       ) : (
-        <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-xl">
+        <div className="mt-6 sm:mt-10 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 w-full max-w-xl">
           <button
             onClick={handleAddMore}
-            className="h-20 rounded-2xl bg-brand-600 active:bg-brand-700 text-2xl font-black touch-manipulation inline-flex items-center justify-center gap-3"
+            className="h-14 sm:h-20 rounded-2xl bg-brand-600 active:bg-brand-700 text-lg sm:text-2xl font-black touch-manipulation inline-flex items-center justify-center gap-3"
           >
-            <Plus className="h-7 w-7" />
+            <Plus className="h-5 w-5 sm:h-7 sm:w-7" />
             {t('confirm.addMore')}
           </button>
           <button
             onClick={handleDone}
-            className="h-20 rounded-2xl bg-neutral-800 active:bg-neutral-700 text-2xl font-black touch-manipulation inline-flex items-center justify-center gap-3"
+            className="h-14 sm:h-20 rounded-2xl bg-neutral-800 active:bg-neutral-700 text-lg sm:text-2xl font-black touch-manipulation inline-flex items-center justify-center gap-3"
           >
-            <Store className="h-7 w-7" />
+            <Store className="h-5 w-5 sm:h-7 sm:w-7" />
             {t('confirm.done')} · {seconds}s
           </button>
         </div>

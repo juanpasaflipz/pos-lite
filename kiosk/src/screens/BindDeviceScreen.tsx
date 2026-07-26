@@ -9,7 +9,9 @@ const Pad: React.FC<{ label: string; onClick: () => void; variant?: 'default' | 
   variant = 'default',
   disabled,
 }) => {
-  const base = 'w-28 h-28 rounded-2xl text-3xl font-bold touch-manipulation flex items-center justify-center transition-colors';
+  // w-28 h-28 (112px) x3 cols + gap-4 needs ~430px — wider than most phones.
+  // Shrink on phone, restore the original tablet size from sm (640px) up.
+  const base = 'w-16 h-16 sm:w-28 sm:h-28 rounded-2xl text-2xl sm:text-3xl font-bold touch-manipulation flex items-center justify-center transition-colors';
   const variants = {
     default: 'bg-neutral-800 active:bg-neutral-700 text-white',
     primary: 'bg-brand-600 active:bg-brand-700 text-white disabled:bg-neutral-800 disabled:text-neutral-600',
@@ -57,15 +59,15 @@ const BindDeviceScreen: React.FC = () => {
   };
 
   return (
-    <div className="h-full w-full bg-neutral-950 flex flex-col items-center justify-center p-8 text-white">
-      <div className="text-center mb-12">
-        <h1 className="text-4xl md:text-5xl font-bold mb-3">Setup Kiosk</h1>
-        <p className="text-lg text-neutral-400 max-w-md">
-          Enter staff PIN to bind this iPad to a restaurant. This is a one-time setup.
+    <div className="h-full w-full bg-neutral-950 flex flex-col items-center justify-center p-4 sm:p-8 text-white pt-safe pb-safe">
+      <div className="text-center mb-6 sm:mb-12">
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-3">Setup Kiosk</h1>
+        <p className="text-base sm:text-lg text-neutral-400 max-w-md px-4">
+          Enter staff PIN to bind this device to a restaurant. This is a one-time setup.
         </p>
       </div>
 
-      <div className="mb-8 h-16 flex items-center justify-center gap-3">
+      <div className="mb-6 sm:mb-8 h-16 flex items-center justify-center gap-3">
         {Array.from({ length: 6 }).map((_, i) => (
           <div
             key={i}
@@ -80,7 +82,7 @@ const BindDeviceScreen: React.FC = () => {
         {error || 'placeholder'}
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-3 sm:gap-4">
         {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
           <Pad key={d} label={d} onClick={() => onDigit(d)} disabled={busy} />
         ))}

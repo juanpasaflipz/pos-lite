@@ -48,3 +48,15 @@ body {
   -webkit-touch-callout: none;
   touch-action: manipulation;
 }
+
+/* Phone support: the kiosk was originally tablet-only (mounted iPad), so
+   nothing accounted for notches / home-indicator insets. These two utilities
+   let edge-to-edge headers/footers stay clear of those areas when the kiosk
+   runs on a phone (mounted or handed to the customer). No-ops on tablets
+   without cutouts, since env() resolves to 0 there. */
+.pt-safe {
+  padding-top: max(1rem, env(safe-area-inset-top));
+}
+.pb-safe {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}

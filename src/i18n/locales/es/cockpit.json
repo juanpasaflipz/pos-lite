@@ -126,20 +126,23 @@
   },
   "kioskAccess": {
     "title": "Kiosco de autoservicio",
-    "subtitle": "Abre tu kiosco en una tablet para que tus clientes ordenen solos",
-    "scanTitle": "Escanea con tu tablet",
+    "subtitle": "Abre tu kiosco en una tablet o teléfono para que tus clientes ordenen solos",
+    "scanTitle": "Escanea con tu tablet o teléfono",
     "copy": "Copiar",
     "copied": "¡Copiado!",
     "open": "Abrir kiosco ahora",
     "howTitle": "Cómo poner tu kiosco",
-    "howSubtitle": "En 4 pasos, desde cualquier tablet Android o iPad.",
+    "howSubtitle": "En 4 pasos, desde cualquier tablet Android, iPad o teléfono.",
     "steps": [
-      "Abre la dirección de arriba en el navegador de tu tablet (Chrome o Safari) — o escanea el código QR.",
+      "Abre la dirección de arriba en el navegador de tu tablet o teléfono (Chrome o Safari) — o escanea el código QR.",
       "Añade la página a la pantalla de inicio para que abra como una app.",
-      "Ponla en pantalla completa. En iPad usa \"Acceso guiado\"; en Android usa el modo de fijar pantalla para bloquearla en el kiosco.",
-      "Coloca la tablet en tu mostrador. Los pedidos pagados entran directo a tu pantalla de cocina."
+      "Ponla en pantalla completa. En iPad/iPhone usa \"Acceso guiado\"; en Android usa el modo de fijar pantalla para bloquearla en el kiosco.",
+      "Coloca la tablet o el teléfono en tu mostrador. Los pedidos pagados entran directo a tu pantalla de cocina."
     ],
     "downloadGuide": "Descargar guía de inicio rápido (PDF)",
-    "tip": "Tip: cualquier tablet con navegador funciona. No necesitas comprar equipo especial."
+    "tip": "Tip: cualquier tablet o teléfono Android/iPhone con navegador funciona. No necesitas comprar equipo especial.",
+    "noHardwareTitle": "¿Taquería de una persona? Ni siquiera necesitas un kiosco",
+    "noHardwareBody": "Con Menú QR tus clientes ordenan y pagan desde su propio celular escaneando un código en el mostrador — cero equipo que comprar o montar.",
+    "noHardwareCta": "Generar código QR para llevar →"
   }
 }
