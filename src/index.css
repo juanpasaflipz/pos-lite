@@ -215,8 +215,80 @@ input {
     font-family: 'Courier New', monospace;
   }
 
-  .no-print {
+  .no-print,
+  .no-print * {
     display: none !important;
+  }
+
+  /* ---- Receipt modal printing ----------------------------------------
+     window.print() prints the whole document, so without this the ticket
+     came out with the modal's action buttons (Imprimir / SMS / Facturar /
+     Listo) attached, and the card's max-h-[90vh]+overflow-auto clipped the
+     header — dropping the tenant logo, order number and customer name off
+     the printed page. Hide everything, un-hide just the ticket, and lift it
+     out of flow so it starts at the top of page 1. */
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  /* App-shell containers sized to the viewport would otherwise emit tall
+     blank pages behind the (invisible) UI. */
+  .h-screen {
+    height: auto !important;
+  }
+
+  .min-h-screen {
+    min-height: 0 !important;
+  }
+
+  /* Scoped with :has() so this only fires while the receipt modal is open.
+     Other print surfaces (PublicReceiptScreen) carry no .receipt-print and
+     must keep printing normally. On a browser without :has() support the
+     rule is simply dropped — the clipping/no-print fixes below still apply. */
+  body:has(.receipt-print) * {
+    visibility: hidden;
+  }
+
+  body:has(.receipt-print) .receipt-print,
+  body:has(.receipt-print) .receipt-print * {
+    visibility: visible;
+  }
+
+  .receipt-print-overlay {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: auto !important;
+    height: auto !important;
+    display: block !important;
+    padding: 0 !important;
+    background: none !important;
+  }
+
+  .receipt-print {
+    position: static !important;
+    width: 80mm !important;
+    max-width: 80mm !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    /* Without this Chrome drops the tenant logo and brand colors. */
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .receipt-print img {
+    max-width: 100% !important;
+    height: auto !important;
   }
 
   .receipt {

@@ -148,8 +148,8 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] overflow-auto">
+      <div className="receipt-print-overlay fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div className="receipt-print bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] overflow-auto">
           <div className="p-6 text-center border-b-2 border-gray-300">
             <BrandLogo className="h-12 mx-auto mb-2" />
             <h2 className="text-2xl font-black tracking-tighter text-neutral-900 mb-1">{branding?.restaurantName || 'Desktop Kitchen'}</h2>
@@ -276,7 +276,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
             )}
           </div>
 
-          <div className="p-4 space-y-2 border-t">
+          <div className="no-print p-4 space-y-2 border-t">
             <button
               onClick={onPrint}
               className="w-full py-3 bg-neutral-800 text-white font-bold rounded-lg hover:bg-neutral-700 transition-all"
