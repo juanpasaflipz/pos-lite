@@ -6,6 +6,7 @@ import { all, get, run } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getPlanLimits, planUpgradeError } from '../planLimits.js';
 import { JWT_SECRET } from '../lib/constants.js';
+import { audit } from '../lib/auditLog.js';
 
 const router = Router();
 
@@ -201,6 +202,17 @@ router.post('/pair/claim', claimLimiter, requireAuth('manage_devices'), async (r
       [row.id, req.employee.id, label, jti]
     );
 
+    audit({
+      tenantId: req.tenant?.id,
+      actorType: 'employee',
+      actorId: req.employee.id,
+      action: 'create',
+      resource: 'kds_device',
+      resourceId: row.id,
+      details: { device_type: row.device_type, device_label: label },
+      ip: req.ip,
+    });
+
     res.json({ ok: true, device_id: row.id });
   } catch (err) {
     console.error('[devices/pair/claim]', err);
@@ -232,9 +244,21 @@ router.patch('/:id', requireAuth('manage_devices'), async (req, res) => {
   try {
     const label = (req.body?.device_label || '').toString().trim().slice(0, 100);
     if (!label) return res.status(400).json({ error: 'device_label required' });
-    const existing = await get(`SELECT id FROM kds_devices WHERE id = $1`, [req.params.id]);
+    const existing = await get(`SELECT id, device_label FROM kds_devices WHERE id = $1`, [req.params.id]);
     if (!existing) return res.status(404).json({ error: 'Device not found' });
     await run(`UPDATE kds_devices SET device_label = $2 WHERE id = $1`, [req.params.id, label]);
+
+    audit({
+      tenantId: req.tenant?.id,
+      actorType: 'employee',
+      actorId: req.employee?.id,
+      action: 'update',
+      resource: 'kds_device',
+      resourceId: req.params.id,
+      details: { from: existing.device_label, to: label },
+      ip: req.ip,
+    });
+
     res.json({ ok: true });
   } catch (err) {
     console.error('[devices patch]', err);
@@ -245,13 +269,32 @@ router.patch('/:id', requireAuth('manage_devices'), async (req, res) => {
 // DELETE /api/devices/:id  — revoke (token instantly stops working)
 router.delete('/:id', requireAuth('manage_devices'), async (req, res) => {
   try {
-    const existing = await get(`SELECT id, revoked_at FROM kds_devices WHERE id = $1`, [req.params.id]);
+    const existing = await get(`SELECT id, device_label, revoked_at FROM kds_devices WHERE id = $1`, [req.params.id]);
     if (!existing) return res.status(404).json({ error: 'Device not found' });
     if (existing.revoked_at) return res.json({ ok: true, already_revoked: true });
     await run(
       `UPDATE kds_devices SET revoked_at = NOW(), token_jti = NULL WHERE id = $1`,
       [req.params.id]
     );
+
+    // This is the only intentional path that kills a device's binding —
+    // logged so a future "why did the KDS un-bind" question has an answer
+    // that isn't a guess: who revoked it, and when.
+    console.warn(
+      `[devices] REVOKED deviceId=${req.params.id} label="${existing.device_label || ''}" ` +
+      `by employeeId=${req.employee?.id ?? 'unknown'} tenant=${req.tenant?.id ?? 'unknown'}`
+    );
+    audit({
+      tenantId: req.tenant?.id,
+      actorType: 'employee',
+      actorId: req.employee?.id,
+      action: 'delete',
+      resource: 'kds_device',
+      resourceId: req.params.id,
+      details: { device_label: existing.device_label },
+      ip: req.ip,
+    });
+
     res.json({ ok: true });
   } catch (err) {
     console.error('[devices delete]', err);
