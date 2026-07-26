@@ -168,14 +168,19 @@ async function insertOrderWithNumber(conn, {
       order_fulfillment_type, customer_call_name
     )
     VALUES ($1, $2, $3, 'active', $4, $5, $6, 'unpaid', $7, $8, $9, $10, $11, $12, $13)
-    RETURNING id, order_number
+    RETURNING id, order_number, order_fulfillment_type, customer_call_name
   `, [
     tid, orderNumber, employee_id, subtotal, tax, total, offline_temp_id || null,
     discount_amount, discount_type, discount_reason, discount_authorized_by,
     fulfillment, customer_call_name,
   ]);
 
-  return { orderId: inserted.id, orderNumber: inserted.order_number };
+  return {
+    orderId: inserted.id,
+    orderNumber: inserted.order_number,
+    orderFulfillmentType: inserted.order_fulfillment_type,
+    customerCallName: inserted.customer_call_name,
+  };
 }
 
 /**
@@ -521,8 +526,9 @@ router.get('/:id', async (req, res) => {
       SELECT o.id, o.order_number, o.employee_id, o.status, o.subtotal, o.tax, o.tip, o.total,
              o.payment_intent_id, o.payment_status, o.payment_method, o.source, o.created_at, o.completed_at,
              o.discount_amount, o.discount_type, o.discount_reason, o.discount_authorized_by,
-             o.loyalty_customer_id,
+             o.loyalty_customer_id, o.order_fulfillment_type, o.customer_call_name,
              lc.name AS loyalty_customer_name, lc.phone AS loyalty_customer_phone,
+             COALESCE(lc.name, o.customer_call_name) AS customer_name,
              e.name as employee_name
       FROM orders o
       JOIN employees e ON o.employee_id = e.id
@@ -577,7 +583,9 @@ router.get('/:id', async (req, res) => {
 async function fetchExistingByOfflineTempId(offline_temp_id) {
   const existing = await get(`
     SELECT o.id, o.order_number, o.employee_id, o.status, o.subtotal, o.tax, o.tip, o.total,
-           o.payment_status, o.payment_method, o.source, o.created_at
+           o.payment_status, o.payment_method, o.source, o.created_at,
+           o.order_fulfillment_type, o.customer_call_name,
+           o.customer_call_name AS customer_name
     FROM orders o WHERE o.offline_temp_id = $1
   `, [offline_temp_id]);
   if (!existing) return null;
@@ -775,10 +783,10 @@ async function buildOrderFromRequest(req) {
   // we can recover — otherwise the outer transaction (set up by the tenant
   // middleware) is poisoned and any subsequent SELECT also fails.
   const conn = getConn();
-  let orderId, orderNumber;
+  let orderId, orderNumber, orderFulfillmentType, customerCallName;
   await conn.unsafe('SAVEPOINT order_insert');
   try {
-    ({ orderId, orderNumber } = await insertOrderWithNumber(conn, {
+    ({ orderId, orderNumber, orderFulfillmentType, customerCallName } = await insertOrderWithNumber(conn, {
       employee_id, subtotal, tax, total, offline_temp_id,
       tenantId: req.tenant?.id,
       tenantTz: req.tenant?.timezone,
@@ -888,6 +896,12 @@ async function buildOrderFromRequest(req) {
       tip: 0,
       total,
       payment_status: 'unpaid',
+      order_fulfillment_type: orderFulfillmentType,
+      customer_call_name: customerCallName,
+      // No loyalty linkage happens at creation time (that's a separate
+      // stamp/lookup flow) — the cashier-entered call name is the best
+      // name we have on the freshly created row.
+      customer_name: customerCallName,
       items: orderItems,
       discount_amount: orderDiscountAmount,
       discount_type: orderDiscountAmount > 0 ? (orderDiscount?.type || null) : null,
