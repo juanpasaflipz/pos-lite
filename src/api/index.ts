@@ -1739,6 +1739,19 @@ export async function sendTestPrint(printerId: number | null): Promise<{ job_id:
   });
 }
 
+// Opt-in toggle: auto-print the customer ticket (loyalty QR + name + for-here/
+// to-go) on the same kitchen printer whenever a counter order is paid.
+export async function getCustomerTicketSetting(): Promise<{ enabled: boolean }> {
+  return apiRequest<{ enabled: boolean }>('/print-jobs/customer-ticket-setting');
+}
+
+export async function updateCustomerTicketSetting(enabled: boolean): Promise<{ enabled: boolean }> {
+  return apiRequest<{ enabled: boolean }>('/print-jobs/customer-ticket-setting', {
+    method: 'PUT',
+    body: JSON.stringify({ enabled }),
+  });
+}
+
 export interface PrinterPingResult {
   status: 'queued' | 'bridge_offline' | 'not_configured';
   job_id?: number;
@@ -2175,6 +2188,12 @@ export async function updateRolePermissions(role: string, permissions: Record<st
 export async function lookupLoyaltyCustomer(phone: string, countryCode?: string): Promise<LoyaltyCustomer> {
   const qs = countryCode ? `?country_code=${encodeURIComponent(countryCode)}` : '';
   return apiRequest<LoyaltyCustomer>(`/loyalty/customers/phone/${encodeURIComponent(phone)}${qs}`);
+}
+
+// Mints a signed loyalty-join link for a just-closed (or past) order, for the
+// "scan to join" QR printed at the bottom of the counter receipt (ReceiptModal).
+export async function getLoyaltyJoinToken(orderId: number): Promise<{ token: string }> {
+  return apiRequest<{ token: string }>(`/loyalty/orders/${orderId}/join-token`);
 }
 
 // Resolve a scanned wallet-pass QR ("dk-loyalty:<serial>") to its customer —

@@ -158,7 +158,8 @@
     "offlineBadge": "OFFLINE",
     "scanForInvoice": "Scan to request your invoice",
     "invoiceIssued": "Invoice issued",
-    "invoiceButton": "Invoice"
+    "invoiceButton": "Invoice",
+    "scanForLoyalty": "Scan to join our rewards program"
   },
   "notes": {
     "title": "Special Instructions",

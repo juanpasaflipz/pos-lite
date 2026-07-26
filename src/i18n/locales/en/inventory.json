@@ -642,6 +642,13 @@
       "bridgeOffline": "The print bridge is offline — start it on the on-site computer first",
       "notConfigured": "Set up the print bridge first (generate a token below)",
       "timeout": "No response from the bridge — check that it is running"
+    },
+    "customerTicket": {
+      "title": "Customer ticket",
+      "description": "When on, every counter order paid prints a second ticket automatically on the same kitchen printer: customer name, for-here/to-go, and a QR to join the loyalty program. We recommend testing with \"Test print\" before turning this on during service.",
+      "toggleOn": "On",
+      "toggleOff": "Off",
+      "saving": "Saving…"
     }
   },
   "recipe": {

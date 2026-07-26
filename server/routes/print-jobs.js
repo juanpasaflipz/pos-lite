@@ -9,6 +9,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { requireAgentToken } from '../middleware/agentAuth.js';
 import { enqueueTestTicket, enqueuePingJob, getBridgeHealth } from '../lib/printQueue.js';
 import { renderInstallScript } from '../lib/installScript.js';
+import { requirePlanFeature } from '../planLimits.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BRIDGE_JS_PATH = path.join(__dirname, '..', '..', 'print-bridge', 'bridge.js');
@@ -115,6 +116,50 @@ router.post('/agent-token', requireAuth('manage_printers'), async (req, res) => 
   } catch (error) {
     console.error('[PrintJobs] Token generation error:', error);
     res.status(500).json({ error: 'Failed to generate agent token' });
+  }
+});
+
+/**
+ * GET /api/print-jobs/customer-ticket-setting
+ * Whether the "auto-print customer ticket" (loyalty QR + name + for-here/
+ * to-go, on the same kitchen printer) is turned on for this tenant. Off by
+ * default — opt-in, since it prints an extra ticket per paid order.
+ */
+router.get('/customer-ticket-setting', requireAuth('manage_printers'), async (req, res) => {
+  try {
+    const tenantId = getTenantId();
+    const rows = await adminSql`
+      SELECT value FROM tenant_credentials
+      WHERE tenant_id = ${tenantId} AND service = 'print_agent' AND key = 'auto_print_customer_ticket'
+      LIMIT 1
+    `;
+    res.json({ enabled: rows[0]?.value === 'true' });
+  } catch (error) {
+    console.error('[PrintJobs] Customer ticket setting fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch setting' });
+  }
+});
+
+/**
+ * PUT /api/print-jobs/customer-ticket-setting
+ * Body: { enabled: boolean }
+ */
+router.put('/customer-ticket-setting', requireAuth('manage_printers'), requirePlanFeature('printers'), async (req, res) => {
+  try {
+    const tenantId = getTenantId();
+    const enabled = req.body?.enabled === true;
+
+    await adminSql`
+      INSERT INTO tenant_credentials (tenant_id, service, key, value)
+      VALUES (${tenantId}, 'print_agent', 'auto_print_customer_ticket', ${enabled ? 'true' : 'false'})
+      ON CONFLICT (tenant_id, service, key)
+      DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+    `;
+
+    res.json({ enabled });
+  } catch (error) {
+    console.error('[PrintJobs] Customer ticket setting update error:', error);
+    res.status(500).json({ error: 'Failed to update setting' });
   }
 });
 

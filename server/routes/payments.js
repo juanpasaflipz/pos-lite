@@ -8,6 +8,7 @@ import { createPaymentIntent, createRefund, getPaymentIntent } from '../stripe.j
 import { requireAuth } from '../middleware/auth.js';
 import { deductInventoryForOrder, restoreInventoryForItems } from '../helpers/inventory.js';
 import { generateInvoiceToken } from '../helpers/facturapi.js';
+import { enqueueCustomerTicket } from '../lib/printQueue.js';
 import { getTenant } from '../tenants.js';
 import {
   ensureFreshToken,
@@ -149,6 +150,7 @@ router.post('/confirm', paymentLimiter, requireAuth('pos_access'), async (req, r
       } catch (tokenErr) {
         console.error('Non-fatal: failed to generate invoice token:', tokenErr.message);
       }
+      await enqueueCustomerTicket(order_id);
 
       return res.json({
         success: true,
@@ -223,6 +225,7 @@ router.post('/cash', paymentLimiter, requireAuth('pos_access'), async (req, res)
     } catch (tokenErr) {
       console.error('Non-fatal: failed to generate invoice token:', tokenErr.message);
     }
+    await enqueueCustomerTicket(order_id);
 
     res.json({
       success: true,
@@ -662,6 +665,7 @@ router.post('/split/finalize', requireAuth('pos_access'), async (req, res) => {
     } catch (tokenErr) {
       console.error('Non-fatal: split finalize invoice token failed:', tokenErr.message);
     }
+    await enqueueCustomerTicket(order_id);
 
     res.json({ success: true, splits_count: splits.length, tip: totalTip, invoice_token });
   } catch (error) {
@@ -932,6 +936,10 @@ async function markTerminalOrderPaid(orderId, tenantId = 'default', { mpOrder = 
 
   if (completed) {
     await deductInventoryForOrder(orderId);
+    // Only on the actual paid transition — this function is re-entered on
+    // every status poll, and completed is null on those, so no duplicate
+    // ticket per poll.
+    await enqueueCustomerTicket(orderId);
   }
 
   // Persist the MP terminal payment + processor fee for owner-facing reports.

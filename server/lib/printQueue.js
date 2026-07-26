@@ -9,9 +9,14 @@
  * tenant-scoped db helpers so RLS applies.
  */
 
+import jwt from 'jsonwebtoken';
 import { all, get, run, getTenantId } from '../db/index.js';
 import { adminSql } from '../db/index.js';
-import { buildKitchenTicket, buildTestTicket } from './escpos.js';
+import { buildKitchenTicket, buildTestTicket, buildCustomerTicket } from './escpos.js';
+import { getCredential } from '../helpers/tenantCredentials.js';
+import { getTenant } from '../tenants.js';
+import { getPlanLimits } from '../planLimits.js';
+import { JWT_SECRET } from './constants.js';
 
 /** Bridge counts as online if it has claimed/heartbeat within this window.
  *  Liveness writes are throttled to 30s (agentAuth), so allow 90s of slack. */
@@ -125,6 +130,104 @@ export async function enqueueKitchenTicket(orderId, opts = {}) {
     return result.lastInsertRowid;
   } catch (err) {
     console.error(`[PrintQueue] Failed to enqueue ticket for order ${orderId}:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Enqueue the customer-facing ticket (order summary + loyalty sign-up QR)
+ * for a just-paid POS order — the raw-ESC/POS counterpart to ReceiptModal's
+ * browser-printed receipt, printed on the same kitchen printer. Opt-in per
+ * tenant (Printer Management → "Auto-print customer ticket" toggle,
+ * tenant_credentials service='print_agent' key='auto_print_customer_ticket');
+ * a cheap no-op if the tenant hasn't turned it on.
+ *
+ * Call this right after marking an order paid, from any completion path
+ * (cash, card, split, terminal). Never throws — printing must not break
+ * payment completion.
+ *
+ * @param {number} orderId
+ */
+export async function enqueueCustomerTicket(orderId) {
+  try {
+    const tenantId = getTenantId();
+    const enabled = await getCredential(tenantId, 'print_agent', 'auto_print_customer_ticket', '');
+    if (enabled !== 'true') return null;
+
+    const order = await get(`
+      SELECT o.*, COALESCE(lc.name, o.customer_call_name) AS customer_name
+      FROM orders o
+      LEFT JOIN loyalty_customers lc ON lc.id = o.loyalty_customer_id
+      WHERE o.id = $1
+    `, [orderId]);
+    if (!order) {
+      console.warn(`[PrintQueue] Order ${orderId} not found — skipping customer ticket`);
+      return null;
+    }
+
+    const items = await all(`
+      SELECT item_name, quantity, unit_price
+      FROM order_items
+      WHERE order_id = $1
+      ORDER BY id
+    `, [orderId]);
+
+    const tenant = await getTenant(tenantId);
+
+    // Loyalty QR — mirrors ReceiptModal's graceful degradation: skip silently
+    // (rest of the ticket still prints) if loyalty is plan-locked, the tenant
+    // has no subdomain, or minting fails for any reason.
+    let loyaltyJoinUrl = null;
+    try {
+      const locked = getPlanLimits(tenant?.plan || 'free')?.loyalty?.locked === true;
+      if (!locked && tenant?.subdomain) {
+        const token = jwt.sign(
+          { type: 'loyalty_join', tenantId, orderId },
+          JWT_SECRET,
+          { expiresIn: '7d' },
+        );
+        loyaltyJoinUrl = `https://${tenant.subdomain}.desktop.kitchen/#/loyalty/join/${token}`;
+      }
+    } catch (qrErr) {
+      console.error(`[PrintQueue] Failed to mint loyalty QR for order ${orderId}:`, qrErr.message);
+    }
+
+    const ticket = {
+      tenantName: tenant?.name || 'Ticket',
+      orderNumber: order.order_number,
+      customerName: order.customer_name || null,
+      fulfillmentType: order.order_fulfillment_type || null,
+      createdAt: order.paid_at || order.created_at,
+      items: items.map(i => ({
+        name: i.item_name,
+        quantity: Number(i.quantity) || 1,
+        unitPrice: Number(i.unit_price) || 0,
+      })),
+      subtotal: Number(order.subtotal) || 0,
+      tax: Number(order.tax) || 0,
+      total: Number(order.total) || 0,
+      loyaltyJoinUrl,
+    };
+
+    const data = buildCustomerTicket(ticket).toString('base64');
+    const printerId = await pickKitchenPrinter();
+
+    const result = await run(`
+      INSERT INTO print_jobs (tenant_id, order_id, printer_id, job_type, source, payload)
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `, [
+      tenantId,
+      orderId,
+      printerId,
+      'customer_ticket',
+      'pos',
+      JSON.stringify({ format: 'escpos', encoding: 'base64', data, ticket }),
+    ]);
+
+    console.log(`[PrintQueue] Enqueued customer ticket job ${result.lastInsertRowid} for order ${orderId}`);
+    return result.lastInsertRowid;
+  } catch (err) {
+    console.error(`[PrintQueue] Failed to enqueue customer ticket for order ${orderId}:`, err.message);
     return null;
   }
 }

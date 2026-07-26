@@ -76,6 +76,37 @@ class TicketBuilder {
   }
   cut() { return this.raw(CMD.FEED_3).raw(CMD.CUT_PARTIAL); }
   beep() { return this.raw(CMD.BEEP); }
+  /**
+   * Print a QR code (GS ( k — "function 165/167/169/180/181", the standard
+   * 2D-symbol command family widely cloned even on cheap thermal printers).
+   * Unlike raster bit images (GS v 0 / ESC *), this is a single well-known
+   * command most ESC/POS clones implement — still, it has not been
+   * hardware-tested against the GHIA GTP801 pilot printer; verify with a
+   * real print before relying on it.
+   * @param {string} data     — payload (e.g. a URL), sent as raw ASCII/UTF-8 bytes
+   * @param {object} [opts]
+   * @param {number} [opts.size=6] — module size in dots, 1-16 (6-8 prints cleanly on 80mm)
+   * @param {'L'|'M'|'Q'|'H'} [opts.ec='M'] — error correction level
+   */
+  qr(data, { size = 6, ec = 'M' } = {}) {
+    const ECC = { L: 0x30, M: 0x31, Q: 0x32, H: 0x33 };
+    const bytes = Buffer.from(String(data), 'utf8');
+    const storeLen = bytes.length + 3;
+    this.parts.push(
+      // Select model 2
+      Buffer.from([0x1d, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00]),
+      // Module size
+      Buffer.from([0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, size]),
+      // Error correction level
+      Buffer.from([0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, ECC[ec] || ECC.M]),
+      // Store symbol data
+      Buffer.from([0x1d, 0x28, 0x6b, storeLen & 0xff, (storeLen >> 8) & 0xff, 0x31, 0x50, 0x30]),
+      bytes,
+      // Print stored symbol
+      Buffer.from([0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30]),
+    );
+    return this;
+  }
   build() { return Buffer.concat(this.parts); }
 }
 
@@ -117,6 +148,10 @@ function formatTime(date) {
     day: '2-digit', month: '2-digit',
     hour: '2-digit', minute: '2-digit', hour12: false,
   });
+}
+
+function money(n) {
+  return `$${(Number(n) || 0).toFixed(2)}`;
 }
 
 // ==================== Public builders ====================
@@ -217,6 +252,77 @@ export function buildTestTicket(opts = {}) {
   b.line('=');
   b.center().text('Si puedes leer esto,');
   b.text('la impresora está lista.');
+  b.left();
+  b.cut();
+  return b.build();
+}
+
+/**
+ * Build a customer-facing ticket for a paid counter order — the raw-ESC/POS
+ * counterpart to ReceiptModal's browser-printed receipt, printed on the same
+ * thermal printer when a tenant opts in (Printer Management → "Auto-print
+ * customer ticket"). Shows the order, customer name (if known), for-here/
+ * to-go, totals, and a loyalty sign-up QR at the bottom.
+ *
+ * No raster logo here — tenant name prints as bold text instead. Image/bit
+ * printing on cheap ESC/POS clones is unconfirmed on the pilot printer (see
+ * print-bridge/diag-raster.sh); the QR command is a different, more widely
+ * supported command family, but hasn't been hardware-tested either — verify
+ * with a real print before relying on it for every order.
+ *
+ * @param {object} ticket
+ * @param {string} ticket.tenantName
+ * @param {string|number} ticket.orderNumber
+ * @param {string} [ticket.customerName]
+ * @param {'for_here'|'to_go'|'delivery'|null} [ticket.fulfillmentType]
+ * @param {string|Date} [ticket.createdAt]
+ * @param {Array<{name:string,quantity:number,unitPrice:number}>} ticket.items
+ * @param {number} ticket.subtotal
+ * @param {number} ticket.tax
+ * @param {number} ticket.total
+ * @param {string} [ticket.loyaltyJoinUrl] — omit to skip the QR block entirely
+ * @returns {Buffer}
+ */
+export function buildCustomerTicket(ticket) {
+  const b = new TicketBuilder();
+
+  b.center().size('tall').bold(true);
+  for (const l of wrap(ticket.tenantName || 'Ticket')) b.text(l);
+  b.bold(false).size('normal');
+  b.text(`# ${ticket.orderNumber}`);
+
+  if (ticket.customerName) {
+    b.size('big').bold(true);
+    for (const l of wrap(ticket.customerName)) b.text(l);
+    b.bold(false).size('normal');
+  }
+
+  if (ticket.fulfillmentType === 'for_here' || ticket.fulfillmentType === 'to_go') {
+    b.bold(true).text(ticket.fulfillmentType === 'for_here' ? 'PARA AQUI' : 'PARA LLEVAR').bold(false);
+  }
+
+  b.text(formatTime(ticket.createdAt || Date.now()));
+  b.left().line('=');
+
+  for (const item of (ticket.items || [])) {
+    const qty = item.quantity || 1;
+    for (const l of wrap(twoCol(`${qty}x ${item.name}`, money(item.unitPrice * qty)))) b.text(l);
+  }
+
+  b.line('-');
+  b.text(twoCol('Subtotal', money(ticket.subtotal)));
+  b.text(twoCol('IVA', money(ticket.tax)));
+  b.bold(true).text(twoCol('TOTAL', money(ticket.total))).bold(false);
+  b.line('=');
+  b.center().text('¡Gracias por tu compra!');
+
+  if (ticket.loyaltyJoinUrl) {
+    b.blank();
+    b.qr(ticket.loyaltyJoinUrl, { size: 6 });
+    b.blank();
+    for (const l of wrap('Escanea y únete a nuestro programa de lealtad')) b.text(l);
+  }
+
   b.left();
   b.cut();
   return b.build();

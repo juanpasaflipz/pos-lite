@@ -1,6 +1,8 @@
 import { Router } from 'express';
-import { all, get, run } from '../db/index.js';
+import jwt from 'jsonwebtoken';
+import { all, get, run, getTenantId } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
+import { JWT_SECRET } from '../lib/constants.js';
 import {
   normalizePhone,
   findOrCreateCustomer,
@@ -466,6 +468,36 @@ router.put('/config', requireAuth('manage_loyalty'), requirePlanFeature('loyalty
     if (affectsWalletPasses(key)) refreshTenantPasses();
 
     res.json(await getLoyaltyConfig());
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/* ==================== Printed-receipt join QR ==================== */
+
+// GET /orders/:orderId/join-token — mints a signed loyalty-join JWT for an
+// order closed at the counter, so ReceiptModal can print a "scan to join" QR
+// at the bottom of the customer ticket. Same token shape/verifier as the
+// kiosk's post-payment QR (routes/kiosk.js mints one just like this for the
+// self-checkout flow; both are read by routes/loyalty-join-public.js).
+// Minted on demand rather than stored on the order, so re-printing an old
+// receipt from OrdersScreen still gets a fresh, non-expired link.
+router.get('/orders/:orderId/join-token', requireAuth('pos_access'), requirePlanFeature('loyalty'), async (req, res) => {
+  try {
+    const orderId = Number(req.params.orderId);
+    if (!Number.isFinite(orderId)) {
+      return res.status(400).json({ error: 'orderId inválido' });
+    }
+    const order = await get('SELECT id FROM orders WHERE id = $1', [orderId]);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+
+    const token = jwt.sign(
+      { type: 'loyalty_join', tenantId: getTenantId(), orderId },
+      JWT_SECRET,
+      { expiresIn: '7d' },
+    );
+    res.json({ token });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });

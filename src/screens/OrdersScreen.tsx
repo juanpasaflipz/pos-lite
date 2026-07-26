@@ -16,6 +16,7 @@ import {
   ChevronRight,
   ChevronDown,
   ScanLine,
+  Printer,
 } from 'lucide-react';
 import {
   getKitchenOrders,
@@ -480,6 +481,8 @@ export default function OrdersScreen() {
                 onAdvance={handleAdvance}
                 onCancel={handleCancel}
                 onRecheckTerminal={handleRecheckTerminal}
+                onOpenReceipt={handleOpenReceipt}
+                openingReceiptId={openingReceiptId}
                 t={t}
               />
             )}
@@ -582,11 +585,13 @@ interface LiveGridProps {
   onAdvance: (o: Order) => void;
   onCancel: (o: Order) => void;
   onRecheckTerminal: (o: Order) => void;
+  onOpenReceipt: (id: number) => void;
+  openingReceiptId: number | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   t: any;
 }
 
-const LiveGrid: React.FC<LiveGridProps> = ({ orders, now, actionId, lane, onEdit, onCharge, onAdvance, onCancel, onRecheckTerminal, t }) => {
+const LiveGrid: React.FC<LiveGridProps> = ({ orders, now, actionId, lane, onEdit, onCharge, onAdvance, onCancel, onRecheckTerminal, onOpenReceipt, openingReceiptId, t }) => {
   if (orders.length === 0) {
     return (
       <div className="text-center py-20 text-neutral-500">
@@ -602,6 +607,7 @@ const LiveGrid: React.FC<LiveGridProps> = ({ orders, now, actionId, lane, onEdit
         const paid = isPaid(order);
         const step = nextStatus(order.status);
         const busy = actionId === order.id;
+        const printing = openingReceiptId === order.id;
 
         return (
           <div
@@ -640,9 +646,20 @@ const LiveGrid: React.FC<LiveGridProps> = ({ orders, now, actionId, lane, onEdit
                   )}
                 </div>
               </div>
-              <div className={`flex items-center gap-1 text-sm font-bold shrink-0 ${TIER_TIME_TEXT[tier]} ${tier === 'critical' ? 'animate-pulse' : ''}`}>
-                <Clock className="w-4 h-4" />
-                {formatElapsed(elapsed)}
+              <div className="flex items-start gap-1.5 shrink-0">
+                <div className={`flex items-center gap-1 text-sm font-bold ${TIER_TIME_TEXT[tier]} ${tier === 'critical' ? 'animate-pulse' : ''}`}>
+                  <Clock className="w-4 h-4" />
+                  {formatElapsed(elapsed)}
+                </div>
+                <button
+                  onClick={() => onOpenReceipt(order.id)}
+                  disabled={printing}
+                  className="p-1 bg-neutral-800 hover:bg-brand-600 disabled:opacity-50 text-neutral-300 hover:text-white rounded-md transition-colors min-h-[28px] min-w-[28px] inline-flex items-center justify-center"
+                  title={t('pos:ordersPanel.openReceipt', 'Ver recibo / imprimir')}
+                  aria-label={t('pos:ordersPanel.openReceipt', 'Ver recibo / imprimir')}
+                >
+                  <Printer size={13} />
+                </button>
               </div>
             </div>
 
@@ -770,10 +787,15 @@ const HistoryGrid: React.FC<{
             key={o.id}
             className="bg-neutral-900 rounded-lg border border-neutral-800 hover:border-neutral-600 transition-colors"
           >
-            <button
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() => toggleExpand(o)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpand(o); }
+              }}
               aria-expanded={expanded}
-              className="w-full text-left p-3 min-h-[40px] hover:bg-neutral-800/60 rounded-lg transition-colors"
+              className="w-full text-left p-3 min-h-[40px] hover:bg-neutral-800/60 rounded-lg transition-colors cursor-pointer"
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-baseline gap-2 min-w-0">
@@ -784,10 +806,19 @@ const HistoryGrid: React.FC<{
                     <span className="text-xs font-bold text-neutral-500 shrink-0">#{o.order_number}</span>
                   )}
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
                   <span className="text-sm font-bold text-brand-500 whitespace-nowrap">
                     {formatPrice(Number(o.total))}
                   </span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onOpen(o.id); }}
+                    disabled={opening}
+                    className="p-1 bg-neutral-800 hover:bg-brand-600 disabled:opacity-50 text-neutral-300 hover:text-white rounded-md transition-colors min-h-[28px] min-w-[28px] inline-flex items-center justify-center"
+                    title={t('ordersPanel.openReceipt', 'Ver recibo / imprimir')}
+                    aria-label={t('ordersPanel.openReceipt', 'Ver recibo / imprimir')}
+                  >
+                    <Printer size={13} />
+                  </button>
                   {expanded ? (
                     <ChevronDown size={14} className="text-neutral-500" />
                   ) : (
@@ -816,7 +847,7 @@ const HistoryGrid: React.FC<{
                   </span>
                 </div>
               </div>
-            </button>
+            </div>
 
             {expanded && (
               <div className="border-t border-neutral-800 px-3 py-3 text-sm">

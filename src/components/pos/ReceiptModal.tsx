@@ -5,7 +5,7 @@ import { Clock, Coins } from 'lucide-react';
 import { Order, CfdiInvoice, LoyaltyCustomer } from '../../types';
 import { formatPrice, TAX_LABEL } from '../../utils/currency';
 import { formatDateTime } from '../../utils/dateFormat';
-import { sendSmsReceipt, lookupLoyaltyCustomer } from '../../api';
+import { sendSmsReceipt, lookupLoyaltyCustomer, getLoyaltyJoinToken } from '../../api';
 import BrandLogo from '../BrandLogo';
 import CashTipModal from './CashTipModal';
 import { useBranding } from '../../context/BrandingContext';
@@ -31,6 +31,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
   const [smsState, setSmsState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [smsError, setSmsError] = useState<string | null>(null);
   const [foundCustomer, setFoundCustomer] = useState<LoyaltyCustomer | null>(null);
+  const [loyaltyJoinToken, setLoyaltyJoinToken] = useState<string | null>(null);
   const [showCashTip, setShowCashTip] = useState(false);
   // Optimistic tip — bumps the displayed tip immediately after a successful
   // post-close add, without waiting for the parent to refetch the order.
@@ -43,6 +44,17 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
   // The effective customer: either passed in from POSScreen (order-start lookup)
   // or discovered live as the merchant types a known phone into the SMS form.
   const recognizedCustomer = linkedCustomer || foundCustomer;
+
+  // Name printed big/bold under the order number (matches the delivery-ticket
+  // convention of calling out the customer prominently). Prefers the live
+  // recognized-customer name, then falls back to whatever the order already
+  // carries — customer_name is server-COALESCE'd from the loyalty customer or
+  // the QR/kiosk "call name" the customer typed in at order time.
+  const displayCustomerName =
+    recognizedCustomer?.name?.trim() ||
+    order.customer_name?.trim() ||
+    order.loyalty_customer_name?.trim() ||
+    null;
 
   // Hydrate from the inline loyalty fields on the order when no linkedCustomer
   // was passed (e.g. re-sending receipt for a past order from OrdersScreen).
@@ -59,6 +71,20 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
     setSmsPhone(phone);
     setSmsName(name || '');
   }, [order.loyalty_customer_id, order.loyalty_customer_phone, order.loyalty_customer_name, linkedCustomer]);
+
+  // Loyalty sign-up QR printed at the bottom of the ticket — same "scan to
+  // join" flow the kiosk shows on-screen after payment, minted fresh here so
+  // re-printing an old receipt from OrdersScreen still gets a live link.
+  // Silently absent (no QR block) if loyalty is plan-locked or the request
+  // fails — this is a nice-to-have on the receipt, not a blocking feature.
+  useEffect(() => {
+    let cancelled = false;
+    setLoyaltyJoinToken(null);
+    getLoyaltyJoinToken(order.id)
+      .then((r) => { if (!cancelled) setLoyaltyJoinToken(r.token); })
+      .catch(() => { /* plan-locked or unavailable — no QR shown */ });
+    return () => { cancelled = true; };
+  }, [order.id]);
 
   // Debounced phone-to-customer lookup. Triggers once the merchant has typed at
   // least 10 digits; clears on shorter input. Cancels in-flight requests via
@@ -88,6 +114,9 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
 
   const appUrl = (window.location.origin + '/#/invoice/');
   const invoiceUrl = order.invoice_token ? `${appUrl}${order.invoice_token}` : null;
+  const loyaltyJoinUrl = loyaltyJoinToken
+    ? `${window.location.origin}/#/loyalty/join/${loyaltyJoinToken}`
+    : null;
 
   const handleSendSms = useCallback(async () => {
     const phone = smsPhone.trim();
@@ -140,6 +169,14 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
               {String(order.order_number).startsWith('OFF-') && (
                 <span className="inline-block mt-1 px-2 py-0.5 bg-cockpit-yellow/15 text-cockpit-yellow text-xs font-bold rounded">
                   {t('receipt.offlineBadge')}
+                </span>
+              )}
+              {displayCustomerName && (
+                <p className="text-2xl font-black tracking-tight text-neutral-900 mt-1">{displayCustomerName}</p>
+              )}
+              {order.order_fulfillment_type && (
+                <span className="inline-block mt-1 px-2 py-0.5 bg-cockpit-yellow text-neutral-950 text-xs font-black uppercase rounded tracking-wide">
+                  {order.order_fulfillment_type === 'for_here' ? t('cart.forHere') : t('cart.toGo')}
                 </span>
               )}
               <p className="text-neutral-600">
@@ -229,6 +266,14 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
               <p className="text-lg font-bold text-brand-600">{t('receipt.thankYou')}</p>
               <p className="text-neutral-600 text-xs mt-2">{t('receipt.comeAgain')}</p>
             </div>
+
+            {/* Loyalty Sign-up QR — printed at the bottom of every ticket */}
+            {loyaltyJoinUrl && (
+              <div className="text-center py-3 border-t pt-3">
+                <QRCodeSVG value={loyaltyJoinUrl} size={120} className="mx-auto" />
+                <p className="text-xs text-neutral-500 mt-2">{t('receipt.scanForLoyalty')}</p>
+              </div>
+            )}
           </div>
 
           <div className="p-4 space-y-2 border-t">

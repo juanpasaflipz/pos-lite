@@ -15,6 +15,8 @@ import {
   sendTestPrint,
   pingPrinter,
   getPrintJobStatus,
+  getCustomerTicketSetting,
+  updateCustomerTicketSetting,
   PrintBridgeStatus,
 } from '../api';
 import { Printer, MenuCategory } from '../types';
@@ -38,13 +40,37 @@ export default function PrinterManagement() {
   const [testSent, setTestSent] = useState(false);
   // Connectivity checks keyed by printer id ('default' = bridge default printer)
   const [pingResults, setPingResults] = useState<Record<string, { state: 'running' | 'ok' | 'fail'; message?: string }>>({});
+  const [autoPrintTicket, setAutoPrintTicket] = useState(false);
+  const [autoPrintSaving, setAutoPrintSaving] = useState(false);
 
   useEffect(() => {
     fetchData();
     fetchBridge();
+    fetchCustomerTicketSetting();
     const interval = setInterval(fetchBridge, 15000);
     return () => clearInterval(interval);
   }, []);
+
+  const fetchCustomerTicketSetting = async () => {
+    try {
+      const { enabled } = await getCustomerTicketSetting();
+      setAutoPrintTicket(enabled);
+    } catch (err) {
+      console.error('Failed to load customer ticket setting:', err);
+    }
+  };
+
+  const handleToggleCustomerTicket = async () => {
+    setAutoPrintSaving(true);
+    try {
+      const { enabled } = await updateCustomerTicketSetting(!autoPrintTicket);
+      setAutoPrintTicket(enabled);
+    } catch (err) {
+      console.error('Failed to update customer ticket setting:', err);
+    } finally {
+      setAutoPrintSaving(false);
+    }
+  };
 
   const fetchBridge = async () => {
     try {
@@ -324,6 +350,31 @@ export default function PrinterManagement() {
                     <p className="text-xs text-neutral-500">{t('printers.bridge.tokenHint')}</p>
                   </div>
                 )}
+              </div>
+            </div>
+
+            {/* Customer ticket auto-print toggle */}
+            <div>
+              <div className="bg-neutral-900 rounded-lg border border-neutral-800 p-4">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex-1 min-w-[240px]">
+                    <p className="font-bold text-white">{t('printers.customerTicket.title')}</p>
+                    <p className="text-sm text-neutral-400 mt-1">{t('printers.customerTicket.description')}</p>
+                  </div>
+                  <button
+                    onClick={handleToggleCustomerTicket}
+                    disabled={autoPrintSaving}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold min-h-[40px] disabled:opacity-50 transition-colors ${
+                      autoPrintTicket ? 'bg-cockpit-green/30 text-cockpit-in-text' : 'bg-neutral-800 text-neutral-500'
+                    }`}
+                  >
+                    {autoPrintSaving
+                      ? t('printers.customerTicket.saving')
+                      : autoPrintTicket
+                        ? t('printers.customerTicket.toggleOn')
+                        : t('printers.customerTicket.toggleOff')}
+                  </button>
+                </div>
               </div>
             </div>
 

@@ -158,7 +158,8 @@
     "offlineBadge": "SIN CONEXIÓN",
     "scanForInvoice": "Escanea para solicitar tu factura",
     "invoiceIssued": "Factura emitida",
-    "invoiceButton": "Facturar"
+    "invoiceButton": "Facturar",
+    "scanForLoyalty": "Escanea y únete a nuestro programa de lealtad"
   },
   "notes": {
     "title": "Instrucciones Especiales",
