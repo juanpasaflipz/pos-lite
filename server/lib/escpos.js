@@ -134,6 +134,20 @@ function twoCol(left, right, width = COLS) {
   return left + ' '.repeat(space) + right;
 }
 
+/**
+ * Rows for one priced line: the label wraps across as many rows as it needs
+ * and the amount rides the last one, right-aligned to the grid. Wrapping the
+ * output of twoCol() instead would break inside the padding and stagger the
+ * price column.
+ */
+function priceRow(label, amount, width = COLS) {
+  const right = String(amount);
+  const lines = wrap(label, Math.max(1, width - right.length - 1));
+  const out = lines.slice(0, -1);
+  out.push(twoCol(lines[lines.length - 1], right, width));
+  return out;
+}
+
 const SOURCE_LABELS = {
   didi_food: 'DIDI FOOD',
   rappi: 'RAPPI',
@@ -286,35 +300,61 @@ export function buildTestTicket(opts = {}) {
 export function buildCustomerTicket(ticket) {
   const b = new TicketBuilder();
 
+  // Double-width glyphs occupy two cells, so anything printed at size 'big'
+  // wraps against half the row. Wrapping those against COLS overflows the
+  // paper and the printer hard-breaks mid-word.
+  const WIDE = Math.floor(COLS / 2);
+
+  // ---- Merchant ------------------------------------------------------
+  // TODO(logo): once diag-raster.sh identifies the printer's graphics mode,
+  // print the tenant logo as a 1-bit raster above this and keep the name as
+  // the fallback for printers with no image support.
+  // 'tall' doubles height only — glyphs keep their width, so this wraps
+  // against the full row. Only 'big' (double width) needs WIDE.
   b.center().size('tall').bold(true);
   for (const l of wrap(ticket.tenantName || 'Ticket')) b.text(l);
   b.bold(false).size('normal');
-  b.text(`# ${ticket.orderNumber}`);
+  b.blank();
+  b.line('=');
+  b.blank();
 
+  // ---- Customer — the line staff and the customer actually look for ----
   if (ticket.customerName) {
     b.size('big').bold(true);
-    for (const l of wrap(ticket.customerName)) b.text(l);
+    for (const l of wrap(ticket.customerName, WIDE)) b.text(l);
     b.bold(false).size('normal');
+    b.blank();
   }
 
   if (ticket.fulfillmentType === 'for_here' || ticket.fulfillmentType === 'to_go') {
-    b.bold(true).text(ticket.fulfillmentType === 'for_here' ? 'PARA AQUI' : 'PARA LLEVAR').bold(false);
+    b.size('tall').bold(true);
+    b.text(ticket.fulfillmentType === 'for_here' ? 'PARA AQUI' : 'PARA LLEVAR');
+    b.bold(false).size('normal');
+    b.blank();
   }
 
+  b.text(`Orden #${ticket.orderNumber}`);
   b.text(formatTime(ticket.createdAt || Date.now()));
-  b.left().line('=');
 
+  // ---- Items ---------------------------------------------------------
+  b.left().blank().line('-');
   for (const item of (ticket.items || [])) {
     const qty = item.quantity || 1;
-    for (const l of wrap(twoCol(`${qty}x ${item.name}`, money(item.unitPrice * qty)))) b.text(l);
+    for (const l of priceRow(`${qty}x ${item.name}`, money(item.unitPrice * qty))) b.text(l);
   }
-
   b.line('-');
+
   b.text(twoCol('Subtotal', money(ticket.subtotal)));
   b.text(twoCol('IVA', money(ticket.tax)));
-  b.bold(true).text(twoCol('TOTAL', money(ticket.total))).bold(false);
+  b.blank();
+  b.size('tall').bold(true);
+  b.text(twoCol('TOTAL', money(ticket.total)));
+  b.bold(false).size('normal');
   b.line('=');
-  b.center().text('¡Gracias por tu compra!');
+
+  // ---- Footer --------------------------------------------------------
+  b.center().blank();
+  b.text('¡Gracias por tu compra!');
 
   if (ticket.loyaltyJoinUrl) {
     b.blank();
@@ -323,7 +363,9 @@ export function buildCustomerTicket(ticket) {
     for (const l of wrap('Escanea y únete a nuestro programa de lealtad')) b.text(l);
   }
 
-  b.left();
+  // Trailing feed: the print head sits above the cutter, so without this the
+  // last rows stay inside the printer and surface atop the next ticket.
+  b.left().blank(2);
   b.cut();
   return b.build();
 }

@@ -164,12 +164,12 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
         <div className="receipt-print bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] overflow-auto">
           <div className="p-6 text-center border-b-2 border-gray-300">
             <BrandLogo className="h-12 mx-auto mb-2" />
-            <h2 className="text-2xl font-black tracking-tighter text-neutral-900 mb-1">{branding?.restaurantName || 'Desktop Kitchen'}</h2>
+            <h2 className="text-2xl font-black tracking-tighter text-black mb-1">{branding?.restaurantName || 'Desktop Kitchen'}</h2>
             {branding?.tagline && (
-              <p className="text-neutral-600">{branding.tagline}</p>
+              <p className="text-gray-600">{branding.tagline}</p>
             )}
             {branding?.address && (
-              <p className="text-sm text-neutral-500 mt-2">
+              <p className="text-sm text-gray-500 mt-2">
                 {branding.address}
               </p>
             )}
@@ -184,18 +184,18 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
                 </span>
               )}
               {displayCustomerName && (
-                <p className="text-2xl font-black tracking-tight text-neutral-900 mt-1">{displayCustomerName}</p>
+                <p className="text-2xl font-black tracking-tight text-black mt-1">{displayCustomerName}</p>
               )}
               {order.order_fulfillment_type && (
-                <span className="inline-block mt-1 px-2 py-0.5 bg-cockpit-yellow text-neutral-950 text-xs font-black uppercase rounded tracking-wide">
+                <span className="inline-block mt-1 px-2 py-0.5 bg-cockpit-yellow text-black text-xs font-black uppercase rounded tracking-wide">
                   {order.order_fulfillment_type === 'for_here' ? t('cart.forHere') : t('cart.toGo')}
                 </span>
               )}
-              <p className="text-neutral-600">
+              <p className="text-gray-600">
                 {formatDateTime(order.created_at ? new Date(order.created_at) : new Date())}
               </p>
               {order.employee_name && (
-                <p className="text-neutral-600">{t('receipt.cashier', { name: order.employee_name })}</p>
+                <p className="text-gray-600">{t('receipt.cashier', { name: order.employee_name })}</p>
               )}
             </div>
 
@@ -221,7 +221,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
                   <div className="flex-1">
                     <p className="font-semibold">{item.item_name}</p>
                     {item.notes && (
-                      <p className="text-neutral-600 text-xs">{item.notes}</p>
+                      <p className="text-gray-600 text-xs">{item.notes}</p>
                     )}
                   </div>
                   <div className="text-right">
@@ -236,11 +236,11 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
                 <p>{t('totals.total')}</p>
                 <p>{formatPrice(order.total)}</p>
               </div>
-              <div className="flex justify-between text-neutral-500 text-sm">
+              <div className="flex justify-between text-gray-500 text-sm">
                 <p>{t('receipt.subtotalBeforeTax')}</p>
                 <p>{formatPrice(order.subtotal)}</p>
               </div>
-              <div className="flex justify-between text-neutral-500 text-sm">
+              <div className="flex justify-between text-gray-500 text-sm">
                 <p>{t('receipt.taxIncluded', { label: TAX_LABEL })}</p>
                 <p>{formatPrice(order.tax)}</p>
               </div>
@@ -254,7 +254,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
 
             {effectiveTip > 0 && (
               <div className="text-center py-3">
-                <p className="text-2xl font-bold text-neutral-900">
+                <p className="text-2xl font-bold text-black">
                   {t('receipt.totalWithTip', { amount: formatPrice(order.total + effectiveTip) })}
                 </p>
               </div>
@@ -264,7 +264,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
             {invoiceUrl && !invoiceIssued && (
               <div className="text-center py-3 border-t pt-3">
                 <QRCodeSVG value={invoiceUrl} size={120} className="mx-auto" />
-                <p className="text-xs text-neutral-500 mt-2">{t('receipt.scanForInvoice')}</p>
+                <p className="text-xs text-gray-500 mt-2">{t('receipt.scanForInvoice')}</p>
               </div>
             )}
 
@@ -275,15 +275,15 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
             )}
 
             <div className="text-center py-3 border-t pt-3">
-              <p className="text-lg font-bold text-brand-600">{t('receipt.thankYou')}</p>
-              <p className="text-neutral-600 text-xs mt-2">{t('receipt.comeAgain')}</p>
+              <p className="text-lg font-bold text-[#2E5EAA]">{t('receipt.thankYou')}</p>
+              <p className="text-gray-600 text-xs mt-2">{t('receipt.comeAgain')}</p>
             </div>
 
             {/* Loyalty Sign-up QR — printed at the bottom of every ticket */}
             {loyaltyJoinUrl && (
               <div className="text-center py-3 border-t pt-3">
                 <QRCodeSVG value={loyaltyJoinUrl} size={120} className="mx-auto" />
-                <p className="text-xs text-neutral-500 mt-2">{t('receipt.scanForLoyalty')}</p>
+                <p className="text-xs text-gray-500 mt-2">{t('receipt.scanForLoyalty')}</p>
               </div>
             )}
           </div>
@@ -372,7 +372,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
             {canAddCashTip && (
               <button
                 onClick={() => setShowCashTip(true)}
-                className="w-full py-3 bg-cockpit-yellow text-neutral-900 font-bold rounded-lg hover:bg-cockpit-yellow/90 transition-all inline-flex items-center justify-center gap-2"
+                className="w-full py-3 bg-cockpit-yellow text-black font-bold rounded-lg hover:bg-cockpit-yellow/90 transition-all inline-flex items-center justify-center gap-2"
               >
                 <Coins className="w-4 h-4" />
                 Agregar propina en efectivo
