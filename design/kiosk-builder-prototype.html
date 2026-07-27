@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Juanberto's — Kiosk Builder Prototype</title>
+<style>
+  /* ─── Talavera Terracotta palette (mirrors kiosk/src/index.css) ─── */
+  :root {
+    --n-50:  #F5F1E8; --n-100: #EBE4D5; --n-200: #D7CDB9; --n-300: #B9AF9B;
+    --n-400: #968C7A; --n-500: #736B5C; --n-600: #524C40; --n-700: #3C3730;
+    --n-800: #2A2A2A; --n-900: #15120E; --n-950: #0A0A0A;
+    --brand-100: #F0DCCB; --brand-200: #E0B598; --brand-300: #CF8E65;
+    --brand-400: #C0743F; --brand-500: #AD6432; --brand-600: #A8542A;
+    --brand-700: #8A4321; --brand-800: #693219; --brand-900: #452010;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; overflow: hidden; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--n-950); color: var(--n-50);
+    user-select: none; -webkit-user-select: none; touch-action: manipulation;
+  }
+  #app { height: 100%; display: flex; flex-direction: column; }
+
+  /* ─── Chrome ─── */
+  header.bar {
+    padding: max(12px, env(safe-area-inset-top)) 16px 12px;
+    border-bottom: 1px solid var(--n-800);
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    flex-shrink: 0;
+  }
+  .kicker { font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--n-500); margin: 0 0 2px; }
+  h1.screen-title { font-size: clamp(22px, 4.5vw, 40px); font-weight: 900; margin: 0; line-height: 1.05; }
+  .bar-right { display: flex; gap: 8px; flex-shrink: 0; }
+  .chip {
+    height: 44px; padding: 0 14px; border-radius: 10px; border: none;
+    background: var(--n-800); color: var(--n-50);
+    font-size: 14px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .chip:active { background: var(--n-700); }
+  .chip.brand { background: var(--brand-600); }
+
+  /* ─── Progress dots ─── */
+  .steps { display: flex; gap: 6px; padding: 10px 16px 0; flex-shrink: 0; }
+  .steps span { height: 5px; flex: 1; border-radius: 3px; background: var(--n-800); transition: background .25s; }
+  .steps span.done { background: var(--brand-600); }
+
+  main.body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; -webkit-overflow-scrolling: touch; }
+
+  footer.bar {
+    padding: 12px 16px max(12px, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--n-800); flex-shrink: 0; display: flex; flex-direction: column; gap: 10px;
+  }
+
+  /* ─── Buttons ─── */
+  .btn {
+    min-height: 56px; border-radius: 14px; border: none; cursor: pointer;
+    font-size: 18px; font-weight: 900; color: #fff;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    transition: transform .08s; width: 100%; padding: 12px 20px;
+  }
+  .btn:active { transform: scale(.98); }
+  .btn.primary { background: var(--brand-600); }
+  .btn.primary:disabled { background: var(--n-800); color: var(--n-500); cursor: default; }
+  .btn.ghost { background: var(--n-800); }
+  .btn.outline { background: transparent; border: 2px solid var(--n-700); color: var(--n-100); }
+  .btn.split { justify-content: space-between; }
+  .btn small { font-weight: 700; font-size: 14px; opacity: .8; }
+
+  /* ─── Attract screen ─── */
+  .attract {
+    height: 100%; display: flex; flex-direction: column; align-items: center;
+    gap: 20px; text-align: center; padding: 24px; overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background: radial-gradient(ellipse at 50% 120%, var(--brand-900) 0%, var(--n-950) 60%);
+  }
+  .attract .logo { font-size: clamp(30px, 6vw, 60px); font-weight: 900; letter-spacing: -.02em; line-height: 1; }
+  .attract .logo em { font-style: normal; color: var(--brand-300); }
+  .attract .tag { font-size: clamp(14px, 2.6vw, 19px); font-weight: 700; color: var(--n-300); margin: 4px 0 0; }
+  .attract .big {
+    min-height: 80px; font-size: clamp(19px, 3.6vw, 28px); max-width: 640px;
+    box-shadow: 0 12px 40px rgba(168,84,42,.35); flex-shrink: 0;
+  }
+  .attract .side { max-width: 640px; min-height: 60px; font-size: 17px; flex-shrink: 0; }
+  .fav-label {
+    font-size: 12px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--brand-300); margin: 4px 0 0;
+  }
+  .fav-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+    width: 100%; max-width: 640px;
+  }
+  @media (min-width: 640px) { .fav-grid { grid-template-columns: repeat(3, 1fr); } }
+  .preset {
+    background: var(--n-900); border: 2px solid var(--n-800); border-radius: 14px;
+    padding: 12px 10px; cursor: pointer; color: var(--n-50); font-family: inherit;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    transition: transform .08s, border-color .15s;
+  }
+  .preset:active { transform: scale(.95); border-color: var(--brand-400); }
+  .preset .ico { font-size: 30px; line-height: 1; }
+  .preset .nm { font-size: 15px; font-weight: 900; line-height: 1.1; }
+  .preset .sb { font-size: 11px; font-weight: 700; color: var(--n-400); }
+  .preset .pr { font-size: 14px; font-weight: 800; color: var(--brand-300); }
+  .or-div {
+    display: flex; align-items: center; gap: 12px; width: 100%; max-width: 640px;
+    color: var(--n-500); font-size: 12px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase;
+  }
+  .or-div::before, .or-div::after { content: ''; flex: 1; height: 1px; background: var(--n-800); }
+
+  /* ─── Preset quick-question overlay (e.g. Breakfast: ¿Con chorizo?) ─── */
+  .ask-overlay {
+    position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.82);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .ask-box {
+    background: var(--n-900); border: 1px solid var(--n-800); border-radius: 24px;
+    width: 100%; max-width: 440px; padding: 28px 24px; text-align: center;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .ask-box .big-ico { font-size: 52px; line-height: 1; }
+  .ask-box h2 { margin: 0; font-size: 28px; font-weight: 900; }
+  .ask-box .sub2 { margin: -8px 0 0; font-size: 14px; font-weight: 700; color: var(--n-400); }
+
+  /* ─── Name entry (call-out name) ─── */
+  .name-wrap { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+  .name-display {
+    min-height: 76px; border-radius: 16px; background: var(--n-900); border: 2px solid var(--n-700);
+    display: flex; align-items: center; justify-content: center; padding: 12px 18px;
+    font-size: clamp(28px, 6vw, 44px); font-weight: 900; letter-spacing: .04em;
+  }
+  .name-display .caret { display: inline-block; width: 3px; height: 1em; background: var(--brand-400); margin-left: 4px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .kb { display: flex; flex-direction: column; gap: 8px; }
+  .kb-row { display: flex; gap: 6px; justify-content: center; }
+  .key {
+    flex: 1; max-width: 64px; min-height: 54px; border-radius: 10px; border: none;
+    background: var(--n-800); color: var(--n-50); font-size: 20px; font-weight: 900;
+    cursor: pointer; font-family: inherit; touch-action: manipulation;
+  }
+  .key:active { background: var(--brand-600); }
+  .key.wide { max-width: none; flex: 3; font-size: 14px; letter-spacing: .1em; }
+
+  /* ─── Done / loyalty screen ─── */
+  .done {
+    height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 18px; text-align: center; padding: 24px; overflow-y: auto;
+    background: radial-gradient(ellipse at 50% -20%, var(--brand-900) 0%, var(--n-950) 55%);
+  }
+  .done .check {
+    width: 84px; height: 84px; border-radius: 50%; background: var(--brand-600);
+    display: flex; align-items: center; justify-content: center; font-size: 44px;
+    box-shadow: 0 12px 40px rgba(168,84,42,.4); flex-shrink: 0;
+  }
+  .done h1 { margin: 0; font-size: clamp(28px, 6vw, 48px); font-weight: 900; }
+  .done .call { margin: 0; font-size: clamp(15px, 3vw, 20px); font-weight: 700; color: var(--n-300); max-width: 520px; }
+  .loyalty-card {
+    background: var(--n-900); border: 1px solid var(--n-800); border-radius: 20px;
+    padding: 20px; display: flex; align-items: center; gap: 18px; max-width: 520px; width: 100%;
+    text-align: left; flex-shrink: 0;
+  }
+  .loyalty-card .qr {
+    width: 132px; height: 132px; background: #fff; border-radius: 12px; padding: 8px; flex-shrink: 0;
+  }
+  .loyalty-card h3 { margin: 0 0 6px; font-size: 18px; font-weight: 900; color: var(--brand-300); }
+  .loyalty-card p { margin: 0; font-size: 14px; font-weight: 600; color: var(--n-300); line-height: 1.45; }
+
+  /* ─── Card grids ─── */
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); padding-bottom: 8px; }
+  @media (min-width: 640px)  { .grid { grid-template-columns: repeat(3, 1fr); gap: 14px; } }
+  @media (min-width: 1024px) { .grid { grid-template-columns: repeat(4, 1fr); } }
+
+  .card {
+    background: var(--n-900); border: 2px solid var(--n-800); border-radius: 16px;
+    padding: 18px 14px; cursor: pointer; text-align: center; color: var(--n-50);
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    min-height: 132px; justify-content: center; position: relative;
+    transition: transform .08s, border-color .15s, background .15s;
+    font-family: inherit;
+  }
+  .card:active { transform: scale(.96); }
+  .card.on { border-color: var(--brand-400); background: var(--brand-900); }
+  .card .ico { font-size: clamp(34px, 6vw, 48px); line-height: 1; }
+  .card .nm { font-size: clamp(15px, 2.6vw, 19px); font-weight: 900; line-height: 1.15; }
+  .card .pr { font-size: clamp(14px, 2.4vw, 17px); font-weight: 800; color: var(--brand-300); }
+  .card .qty {
+    position: absolute; top: -8px; right: -8px; min-width: 28px; height: 28px; border-radius: 14px;
+    background: var(--brand-600); color: #fff; font-weight: 900; font-size: 15px;
+    display: flex; align-items: center; justify-content: center; padding: 0 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.5);
+  }
+
+  /* ─── Style cards ─── */
+  .style-wrap { display: grid; gap: 14px; grid-template-columns: 1fr; max-width: 900px; margin: 0 auto; }
+  @media (min-width: 700px) { .style-wrap { grid-template-columns: 1fr 1fr; } }
+  @media (min-width: 1024px) { .style-wrap { grid-template-columns: 1fr 1fr 1fr; max-width: 1200px; } }
+  .style-card {
+    background: var(--n-900); border: 3px solid var(--n-800); border-radius: 20px;
+    padding: 24px 20px; cursor: pointer; text-align: left; color: var(--n-50);
+    transition: transform .08s, border-color .15s, background .15s; font-family: inherit; width: 100%;
+  }
+  .style-card:active { transform: scale(.97); }
+  .style-card.on { border-color: var(--brand-400); background: var(--brand-900); box-shadow: 0 8px 30px rgba(168,84,42,.25); }
+  .style-card h3 { margin: 0 0 4px; font-size: clamp(22px, 4vw, 30px); font-weight: 900; }
+  .style-badge {
+    display: inline-block; padding: 5px 12px; border-radius: 999px; margin-bottom: 10px;
+    font-size: 11px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase;
+  }
+  .style-badge.burrito { background: var(--brand-600); color: #fff; }
+  .style-badge.nob { background: var(--n-800); color: var(--n-100); border: 1px solid var(--n-600); }
+  .style-card .sub { font-size: 13px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--brand-300); margin: 0 0 12px; }
+  .style-card ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+  .style-card li {
+    background: var(--n-800); border-radius: 999px; padding: 6px 12px;
+    font-size: clamp(13px, 2.3vw, 15px); font-weight: 700; color: var(--n-100);
+  }
+  .style-card.on li { background: var(--brand-800); }
+
+  /* ─── Modify (remove) rows ─── */
+  .rows { display: flex; flex-direction: column; gap: 10px; max-width: 640px; margin: 0 auto; }
+  .row-t {
+    background: var(--n-900); border: 2px solid var(--n-800); border-radius: 14px;
+    min-height: 60px; padding: 10px 16px; cursor: pointer; color: var(--n-50);
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    font-family: inherit; font-size: 17px; font-weight: 800; text-align: left;
+    transition: border-color .15s, background .15s;
+  }
+  .row-t .lbl { display: flex; align-items: center; gap: 12px; }
+  .row-t .ico { font-size: 26px; }
+  .row-t.off { border-color: var(--brand-500); background: var(--brand-900); }
+  .row-t.off .lbl { text-decoration: line-through; color: var(--brand-200); }
+  .row-t .state { font-size: 13px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; color: var(--n-500); }
+  .row-t.off .state { color: var(--brand-300); }
+  .hint { text-align: center; color: var(--n-400); font-weight: 700; font-size: 14px; margin: 0 0 14px; }
+
+  /* ─── Section headers in add-ons ─── */
+  .sect { font-size: 13px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; color: var(--n-400); margin: 18px 0 10px; }
+  .sect:first-child { margin-top: 0; }
+
+  /* ─── Summary ─── */
+  .sum { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+  .sum-item { background: var(--n-900); border: 1px solid var(--n-800); border-radius: 16px; padding: 16px; }
+  .sum-item .top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .sum-item .top b { font-size: 18px; font-weight: 900; }
+  .sum-item .top span { font-weight: 900; color: var(--brand-300); font-size: 17px; }
+  .sum-item .mods { margin: 6px 0 0; font-size: 14px; color: var(--n-300); font-weight: 600; line-height: 1.5; }
+  .sum-item .mods .rm { color: var(--brand-300); }
+  .sum-item .rowbtns { display: flex; gap: 8px; margin-top: 12px; }
+  .mini { height: 40px; padding: 0 14px; border-radius: 10px; border: none; background: var(--n-800); color: var(--n-100); font-weight: 800; font-size: 13px; cursor: pointer; font-family: inherit; }
+  .total-line { display: flex; justify-content: space-between; font-size: 22px; font-weight: 900; padding: 4px 6px; }
+  .total-line span:last-child { color: var(--brand-300); }
+
+  .fade { animation: fade .22s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  .note {
+    position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+    background: var(--brand-600); color: #fff; font-weight: 900; padding: 10px 20px; border-radius: 999px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.5); font-size: 15px; opacity: 0; pointer-events: none;
+    transition: opacity .2s; z-index: 50; white-space: nowrap;
+  }
+  .note.show { opacity: 1; }
+
+  .proto-tag {
+    position: fixed; top: max(8px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+    font-size: 10px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--n-600); pointer-events: none; z-index: 60;
+  }
+</style>
+</head>
+<body>
+<div class="proto-tag">Prototipo · v11</div>
+<div id="app"></div>
+<div class="note" id="note"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   EDIT ME — all menu data lives here. Prices in MXN.
+   Prices pulled from the live juanbertos.com menu where they exist;
+   chorizo & bacon burritos are NEW items → placeholder prices, adjust!
+   ═══════════════════════════════════════════════════════════════════ */
+const PROTEINS = [
+  { id:'asada',      ico:'🐮', price:250, es:'Carne Asada',  en:'Carne Asada' },
+  { id:'pollo',      ico:'🐔', price:219, es:'Pollo Asado',  en:'Grilled Chicken' },
+  { id:'porkbelly',  ico:'🐷', price:230, es:'Porkbelly',    en:'Pork Belly' },
+  { id:'huevo',      ico:'🍳', price:180, es:'Huevo',        en:'Eggs' },
+  /* chorizo is hidden from the builder grid (v8) — it exists only as the
+     Breakfast "¿Con chorizo?" add-on, but stays here so pricing/names resolve.
+     If a guest backs into the protein screen with it selected, it shows. */
+  { id:'chorizo',    ico:'🌶️', price:195, es:'Chorizo',      en:'Chorizo', hidden:true },  // placeholder price
+  { id:'portobello', ico:'🍄', price:170, es:'Portobello',   en:'Portobello' },
+  { id:'camaron',    ico:'🦐', price:240, es:'Camarón',      en:'Shrimp' },
+  { id:'pescado',    ico:'🐟', price:265, es:'Pescado',      en:'Baja Fish' },
+];
+/* birria & cochinita are NOT builder proteins — they live only as the fixed
+   $99 house favorites El Tijuana / Yucatán on the start screen (v6). */
+
+/* Two-protein combos: max 2 proteins per burrito.
+   COMBO_PRICES = combos Juan has priced manually. Key = the two protein ids
+   in alphabetical order joined with '+'. Any combo NOT listed here falls back
+   to: price of the pricier protein + COMBO_FALLBACK_ADDON (so the prototype
+   always shows a price). Add lines here as you decide real combo prices. */
+const COMBO_PRICES = {
+  'asada+camaron': 340,   // real: Surf-N-Turf on the current menu
+  'chorizo+huevo': 210,   // placeholder — breakfast con chorizo, set real price
+};
+const COMBO_FALLBACK_ADDON = 90;  // placeholder rule for unpriced combos
+const MAX_PROTEINS = 2;
+
+function proteinPrice(ids){
+  if (!ids || !ids.length) return 0;
+  const ps = ids.map(id => PROTEINS.find(x => x.id === id));
+  if (ids.length === 1) return ps[0].price;
+  const key = [...ids].sort().join('+');
+  if (key in COMBO_PRICES) return COMBO_PRICES[key];
+  return Math.max(ps[0].price, ps[1].price) + COMBO_FALLBACK_ADDON;
+}
+
+const STYLES = {
+  california: {
+    es:'California Style', en:'California Style',
+    subEs:'El clásico de San Diego', subEn:'The San Diego classic',
+    ing: [
+      { id:'papas', ico:'🍟', es:'Papas a la francesa', en:'French fries' },
+      { id:'queso', ico:'🧀', es:'Queso',               en:'Cheese' },
+      { id:'guac',  ico:'🥑', es:'Guacamole',           en:'Guacamole' },
+      { id:'pico',  ico:'🍅', es:'Pico de gallo',       en:'Pico de gallo' },
+      { id:'crema', ico:'🥛', es:'Crema',               en:'Sour cream' },
+    ],
+  },
+  mission: {
+    es:'Mission Style', en:'Mission Style',
+    subEs:'Al estilo San Francisco', subEn:'San Francisco style',
+    ing: [
+      { id:'arroz',    ico:'🍚', es:'Arroz',         en:'Rice' },
+      { id:'frijoles', ico:'🫘', es:'Frijoles',      en:'Beans' },
+      { id:'queso',    ico:'🧀', es:'Queso',         en:'Cheese' },
+      { id:'guac',     ico:'🥑', es:'Guacamole',     en:'Guacamole' },
+      { id:'pico',     ico:'🍅', es:'Pico de gallo', en:'Pico de gallo' },
+      { id:'crema',    ico:'🥛', es:'Crema',         en:'Sour cream' },
+    ],
+  },
+  fries: {
+    es:'Fries', en:'Fries',
+    subEs:'Tu proteína sobre papas — sin tortilla', subEn:'Your protein over fries — no tortilla',
+    ing: [
+      { id:'papas',    ico:'🍟', es:'Papas a la francesa',  en:'French fries' },
+      { id:'guac',     ico:'🥑', es:'Guacamole',            en:'Guacamole' },
+      { id:'pico',     ico:'🍅', es:'Pico de gallo',        en:'Pico de gallo' },
+      { id:'crema',    ico:'🥛', es:'Crema',                en:'Sour cream' },
+      { id:'frijoles', ico:'🫘', es:'Frijoles (opcional)',  en:'Beans (optional)' },
+    ],
+  },
+};
+
+/* Fries-style pricing: the menu prices fries entrées per protein, not as a
+   flat markup (Carne Asada/Chorizo/Porkbelly Fries $299, Birria Fries $269).
+   Key = protein id, or 'idA+idB' (alphabetical) for a two-protein fries.
+   Unlisted → protein/combo price + FRIES_FALLBACK_ADDON. */
+const FRIES_PRICES = {
+  'asada': 299, 'chorizo': 299, 'porkbelly': 299,  // real menu prices
+};
+const FRIES_FALLBACK_ADDON = 49;  // matches asada: 250 → 299
+
+function stylePrice(ids, styleKey){
+  const base = proteinPrice(ids);
+  if (styleKey !== 'fries' || !ids || !ids.length) return base;
+  const key = [...ids].sort().join('+');
+  if (key in FRIES_PRICES) return FRIES_PRICES[key];
+  return base + FRIES_FALLBACK_ADDON;
+}
+
+/* House favorites shown on the start screen. Tapping one pre-fills the
+   wizard (proteins + style) and lands on the style screen, where the guest
+   confirms "Así está bien" or modifies. Price always comes from the same
+   protein/combo pricing engine — no separate preset prices to maintain. */
+const PRESETS = [
+  { id:'california',  ico:'🌊', proteins:['asada'],            style:'california', es:'El California',   en:'The California' },
+  { id:'pollos',      ico:'🐔', proteins:['pollo'],            style:'mission',    es:'Pollos Hermanos', en:'Pollos Hermanos' },
+  /* `ask` = one-tap question after tapping the card: offer a second protein
+     (most Breakfast customers add chorizo). Both answers land on style/confirm. */
+  { id:'breakfast',   ico:'🍳', proteins:['huevo'],            style:'california', es:'Breakfast',       en:'Breakfast', ask:{ protein:'chorizo' } },
+  { id:'surfnturf',   ico:'🦐', proteins:['asada','camaron'],  style:'mission',    es:'Surf-N-Turf',     en:'Surf-N-Turf' },
+  /* Fixed-price house items (not builder-backed): tapping adds straight to the
+     order at this price, then flows into "¿Deseas agregar algo?".
+     A fixed item with `choice` first asks ONE required either/or question
+     (same price either way) — e.g. Rollbertos: birria or cochinita on top. */
+  { id:'tijuana',     ico:'🐂', fixed:true, price:99, es:'Birria',    en:'Birria',    subEs:'Burrito de birria', subEn:'Birria burrito' },
+  { id:'yucatan',     ico:'🐖', fixed:true, price:99, es:'Cochinita', en:'Cochinita', subEs:'Burrito de cochinita pibil', subEn:'Cochinita pibil burrito' },
+  { id:'rollbertos',  ico:'🫔', fixed:true, price:139, es:'Rollbertos', en:'Rollbertos', subEs:'Taquitos dorados de queso', subEn:'Rolled cheese taquitos',
+    choice:{ qEs:'¿Con birria o cochinita?', qEn:'Birria or cochinita on top?',
+      options:[ { id:'birria', ico:'🐂', es:'Con birria', en:'With birria' },
+                { id:'cochinita', ico:'🐖', es:'Con cochinita', en:'With cochinita' } ] } },
+  /* Builder-backed like the top four — lands on style/confirm with Fries
+     preselected at the real FRIES_PRICES number ($299). */
+  { id:'asadafries',  ico:'🍟', proteins:['asada'], style:'fries', es:'Carne Asada Fries', en:'Carne Asada Fries' },
+];
+
+const EXTRAS = [
+  { id:'guacx',   ico:'🥑', price:35, es:'Guacamole extra',  en:'Extra guacamole' },  // placeholder price
+  { id:'quesox',  ico:'🧀', price:25, es:'Queso extra',      en:'Extra cheese' },     // placeholder price
+  { id:'cebolla', ico:'🧅', price:20, es:'Cebollita asada',  en:'Grilled onions' },   // placeholder price
+];
+const SIDES = [
+  { id:'papas',   ico:'🍟', price:96,  es:'Orden de Papas',    en:'Fries' },
+  { id:'brownie', ico:'🍫', price:53,  es:'Brownie con crema', en:'Brownie & cream' },
+];
+const DRINKS = [
+  { id:'agua',      ico:'🧊', price:60, es:'Agua Fresca',        en:'Agua Fresca' },
+  { id:'refresco',  ico:'🥤', price:44, es:'Refresco',           en:'Soda' },
+  { id:'cafe',      ico:'☕', price:39, es:'Café',               en:'Coffee' },
+  { id:'cerveza',   ico:'🍺', price:57, es:'Cerveza',            en:'Beer' },
+  { id:'michelada', ico:'🍻', price:87, es:'Michelada',          en:'Michelada' },
+];
+
+/* Loyalty join QR (placeholder URL — prod mints a loyalty_join JWT per order) */
+const QR_SVG = '<svg width="100%" height="100%"   version="1.1" viewBox="0 0 37 37" xmlns="http://www.w3.org/2000/svg"><path d="M2,2H3V3H2zM3,2H4V3H3zM4,2H5V3H4zM5,2H6V3H5zM6,2H7V3H6zM7,2H8V3H7zM8,2H9V3H8zM11,2H12V3H11zM12,2H13V3H12zM16,2H17V3H16zM18,2H19V3H18zM21,2H22V3H21zM22,2H23V3H22zM25,2H26V3H25zM28,2H29V3H28zM29,2H30V3H29zM30,2H31V3H30zM31,2H32V3H31zM32,2H33V3H32zM33,2H34V3H33zM34,2H35V3H34zM2,3H3V4H2zM8,3H9V4H8zM14,3H15V4H14zM17,3H18V4H17zM18,3H19V4H18zM20,3H21V4H20zM22,3H23V4H22zM24,3H25V4H24zM26,3H27V4H26zM28,3H29V4H28zM34,3H35V4H34zM2,4H3V5H2zM4,4H5V5H4zM5,4H6V5H5zM6,4H7V5H6zM8,4H9V5H8zM10,4H11V5H10zM16,4H17V5H16zM17,4H18V5H17zM22,4H23V5H22zM23,4H24V5H23zM24,4H25V5H24zM25,4H26V5H25zM26,4H27V5H26zM28,4H29V5H28zM30,4H31V5H30zM31,4H32V5H31zM32,4H33V5H32zM34,4H35V5H34zM2,5H3V6H2zM4,5H5V6H4zM5,5H6V6H5zM6,5H7V6H6zM8,5H9V6H8zM10,5H11V6H10zM11,5H12V6H11zM12,5H13V6H12zM20,5H21V6H20zM24,5H25V6H24zM26,5H27V6H26zM28,5H29V6H28zM30,5H31V6H30zM31,5H32V6H31zM32,5H33V6H32zM34,5H35V6H34zM2,6H3V7H2zM4,6H5V7H4zM5,6H6V7H5zM6,6H7V7H6zM8,6H9V7H8zM10,6H11V7H10zM11,6H12V7H11zM12,6H13V7H12zM16,6H17V7H16zM17,6H18V7H17zM18,6H19V7H18zM22,6H23V7H22zM23,6H24V7H23zM25,6H26V7H25zM28,6H29V7H28zM30,6H31V7H30zM31,6H32V7H31zM32,6H33V7H32zM34,6H35V7H34zM2,7H3V8H2zM8,7H9V8H8zM10,7H11V8H10zM16,7H17V8H16zM19,7H20V8H19zM20,7H21V8H20zM21,7H22V8H21zM23,7H24V8H23zM24,7H25V8H24zM26,7H27V8H26zM28,7H29V8H28zM34,7H35V8H34zM2,8H3V9H2zM3,8H4V9H3zM4,8H5V9H4zM5,8H6V9H5zM6,8H7V9H6zM7,8H8V9H7zM8,8H9V9H8zM10,8H11V9H10zM12,8H13V9H12zM14,8H15V9H14zM16,8H17V9H16zM18,8H19V9H18zM20,8H21V9H20zM22,8H23V9H22zM24,8H25V9H24zM26,8H27V9H26zM28,8H29V9H28zM29,8H30V9H29zM30,8H31V9H30zM31,8H32V9H31zM32,8H33V9H32zM33,8H34V9H33zM34,8H35V9H34zM10,9H11V10H10zM11,9H12V10H11zM13,9H14V10H13zM18,9H19V10H18zM21,9H22V10H21zM22,9H23V10H22zM23,9H24V10H23zM24,9H25V10H24zM25,9H26V10H25zM26,9H27V10H26zM2,10H3V11H2zM4,10H5V11H4zM5,10H6V11H5zM6,10H7V11H6zM7,10H8V11H7zM8,10H9V11H8zM11,10H12V11H11zM12,10H13V11H12zM15,10H16V11H15zM16,10H17V11H16zM19,10H20V11H19zM21,10H22V11H21zM24,10H25V11H24zM25,10H26V11H25zM26,10H27V11H26zM28,10H29V11H28zM29,10H30V11H29zM30,10H31V11H30zM31,10H32V11H31zM32,10H33V11H32zM6,11H7V12H6zM9,11H10V12H9zM10,11H11V12H10zM11,11H12V12H11zM12,11H13V12H12zM13,11H14V12H13zM15,11H16V12H15zM18,11H19V12H18zM19,11H20V12H19zM20,11H21V12H20zM21,11H22V12H21zM22,11H23V12H22zM24,11H25V12H24zM25,11H26V12H25zM28,11H29V12H28zM29,11H30V12H29zM31,11H32V12H31zM32,11H33V12H32zM34,11H35V12H34zM5,12H6V13H5zM6,12H7V13H6zM8,12H9V13H8zM11,12H12V13H11zM15,12H16V13H15zM16,12H17V13H16zM17,12H18V13H17zM18,12H19V13H18zM19,12H20V13H19zM23,12H24V13H23zM26,12H27V13H26zM30,12H31V13H30zM32,12H33V13H32zM33,12H34V13H33zM3,13H4V14H3zM6,13H7V14H6zM10,13H11V14H10zM13,13H14V14H13zM15,13H16V14H15zM19,13H20V14H19zM20,13H21V14H20zM22,13H23V14H22zM23,13H24V14H23zM24,13H25V14H24zM25,13H26V14H25zM27,13H28V14H27zM30,13H31V14H30zM31,13H32V14H31zM32,13H33V14H32zM33,13H34V14H33zM2,14H3V15H2zM8,14H9V15H8zM9,14H10V15H9zM10,14H11V15H10zM11,14H12V15H11zM13,14H14V15H13zM14,14H15V15H14zM16,14H17V15H16zM18,14H19V15H18zM22,14H23V15H22zM24,14H25V15H24zM25,14H26V15H25zM26,14H27V15H26zM27,14H28V15H27zM29,14H30V15H29zM30,14H31V15H30zM31,14H32V15H31zM33,14H34V15H33zM2,15H3V16H2zM6,15H7V16H6zM7,15H8V16H7zM9,15H10V16H9zM10,15H11V16H10zM14,15H15V16H14zM17,15H18V16H17zM19,15H20V16H19zM20,15H21V16H20zM23,15H24V16H23zM25,15H26V16H25zM28,15H29V16H28zM31,15H32V16H31zM33,15H34V16H33zM34,15H35V16H34zM7,16H8V17H7zM8,16H9V17H8zM10,16H11V17H10zM11,16H12V17H11zM13,16H14V17H13zM14,16H15V17H14zM15,16H16V17H15zM17,16H18V17H17zM18,16H19V17H18zM19,16H20V17H19zM20,16H21V17H20zM22,16H23V17H22zM27,16H28V17H27zM28,16H29V17H28zM33,16H34V17H33zM3,17H4V18H3zM4,17H5V18H4zM6,17H7V18H6zM11,17H12V18H11zM12,17H13V18H12zM13,17H14V18H13zM16,17H17V18H16zM17,17H18V18H17zM23,17H24V18H23zM25,17H26V18H25zM27,17H28V18H27zM28,17H29V18H28zM29,17H30V18H29zM30,17H31V18H30zM32,17H33V18H32zM4,18H5V19H4zM8,18H9V19H8zM10,18H11V19H10zM12,18H13V19H12zM13,18H14V19H13zM15,18H16V19H15zM16,18H17V19H16zM17,18H18V19H17zM19,18H20V19H19zM24,18H25V19H24zM25,18H26V19H25zM26,18H27V19H26zM27,18H28V19H27zM29,18H30V19H29zM30,18H31V19H30zM34,18H35V19H34zM2,19H3V20H2zM3,19H4V20H3zM10,19H11V20H10zM12,19H13V20H12zM16,19H17V20H16zM18,19H19V20H18zM21,19H22V20H21zM22,19H23V20H22zM24,19H25V20H24zM25,19H26V20H25zM28,19H29V20H28zM29,19H30V20H29zM31,19H32V20H31zM32,19H33V20H32zM34,19H35V20H34zM2,20H3V21H2zM3,20H4V21H3zM5,20H6V21H5zM7,20H8V21H7zM8,20H9V21H8zM10,20H11V21H10zM15,20H16V21H15zM17,20H18V21H17zM20,20H21V21H20zM24,20H25V21H24zM27,20H28V21H27zM28,20H29V21H28zM29,20H30V21H29zM30,20H31V21H30zM32,20H33V21H32zM33,20H34V21H33zM2,21H3V22H2zM4,21H5V22H4zM9,21H10V22H9zM13,21H14V22H13zM14,21H15V22H14zM15,21H16V22H15zM18,21H19V22H18zM21,21H22V22H21zM22,21H23V22H22zM23,21H24V22H23zM26,21H27V22H26zM29,21H30V22H29zM30,21H31V22H30zM31,21H32V22H31zM32,21H33V22H32zM4,22H5V23H4zM5,22H6V23H5zM8,22H9V23H8zM11,22H12V23H11zM12,22H13V23H12zM13,22H14V23H13zM15,22H16V23H15zM16,22H17V23H16zM20,22H21V23H20zM21,22H22V23H21zM23,22H24V23H23zM26,22H27V23H26zM27,22H28V23H27zM30,22H31V23H30zM31,22H32V23H31zM34,22H35V23H34zM2,23H3V24H2zM4,23H5V24H4zM5,23H6V24H5zM6,23H7V24H6zM7,23H8V24H7zM10,23H11V24H10zM14,23H15V24H14zM16,23H17V24H16zM17,23H18V24H17zM18,23H19V24H18zM22,23H23V24H22zM23,23H24V24H23zM25,23H26V24H25zM26,23H27V24H26zM27,23H28V24H27zM28,23H29V24H28zM31,23H32V24H31zM34,23H35V24H34zM2,24H3V25H2zM4,24H5V25H4zM6,24H7V25H6zM8,24H9V25H8zM9,24H10V25H9zM10,24H11V25H10zM13,24H14V25H13zM14,24H15V25H14zM15,24H16V25H15zM21,24H22V25H21zM23,24H24V25H23zM24,24H25V25H24zM28,24H29V25H28zM30,24H31V25H30zM31,24H32V25H31zM33,24H34V25H33zM2,25H3V26H2zM4,25H5V26H4zM5,25H6V26H5zM9,25H10V26H9zM12,25H13V26H12zM13,25H14V26H13zM16,25H17V26H16zM18,25H19V26H18zM20,25H21V26H20zM21,25H22V26H21zM22,25H23V26H22zM23,25H24V26H23zM26,25H27V26H26zM28,25H29V26H28zM30,25H31V26H30zM31,25H32V26H31zM32,25H33V26H32zM33,25H34V26H33zM34,25H35V26H34zM2,26H3V27H2zM4,26H5V27H4zM6,26H7V27H6zM7,26H8V27H7zM8,26H9V27H8zM9,26H10V27H9zM10,26H11V27H10zM11,26H12V27H11zM12,26H13V27H12zM13,26H14V27H13zM15,26H16V27H15zM19,26H20V27H19zM21,26H22V27H21zM24,26H25V27H24zM25,26H26V27H25zM26,26H27V27H26zM27,26H28V27H27zM28,26H29V27H28zM29,26H30V27H29zM30,26H31V27H30zM33,26H34V27H33zM34,26H35V27H34zM10,27H11V28H10zM11,27H12V28H11zM12,27H13V28H12zM16,27H17V28H16zM19,27H20V28H19zM20,27H21V28H20zM21,27H22V28H21zM26,27H27V28H26zM30,27H31V28H30zM32,27H33V28H32zM34,27H35V28H34zM2,28H3V29H2zM3,28H4V29H3zM4,28H5V29H4zM5,28H6V29H5zM6,28H7V29H6zM7,28H8V29H7zM8,28H9V29H8zM11,28H12V29H11zM17,28H18V29H17zM19,28H20V29H19zM22,28H23V29H22zM24,28H25V29H24zM25,28H26V29H25zM26,28H27V29H26zM28,28H29V29H28zM30,28H31V29H30zM32,28H33V29H32zM33,28H34V29H33zM2,29H3V30H2zM8,29H9V30H8zM10,29H11V30H10zM15,29H16V30H15zM16,29H17V30H16zM17,29H18V30H17zM19,29H20V30H19zM20,29H21V30H20zM21,29H22V30H21zM25,29H26V30H25zM26,29H27V30H26zM30,29H31V30H30zM31,29H32V30H31zM32,29H33V30H32zM33,29H34V30H33zM34,29H35V30H34zM2,30H3V31H2zM4,30H5V31H4zM5,30H6V31H5zM6,30H7V31H6zM8,30H9V31H8zM10,30H11V31H10zM11,30H12V31H11zM13,30H14V31H13zM14,30H15V31H14zM15,30H16V31H15zM16,30H17V31H16zM17,30H18V31H17zM18,30H19V31H18zM22,30H23V31H22zM23,30H24V31H23zM24,30H25V31H24zM26,30H27V31H26zM27,30H28V31H27zM28,30H29V31H28zM29,30H30V31H29zM30,30H31V31H30zM31,30H32V31H31zM2,31H3V32H2zM4,31H5V32H4zM5,31H6V32H5zM6,31H7V32H6zM8,31H9V32H8zM10,31H11V32H10zM12,31H13V32H12zM13,31H14V32H13zM14,31H15V32H14zM16,31H17V32H16zM17,31H18V32H17zM19,31H20V32H19zM20,31H21V32H20zM25,31H26V32H25zM26,31H27V32H26zM27,31H28V32H27zM30,31H31V32H30zM31,31H32V32H31zM34,31H35V32H34zM2,32H3V33H2zM4,32H5V33H4zM5,32H6V33H5zM6,32H7V33H6zM8,32H9V33H8zM10,32H11V33H10zM14,32H15V33H14zM16,32H17V33H16zM17,32H18V33H17zM18,32H19V33H18zM19,32H20V33H19zM22,32H23V33H22zM24,32H25V33H24zM25,32H26V33H25zM26,32H27V33H26zM27,32H28V33H27zM28,32H29V33H28zM29,32H30V33H29zM32,32H33V33H32zM2,33H3V34H2zM8,33H9V34H8zM11,33H12V34H11zM12,33H13V34H12zM13,33H14V34H13zM14,33H15V34H14zM15,33H16V34H15zM16,33H17V34H16zM17,33H18V34H17zM23,33H24V34H23zM24,33H25V34H24zM25,33H26V34H25zM27,33H28V34H27zM30,33H31V34H30zM31,33H32V34H31zM32,33H33V34H32zM2,34H3V35H2zM3,34H4V35H3zM4,34H5V35H4zM5,34H6V35H5zM6,34H7V35H6zM7,34H8V35H7zM8,34H9V35H8zM10,34H11V35H10zM12,34H13V35H12zM13,34H14V35H13zM17,34H18V35H17zM18,34H19V35H18zM19,34H20V35H19zM22,34H23V35H22zM24,34H25V35H24zM25,34H26V35H25zM26,34H27V35H26zM29,34H30V35H29zM33,34H34V35H33z" id="qr-path" fill="#000000" fill-opacity="1" fill-rule="nonzero" stroke="none"/></svg>';
+
+/* ─── i18n ─── */
+const T = {
+  es: {
+    start:'Arma tu burrito', startSub:'Toca para empezar',
+    favorites:'Favoritos de la casa',
+    drinksJump:'Solo bebidas y complementos',
+    stepProtein:'Elige tu proteína', stepProteinK:'Paso 1 · Proteína',
+    proteinHint:'Elige 1 o combina 2 proteínas', proteinPick:'Elige una proteína',
+    maxProteins:'Máximo 2 proteínas', comboTag:'combo',
+    stepStyle:'Elige tu estilo', stepStyleK:'Paso 2 · Estilo',
+    asIs:'Así está bien ✓', modify:'¿Deseas modificar algo?',
+    stepModify:'Quítale lo que no quieras', stepModifyK:'Paso 3 · A tu gusto',
+    modifyHint:'Toca un ingrediente para quitarlo',
+    stepAdd:'¿Deseas agregar algo?', stepAddK:'Paso 4 · Extras',
+    extras:'Para tu burrito', sides:'Complementos', drinks:'Bebidas',
+    continue:'Continuar', skip:'No, gracias — continuar',
+    without:'SIN', withIt:'Lleva',
+    yourOrder:'Tu orden', orderK:'Resumen',
+    anotherBurrito:'+ Agregar otro burrito', addMore:'+ Bebidas y complementos',
+    pay:'Pagar', total:'Total', edit:'Editar', remove:'Quitar',
+    back:'Atrás', startOver:'Empezar de nuevo',
+    burrito:'Burrito', added:'¡Agregado!',
+    emptyCart:'Tu orden está vacía',
+    payStub:'Aquí seguiría el flujo de pago existente (tarjeta / efectivo)',
+    nameK:'Último paso', namePrompt:'¿A qué nombre llamamos tu orden?',
+    nameHint:'Con este nombre te llamaremos cuando esté lista',
+    space:'ESPACIO', payN:'Confirmar y pagar', processing:'Procesando pago…',
+    doneTitle:'¡Listo, {n}!',
+    doneBody:'Escucha tu nombre — te llamamos cuando tu orden esté lista.',
+    loyaltyTitle:'Suma puntos con esta orden',
+    loyaltyBody:'Escanea el QR y únete a la lealtad de Juanberto’s: sellos con cada compra y tu burrito de regalo.',
+    newOrder:'Nueva orden',
+  },
+  en: {
+    start:'Build your burrito', startSub:'Touch to start',
+    favorites:'House favorites',
+    drinksJump:'Just drinks & sides',
+    stepProtein:'Choose your protein', stepProteinK:'Step 1 · Protein',
+    proteinHint:'Pick 1 or combine 2 proteins', proteinPick:'Pick a protein',
+    maxProteins:'2 proteins max', comboTag:'combo',
+    stepStyle:'Choose your style', stepStyleK:'Step 2 · Style',
+    asIs:'As is ✓', modify:'Want to change something?',
+    stepModify:'Take off what you don’t want', stepModifyK:'Step 3 · Your way',
+    modifyHint:'Tap an ingredient to remove it',
+    stepAdd:'Want to add anything?', stepAddK:'Step 4 · Extras',
+    extras:'For your burrito', sides:'Sides', drinks:'Drinks',
+    continue:'Continue', skip:'No thanks — continue',
+    without:'NO', withIt:'Includes',
+    yourOrder:'Your order', orderK:'Summary',
+    anotherBurrito:'+ Add another burrito', addMore:'+ Drinks & sides',
+    pay:'Pay', total:'Total', edit:'Edit', remove:'Remove',
+    back:'Back', startOver:'Start over',
+    burrito:'Burrito', added:'Added!',
+    emptyCart:'Your order is empty',
+    payStub:'The existing payment flow (card / cash) would continue here',
+    nameK:'Last step', namePrompt:'What name should we call out?',
+    nameHint:'We’ll call this name when your order is ready',
+    space:'SPACE', payN:'Confirm & pay', processing:'Processing payment…',
+    doneTitle:'All set, {n}!',
+    doneBody:'Listen for your name — we’ll call you when your order is ready.',
+    loyaltyTitle:'Earn points with this order',
+    loyaltyBody:'Scan the QR to join Juanberto’s loyalty: stamps with every purchase and a free burrito.',
+    newOrder:'New order',
+  },
+};
+
+/* ─── state (in-memory only) ─── */
+let lang = 'es';
+let screen = 'attract';           // attract | protein | style | modify | addons | summary | name | done
+let draft = null;                  // { proteins, style, removed:Set, extras:{} }
+let cart = [];                     // committed burritos + loose items
+let editIndex = null;              // when editing an existing cart line
+let customerName = '';             // call-out name, captured before payment
+
+const $ = (s) => document.querySelector(s);
+const t = (k) => T[lang][k];
+const mxn = (n) => '$' + n.toFixed(0);
+const name = (o) => lang === 'es' ? o.es : o.en;
+
+function toast(msg){
+  const n = $('#note'); n.textContent = msg; n.classList.add('show');
+  clearTimeout(n._t); n._t = setTimeout(() => n.classList.remove('show'), 1200);
+}
+
+function go(s){ screen = s; render(); }
+
+function newDraft(){ draft = { proteins:[], style:null, removed:new Set(), extras:{} }; }
+
+function draftPrice(d){
+  const p = stylePrice(d.proteins, d.style);
+  const ex = Object.entries(d.extras).reduce((s,[id,q]) => {
+    const it = EXTRAS.find(x => x.id === id); return s + (it ? it.price * q : 0);
+  }, 0);
+  return p + ex;
+}
+function cartTotal(){
+  return cart.reduce((s,l) => s + (l.kind === 'burrito' ? draftPrice(l) : l.price * l.qty), 0);
+}
+function looseAdd(item, kind){
+  const found = cart.find(l => l.kind === kind && l.id === item.id);
+  if (found) found.qty += 1;
+  else cart.push({ kind, id:item.id, es:item.es, en:item.en, ico:item.ico, price:item.price, qty:1 });
+  toast(t('added') + ' ' + name(item));
+  render();
+}
+
+/* ─── renderers ─── */
+function render(){
+  const app = $('#app');
+  app.innerHTML = '';
+  const fn = { attract:rAttract, protein:rProtein, style:rStyle, modify:rModify, addons:rAddons, summary:rSummary, name:rName, done:rDone }[screen];
+  fn(app);
+}
+
+function chrome(app, { kicker, title, step, backTo }){
+  const hdr = document.createElement('header'); hdr.className = 'bar';
+  hdr.innerHTML = `
+    <div style="min-width:0">
+      <p class="kicker">${kicker}</p>
+      <h1 class="screen-title">${title}</h1>
+    </div>
+    <div class="bar-right">
+      <button class="chip" id="langBtn">${lang === 'es' ? 'EN' : 'ES'}</button>
+      ${backTo ? `<button class="chip" id="backBtn">← ${t('back')}</button>` : ''}
+    </div>`;
+  app.appendChild(hdr);
+  hdr.querySelector('#langBtn').onclick = () => { lang = lang === 'es' ? 'en' : 'es'; render(); };
+  if (backTo) hdr.querySelector('#backBtn').onclick = () => go(backTo);
+  if (step) {
+    const dots = document.createElement('div'); dots.className = 'steps';
+    dots.innerHTML = [1,2,3,4].map(i => `<span class="${i <= step ? 'done' : ''}"></span>`).join('');
+    app.appendChild(dots);
+  }
+  const main = document.createElement('main'); main.className = 'body fade';
+  app.appendChild(main);
+  return main;
+}
+
+function footerBtns(app, btns){
+  const f = document.createElement('footer'); f.className = 'bar';
+  for (const b of btns){
+    const el = document.createElement('button');
+    el.className = 'btn ' + (b.cls || 'primary') + (b.split ? ' split' : '');
+    el.innerHTML = b.html; el.disabled = !!b.disabled; el.onclick = b.on;
+    f.appendChild(el);
+  }
+  app.appendChild(f);
+}
+
+/* 0 · Attract: house favorites (pre-filled wizard) + blank builder + drinks */
+function rAttract(app){
+  const d = document.createElement('div'); d.className = 'attract fade';
+  const styleName = (key) => lang === 'es' ? STYLES[key].es : STYLES[key].en;
+  d.innerHTML = `
+    <div>
+      <div class="logo">JUANBERTO<em>'S</em></div>
+      <p class="tag">${lang === 'es' ? 'La regla no se rompe: papas adentro.' : 'The rule stands: fries inside.'}</p>
+    </div>
+    <p class="fav-label">${t('favorites')}</p>
+    <div class="fav-grid">
+      ${PRESETS.map(p => `
+        <button class="preset" data-p="${p.id}">
+          <span class="ico">${p.ico}</span>
+          <span class="nm">${name(p)}</span>
+          <span class="sb">${p.fixed
+            ? (lang === 'es' ? p.subEs : p.subEn)
+            : p.proteins.map(id => name(PROTEINS.find(x => x.id === id))).join(' + ') + ' · ' + styleName(p.style).replace(' Style','')}</span>
+          <span class="pr">${mxn(p.fixed ? p.price : stylePrice(p.proteins, p.style))}</span>
+        </button>`).join('')}
+    </div>
+    <div class="or-div">${lang === 'es' ? 'o' : 'or'}</div>
+    <button class="btn primary big" id="go">🌯 ${t('start')}<br><small>${t('startSub')}</small></button>
+    <button class="btn outline side" id="dr">🥤 ${t('drinksJump')}</button>
+    <button class="chip" id="lg">${lang === 'es' ? 'English' : 'Español'}</button>`;
+  app.appendChild(d);
+  d.querySelectorAll('.preset').forEach(el => {
+    el.onclick = () => {
+      const p = PRESETS.find(x => x.id === el.dataset.p);
+      if (p.fixed){
+        if (p.choice){ showFixedChoice(d, p); return; }
+        // Fixed house item: straight to the order, then the add-something upsell.
+        looseAdd(p, 'preset');
+        draft = null; editIndex = null;
+        go('addons_only');
+        return;
+      }
+      if (p.ask){ showPresetAsk(d, p); return; }
+      startPreset(p, p.proteins);
+    };
+  });
+  $('#go').onclick = () => { newDraft(); editIndex = null; go('protein'); };
+  $('#dr').onclick = () => go('addons_only');
+  $('#lg').onclick = () => { lang = lang === 'es' ? 'en' : 'es'; render(); };
+}
+
+function startPreset(p, proteins){
+  newDraft(); editIndex = null;
+  draft.proteins = [...proteins];
+  draft.style = p.style;
+  go('style');   // land on style screen, pre-selected → "Así está bien" / modify
+}
+
+/* One-tap question after tapping a preset with `ask` (e.g. Breakfast → chorizo).
+   The "with" option leads since most guests take it; price delta comes from the
+   same combo pricing engine. */
+function showPresetAsk(container, p){
+  const extra = PROTEINS.find(x => x.id === p.ask.protein);
+  const withPrice = proteinPrice([...p.proteins, extra.id]);
+  const delta = withPrice - proteinPrice(p.proteins);
+  const ov = document.createElement('div'); ov.className = 'ask-overlay fade';
+  ov.innerHTML = `
+    <div class="ask-box">
+      <span class="big-ico">${p.ico}${extra.ico}</span>
+      <h2>${lang === 'es' ? `¿Con ${name(extra).toLowerCase()}?` : `Add ${name(extra).toLowerCase()}?`}</h2>
+      <p class="sub2">${name(p)}</p>
+      <button class="btn primary split" id="askYes">
+        <span>${lang === 'es' ? `Con ${name(extra).toLowerCase()}` : `With ${name(extra).toLowerCase()}`}</span>
+        <small>+${mxn(delta)} · ${mxn(withPrice)}</small>
+      </button>
+      <button class="btn ghost split" id="askNo">
+        <span>${lang === 'es' ? `Sin ${name(extra).toLowerCase()}` : `Without ${name(extra).toLowerCase()}`}</span>
+        <small>${mxn(proteinPrice(p.proteins))}</small>
+      </button>
+      <button class="chip" id="askBack">${t('back')}</button>
+    </div>`;
+  container.appendChild(ov);
+  ov.querySelector('#askYes').onclick = () => startPreset(p, [...p.proteins, extra.id]);
+  ov.querySelector('#askNo').onclick = () => startPreset(p, p.proteins);
+  ov.querySelector('#askBack').onclick = () => ov.remove();
+}
+
+/* Required either/or pop-up for a fixed item with `choice` (e.g. Rollbertos:
+   birria or cochinita — same price, guest must pick one). */
+function showFixedChoice(container, p){
+  const ov = document.createElement('div'); ov.className = 'ask-overlay fade';
+  ov.innerHTML = `
+    <div class="ask-box">
+      <span class="big-ico">${p.ico}</span>
+      <h2>${lang === 'es' ? p.choice.qEs : p.choice.qEn}</h2>
+      <p class="sub2">${name(p)} · ${lang === 'es' ? p.subEs : p.subEn} · ${mxn(p.price)}</p>
+      ${p.choice.options.map((o, i) => `
+        <button class="btn primary split" data-o="${i}">
+          <span>${o.ico} ${name(o)}</span>
+          <small>${mxn(p.price)}</small>
+        </button>`).join('')}
+      <button class="chip" id="chBack">${t('back')}</button>
+    </div>`;
+  container.appendChild(ov);
+  ov.querySelectorAll('[data-o]').forEach(btn => {
+    btn.onclick = () => {
+      const o = p.choice.options[Number(btn.dataset.o)];
+      looseAdd({
+        id: p.id + '-' + o.id,
+        ico: p.ico,
+        price: p.price,
+        es: `${p.es} ${o.es.toLowerCase()}`,
+        en: `${p.en} — ${o.en.toLowerCase()}`,
+      }, 'preset');
+      draft = null; editIndex = null;
+      go('addons_only');
+    };
+  });
+  ov.querySelector('#chBack').onclick = () => ov.remove();
+}
+
+/* 1 · Protein (multi-select, max 2) */
+function rProtein(app){
+  const main = chrome(app, { kicker:t('stepProteinK'), title:t('stepProtein'), step:1, backTo:null });
+  const hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = t('proteinHint');
+  main.appendChild(hint);
+  const g = document.createElement('div'); g.className = 'grid';
+  const visible = PROTEINS.filter(p => !p.hidden || draft.proteins.includes(p.id));
+  for (const p of visible){
+    const on = draft.proteins.includes(p.id);
+    const c = document.createElement('button');
+    c.className = 'card' + (on ? ' on' : '');
+    c.innerHTML = `${on ? `<span class="qty">✓</span>` : ''}<span class="ico">${p.ico}</span><span class="nm">${name(p)}</span><span class="pr">${mxn(p.price)}</span>`;
+    c.onclick = () => {
+      if (on) draft.proteins = draft.proteins.filter(id => id !== p.id);
+      else if (draft.proteins.length >= MAX_PROTEINS){ toast(t('maxProteins')); return; }
+      else draft.proteins.push(p.id);
+      render();
+    };
+    g.appendChild(c);
+  }
+  main.appendChild(g);
+  const n = draft.proteins.length;
+  const label = n
+    ? `<span>${t('continue')}${n === 2 ? ' · ' + t('comboTag') : ''}</span><small>${mxn(proteinPrice(draft.proteins))}</small>`
+    : t('proteinPick');
+  footerBtns(app, [
+    { html:label, cls:'primary', split:!!n, disabled:!n, on:() => go('style') },
+    { html:`← ${t('startOver')}`, cls:'ghost', on:() => { newDraft(); go('attract'); } },
+  ]);
+}
+
+/* 2 · Style */
+function rStyle(app){
+  const main = chrome(app, { kicker:t('stepStyleK'), title:t('stepStyle'), step:2, backTo:'protein' });
+  const wrap = document.createElement('div'); wrap.className = 'style-wrap';
+  const icons = { california:'🌊', mission:'🌉', fries:'🍟' };
+  for (const key of Object.keys(STYLES)){
+    const s = STYLES[key];
+    const price = stylePrice(draft.proteins, key);
+    const isBurrito = key !== 'fries';
+    const badge = isBurrito
+      ? `<span class="style-badge burrito">🌯 Burrito</span>`
+      : `<span class="style-badge nob">${lang === 'es' ? '🍟 Solo papas · NO es burrito' : '🍟 Just fries · NOT a burrito'}</span>`;
+    const c = document.createElement('button');
+    c.className = 'style-card' + (draft.style === key ? ' on' : '');
+    c.innerHTML = `
+      ${badge}
+      <h3>${icons[key]} ${name(s)} <span style="float:right;color:var(--brand-300)">${mxn(price)}</span></h3>
+      <p class="sub">${lang === 'es' ? s.subEs : s.subEn}</p>
+      <ul>${s.ing.map(i => `<li>${i.ico} ${name(i)}</li>`).join('')}</ul>`;
+    c.onclick = () => { draft.style = key; draft.removed = new Set(); render(); };
+    wrap.appendChild(c);
+  }
+  main.appendChild(wrap);
+  footerBtns(app, [
+    { html:t('asIs'), cls:'primary', disabled:!draft.style, on:() => go('addons') },
+    { html:t('modify'), cls:'ghost', disabled:!draft.style, on:() => go('modify') },
+  ]);
+}
+
+/* 3 · Modify (removals) */
+function rModify(app){
+  const main = chrome(app, { kicker:t('stepModifyK'), title:t('stepModify'), step:3, backTo:'style' });
+  const hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = t('modifyHint');
+  main.appendChild(hint);
+  const rows = document.createElement('div'); rows.className = 'rows';
+  for (const ing of STYLES[draft.style].ing){
+    const off = draft.removed.has(ing.id);
+    const r = document.createElement('button');
+    r.className = 'row-t' + (off ? ' off' : '');
+    r.innerHTML = `
+      <span class="lbl"><span class="ico">${ing.ico}</span>${name(ing)}</span>
+      <span class="state">${off ? t('without') : t('withIt')}</span>`;
+    r.onclick = () => {
+      off ? draft.removed.delete(ing.id) : draft.removed.add(ing.id);
+      render();
+    };
+    rows.appendChild(r);
+  }
+  main.appendChild(rows);
+  footerBtns(app, [{ html:t('continue'), cls:'primary', on:() => go('addons') }]);
+}
+
+/* 4 · Add-ons (also serves the drinks&sides jump when draft === null) */
+function rAddons(app){
+  const jumpMode = !draft;
+  const main = chrome(app, {
+    kicker: jumpMode ? '' : t('stepAddK'),
+    title: jumpMode ? t('drinksJump').replace('Solo b','B').replace('Just d','D') : t('stepAdd'),
+    step: jumpMode ? 0 : 4,
+    backTo: jumpMode ? 'attract' : (draft.removed && draft.removed.size ? 'modify' : 'style'),
+  });
+
+  const addSection = (label, items, kind) => {
+    const h = document.createElement('p'); h.className = 'sect'; h.textContent = label;
+    main.appendChild(h);
+    const g = document.createElement('div'); g.className = 'grid';
+    for (const it of items){
+      const qty = kind === 'extra'
+        ? (draft ? (draft.extras[it.id] || 0) : 0)
+        : (cart.find(l => l.kind === kind && l.id === it.id)?.qty || 0);
+      const c = document.createElement('button');
+      c.className = 'card' + (qty ? ' on' : '');
+      c.innerHTML = `${qty ? `<span class="qty">×${qty}</span>` : ''}
+        <span class="ico">${it.ico}</span><span class="nm">${name(it)}</span><span class="pr">+${mxn(it.price)}</span>`;
+      c.onclick = () => {
+        if (kind === 'extra' && draft){ draft.extras[it.id] = (draft.extras[it.id] || 0) + 1; toast(t('added') + ' ' + name(it)); render(); }
+        else looseAdd(it, kind);
+      };
+      g.appendChild(c);
+    }
+    main.appendChild(g);
+  };
+
+  if (!jumpMode) addSection(t('extras'), EXTRAS, 'extra');
+  addSection(t('sides'), SIDES, 'side');
+  addSection(t('drinks'), DRINKS, 'drink');
+
+  const done = () => {
+    if (draft){
+      if (editIndex !== null){ cart[editIndex] = { kind:'burrito', ...draft }; editIndex = null; }
+      else cart.push({ kind:'burrito', ...draft });
+      draft = null;
+    }
+    go('summary');
+  };
+  footerBtns(app, [{
+    html: draft || cart.length ? `<span>${t('continue')}</span><small>${t('total')}: ${mxn(cartTotal() + (draft ? draftPrice(draft) : 0))}</small>` : t('skip'),
+    cls:'primary', split: !!(draft || cart.length), on: done,
+  }]);
+}
+
+/* 5 · Summary */
+function rSummary(app){
+  const main = chrome(app, { kicker:t('orderK'), title:t('yourOrder'), step:0, backTo:null });
+  const wrap = document.createElement('div'); wrap.className = 'sum';
+
+  if (!cart.length){
+    const p = document.createElement('p'); p.className = 'hint'; p.textContent = t('emptyCart');
+    wrap.appendChild(p);
+  }
+
+  cart.forEach((line, i) => {
+    const d = document.createElement('div'); d.className = 'sum-item';
+    if (line.kind === 'burrito'){
+      const protNames = line.proteins.map(id => name(PROTEINS.find(p => p.id === id))).join(' + ');
+      const st = STYLES[line.style];
+      const removed = [...line.removed].map(id => {
+        const ing = st.ing.find(x => x.id === id); return ing ? `<span class="rm">${t('without').toLowerCase()} ${name(ing).toLowerCase()}</span>` : '';
+      }).filter(Boolean);
+      const extras = Object.entries(line.extras).map(([id,q]) => {
+        const e = EXTRAS.find(x => x.id === id); return e ? `+ ${name(e)}${q > 1 ? ' ×' + q : ''}` : '';
+      }).filter(Boolean);
+      d.innerHTML = `
+        <div class="top"><b>${line.style === 'fries' ? '🍟 ' + protNames + ' Fries' : '🌯 ' + t('burrito') + ' ' + protNames + ' · ' + name(st)}</b><span>${mxn(draftPrice(line))}</span></div>
+        ${removed.length || extras.length ? `<p class="mods">${[...removed, ...extras].join(' · ')}</p>` : ''}
+        <div class="rowbtns">
+          <button class="mini" data-e="${i}">${t('edit')}</button>
+          <button class="mini" data-x="${i}">${t('remove')}</button>
+        </div>`;
+    } else {
+      d.innerHTML = `
+        <div class="top"><b>${line.ico} ${name(line)}${line.qty > 1 ? ' ×' + line.qty : ''}</b><span>${mxn(line.price * line.qty)}</span></div>
+        <div class="rowbtns"><button class="mini" data-x="${i}">${t('remove')}</button></div>`;
+    }
+    wrap.appendChild(d);
+  });
+
+  if (cart.length){
+    const tot = document.createElement('div'); tot.className = 'total-line';
+    tot.innerHTML = `<span>${t('total')}</span><span>${mxn(cartTotal())}</span>`;
+    wrap.appendChild(tot);
+  }
+  main.appendChild(wrap);
+
+  main.addEventListener('click', (ev) => {
+    const e = ev.target.closest('[data-e]'); const x = ev.target.closest('[data-x]');
+    if (e){
+      const line = cart[Number(e.dataset.e)];
+      draft = { proteins:[...line.proteins], style:line.style, removed:new Set(line.removed), extras:{ ...line.extras } };
+      editIndex = Number(e.dataset.e);
+      go('protein');
+    } else if (x){
+      cart.splice(Number(x.dataset.x), 1); render();
+    }
+  });
+
+  footerBtns(app, [
+    { html:t('anotherBurrito'), cls:'ghost', on:() => { newDraft(); editIndex = null; go('protein'); } },
+    { html:t('addMore'), cls:'ghost', on:() => { draft = null; go('addons'); } },
+    { html:`<span>${t('pay')}</span><small>${mxn(cartTotal())}</small>`, cls:'primary', split:true, disabled:!cart.length,
+      on:() => go('name') },
+  ]);
+}
+
+/* 6 · Name (before payment — the call-out name) */
+function rName(app){
+  const main = chrome(app, { kicker:t('nameK'), title:t('namePrompt'), step:0, backTo:'summary' });
+  const wrap = document.createElement('div'); wrap.className = 'name-wrap';
+  const rows = ['QWERTYUIOP', 'ASDFGHJKLÑ', 'ZXCVBNM'];
+  wrap.innerHTML = `
+    <p class="hint" style="margin:0">${t('nameHint')}</p>
+    <div class="name-display">${customerName || ''}<span class="caret"></span></div>
+    <div class="kb">
+      ${rows.map(r => `<div class="kb-row">${[...r].map(k => `<button class="key" data-k="${k}">${k}</button>`).join('')}</div>`).join('')}
+      <div class="kb-row">
+        <button class="key wide" data-k=" ">${t('space')}</button>
+        <button class="key" data-k="⌫">⌫</button>
+      </div>
+    </div>`;
+  main.appendChild(wrap);
+  main.addEventListener('click', (ev) => {
+    const key = ev.target.closest('[data-k]');
+    if (!key) return;
+    const k = key.dataset.k;
+    if (k === '⌫') customerName = customerName.slice(0, -1);
+    else if (customerName.length < 18) customerName += (k === ' ' ? ' ' : k);
+    render();
+  });
+  const ready = customerName.trim().length >= 2;
+  footerBtns(app, [{
+    html:`<span>${t('payN')}</span><small>${mxn(cartTotal())}</small>`, cls:'primary', split:true, disabled:!ready,
+    on:() => {
+      toast(t('processing'));
+      setTimeout(() => go('done'), 900);   // payment stub — real flow charges here
+    },
+  }]);
+}
+
+/* 7 · Done (after payment — call-out + loyalty QR) */
+function rDone(app){
+  const d = document.createElement('div'); d.className = 'done fade';
+  d.innerHTML = `
+    <div class="check">✓</div>
+    <h1>${t('doneTitle').replace('{n}', customerName.trim())}</h1>
+    <p class="call">📣 ${t('doneBody')}</p>
+    <div class="loyalty-card">
+      <div class="qr">${QR_SVG}</div>
+      <div>
+        <h3>⭐ ${t('loyaltyTitle')}</h3>
+        <p>${t('loyaltyBody')}</p>
+      </div>
+    </div>
+    <button class="btn ghost" id="newOrder" style="max-width:520px">${t('newOrder')}</button>`;
+  app.appendChild(d);
+  $('#newOrder').onclick = () => {
+    cart = []; draft = null; customerName = ''; editIndex = null;
+    go('attract');
+  };
+}
+
+/* route alias for the drinks&sides jump */
+const _go = go;
+go = function(s){
+  if (s === 'addons_only'){ draft = null; screen = 'addons'; render(); return; }
+  _go(s);
+};
+
+render();
+</script>
+</body>
+</html>
