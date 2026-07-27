@@ -107,6 +107,27 @@ class TicketBuilder {
     );
     return this;
   }
+  /**
+   * Print a pre-packed 1-bit raster image (GS v 0, normal mode), fed in
+   * 24-row bands. Banding matters: several ESC/POS clones cap the row count
+   * a single GS v 0 accepts, and consecutive raster commands butt together
+   * seamlessly, so the banded form works on strictly more firmwares than a
+   * single full-height command.
+   *
+   * @param {Buffer} packed     — 1 bit/dot, MSB first, widthBytes per row
+   * @param {number} widthBytes — bytes per row (e.g. 72 = 576 dots = full 80mm)
+   * @param {number} height     — total rows
+   */
+  rasterImage(packed, widthBytes, height, { bandRows = 24 } = {}) {
+    for (let y = 0; y < height; y += bandRows) {
+      const rows = Math.min(bandRows, height - y);
+      this.parts.push(
+        Buffer.from([GS, 0x76, 0x30, 0x00, widthBytes & 0xff, (widthBytes >> 8) & 0xff, rows & 0xff, (rows >> 8) & 0xff]),
+        packed.subarray(y * widthBytes, (y + rows) * widthBytes),
+      );
+    }
+    return this;
+  }
   build() { return Buffer.concat(this.parts); }
 }
 
@@ -306,9 +327,15 @@ export function buildCustomerTicket(ticket) {
   const WIDE = Math.floor(COLS / 2);
 
   // ---- Merchant ------------------------------------------------------
-  // TODO(logo): once diag-raster.sh identifies the printer's graphics mode,
-  // print the tenant logo as a 1-bit raster above this and keep the name as
-  // the fallback for printers with no image support.
+  // Raster logo when the tenant stored one (PUT /api/print-jobs/customer-
+  // ticket-logo converts the upload to packed 1-bit bytes, pre-centered on
+  // the full printable width). The name always prints below it — the logo
+  // is decoration, the name is identification — and doubles as the
+  // fallback for tenants with no logo stored.
+  if (ticket.logo?.data?.length && ticket.logo.widthBytes > 0 && ticket.logo.height > 0) {
+    b.rasterImage(ticket.logo.data, ticket.logo.widthBytes, ticket.logo.height);
+    b.blank();
+  }
   // 'tall' doubles height only — glyphs keep their width, so this wraps
   // against the full row. Only 'big' (double width) needs WIDE.
   b.center().size('tall').bold(true);

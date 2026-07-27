@@ -192,12 +192,34 @@ export async function enqueueCustomerTicket(orderId) {
       console.error(`[PrintQueue] Failed to mint loyalty QR for order ${orderId}:`, qrErr.message);
     }
 
+    // Tenant logo — stored pre-packed as printer raster bytes at upload time
+    // (PUT /api/print-jobs/customer-ticket-logo), so this is a read + base64
+    // decode, no image processing in the payment path. Absent or corrupt →
+    // text-only header, never a failed ticket.
+    let logo = null;
+    try {
+      const storedLogo = await getCredential(tenantId, 'print_agent', 'customer_ticket_logo', '');
+      if (storedLogo) {
+        const meta = JSON.parse(storedLogo);
+        if (meta?.data && meta.width_bytes > 0 && meta.height > 0) {
+          logo = {
+            widthBytes: meta.width_bytes,
+            height: meta.height,
+            data: Buffer.from(meta.data, 'base64'),
+          };
+        }
+      }
+    } catch (logoErr) {
+      console.error(`[PrintQueue] Ignoring bad customer_ticket_logo for ${tenantId}:`, logoErr.message);
+    }
+
     const ticket = {
       tenantName: tenant?.name || 'Ticket',
       orderNumber: order.order_number,
       customerName: order.customer_name || null,
       fulfillmentType: order.order_fulfillment_type || null,
       createdAt: order.paid_at || order.created_at,
+      logo,
       items: items.map(i => ({
         name: i.item_name,
         quantity: Number(i.quantity) || 1,
@@ -221,7 +243,10 @@ export async function enqueueCustomerTicket(orderId) {
       printerId,
       'customer_ticket',
       'pos',
-      JSON.stringify({ format: 'escpos', encoding: 'base64', data, ticket }),
+      // logo excluded from the debug copy: `data` already embeds the raster
+      // bytes, and JSON.stringify would inflate the Buffer to ~5x its size
+      // as a number array on every single paid order.
+      JSON.stringify({ format: 'escpos', encoding: 'base64', data, ticket: { ...ticket, logo: ticket.logo ? '<raster>' : null } }),
     ]);
 
     console.log(`[PrintQueue] Enqueued customer ticket job ${result.lastInsertRowid} for order ${orderId}`);

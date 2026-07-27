@@ -163,6 +163,125 @@ router.put('/customer-ticket-setting', requireAuth('manage_printers'), requirePl
   }
 });
 
+// ==================== Customer ticket logo ====================
+
+// Printable width of an 80mm thermal head: 576 dots = 72 bytes per row.
+const LOGO_PAPER_DOTS = 576;
+const LOGO_MAX_WIDTH = 384;   // ~48mm — logo band, not edge-to-edge
+const LOGO_MAX_HEIGHT = 600;  // ~75mm of paper; caps absurd uploads
+
+/**
+ * PUT /api/print-jobs/customer-ticket-logo
+ * Body: { image: <base64 PNG/JPEG> }
+ *
+ * Converts the upload to the printer's native format ONCE at upload time:
+ * grayscale → hard 1-bit threshold → packed raster bytes, pre-centered on
+ * the 576-dot printable width. Print time then just streams stored bytes —
+ * no image work in the payment path. Thermal heads print 1-bit only, so
+ * the ideal upload is black line art on white; anything grey or colored
+ * gets thresholded and may fill solid.
+ */
+router.put('/customer-ticket-logo', requireAuth('manage_printers'), requirePlanFeature('printers'), async (req, res) => {
+  try {
+    const tenantId = getTenantId();
+    const b64 = String(req.body?.image || '');
+    if (!b64) return res.status(400).json({ error: 'image (base64) requerido' });
+
+    let input;
+    try {
+      input = Buffer.from(b64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+    } catch {
+      return res.status(400).json({ error: 'base64 inválido' });
+    }
+    if (!input.length || input.length > 1_500_000) {
+      return res.status(400).json({ error: 'Imagen vacía o mayor a 1.5MB' });
+    }
+
+    const { default: sharp } = await import('sharp');
+    const { data, info } = await sharp(input)
+      .resize({ width: LOGO_MAX_WIDTH, height: LOGO_MAX_HEIGHT, fit: 'inside', withoutEnlargement: false })
+      .flatten({ background: '#ffffff' })
+      .greyscale()
+      .threshold(160)
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    const { width: W, height: H } = info;
+    const widthBytes = LOGO_PAPER_DOTS / 8; // 72 — full row, image centered inside
+    const leftDots = Math.floor((LOGO_PAPER_DOTS - W) / 2);
+    const packed = Buffer.alloc(widthBytes * H);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (data[(y * W + x) * info.channels] < 128) {
+          const dot = leftDots + x;
+          packed[y * widthBytes + (dot >> 3)] |= 0x80 >> (dot & 7);
+        }
+      }
+    }
+
+    const stored = JSON.stringify({
+      width_bytes: widthBytes,
+      height: H,
+      data: packed.toString('base64'),
+    });
+
+    await adminSql`
+      INSERT INTO tenant_credentials (tenant_id, service, key, value)
+      VALUES (${tenantId}, 'print_agent', 'customer_ticket_logo', ${stored})
+      ON CONFLICT (tenant_id, service, key)
+      DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+    `;
+
+    res.json({ ok: true, width: W, height: H });
+  } catch (error) {
+    console.error('[PrintJobs] Logo upload error:', error);
+    res.status(500).json({ error: 'No pudimos procesar el logo' });
+  }
+});
+
+/**
+ * GET /api/print-jobs/customer-ticket-logo — presence + dimensions only.
+ */
+router.get('/customer-ticket-logo', requireAuth('manage_printers'), async (req, res) => {
+  try {
+    const tenantId = getTenantId();
+    const rows = await adminSql`
+      SELECT value FROM tenant_credentials
+      WHERE tenant_id = ${tenantId} AND service = 'print_agent' AND key = 'customer_ticket_logo'
+      LIMIT 1
+    `;
+    if (!rows[0]) return res.json({ configured: false });
+    try {
+      const meta = JSON.parse(rows[0].value);
+      res.json({ configured: true, height: meta.height || null });
+    } catch {
+      res.json({ configured: true, height: null });
+    }
+  } catch (error) {
+    console.error('[PrintJobs] Logo fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch logo' });
+  }
+});
+
+/**
+ * DELETE /api/print-jobs/customer-ticket-logo
+ * Kill switch: tickets return to text-only header on the next print — the
+ * rollback path if a printer turns out not to support raster images.
+ */
+router.delete('/customer-ticket-logo', requireAuth('manage_printers'), async (req, res) => {
+  try {
+    const tenantId = getTenantId();
+    await adminSql`
+      DELETE FROM tenant_credentials
+      WHERE tenant_id = ${tenantId} AND service = 'print_agent' AND key = 'customer_ticket_logo'
+    `;
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('[PrintJobs] Logo delete error:', error);
+    res.status(500).json({ error: 'Failed to delete logo' });
+  }
+});
+
 /**
  * POST /api/print-jobs/install-code
  * Generates a one-time, 10-minute install code. The Printer Management UI

@@ -17,6 +17,9 @@ import {
   getPrintJobStatus,
   getCustomerTicketSetting,
   updateCustomerTicketSetting,
+  getCustomerTicketLogo,
+  uploadCustomerTicketLogo,
+  deleteCustomerTicketLogo,
   PrintBridgeStatus,
 } from '../api';
 import { Printer, MenuCategory } from '../types';
@@ -42,14 +45,60 @@ export default function PrinterManagement() {
   const [pingResults, setPingResults] = useState<Record<string, { state: 'running' | 'ok' | 'fail'; message?: string }>>({});
   const [autoPrintTicket, setAutoPrintTicket] = useState(false);
   const [autoPrintSaving, setAutoPrintSaving] = useState(false);
+  const [ticketLogoConfigured, setTicketLogoConfigured] = useState(false);
+  const [ticketLogoBusy, setTicketLogoBusy] = useState(false);
+  const [ticketLogoError, setTicketLogoError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
     fetchBridge();
     fetchCustomerTicketSetting();
+    fetchTicketLogo();
     const interval = setInterval(fetchBridge, 15000);
     return () => clearInterval(interval);
   }, []);
+
+  const fetchTicketLogo = async () => {
+    try {
+      const { configured } = await getCustomerTicketLogo();
+      setTicketLogoConfigured(configured);
+    } catch (err) {
+      console.error('Failed to load ticket logo state:', err);
+    }
+  };
+
+  const handleTicketLogoFile = async (file: File | null) => {
+    if (!file) return;
+    setTicketLogoBusy(true);
+    setTicketLogoError(null);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('read failed'));
+        reader.readAsDataURL(file);
+      });
+      await uploadCustomerTicketLogo(base64);
+      setTicketLogoConfigured(true);
+    } catch (err) {
+      setTicketLogoError(err instanceof Error ? err.message : 'Error');
+    } finally {
+      setTicketLogoBusy(false);
+    }
+  };
+
+  const handleRemoveTicketLogo = async () => {
+    setTicketLogoBusy(true);
+    setTicketLogoError(null);
+    try {
+      await deleteCustomerTicketLogo();
+      setTicketLogoConfigured(false);
+    } catch (err) {
+      setTicketLogoError(err instanceof Error ? err.message : 'Error');
+    } finally {
+      setTicketLogoBusy(false);
+    }
+  };
 
   const fetchCustomerTicketSetting = async () => {
     try {
@@ -374,6 +423,54 @@ export default function PrinterManagement() {
                         ? t('printers.customerTicket.toggleOn')
                         : t('printers.customerTicket.toggleOff')}
                   </button>
+                </div>
+
+                {/* Ticket logo — printed as a raster image above the tenant
+                    name. Converted server-side to 1-bit printer bytes once at
+                    upload. */}
+                <div className="flex items-center justify-between gap-4 flex-wrap mt-4 pt-4 border-t border-neutral-800">
+                  <div className="flex-1 min-w-[240px]">
+                    <p className="font-bold text-white">{t('printers.customerTicket.logoTitle')}</p>
+                    <p className="text-sm text-neutral-400 mt-1">{t('printers.customerTicket.logoDescription')}</p>
+                    {ticketLogoError && (
+                      <p className="text-sm text-cockpit-out-text mt-1">{ticketLogoError}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {ticketLogoConfigured && (
+                      <span className="inline-flex items-center gap-1 text-sm text-cockpit-in-text">
+                        <CheckCircle2 size={16} /> {t('printers.customerTicket.logoConfigured')}
+                      </span>
+                    )}
+                    <label className={`px-4 py-2 rounded-lg text-sm font-bold min-h-[40px] inline-flex items-center cursor-pointer transition-colors ${
+                      ticketLogoBusy ? 'opacity-50 pointer-events-none' : ''
+                    } bg-neutral-800 text-neutral-300 hover:bg-neutral-700`}>
+                      {ticketLogoBusy
+                        ? t('printers.customerTicket.logoUploading')
+                        : ticketLogoConfigured
+                          ? t('printers.customerTicket.logoReplace')
+                          : t('printers.customerTicket.logoUpload')}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg"
+                        className="hidden"
+                        disabled={ticketLogoBusy}
+                        onChange={(e) => {
+                          handleTicketLogoFile(e.target.files?.[0] || null);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                    {ticketLogoConfigured && (
+                      <button
+                        onClick={handleRemoveTicketLogo}
+                        disabled={ticketLogoBusy}
+                        className="px-4 py-2 rounded-lg text-sm font-bold min-h-[40px] bg-neutral-800 text-cockpit-out-text hover:bg-neutral-700 disabled:opacity-50 transition-colors"
+                      >
+                        {t('printers.customerTicket.logoRemove')}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

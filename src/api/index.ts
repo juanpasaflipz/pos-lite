@@ -1752,6 +1752,26 @@ export async function updateCustomerTicketSetting(enabled: boolean): Promise<{ e
   });
 }
 
+// Tenant logo on the auto-printed customer ticket. Uploaded once as a normal
+// image; the server converts it to the printer's 1-bit raster format at
+// upload time and stores the packed bytes.
+export async function getCustomerTicketLogo(): Promise<{ configured: boolean; height?: number | null }> {
+  return apiRequest<{ configured: boolean; height?: number | null }>('/print-jobs/customer-ticket-logo');
+}
+
+export async function uploadCustomerTicketLogo(imageBase64: string): Promise<{ ok: boolean; width: number; height: number }> {
+  return apiRequest<{ ok: boolean; width: number; height: number }>('/print-jobs/customer-ticket-logo', {
+    method: 'PUT',
+    body: JSON.stringify({ image: imageBase64 }),
+  });
+}
+
+export async function deleteCustomerTicketLogo(): Promise<{ ok: boolean }> {
+  return apiRequest<{ ok: boolean }>('/print-jobs/customer-ticket-logo', {
+    method: 'DELETE',
+  });
+}
+
 export interface PrinterPingResult {
   status: 'queued' | 'bridge_offline' | 'not_configured';
   job_id?: number;

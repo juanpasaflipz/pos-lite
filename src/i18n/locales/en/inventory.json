@@ -648,7 +648,14 @@
       "description": "When on, every counter order paid prints a second ticket automatically on the same kitchen printer: customer name, for-here/to-go, and a QR to join the loyalty program. We recommend testing with \"Test print\" before turning this on during service.",
       "toggleOn": "On",
       "toggleOff": "Off",
-      "saving": "Saving…"
+      "saving": "Saving…",
+      "logoTitle": "Ticket logo",
+      "logoDescription": "Printed above the name on the customer ticket. Upload black line art on a white background (PNG or JPG) — the thermal printer only prints solid black.",
+      "logoConfigured": "Logo set",
+      "logoUpload": "Upload logo",
+      "logoReplace": "Replace",
+      "logoRemove": "Remove",
+      "logoUploading": "Processing..."
     }
   },
   "recipe": {

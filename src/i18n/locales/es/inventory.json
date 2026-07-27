@@ -648,7 +648,14 @@
       "description": "Al activarlo, cada orden pagada en el mostrador imprime automáticamente un segundo ticket en la misma impresora de cocina: nombre del cliente, para aquí/para llevar, y un QR para sumarse al programa de lealtad. Recomendamos probarlo primero con \"Impresión de prueba\" antes de activarlo en servicio.",
       "toggleOn": "Activado",
       "toggleOff": "Desactivado",
-      "saving": "Guardando…"
+      "saving": "Guardando…",
+      "logoTitle": "Logo en el ticket",
+      "logoDescription": "Se imprime arriba del nombre en el ticket del cliente. Sube el logo en línea negra sobre fondo blanco (PNG o JPG) — la impresora térmica solo imprime negro sólido.",
+      "logoConfigured": "Logo cargado",
+      "logoUpload": "Subir logo",
+      "logoReplace": "Reemplazar",
+      "logoRemove": "Quitar",
+      "logoUploading": "Procesando..."
     }
   },
   "recipe": {
