@@ -278,12 +278,18 @@
     "modeNew": "Nuevo Cliente",
     "byPhone": "Teléfono",
     "byName": "Nombre",
+    "byScan": "Escanear",
     "namePlaceholder": "Nombre o nombre completo",
     "nameTooShort": "Escribe al menos 2 letras",
     "noNameMatch": "Sin clientes con ese nombre",
     "nameResultsCount": "{{count}} resultados — elige uno",
     "searchAgain": "Buscar otra vez",
-    "passScanNotFound": "Esa tarjeta digital no coincide con ningún cliente. Busca por teléfono."
+    "passScanNotFound": "Esa tarjeta digital no coincide con ningún cliente. Busca por teléfono.",
+    "scanStarting": "Iniciando cámara...",
+    "scanCameraDenied": "Acceso a la cámara denegado. Permite el acceso a la cámara o usa búsqueda por teléfono.",
+    "scanCameraUnavailable": "La cámara no está disponible en este dispositivo. Usa búsqueda por teléfono.",
+    "scanInstruction": "Acerca el código QR de la tarjeta digital del cliente a la cámara",
+    "scanFallback": "Si el escaneo no funciona, cambia a búsqueda por teléfono"
   },
   "refund": {
     "title": "Reembolso",

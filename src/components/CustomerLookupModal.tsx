@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { UserPlus, Search, X, Gift, Phone, User } from 'lucide-react';
+import { UserPlus, Search, X, Gift, Phone, User, Camera } from 'lucide-react';
 import type { LoyaltyCustomer } from '../types';
 import { lookupLoyaltyCustomer, lookupLoyaltyCustomerByPass, createLoyaltyCustomer, searchLoyaltyCustomersByName } from '../api';
 import { formatPhone } from '../utils/phone';
+import QrPassScanner from './QrPassScanner';
 
 interface Props {
   onCustomerLinked: (customer: LoyaltyCustomer) => void;
@@ -12,7 +13,7 @@ interface Props {
 
 type Mode = 'existing' | 'new';
 type Phase = 'search' | 'found' | 'register' | 'name-results';
-type SearchBy = 'phone' | 'name';
+type SearchBy = 'phone' | 'name' | 'scan';
 type Country = 'MX' | 'US';
 
 const COUNTRIES: Array<{ code: Country; label: string; dial: string }> = [
@@ -62,25 +63,33 @@ export default function CustomerLookupModal({ onCustomerLinked, onClose }: Props
     setPhase('search');
   };
 
-  const handleSearch = async () => {
+  // Core lookup, shared by the phone-field flow (typed digits, or a
+  // keyboard-wedge scanner typing "dk-loyalty:<serial>" + Enter into the
+  // field) and the camera scan flow (QrPassScanner decodes the same payload
+  // straight from a member's wallet-pass QR, no typing at all).
+  const runLookup = async (value: string, opts?: { viaCamera?: boolean }) => {
     if (busy) return;
-    if (!isPassScan && !phoneValid) {
+    const trimmed = value.trim();
+    const passScan = trimmed.toLowerCase().startsWith('dk-loyalty:');
+    const enteredDigits = trimmed.replace(/\D/g, '');
+    if (!passScan && enteredDigits.length < 10) {
       setError(t('customerLookup.enterDigits'));
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const customer = isPassScan
-        ? await lookupLoyaltyCustomerByPass(scanValue)
-        : await lookupLoyaltyCustomer(digits, country);
+      const customer = passScan
+        ? await lookupLoyaltyCustomerByPass(trimmed)
+        : await lookupLoyaltyCustomer(enteredDigits, country);
       setFoundCustomer(customer);
       setPhase('found');
     } catch (err: any) {
       const msg = err?.message ?? '';
-      if (isPassScan) {
+      if (passScan || opts?.viaCamera) {
         // A scanned pass that doesn't resolve is NOT a new customer — the
-        // pass is revoked/foreign. Clear the field for a phone retry.
+        // pass is revoked/foreign. Clear the field for a phone retry; the
+        // camera scan stays mounted and simply re-arms for another attempt.
         setPhone('');
         setError(t('customerLookup.passScanNotFound'));
       } else if (/not found/i.test(msg) || /\b404\b/.test(msg)) {
@@ -94,6 +103,10 @@ export default function CustomerLookupModal({ onCustomerLinked, onClose }: Props
       setBusy(false);
     }
   };
+
+  const handleSearch = () => runLookup(scanValue);
+
+  const handleScanDetected = (value: string) => runLookup(value, { viaCamera: true });
 
   const handleNameSearch = async () => {
     if (!nameValid || busy) {
@@ -205,7 +218,7 @@ export default function CustomerLookupModal({ onCustomerLinked, onClose }: Props
               New-customer flow always collects phone since that's the loyalty
               key on the backend. */}
           {mode === 'existing' && (
-            <div className="grid grid-cols-2 gap-1 p-1 bg-neutral-800 rounded-lg">
+            <div className="grid grid-cols-3 gap-1 p-1 bg-neutral-800 rounded-lg">
               <button
                 onClick={() => switchSearchBy('phone')}
                 className={`py-2 text-xs font-bold rounded-md transition-colors min-h-[36px] inline-flex items-center justify-center gap-1.5 ${
@@ -223,6 +236,15 @@ export default function CustomerLookupModal({ onCustomerLinked, onClose }: Props
               >
                 <User size={14} />
                 {t('customerLookup.byName')}
+              </button>
+              <button
+                onClick={() => switchSearchBy('scan')}
+                className={`py-2 text-xs font-bold rounded-md transition-colors min-h-[36px] inline-flex items-center justify-center gap-1.5 ${
+                  searchBy === 'scan' ? 'bg-neutral-700 text-white' : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                <Camera size={14} />
+                {t('customerLookup.byScan')}
               </button>
             </div>
           )}
@@ -306,6 +328,10 @@ export default function CustomerLookupModal({ onCustomerLinked, onClose }: Props
                 />
               </div>
             </div>
+          )}
+
+          {mode === 'existing' && phase === 'search' && searchBy === 'scan' && (
+            <QrPassScanner busy={busy} onDetected={handleScanDetected} />
           )}
 
           {mode === 'existing' && phase === 'search' && searchBy === 'phone' && (
