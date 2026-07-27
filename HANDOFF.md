@@ -7,6 +7,74 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-07-27 (Kiosk burrito-builder — Phase 1 seed **DONE**) — Claude Code — closes work order below
+
+Seed applied to prod Neon for tenant `juanbertos`. Script:
+`scripts/seed-builder-menu.mjs` (`--tenant <id|subdomain>` required, `--dry-run`
+optional, idempotent, single transaction).
+
+**What landed:**
+- Category `Arma tu burrito` (id **2392**, `active=false`)
+- 10 items, all `active=false`: 7 builder burritos + Birria + Cochinita + Rollbertos
+- 29 modifier groups (per-item `__<slug>` copies of Estilo/Segunda/Quitar/Extras
+  for each of the 7 builders + 1 required `¿Con birria o cochinita?` for Rollbertos)
+- 136 modifier options
+- 29 item↔group links
+
+**Schema reality vs spec:** modifier_groups is tenant-scoped and shared, no
+per-item price overrides on the join. Followed the spec's contingency plan —
+one group instance per item with internal `__<protein-slug>` suffix (invisible
+to customers, wizard keys on `modifierMap[item.id]`). No schema change needed.
+
+**Verifications:**
+- ✓ 5 acceptance-check totals passed (Asada+Fries=299, Asada+Camarón=340,
+  Huevo+Chorizo=210, Pescado+Asada=355, Rollbertos=139) — computed from the
+  seed's own numbers so any spec/matrix drift would fail loud
+- ✓ Rerun: 0 INSERT / 0 UPDATE / 10 NOOP (idempotent)
+- ✓ Live `/api/customer-order/menu` for `juanbertos.desktop.kitchen` returns
+  zero seeded items — empirically invisible
+- ✓ Post-seed safety query: 0 seeded items with `active=true`
+
+**Still pending Juan's confirmation:** 67 ⚠️ placeholder prices — all fries
+adjustments except Asada($49→confirmed) and Porkbelly($69→confirmed), every
+non-anchor Segunda cell (+$90 fallback rule), and Extras (35/25/20). Full
+table prints at the end of any seed run. Fix by editing the constants at the
+top of `scripts/seed-builder-menu.mjs` and re-running — the script will
+UPDATE-in-place, no ID churn.
+
+**Untouched, per handoff:** the 07-26 kiosk responsive changes still sitting
+uncommitted (nothing in this seed goes near `kiosk/`).
+
+---
+
+## 2026-07-27 (Kiosk burrito-builder — Phase 1 menu seed) — Cowork agent — **WORK ORDER, ready to implement**
+
+Juan is redesigning the kiosk into a guided burrito-builder (protein → estilo →
+quitar → extras), prototyped and approved in `design/kiosk-builder-prototype.html`
+(v11 — open it in a browser to see the exact flow). Rollout plan agreed with Juan:
+Phase 1 = model the builder menu in the REAL menu system, invisible to customers;
+Phase 2 = wizard UI in kiosk/ behind a per-tenant flag; Phase 3 = pilot on juanbertos.
+
+**This entry is the Phase 1 work order.** Full spec — every item, modifier group,
+and computed price adjustment (Estilo per-item Fries adjustments, the complete
+7×7 Segunda-proteina matrix with the two real anchors asada+camaron=$340 and
+huevo+chorizo=$210, Quitar, Extras, and the three fixed items Birria $99 /
+Cochinita $99 / Rollbertos $139 with its required con-birria-o-cochinita group) —
+is in **`design/kiosk-builder-menu-spec.md`**. Follow it exactly; the matrix is
+machine-verified against the pricing rules.
+
+Non-negotiables (details in the spec): (1) everything seeded INVISIBLE to live
+customers — verify empirically against the kiosk/QR menu payloads, don't assume;
+(2) zero changes to existing live items; (3) idempotent seed script with
+--dry-run, scoped to the juanbertos tenant only; (4) check the real modifier
+schema first (per-item groups assumed) and flag mismatches rather than
+approximating; (5) print the placeholder-price table (marked with warning signs in the spec) for
+Juan at the end — those numbers are unconfirmed.
+
+Out of scope here: wizard UI, tenant flag, ticket format, hiding today's items.
+Also still pending in this repo, unrelated: the 07-26 kiosk responsive changes
+are uncommitted/untested — commit those first if you touch kiosk/.
+
 ## 2026-07-25 (Manual & imported sales entry) — Cowork agent — **NEEDS `npm test` + PUSH**
 
 **UPDATE, same day — validated against a REAL DiDi export and materially
