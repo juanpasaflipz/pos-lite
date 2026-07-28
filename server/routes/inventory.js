@@ -3,6 +3,11 @@ import { Router } from 'express';
 import { all, get, run, getTenantId } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { checkLimit, planUpgradeError } from '../planLimits.js';
+import {
+  buildResetPreview,
+  resetInventoryData,
+  InventoryStillReferencedError,
+} from '../helpers/inventoryReset.js';
 import { modelFor } from '../lib/aiModels.js';
 // AI data pipeline removed in pos-lite
 const logRestockEvent = () => {};
@@ -706,6 +711,73 @@ router.delete('/:id', requireAuth('manage_inventory'), async (req, res) => {
   } catch (error) {
     console.error('Error deleting inventory item:', error);
     res.status(500).json({ error: 'Failed to delete inventory item' });
+  }
+});
+
+// ==================== Inventory Reset (danger zone) ====================
+//
+// Clears inventory left behind by testing the system. Two modes, both
+// irreversible — see server/helpers/inventoryReset.js for what each touches.
+// 'wipe' is admin-only: it destroys menu cost math, not just stock levels.
+
+// GET /api/inventory/reset/preview - row counts a reset would touch
+router.get('/reset/preview', requireAuth('manage_inventory'), async (_req, res) => {
+  try {
+    res.json(await buildResetPreview(getTenantId()));
+  } catch (error) {
+    console.error('Error building inventory reset preview:', error);
+    res.status(500).json({ error: 'Failed to load reset preview' });
+  }
+});
+
+// POST /api/inventory/reset - zero out stock, or wipe the inventory slate
+router.post('/reset', requireAuth('manage_inventory'), async (req, res) => {
+  try {
+    const { mode, confirm } = req.body || {};
+
+    if (mode !== 'zero' && mode !== 'wipe') {
+      return res.status(400).json({ error: "mode must be 'zero' or 'wipe'" });
+    }
+
+    // Typed confirmation, in either language the UI runs in.
+    const word = typeof confirm === 'string' ? confirm.trim().toUpperCase() : '';
+    if (word !== 'BORRAR' && word !== 'DELETE') {
+      return res.status(400).json({ error: 'Confirmation word required' });
+    }
+
+    // A wipe destroys recipes and menu cost math, so it stays with the owner
+    // even if a tenant has granted manage_inventory more widely.
+    if (mode === 'wipe' && req.employee?.role !== 'admin') {
+      return res.status(403).json({
+        error: 'Only an admin can delete the whole inventory. Use "zero out stock" instead.',
+      });
+    }
+
+    const tenantId = getTenantId();
+
+    // No BEGIN here — tenantMiddleware owns the request transaction, so either
+    // every statement in the reset lands or none of them do.
+    let result;
+    try {
+      result = await resetInventoryData({ mode, tenantId });
+    } catch (error) {
+      if (error instanceof InventoryStillReferencedError) {
+        return res.status(409).json({
+          error: `${error.message} — reset aborted, nothing was deleted.`,
+        });
+      }
+      throw error;
+    }
+
+    console.log(
+      `[inventory-reset] tenant=${tenantId} mode=${mode} by=${req.employee?.id} ` +
+      `items=${result.items_affected} ${JSON.stringify(result.deleted)}`
+    );
+
+    res.json({ mode, ...result });
+  } catch (error) {
+    console.error('Error resetting inventory:', error);
+    res.status(500).json({ error: 'Failed to reset inventory' });
   }
 });
 

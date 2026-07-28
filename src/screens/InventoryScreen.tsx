@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   ScanLine,
   Trash2,
+  AlertOctagon,
 } from 'lucide-react';
 import {
   getInventory,
@@ -51,6 +52,7 @@ import {
 } from '../types';
 import BrandLogo from '../components/BrandLogo';
 import { usePlan } from '../context/PlanContext';
+import { useAuth } from '../context/AuthContext';
 import StockTab from '../components/inventory/StockTab';
 import InventoryPulseGrid, { PulseBucket } from '../components/inventory/InventoryPulseGrid';
 import UnlinkedPurchasesBanner from '../components/inventory/UnlinkedPurchasesBanner';
@@ -66,6 +68,7 @@ import AlertsTab from '../components/inventory/AlertsTab';
 import AIInsightsTab from '../components/inventory/AIInsightsTab';
 import StaleStockPanel from '../components/inventory/StaleStockPanel';
 import ShelfLifeAuditBanner from '../components/inventory/ShelfLifeAuditBanner';
+import InventoryResetModal from '../components/inventory/InventoryResetModal';
 
 type Tab = 'stock' | 'scan' | 'waste' | 'count' | 'variance' | 'alerts' | 'insights';
 type SortField = 'name' | 'quantity' | 'status';
@@ -98,7 +101,9 @@ const emptyInventoryForm: InventoryItemForm = {
 export default function InventoryScreen() {
   const { t } = useTranslation('inventory');
   const { limits } = usePlan();
+  const { currentEmployee } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('stock');
+  const [resetModalOpen, setResetModalOpen] = useState(false);
 
   // Stock tab state
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -207,6 +212,18 @@ export default function InventoryScreen() {
     } finally {
       setUnlinkedLoading(false);
     }
+  };
+
+  // A reset touches items, history and (in wipe mode) recipes — reload every
+  // panel on this screen rather than trusting local state.
+  const handleResetComplete = async () => {
+    setError(null);
+    await Promise.all([
+      fetchItems(),
+      loadPulseBuckets(),
+      loadUnlinked(),
+      loadCostReviewCount(),
+    ]);
   };
 
   const handleUnlinkedLinked = async () => {
@@ -874,6 +891,32 @@ export default function InventoryScreen() {
               onDeleteItem={handleDeleteItem}
               onCloseItemForm={closeItemForm}
               onShowForecastsChange={setShowForecasts}
+            />
+
+            {/* Danger zone — clears inventory left over from testing the system */}
+            <div className="mt-10 border border-brand-900 bg-brand-950/20 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <AlertOctagon size={20} className="text-brand-400 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-white font-semibold text-sm">{t('reset.zoneTitle')}</h3>
+                  <p className="text-neutral-400 text-xs mt-1 max-w-xl leading-relaxed">
+                    {t('reset.zoneDescription')}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setResetModalOpen(true)}
+                className="px-4 py-2 min-h-[40px] bg-brand-700 hover:bg-brand-600 text-white rounded-lg text-sm font-semibold whitespace-nowrap"
+              >
+                {t('reset.zoneButton')}
+              </button>
+            </div>
+
+            <InventoryResetModal
+              open={resetModalOpen}
+              isAdmin={currentEmployee?.role === 'admin'}
+              onClose={() => setResetModalOpen(false)}
+              onReset={handleResetComplete}
             />
           </>
         )}

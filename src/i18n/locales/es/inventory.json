@@ -815,5 +815,39 @@
     "close": "Cerrar",
     "linkedProgress": "{{linked}} de {{total}} enlazados",
     "tapToBindHint": "Toca un resultado para enlazar"
+  },
+  "reset": {
+    "zoneTitle": "Zona de peligro",
+    "zoneDescription": "¿Probaste el sistema con inventario de prueba? Deja el inventario en cero o bórralo por completo para empezar de nuevo. No se puede deshacer.",
+    "zoneButton": "Restablecer inventario",
+    "title": "Restablecer inventario",
+    "intro": "Elige qué tan a fondo quieres limpiar. Ninguna de las dos opciones se puede deshacer.",
+    "modes": {
+      "zero": {
+        "title": "Poner todo en cero",
+        "description": "Conserva tus productos, costos, mínimos y recetas. Pone todas las cantidades en 0 y borra el historial de conteos, mermas, alertas y costos."
+      },
+      "wipe": {
+        "title": "Borrar todo el inventario",
+        "description": "Elimina todos los productos y todo lo que los referencia: historial, órdenes de compra, proveedores enlazados y las recetas del menú. Tu menú se queda, pero sin costos.",
+        "adminOnly": "Solo un administrador puede borrar todo el inventario."
+      }
+    },
+    "loadingPreview": "Calculando qué se va a afectar...",
+    "preview": {
+      "zeroItems": "{{count}} productos con existencia pasan a 0",
+      "wipeItems": "Se eliminan {{count}} productos del inventario",
+      "history": "Se borran {{count}} registros de historial (conteos, mermas, alertas, costos)",
+      "keepsCatalog": "Se conservan productos, costos, recetas y proveedores",
+      "recipes": "Se borran {{count}} enlaces de recetas — tus platillos quedan sin costo",
+      "unavailable": "No se pudo calcular la vista previa"
+    },
+    "confirmWord": "BORRAR",
+    "confirmLabel": "Escribe {{word}} para confirmar",
+    "cancel": "Cancelar",
+    "confirmZero": "Poner en cero",
+    "confirmWipe": "Borrar todo",
+    "working": "Restableciendo...",
+    "failed": "Error al restablecer el inventario"
   }
 }

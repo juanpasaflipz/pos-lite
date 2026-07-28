@@ -1118,6 +1118,36 @@ export async function deleteInventoryItem(id: number): Promise<{ id: number; del
   });
 }
 
+export type InventoryResetMode = 'zero' | 'wipe';
+
+export interface InventoryResetPreview {
+  inventory_items: number;
+  items_with_stock: number;
+  history_rows: number;
+  recipe_links: number;
+  counts: Record<string, number>;
+}
+
+export interface InventoryResetResult {
+  mode: InventoryResetMode;
+  items_affected: number;
+  deleted: Record<string, number>;
+}
+
+export async function getInventoryResetPreview(): Promise<InventoryResetPreview> {
+  return apiRequest<InventoryResetPreview>('/inventory/reset/preview');
+}
+
+export async function resetInventory(
+  mode: InventoryResetMode,
+  confirm: string
+): Promise<InventoryResetResult> {
+  return apiRequest<InventoryResetResult>('/inventory/reset', {
+    method: 'POST',
+    body: JSON.stringify({ mode, confirm }),
+  });
+}
+
 /* ==================== Waste Endpoints ==================== */
 
 export async function logWaste(data: {

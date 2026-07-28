@@ -815,5 +815,39 @@
     "close": "Close",
     "linkedProgress": "{{linked}} of {{total}} linked",
     "tapToBindHint": "Tap a result to link"
+  },
+  "reset": {
+    "zoneTitle": "Danger zone",
+    "zoneDescription": "Tested the system with dummy inventory? Zero out your stock or delete it entirely to start from scratch. This cannot be undone.",
+    "zoneButton": "Reset inventory",
+    "title": "Reset inventory",
+    "intro": "Pick how deep the clean should go. Neither option can be undone.",
+    "modes": {
+      "zero": {
+        "title": "Zero out stock",
+        "description": "Keeps your items, costs, thresholds and recipes. Sets every quantity to 0 and clears count, waste, alert and cost history."
+      },
+      "wipe": {
+        "title": "Delete all inventory",
+        "description": "Removes every item and everything referencing it: history, purchase orders, vendor links and menu recipes. Your menu survives, but without cost math.",
+        "adminOnly": "Only an admin can delete the whole inventory."
+      }
+    },
+    "loadingPreview": "Working out what this touches...",
+    "preview": {
+      "zeroItems": "{{count}} items with stock drop to 0",
+      "wipeItems": "{{count}} inventory items deleted",
+      "history": "{{count}} history rows cleared (counts, waste, alerts, costs)",
+      "keepsCatalog": "Items, costs, recipes and vendors are kept",
+      "recipes": "{{count}} recipe links deleted — your menu items lose their cost",
+      "unavailable": "Preview unavailable"
+    },
+    "confirmWord": "DELETE",
+    "confirmLabel": "Type {{word}} to confirm",
+    "cancel": "Cancel",
+    "confirmZero": "Zero out stock",
+    "confirmWipe": "Delete everything",
+    "working": "Resetting...",
+    "failed": "Failed to reset inventory"
   }
 }
