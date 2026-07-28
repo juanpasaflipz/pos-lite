@@ -380,10 +380,17 @@ async function buildKioskOrderItems(tenantId, items) {
     throw err;
   }
 
+  // Menu items normally require active=true, but builder-menu items are
+  // deliberately active=false (they're keyed via kiosk_builder_map and only
+  // exposed through the wizard flow). Widen the filter to accept either — the
+  // kiosk_builder_map membership acts as an allowlist so no other hidden item
+  // can leak into a cart. Modifier validation below still enforces that every
+  // chosen modifier belongs to a group attached to the item.
   const menuRows = await adminSql.unsafe(`
     SELECT id, name, price
     FROM menu_items
-    WHERE tenant_id = $1 AND active = true AND id = ANY($2::int[])
+    WHERE tenant_id = $1 AND id = ANY($2::int[])
+      AND (active = true OR id IN (SELECT menu_item_id FROM kiosk_builder_map WHERE tenant_id = $1))
   `, [tenantId, menuIds]);
   const menuById = new Map(menuRows.map((row) => [Number(row.id), row]));
 
