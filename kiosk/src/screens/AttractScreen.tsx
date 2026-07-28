@@ -118,15 +118,18 @@ const AttractScreen: React.FC = () => {
         <LanguageToggle />
       </div>
 
-      <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4 pb-4">
+      {/* Grid: content-start + auto-rows-min keeps tiles at their natural
+          height so they don't stretch to fill the remaining vertical space.
+          Two rows of four on tablet, one column stacked on phone. */}
+      <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4 pb-4 content-start auto-rows-min">
         {presets.map((p) => (
           <button
             key={p.label + p.sub}
             onClick={() => startPreset(p.preset)}
-            className="bg-brand-700 hover:bg-brand-800 rounded-2xl p-4 sm:p-6 min-h-[140px] flex flex-col items-start justify-between text-left touch-manipulation"
+            className="bg-brand-700 hover:bg-brand-800 rounded-2xl p-4 sm:p-5 min-h-[110px] flex flex-col items-start justify-center gap-1 text-left touch-manipulation"
           >
-            <div className="text-lg sm:text-2xl font-black leading-tight">{p.label}</div>
-            <div className="text-sm sm:text-base text-white/75">{p.sub}</div>
+            <div className="text-lg sm:text-xl font-black leading-tight">{p.label}</div>
+            <div className="text-sm sm:text-base text-white/75 leading-snug">{p.sub}</div>
           </button>
         ))}
       </div>
