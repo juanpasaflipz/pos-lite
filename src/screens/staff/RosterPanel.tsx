@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Plus, Edit2, X, Check, Eye, EyeOff, AlertCircle, KeyRound, Copy,
+  Plus, Edit2, X, Check, Eye, EyeOff, AlertCircle, KeyRound, Copy, Phone,
 } from 'lucide-react';
 import {
   getEmployees, createEmployee, updateEmployee, toggleEmployee,
@@ -17,6 +17,23 @@ interface FormData {
   name: string;
   pin: string;
   role: RoleType;
+  phone: string;
+}
+
+const EMPTY_FORM: FormData = { name: '', pin: '', role: 'cashier', phone: '' };
+
+/**
+ * Display an E.164 staff number as `+52 55 1234 5678`. Purely cosmetic — the
+ * server owns normalization, so the raw value round-trips untouched.
+ */
+function formatPhone(raw?: string | null): string {
+  const value = String(raw || '').trim();
+  const digits = value.replace(/\D/g, '');
+  if (digits.length < 10) return value;
+  const local = digits.slice(-10);
+  const cc = digits.slice(0, -10);
+  const grouped = `${local.slice(0, 2)} ${local.slice(2, 6)} ${local.slice(6)}`;
+  return cc ? `+${cc} ${grouped}` : grouped;
 }
 
 /**
@@ -31,7 +48,7 @@ export default function RosterPanel() {
   const [error, setError] = useState<string | null>(null);
   const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [formData, setFormData] = useState<FormData>({ name: '', pin: '', role: 'cashier' });
+  const [formData, setFormData] = useState<FormData>(EMPTY_FORM);
   const [formErrors, setFormErrors] = useState<Partial<FormData>>({});
   const [actionLoading, setActionLoading] = useState(false);
   const [showPin, setShowPin] = useState<number | null>(null);
@@ -58,10 +75,34 @@ export default function RosterPanel() {
   const validateForm = (): boolean => {
     const errors: Partial<FormData> = {};
     if (!formData.name.trim()) errors.name = t('employees.nameRequired');
-    if (!formData.pin) errors.pin = t('employees.pinRequired');
-    else if (!/^\d{4}$/.test(formData.pin)) errors.pin = t('employees.pinFormat');
+    // PINs are stored bcrypt-hashed and never returned by GET /employees, so
+    // the edit form always opens with an empty box. Requiring one here would
+    // mean no field can be changed without also resetting the employee's PIN.
+    // Blank on edit = leave it alone; use the key icon to actually reset.
+    if (!formData.pin) {
+      if (modalMode === 'add') errors.pin = t('employees.pinRequired');
+    } else if (!/^\d{4}$/.test(formData.pin)) {
+      errors.pin = t('employees.pinFormat');
+    }
+    // Phone stays optional — an employee who never uses WhatsApp ops doesn't
+    // need one. But a half-typed number is a silent no-match later, so reject it.
+    const phoneDigits = formData.phone.replace(/\D/g, '');
+    if (formData.phone.trim() && phoneDigits.length < 10) {
+      errors.phone = t('employees.phoneFormat');
+    }
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
+  };
+
+  /** A duplicate number is a 409 naming the employee who already holds it. */
+  const describeSaveError = (err: unknown, fallbackKey: string): string => {
+    const e = err as Error & { status?: number; conflictWith?: string };
+    if (e?.status === 409) {
+      return e.conflictWith
+        ? t('employees.phoneTakenBy', { name: e.conflictWith })
+        : t('employees.phoneTaken');
+    }
+    return err instanceof Error ? err.message : t(fallbackKey);
   };
 
   const handleAdd = async () => {
@@ -73,7 +114,7 @@ export default function RosterPanel() {
       await fetchEmployees();
       closeModal();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('employees.failedAdd'));
+      setError(describeSaveError(err, 'employees.failedAdd'));
     } finally {
       setActionLoading(false);
     }
@@ -84,11 +125,15 @@ export default function RosterPanel() {
     try {
       setActionLoading(true);
       setError(null);
-      await updateEmployee(editingId, formData);
+      // Omit an untouched PIN so the server leaves the hash — and every issued
+      // JWT for this employee — alone. Sending '' would fail validation above,
+      // but being explicit keeps the intent readable.
+      const { pin, ...rest } = formData;
+      await updateEmployee(editingId, pin ? formData : rest);
       await fetchEmployees();
       closeModal();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('employees.failedUpdate'));
+      setError(describeSaveError(err, 'employees.failedUpdate'));
     } finally {
       setActionLoading(false);
     }
@@ -117,14 +162,19 @@ export default function RosterPanel() {
   };
 
   const openAdd = () => {
-    setFormData({ name: '', pin: '', role: 'cashier' });
+    setFormData(EMPTY_FORM);
     setFormErrors({});
     setEditingId(null);
     setModalMode('add');
   };
 
   const openEdit = (employee: Employee) => {
-    setFormData({ name: employee.name, pin: employee.pin || '', role: employee.role as RoleType });
+    setFormData({
+      name: employee.name,
+      pin: employee.pin || '',
+      role: employee.role as RoleType,
+      phone: employee.phone || '',
+    });
     setFormErrors({});
     setEditingId(employee.id);
     setModalMode('edit');
@@ -133,7 +183,7 @@ export default function RosterPanel() {
   const closeModal = () => {
     setModalMode(null);
     setEditingId(null);
-    setFormData({ name: '', pin: '', role: 'cashier' });
+    setFormData(EMPTY_FORM);
     setFormErrors({});
   };
 
@@ -230,6 +280,15 @@ export default function RosterPanel() {
                     >
                       {showPin === employee.id ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
+                    {/* The phone is what WhatsApp ops matches an inbound sender
+                        against — surfacing "sin teléfono" here is the answer to
+                        "I sent a photo and nothing happened". */}
+                    <span className="flex items-center gap-1.5">
+                      <Phone size={14} className={employee.phone ? 'text-neutral-500' : 'text-amber-500'} />
+                      {employee.phone
+                        ? formatPhone(employee.phone)
+                        : <span className="text-amber-500">{t('employees.noPhone')}</span>}
+                    </span>
                   </div>
                 </div>
 
@@ -290,7 +349,12 @@ export default function RosterPanel() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-neutral-300 mb-2">{t('employees.pin')}</label>
+                <label className="block text-sm font-medium text-neutral-300 mb-2">
+                  {t('employees.pin')}
+                  {modalMode === 'edit' && (
+                    <span className="ml-2 font-normal text-neutral-500">{t('employees.optional')}</span>
+                  )}
+                </label>
                 <input
                   type="text"
                   value={formData.pin}
@@ -298,11 +362,30 @@ export default function RosterPanel() {
                     const v = e.target.value.replace(/\D/g, '').slice(0, 4);
                     setFormData({ ...formData, pin: v });
                   }}
-                  placeholder={t('employees.pinPlaceholder')}
+                  placeholder={modalMode === 'edit' ? t('employees.pinUnchanged') : t('employees.pinPlaceholder')}
                   maxLength={4}
                   className="w-full px-4 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-brand-600 tracking-widest text-center text-lg"
                 />
                 {formErrors.pin && <p className="text-brand-400 text-sm mt-1">{formErrors.pin}</p>}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-neutral-300 mb-2">
+                  {t('employees.phone')}
+                  <span className="ml-2 font-normal text-neutral-500">{t('employees.optional')}</span>
+                </label>
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="off"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  placeholder={t('employees.phonePlaceholder')}
+                  className="w-full px-4 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-brand-600"
+                />
+                {formErrors.phone
+                  ? <p className="text-brand-400 text-sm mt-1">{formErrors.phone}</p>
+                  : <p className="text-neutral-500 text-xs mt-1">{t('employees.phoneHelp')}</p>}
               </div>
 
               <div>

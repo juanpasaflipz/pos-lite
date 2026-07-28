@@ -7,7 +7,39 @@ import { requireAuth } from '../middleware/auth.js';
 import { checkLimit, planUpgradeError } from '../planLimits.js';
 import { audit } from '../lib/auditLog.js';
 import { sendPinEmail, sendSecurityAlertEmail } from '../helpers/email.js';
+import { toE164 } from '../helpers/twilio.js';
 import { BCRYPT_ROUNDS, JWT_SECRET } from '../lib/constants.js';
+
+// ---------------------------------------------------------------------------
+// Staff phone numbers (WhatsApp / SMS ops identity)
+// ---------------------------------------------------------------------------
+// `employees.phone` is what resolveEmployeeByPhone() matches an inbound
+// WhatsApp/SMS sender against (helpers/inboundVoiceOps.js). That lookup builds
+// a variant set (+52…, +521…, bare 10 digits) from whatever the transport
+// sends, so storing the WhatsApp `+52` E.164 form is a hit on every variant.
+// A number typed with an explicit non-MX country code is preserved rather than
+// force-fed +52 — toE164 would otherwise mangle a US staff number.
+const PHONE_MIN_DIGITS = 10;
+
+export function normalizeStaffPhone(raw) {
+  const trimmed = String(raw ?? '').trim();
+  if (!trimmed) return { value: null }; // explicit clear
+  const digits = trimmed.replace(/\D/g, '');
+  if (digits.length < PHONE_MIN_DIGITS) return { error: 'Invalid phone number' };
+  if (trimmed.startsWith('+') && !digits.startsWith('52')) return { value: `+${digits}` };
+  return { value: toE164(trimmed, 'MX') };
+}
+
+// uq_employees_tenant_phone (migration 0059) makes a duplicate a hard failure.
+// Pre-check instead of relying on the 23505 catch: a constraint violation
+// aborts the tenant middleware's request transaction, and the friendly message
+// needs the colliding employee's name anyway.
+async function findPhoneOwner(phone, excludeId = null) {
+  if (!phone) return null;
+  return excludeId
+    ? await get('SELECT id, name FROM employees WHERE phone = $1 AND id <> $2', [phone, excludeId])
+    : await get('SELECT id, name FROM employees WHERE phone = $1', [phone]);
+}
 
 // ---------------------------------------------------------------------------
 // Brute-force protection: per-IP+tenant lockout with exponential backoff
@@ -90,7 +122,7 @@ const router = Router();
 router.get('/', requireAuth(), async (req, res) => {
   try {
     const employees = await all(`
-      SELECT id, name, role, active, created_at
+      SELECT id, name, role, active, phone, created_at
       FROM employees
       ORDER BY name ASC
     `);
@@ -105,7 +137,7 @@ router.get('/', requireAuth(), async (req, res) => {
 // POST /api/employees - create employee
 router.post('/', requireAuth('manage_employees'), async (req, res) => {
   try {
-    const { name, pin, role = 'cashier' } = req.body;
+    const { name, pin, role = 'cashier', phone } = req.body;
 
     if (!name || !pin) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -114,6 +146,15 @@ router.post('/', requireAuth('manage_employees'), async (req, res) => {
     const validRoles = ['admin', 'cashier', 'manager', 'kitchen', 'bar'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({ error: 'Invalid role' });
+    }
+
+    const normalizedPhone = normalizeStaffPhone(phone);
+    if (normalizedPhone.error) {
+      return res.status(400).json({ error: normalizedPhone.error });
+    }
+    const phoneOwner = await findPhoneOwner(normalizedPhone.value);
+    if (phoneOwner) {
+      return res.status(409).json({ error: 'Phone already registered', conflict_with: phoneOwner.name });
     }
 
     // Plan limit check
@@ -128,9 +169,9 @@ router.post('/', requireAuth('manage_employees'), async (req, res) => {
 
     const tid = getTenantId();
     const result = await run(`
-      INSERT INTO employees (tenant_id, name, pin, role, active, pin_changed_at)
-      VALUES ($1, $2, $3, $4, true, NOW())
-    `, [tid, name, hashedPin, role]);
+      INSERT INTO employees (tenant_id, name, pin, role, active, phone, pin_changed_at)
+      VALUES ($1, $2, $3, $4, true, $5, NOW())
+    `, [tid, name, hashedPin, role, normalizedPhone.value]);
 
     audit({
       tenantId: req.tenant?.id || 'default',
@@ -152,8 +193,12 @@ router.post('/', requireAuth('manage_employees'), async (req, res) => {
       name,
       role,
       active: true,
+      phone: normalizedPhone.value,
     });
   } catch (error) {
+    if (error?.code === '23505') {
+      return res.status(409).json({ error: 'Phone already registered' });
+    }
     console.error('Error creating employee:', error);
     res.status(500).json({ error: 'Failed to create employee' });
   }
@@ -453,7 +498,7 @@ router.put('/permissions/:role', requireAuth('manage_permissions'), async (req, 
 router.put('/:id', requireAuth('manage_employees'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, pin, role } = req.body;
+    const { name, pin, role, phone } = req.body;
 
     const employee = await get('SELECT id FROM employees WHERE id = $1', [id]);
     if (!employee) {
@@ -483,6 +528,20 @@ router.put('/:id', requireAuth('manage_employees'), async (req, res) => {
       updates.push(`role = $${values.length + 1}`);
       values.push(role);
     }
+    if (phone !== undefined) {
+      // An empty string clears the number (un-enrolls the employee from
+      // WhatsApp ops); `undefined` leaves it untouched.
+      const normalizedPhone = normalizeStaffPhone(phone);
+      if (normalizedPhone.error) {
+        return res.status(400).json({ error: normalizedPhone.error });
+      }
+      const phoneOwner = await findPhoneOwner(normalizedPhone.value, Number(id));
+      if (phoneOwner) {
+        return res.status(409).json({ error: 'Phone already registered', conflict_with: phoneOwner.name });
+      }
+      updates.push(`phone = $${values.length + 1}`);
+      values.push(normalizedPhone.value);
+    }
 
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No fields to update' });
@@ -508,6 +567,9 @@ router.put('/:id', requireAuth('manage_employees'), async (req, res) => {
 
     res.json({ message: 'Employee updated successfully' });
   } catch (error) {
+    if (error?.code === '23505') {
+      return res.status(409).json({ error: 'Phone already registered' });
+    }
     console.error('Error updating employee:', error);
     res.status(500).json({ error: 'Failed to update employee' });
   }

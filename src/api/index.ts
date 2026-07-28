@@ -256,8 +256,14 @@ async function apiRequest<T>(
     } catch {
       // Use default error message if response is not JSON
     }
-    const err = new Error(errorMessage) as Error & { status?: number; planUpgradeRequired?: boolean; requiredPlan?: string; feature?: string };
+    const err = new Error(errorMessage) as Error & { status?: number; planUpgradeRequired?: boolean; requiredPlan?: string; feature?: string; conflictWith?: string };
     err.status = response.status;
+    // Uniqueness conflicts name the row they collided with so callers can build
+    // a translated "X already has that" message instead of echoing the server's
+    // English error string.
+    if (typeof errorData.conflict_with === 'string') {
+      err.conflictWith = errorData.conflict_with;
+    }
     if (response.status === 403 && errorData.error === 'PLAN_UPGRADE_REQUIRED') {
       err.planUpgradeRequired = true;
       err.requiredPlan = errorData.requiredPlan as string;
@@ -1161,6 +1167,8 @@ interface CreateEmployeeData {
   name: string;
   pin: string;
   role: string;
+  /** Optional WhatsApp/SMS ops number. Empty string clears it on update. */
+  phone?: string;
 }
 
 export async function createEmployee(data: CreateEmployeeData): Promise<Employee> {
@@ -1172,7 +1180,7 @@ export async function createEmployee(data: CreateEmployeeData): Promise<Employee
 
 export async function updateEmployee(
   id: number,
-  data: { name?: string; pin?: string; role?: string }
+  data: { name?: string; pin?: string; role?: string; phone?: string }
 ): Promise<any> {
   return apiRequest(`/employees/${id}`, {
     method: 'PUT',

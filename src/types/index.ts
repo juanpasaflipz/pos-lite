@@ -5,6 +5,8 @@ export interface Employee {
   pin?: string;
   role: 'cashier' | 'kitchen' | 'bar' | 'manager' | 'admin';
   active: boolean;
+  /** WhatsApp/SMS ops number in E.164. Null until the owner registers one. */
+  phone?: string | null;
   created_at: string;
   permissions?: string[];
   token?: string;
