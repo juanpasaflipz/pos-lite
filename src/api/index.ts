@@ -3282,6 +3282,29 @@ export async function saveCredentials(service: string, values: Record<string, st
   });
 }
 
+/* ==================== WhatsApp ops ==================== */
+
+export interface WhatsAppEligibleEmployee {
+  id: number;
+  name: string;
+  role: string;
+  phone_masked: string;
+}
+
+export interface WhatsAppStatus {
+  connected: boolean;
+  /** 'tenant' = this restaurant's own number, 'platform' = Desktop Kitchen's, 'none' = not connected. */
+  source: 'tenant' | 'platform' | 'none';
+  display_phone_number: string | null;
+  eligible: WhatsAppEligibleEmployee[];
+  eligible_count: number;
+  missing_phone_count: number;
+}
+
+export async function getWhatsAppStatus(): Promise<WhatsAppStatus> {
+  return apiRequest<WhatsAppStatus>('/whatsapp/status');
+}
+
 /* ==================== Stress Test ==================== */
 
 export async function getStressTestTemplates(): Promise<StressTestTemplate[]> {

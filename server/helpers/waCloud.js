@@ -1,14 +1,24 @@
 // Meta WhatsApp Cloud API client + webhook utilities.
 //
-// Serves the coexistence number (+52 56 1309 6835): the number stays on the
-// WhatsApp Business app on the restaurant phone (humans answer to-go orders
-// and DK sales leads there) while this API connection runs employee voice-ops
-// — and, later, the order bot. Twilio is NOT involved on this number; Twilio
+// Multi-number by design: we run as our own Meta Tech Provider, so the same
+// app onboards DK's coexistence number (+52 56 1309 6835) AND each tenant
+// restaurant's own WhatsApp Business number. A number in coexistence stays on
+// the WhatsApp Business app on the restaurant phone (humans answer to-go
+// orders there) while this API connection runs employee voice-ops — and,
+// later, the order bot. Twilio is NOT involved on these numbers; Twilio
 // remains the SMS/loyalty sender only.
 //
-// Env (all unset = feature dormant; route mounts but rejects traffic):
-//   WA_CLOUD_ACCESS_TOKEN     Graph API bearer token (from Meta / the BSP)
-//   WA_CLOUD_PHONE_NUMBER_ID  The number's Cloud API phone-number id
+// Credentials split, because it is not obvious:
+//   PER-TENANT (tenant_credentials, service='whatsapp') — the things that
+//     differ per number: access_token, phone_number_id, waba_id.
+//   PLATFORM (env) — the things that are ours, not the tenant's. Every tenant
+//     WABA delivers to ONE webhook URL signed with OUR app secret, so
+//     signature verification and the GET handshake are number-independent.
+//
+// Env (WA_CLOUD_ACCESS_TOKEN/PHONE_NUMBER_ID unset = no platform fallback;
+// tenants with stored credentials still work):
+//   WA_CLOUD_ACCESS_TOKEN     Fallback Graph API bearer token (DK's own number)
+//   WA_CLOUD_PHONE_NUMBER_ID  Fallback Cloud API phone-number id
 //   WA_CLOUD_APP_SECRET       App secret used to sign webhooks (X-Hub-Signature-256)
 //   WA_CLOUD_VERIFY_TOKEN     Static token echoed in the GET webhook handshake
 //   WA_GRAPH_VERSION          Graph version, default v23.0
@@ -18,15 +28,87 @@
 
 import crypto from 'crypto';
 import { fetchWithTimeout } from '../lib/http.js';
+import { adminSql } from '../db/index.js';
+import { getServiceCredentials } from './tenantCredentials.js';
 
 const GRAPH_VERSION = process.env.WA_GRAPH_VERSION || 'v23.0';
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
 
-function accessToken() { return process.env.WA_CLOUD_ACCESS_TOKEN; }
-function phoneNumberId() { return process.env.WA_CLOUD_PHONE_NUMBER_ID; }
+// Media downloads are unbounded on the wire — a 100 MB video from a registered
+// employee would otherwise be pulled into memory, base64'd (+33%) into the
+// Claude request, and only THEN rejected for its content type. Receipts and
+// shelf photos are ~1-5 MB; voice notes far less.
+const MAX_MEDIA_BYTES = 10 * 1024 * 1024;
 
-export function isCloudConfigured() {
-  return Boolean(accessToken() && phoneNumberId());
+/**
+ * A tenant's Cloud API credentials. Falls back to the platform env values so
+ * DK's own number keeps working with zero rows in tenant_credentials.
+ * @typedef {{ accessToken: string, phoneNumberId: string }} CloudConfig
+ */
+
+/** The platform (env) config — DK's own number. */
+export function envCloudConfig() {
+  return {
+    accessToken: process.env.WA_CLOUD_ACCESS_TOKEN || '',
+    phoneNumberId: process.env.WA_CLOUD_PHONE_NUMBER_ID || '',
+  };
+}
+
+export function isCloudConfigured(cfg = envCloudConfig()) {
+  return Boolean(cfg?.accessToken && cfg?.phoneNumberId);
+}
+
+// phone_number_id → tenant_id. Hit on every inbound message and the mapping
+// only changes at onboarding time, so it is memoized with a short TTL rather
+// than queried per webhook. Negative results are cached too — an unrecognized
+// WABA hammering the endpoint shouldn't mean a DB round-trip per message.
+const TENANT_CACHE_TTL_MS = 5 * 60 * 1000;
+const _tenantCache = new Map(); // phoneNumberId → { tenantId, at }
+
+/** Test seam — drop the memoized phone_number_id → tenant mapping. */
+export function clearCloudTenantCache() {
+  _tenantCache.clear();
+}
+
+/**
+ * Find the tenant that owns an inbound number. Returns null when the number
+ * isn't ours — callers must NOT guess a tenant in that case.
+ *
+ * Uses adminSql (bypasses RLS): the webhook runs before any tenant context
+ * exists, which is the whole point of this lookup. Same shape as the
+ * print-agent token lookup in middleware/agentAuth.js.
+ */
+export async function resolveTenantByPhoneNumberId(phoneNumberId) {
+  const id = String(phoneNumberId || '').trim();
+  if (!id) return null;
+
+  const hit = _tenantCache.get(id);
+  if (hit && Date.now() - hit.at < TENANT_CACHE_TTL_MS) return hit.tenantId;
+
+  const rows = await adminSql`
+    SELECT tenant_id FROM tenant_credentials
+    WHERE service = 'whatsapp' AND key = 'phone_number_id' AND value = ${id}
+    LIMIT 1
+  `;
+  const tenantId = rows[0]?.tenant_id || null;
+  _tenantCache.set(id, { tenantId, at: Date.now() });
+  return tenantId;
+}
+
+/**
+ * Credentials for a tenant, with env fallback. Passing a null tenantId yields
+ * the platform config, which is what keeps the pre-multi-tenant pilot working.
+ */
+export async function cloudConfigFor(tenantId) {
+  if (!tenantId) return envCloudConfig();
+  const creds = await getServiceCredentials(tenantId, 'whatsapp', {
+    access_token: 'WA_CLOUD_ACCESS_TOKEN',
+    phone_number_id: 'WA_CLOUD_PHONE_NUMBER_ID',
+  });
+  return {
+    accessToken: creds.access_token || '',
+    phoneNumberId: creds.phone_number_id || '',
+  };
 }
 
 /**
@@ -109,12 +191,12 @@ export function messageMediaId(message) {
   return media?.id || null;
 }
 
-async function graphFetch(path, options = {}) {
+async function graphFetch(cfg, path, options = {}) {
   const res = await fetchWithTimeout(`${GRAPH_BASE}${path}`, {
     timeoutMs: 15000,
     ...options,
     headers: {
-      Authorization: `Bearer ${accessToken()}`,
+      Authorization: `Bearer ${cfg.accessToken}`,
       ...(options.headers || {}),
     },
   });
@@ -124,25 +206,39 @@ async function graphFetch(path, options = {}) {
 /**
  * Download a media attachment: media id → short-lived URL → bytes.
  * Both hops require the bearer token.
+ *
+ * Rejects anything over MAX_MEDIA_BYTES. Meta reports file_size on the meta
+ * hop, so oversized media is refused before a single byte is transferred;
+ * Content-Length is the backstop when it isn't.
  */
-export async function fetchCloudMedia(mediaId) {
-  const metaRes = await graphFetch(`/${mediaId}`);
+export async function fetchCloudMedia(cfg, mediaId) {
+  const metaRes = await graphFetch(cfg, `/${mediaId}`);
   if (!metaRes.ok) {
     throw new Error(`Cloud media meta ${metaRes.status}: ${await metaRes.text().catch(() => '')}`);
   }
   const meta = await metaRes.json();
   if (!meta.url) throw new Error('Cloud media meta missing url');
+  if (Number(meta.file_size) > MAX_MEDIA_BYTES) {
+    throw new Error(`Cloud media too large: ${meta.file_size} bytes (max ${MAX_MEDIA_BYTES})`);
+  }
 
   const binRes = await fetchWithTimeout(meta.url, {
     timeoutMs: 20000,
-    headers: { Authorization: `Bearer ${accessToken()}` },
+    headers: { Authorization: `Bearer ${cfg.accessToken}` },
     redirect: 'follow',
   });
   if (!binRes.ok) {
     throw new Error(`Cloud media download ${binRes.status}: ${await binRes.text().catch(() => '')}`);
   }
+  const declared = Number(binRes.headers.get('content-length'));
+  if (declared > MAX_MEDIA_BYTES) {
+    throw new Error(`Cloud media too large: ${declared} bytes (max ${MAX_MEDIA_BYTES})`);
+  }
   const contentType = binRes.headers.get('content-type') || meta.mime_type || 'application/octet-stream';
   const buffer = Buffer.from(await binRes.arrayBuffer());
+  if (buffer.length > MAX_MEDIA_BYTES) {
+    throw new Error(`Cloud media too large: ${buffer.length} bytes (max ${MAX_MEDIA_BYTES})`);
+  }
   return { buffer, contentType };
 }
 
@@ -151,10 +247,10 @@ export async function fetchCloudMedia(mediaId) {
  * window, which always holds here — we only ever send as a REPLY to an
  * inbound message. Returns the wamid on success, null on failure (logged).
  */
-export async function sendCloudText(to, body) {
-  if (!isCloudConfigured() || !to || !body) return null;
+export async function sendCloudText(cfg, to, body) {
+  if (!isCloudConfigured(cfg) || !to || !body) return null;
   try {
-    const res = await graphFetch(`/${phoneNumberId()}/messages`, {
+    const res = await graphFetch(cfg, `/${cfg.phoneNumberId}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -181,10 +277,10 @@ export async function sendCloudText(to, body) {
  * Mark an inbound message read (grey → blue ticks). Best-effort; failures are
  * silent — read receipts are cosmetic.
  */
-export async function markCloudRead(messageId) {
-  if (!isCloudConfigured() || !messageId) return;
+export async function markCloudRead(cfg, messageId) {
+  if (!isCloudConfigured(cfg) || !messageId) return;
   try {
-    await graphFetch(`/${phoneNumberId()}/messages`, {
+    await graphFetch(cfg, `/${cfg.phoneNumberId}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

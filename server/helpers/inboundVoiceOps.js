@@ -62,18 +62,30 @@ export function phoneVariants(rawPhone) {
   return out;
 }
 
-// Cross-tenant employee lookup via adminSql (bypasses RLS — webhook is
-// platform-level). Picks the most recently created match if a phone is
-// shared across tenants (rare; documented in scope as one-tenant pilot).
-export async function resolveEmployeeByPhone(rawPhone) {
+// Employee lookup via adminSql (bypasses RLS — the webhook is platform-level
+// and runs before any tenant context exists).
+//
+// Pass `tenantId` whenever the transport knows which number received the
+// message (Meta Cloud API does — see routes/wa-cloud-inbound.js). That scopes
+// the match and makes a phone shared across tenants unambiguous. Without it
+// the lookup stays cross-tenant and falls back to the most recently created
+// match, which is only safe while one tenant is on the shared Twilio number.
+export async function resolveEmployeeByPhone(rawPhone, tenantId = null) {
   const tries = phoneVariants(rawPhone);
   for (const phone of tries) {
-    const rows = await adminSql`
-      SELECT id, tenant_id, name, role, active
-      FROM employees
-      WHERE phone = ${phone} AND active = true
-      ORDER BY id DESC LIMIT 1
-    `;
+    const rows = tenantId
+      ? await adminSql`
+          SELECT id, tenant_id, name, role, active
+          FROM employees
+          WHERE phone = ${phone} AND active = true AND tenant_id = ${tenantId}
+          LIMIT 1
+        `
+      : await adminSql`
+          SELECT id, tenant_id, name, role, active
+          FROM employees
+          WHERE phone = ${phone} AND active = true
+          ORDER BY id DESC LIMIT 1
+        `;
     if (rows.length > 0) return rows[0];
   }
   return null;
@@ -123,6 +135,7 @@ async function expireStalePending(tenantId, employeeId) {
  * @param {string}  msg.messageId    Transport message id (Twilio MessageSid or WA wamid) — idempotency key. May be null.
  * @param {string}  msg.fromPhone    Sender phone, no `whatsapp:` prefix (E.164 or close — phoneVariants absorbs formats).
  * @param {string}  msg.toPhone      Receiving business number, no prefix. Stored on the voice_intents row.
+ * @param {string}  [msg.tenantId]   Tenant that owns the receiving number, when the transport knows it. Scopes the employee lookup.
  * @param {string}  msg.body         Text body ('' if none).
  * @param {'whatsapp'|'sms'} msg.channel  Media is only processed on 'whatsapp'.
  * @param {'whatsapp'|'sms'} [msg.source] voice_intents.source value; defaults to msg.channel.
@@ -137,14 +150,14 @@ async function expireStalePending(tenantId, employeeId) {
  */
 export async function handleInboundVoiceOps(msg) {
   const {
-    messageId, fromPhone, toPhone, channel,
+    messageId, fromPhone, toPhone, channel, tenantId,
     hasMedia, mediaRef, fetchMedia, reply, onUnknownSender,
   } = msg;
   const body = String(msg.body || '').trim();
   const source = msg.source || channel;
   const channelIsWA = channel === 'whatsapp';
 
-  const employee = await resolveEmployeeByPhone(fromPhone);
+  const employee = await resolveEmployeeByPhone(fromPhone, tenantId || null);
 
   if (!employee) {
     const isLoyalty = await isLoyaltyCustomerPhone(fromPhone);

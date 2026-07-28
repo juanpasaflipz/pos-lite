@@ -113,6 +113,10 @@
     "kiosk": {
       "label": "Kiosco",
       "hint": "Autoservicio en tablet"
+    },
+    "whatsappOps": {
+      "label": "Ops por WhatsApp",
+      "hint": "Foto de nota → inventario"
     }
   },
   "danger": {
@@ -144,5 +148,69 @@
     "noHardwareTitle": "¿Taquería de una persona? Ni siquiera necesitas un kiosco",
     "noHardwareBody": "Con Menú QR tus clientes ordenan y pagan desde su propio celular escaneando un código en el mostrador — cero equipo que comprar o montar.",
     "noHardwareCta": "Generar código QR para llevar →"
+  },
+  "whatsappOps": {
+    "title": "Inventario y gastos por WhatsApp",
+    "subtitle": "Manda una foto o una nota de voz. Se convierte en compra, conteo o merma.",
+    "cardLabel": "Ops por WhatsApp",
+    "cardHint": "Foto de nota → inventario",
+    "status": {
+      "title": "El número al que se le escribe",
+      "connectedTenant": "Conectado — número propio",
+      "connectedPlatform": "Conectado — número de Desktop Kitchen",
+      "notConnected": "Sin conectar",
+      "noNumberYet": "Todavía no hay un número conectado para tu restaurante.",
+      "notConnectedBody": "Escríbenos para conectar el WhatsApp de tu negocio. El número sigue funcionando normal en el teléfono: tus clientes te siguen escribiendo igual y una persona les contesta. Lo único que se agrega es que tu equipo pueda mandar fotos y notas de voz al inventario.",
+      "platformNote": "Estás usando el número de Desktop Kitchen. Funciona igual, pero conectar el WhatsApp de tu propio negocio es mejor: tu equipo le escribe al número que ya conoce.",
+      "save": "Guarda este número en el teléfono de tu equipo.",
+      "copy": "Copiar",
+      "copied": "¡Copiado!",
+      "openChat": "Abrir chat"
+    },
+    "who": {
+      "title": "Quién puede usarlo",
+      "body": "Solo los empleados con teléfono registrado. El sistema reconoce quién manda el mensaje por su número — si tu número no está en la lista, no te va a contestar.",
+      "empty": "Ningún empleado tiene teléfono registrado todavía. Registra al menos uno para empezar.",
+      "missing": "{{count}} empleado(s) activos sin teléfono registrado.",
+      "cta": "Registrar teléfonos →",
+      "customersNote": "Los clientes que le escriban a este número NO reciben respuesta automática. El bot solo le contesta a tu equipo; a los clientes los sigue atendiendo una persona desde el teléfono."
+    },
+    "flows": {
+      "title": "Qué puedes mandar",
+      "receipt": {
+        "title": "Foto de una nota, remisión o ticket",
+        "body": "Nota de venta con letra a mano, remisión del proveedor, ticket del súper o el papelito de la terminal. Saca proveedor, productos, cantidades y costos: entra al inventario y se registra el gasto con la foto adjunta."
+      },
+      "count": {
+        "title": "Foto del refri, congelador o estante",
+        "body": "Cuenta las piezas visibles por marca y las compara con lo que dice el sistema. Si la diferencia pasa del 10% levanta una alerta de merma. Es honesto con lo que no ve: si hay filas atrás, lo anota y baja la confianza."
+      },
+      "voice": {
+        "title": "Nota de voz",
+        "body": "\"Tiré tres burritos de asada\" registra la merma. También sirve para conteos y para prender o apagar platillos del menú cuando se acaba algo."
+      }
+    },
+    "how": {
+      "title": "Cómo funciona, paso a paso",
+      "subtitle": "Igual para todos los casos. Nada se guarda hasta que tú confirmas.",
+      "steps": [
+        "Guarda el número de arriba en el teléfono del empleado, como cualquier contacto.",
+        "Manda la foto o la nota de voz por WhatsApp. Si quieres, escribe algo junto a la foto para orientarlo: \"conteo\" o el nombre del proveedor.",
+        "En unos segundos te contesta con un borrador de lo que entendió: productos, cantidades y costos, línea por línea.",
+        "Revísalo y contesta SI para guardarlo, o NO para descartarlo. Si venían productos que no existen en tu inventario, contesta AGREGAR y los crea antes de guardar.",
+        "Tienes 60 minutos para contestar. Si se pasa el tiempo, el borrador se cancela solo y no se guarda nada."
+      ]
+    },
+    "tips": {
+      "title": "Para que salga bien a la primera",
+      "items": [
+        "Que la nota quepa completa en la foto, con buena luz y sin dobleces.",
+        "Para conteos, una foto por sección: un estante o una charola por mensaje, no todo el refri de lejos.",
+        "En las notas escritas a mano, lo que importa es el total de cada renglón — no el precio por kilo. El sistema saca solo el costo unitario.",
+        "Funciona por WhatsApp, no por SMS: los mensajes de texto normales no llevan foto en México.",
+        "Si un producto no lo reconoce, lo deja sin vincular y te lo dice. Contesta AGREGAR para crearlo."
+      ]
+    },
+    "privacy": "Las fotos se guardan junto al gasto para que puedas consultarlas después. Solo tu restaurante las ve."
   }
 }

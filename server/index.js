@@ -55,6 +55,7 @@ import authRoutes from './routes/auth.js';
 import accountRoutes from './routes/account.js';
 import brandingRoutes from './routes/branding.js';
 import credentialsRoutes from './routes/credentials.js';
+import whatsappRoutes from './routes/whatsapp.js';
 import onboardingRoutes from './routes/onboarding.js';
 
 // Billing & Admin
@@ -89,6 +90,9 @@ import twilioInboundRoutes from './routes/twilio-inbound.js';
 
 // Meta Cloud API inbound (coexistence WhatsApp number — platform-level webhook)
 import waCloudInboundRoutes from './routes/wa-cloud-inbound.js';
+
+// WhatsApp Embedded Signup onboarding (admin-only, ADMIN_SECRET gated)
+import waOnboardingRoutes from './routes/wa-onboarding.js';
 
 // ==================== App Setup ====================
 
@@ -174,6 +178,10 @@ app.use('/api', globalApiLimiter);
 app.use('/admin', globalApiLimiter);
 
 // ==================== Pre-Tenant Routes ====================
+
+// WhatsApp Embedded Signup onboarding (own ADMIN_SECRET gate; mounted before
+// adminRoutes so it isn't swallowed by that router's JSON-only handlers)
+app.use('/admin/wa-onboarding', waOnboardingRoutes);
 
 // Admin (uses admin pool, not tenant-scoped)
 app.use('/admin', adminRoutes);
@@ -313,6 +321,7 @@ app.use('/api/display-assets', displayAssetsRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/account', accountRoutes);
 app.use('/api/credentials', credentialsRoutes);
+app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/devices', devicesRoutes);
 app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/demo-data', demoDataRoutes);

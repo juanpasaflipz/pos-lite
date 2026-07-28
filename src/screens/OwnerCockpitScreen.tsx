@@ -29,6 +29,7 @@ import {
   QrCode,
   MonitorSmartphone,
   Printer,
+  MessageCircle,
 } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 import { useAuth } from '../context/AuthContext';
@@ -67,6 +68,7 @@ const OUT_CARDS: CockpitCard[] = [
 const SYSTEM_CARDS: CockpitCard[] = [
   { to: '/admin/reports?tab=cashcard', icon: <BarChart3 size={28} />, key: 'reports', intensity: 'primary' },
   { to: '/admin/integrations', icon: <Plug size={28} />, key: 'integrations', intensity: 'primary' },
+  { to: '/admin/whatsapp', icon: <MessageCircle size={28} />, key: 'whatsappOps', intensity: 'primary' },
   { to: '/admin/modifiers', icon: <SlidersHorizontal size={28} />, key: 'modifiers', intensity: 'secondary' },
   { to: '/kitchen', icon: <Monitor size={28} />, key: 'kitchenDisplay', intensity: 'secondary' },
   { to: '/admin/devices', icon: <Monitor size={28} />, key: 'devices', intensity: 'secondary' },

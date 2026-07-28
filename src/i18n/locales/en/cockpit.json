@@ -113,6 +113,10 @@
     "kiosk": {
       "label": "Kiosk",
       "hint": "Self-service on a tablet"
+    },
+    "whatsappOps": {
+      "label": "WhatsApp Ops",
+      "hint": "Photo of a receipt → inventory"
     }
   },
   "danger": {
@@ -144,5 +148,69 @@
     "noHardwareTitle": "One-person taco shop? You don't even need a kiosk",
     "noHardwareBody": "With QR Menu, customers order and pay from their own phone by scanning a code at the counter — zero hardware to buy or set up.",
     "noHardwareCta": "Generate a takeaway QR code →"
+  },
+  "whatsappOps": {
+    "title": "Inventory and expenses over WhatsApp",
+    "subtitle": "Send a photo or a voice note. It becomes a purchase, a count, or waste.",
+    "cardLabel": "WhatsApp Ops",
+    "cardHint": "Photo of a receipt → inventory",
+    "status": {
+      "title": "The number your team messages",
+      "connectedTenant": "Connected — your own number",
+      "connectedPlatform": "Connected — Desktop Kitchen number",
+      "notConnected": "Not connected",
+      "noNumberYet": "No number is connected for your restaurant yet.",
+      "notConnectedBody": "Get in touch to connect your business WhatsApp. The number keeps working normally on the phone: customers still message you and a person still answers them. All this adds is your team being able to send photos and voice notes into inventory.",
+      "platformNote": "You're on the Desktop Kitchen number. It works the same, but connecting your own business WhatsApp is better — your team messages the number they already know.",
+      "save": "Save this number on your team's phones.",
+      "copy": "Copy",
+      "copied": "Copied!",
+      "openChat": "Open chat"
+    },
+    "who": {
+      "title": "Who can use it",
+      "body": "Only employees with a phone on file. The system recognizes who sent the message by their number — if yours isn't on the list, it won't answer you.",
+      "empty": "No employee has a phone registered yet. Add at least one to get started.",
+      "missing": "{{count}} active employee(s) without a phone on file.",
+      "cta": "Add phone numbers →",
+      "customersNote": "Customers who message this number get NO automated reply. The bot only answers your team; customers are still handled by a person on the phone."
+    },
+    "flows": {
+      "title": "What you can send",
+      "receipt": {
+        "title": "Photo of a receipt, delivery note, or slip",
+        "body": "Handwritten sales note, supplier delivery note, supermarket receipt, or the little slip from the card terminal. It pulls vendor, items, quantities, and costs: stock goes into inventory and the expense is recorded with the photo attached."
+      },
+      "count": {
+        "title": "Photo of the fridge, freezer, or shelf",
+        "body": "Counts the visible units per brand and compares them against what the system says. A variance over 10% raises a shrinkage alert. It's honest about what it can't see: if rows are hidden behind, it says so and lowers its confidence."
+      },
+      "voice": {
+        "title": "Voice note",
+        "body": "\"I threw out three carne asada burritos\" records the waste. It also handles counts and turning menu items on or off when something runs out."
+      }
+    },
+    "how": {
+      "title": "How it works, step by step",
+      "subtitle": "Same for every case. Nothing is saved until you confirm.",
+      "steps": [
+        "Save the number above on the employee's phone, like any other contact.",
+        "Send the photo or voice note over WhatsApp. You can add a caption to steer it: \"count\", or the supplier's name.",
+        "Within seconds you get a draft of what it understood: items, quantities, and costs, line by line.",
+        "Check it and reply SI to save, or NO to discard. If it found items that aren't in your inventory, reply AGREGAR and it creates them first.",
+        "You have 60 minutes to reply. After that the draft expires on its own and nothing is saved."
+      ]
+    },
+    "tips": {
+      "title": "Getting it right the first time",
+      "items": [
+        "Fit the whole receipt in frame, with good light and no folds.",
+        "For counts, one photo per section: a single shelf or tray per message, not the whole fridge from across the room.",
+        "On handwritten notes, what matters is each line's total — not the price per kilo. The system works out the unit cost itself.",
+        "It works over WhatsApp, not SMS: plain text messages don't carry photos in Mexico.",
+        "If it doesn't recognize an item it leaves it unlinked and tells you. Reply AGREGAR to create it."
+      ]
+    },
+    "privacy": "Photos are stored alongside the expense so you can look them up later. Only your restaurant can see them."
   }
 }

@@ -75,6 +75,13 @@ Brand: kiosk wears Talavera Terracotta (`#A8542A`), driven by CSS variables in `
 - Platform env vars (`MP_CLIENT_ID` etc.) act as fallback when tenant has no per-tenant creds
 - **Webhooks are per-tenant config** — merchants register webhook URLs in their own processor's dashboard. Don't depend on webhooks for correctness; always implement a live-pull fallback in the status-polling endpoint (see `server/routes/payments.js` MP status pull for the pattern)
 
+## WhatsApp / voice + visual ops
+- Two inbound transports, one shared engine (`server/helpers/inboundVoiceOps.js`): Twilio (`routes/twilio-inbound.js`, also SMS) and Meta Cloud API (`routes/wa-cloud-inbound.js`). Photo → `helpers/receiptVision.js` (Claude vision) → `record_purchase` or `count_inventory` → SI/NO confirm → `helpers/voiceIntent.js` executes
+- **WhatsApp numbers are per-tenant.** `access_token` / `phone_number_id` / `waba_id` live in `tenant_credentials` (`service='whatsapp'`), written by the Embedded Signup flow at `/admin/wa-onboarding`. `WA_CLOUD_ACCESS_TOKEN` / `WA_CLOUD_PHONE_NUMBER_ID` env are only the platform fallback (DK's own number)
+- We are our own Meta **Tech Provider**, so every tenant WABA delivers to one webhook signed with **our** `WA_CLOUD_APP_SECRET` — signature verification is platform-level, tenant routing is by `value.metadata.phone_number_id` (`resolveTenantByPhoneNumberId`). An unknown number is dropped, never guessed
+- Pass `tenantId` to `resolveEmployeeByPhone()` whenever the transport knows which number received the message; without it the lookup is cross-tenant and ties break on "most recently created"
+- Runbook: `docs/whatsapp-tech-provider-onboarding.md`
+
 ## Offline behavior
 - Frontend caches menu + queues orders via **Dexie/IndexedDB** + a service worker; reconnect triggers automatic sync. When debugging "order missing on server" check the offline queue first before assuming a backend bug
 

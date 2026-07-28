@@ -7,6 +7,101 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-07-28 (WhatsApp Ops owner screen — finishes the entry below) — Claude Code — **local only, NOT pushed**
+
+The multi-number work below left `/admin/whatsapp` **dead**: the cockpit card,
+the `whatsappOps` i18n namespace (ES+EN, full copy), `GET /api/whatsapp/status`
+and the `getWhatsAppStatus()` client fn all existed, but no screen did. Built it.
+
+- **NEW `src/screens/WhatsAppOpsScreen.tsx`** + route in `App.tsx`
+  (manager/admin, lazy, same shape as `/admin/kiosk`). Read-only by design —
+  connecting a number is the ADMIN_SECRET `wa-onboarding` flow we drive with
+  the owner, so there is nothing to configure here. Sections follow the two
+  questions owners actually ask, in order: which number do we message, then
+  who is allowed to (masked phones + count of employees missing one +
+  deep-link to `/admin/staff?tab=roster`), then what you can send, how it
+  works, tips, privacy.
+
+**One bug found and fixed while wiring it.** `whatsapp.js` read
+`display_phone_number` from `tenant_credentials` only. A tenant on the platform
+fallback (i.e. **juanbertos today**) has no such row, so the endpoint answered
+`connected: true, source: 'platform', display_phone_number: null` — the screen
+would have shown "Connected — Desktop Kitchen number" directly above "No number
+is connected yet", and never printed the number the whole screen exists to give
+them. Now falls back to **`WA_CLOUD_DISPLAY_PHONE_NUMBER`** (new, documented in
+`.env.example`; display-only, never used to send). The UI also handles
+connected-but-unknown-number without contradicting itself, so an unset env
+degrades instead of lying.
+
+**→ Juan: set `WA_CLOUD_DISPLAY_PHONE_NUMBER=5613096835` in Railway** (DK's own
+number, the one already in the `.env.example` comment) or the platform-number
+case shows no number to save.
+
+Verified: `npm run typecheck` clean, `build:client` green, `wa-cloud-routing`
+**19/19** (12 existing + 7 new pinning `prettyPhone`/`maskPhone` — the first
+feeds the `wa.me` link via digit-stripping so it must regroup without losing or
+inventing a digit; the second must never render a full number, since that
+endpoint is readable by any logged-in employee).
+
+Full suite: **238 total, 193 passed + 45 skipped** — `tests/manual-sales.test.ts`
+lost its `beforeAll` to the 60 s hook timeout at the 626 s mark (shared test
+branch, single-fork pool) and skipped its 45. Reran alone: **45/45 in 25 s**.
+Contention flake, same pattern as the 07-20 payment-status one — not a
+regression, but that file is now the suite's canary for test-branch latency.
+
+---
+
+## 2026-07-28 (WhatsApp goes multi-number) — Claude Code — **local only, NOT pushed**
+
+Juan asked whether the visual-inventory pipeline (photo → `receiptVision.js` →
+purchase/count → SI/NO) could run on any WhatsApp Business number. It couldn't:
+`waCloud.js` read `WA_CLOUD_ACCESS_TOKEN`/`PHONE_NUMBER_ID` straight off
+`process.env`, so exactly one number was ever connectable, and tenant came from
+the *sender's* phone with an `ORDER BY id DESC` tiebreak. Now per-tenant:
+
+- **Credentials moved to `tenant_credentials` (`service='whatsapp'`)** —
+  `access_token`, `phone_number_id`, `waba_id`, `display_phone_number`. Env
+  `WA_CLOUD_*` is now only the platform fallback (DK's own number), so the
+  pilot keeps working with zero DB rows.
+- **Inbound routes by `value.metadata.phone_number_id`** →
+  `resolveTenantByPhoneNumberId()` (memoized 5 min, negatives cached). Unknown
+  number is **dropped, never guessed onto a tenant**.
+- **`resolveEmployeeByPhone(phone, tenantId)`** — scoping closes the
+  cross-tenant collision the code flagged at `inboundVoiceOps.js:65-67`. Twilio
+  passes no tenantId, so its behavior is byte-for-byte unchanged.
+- **`fetchCloudMedia` now caps media at 10 MB** (was unbounded — full download
+  + base64 happened *before* the content-type reject).
+- **Migration 0093** — partial index for the reverse lookup. Applied clean on
+  the test branch.
+
+**Two things that change your mental model:**
+1. The kill switch in the runbook moved. Blanking `WA_CLOUD_ACCESS_TOKEN` now
+   only silences DK's own number; tenant numbers keep their token in the DB.
+   Platform-wide stop is blanking **`WA_CLOUD_APP_SECRET`** (route 503s).
+2. `wa-onboarding.js` is committed now and no longer prints env to copy — it
+   **writes** creds to the tenant. It's a two-page flow: super-admin picks a
+   tenant and mints a **signed 1-hour link that carries no ADMIN_SECRET**, so
+   the link can be handed to the restaurant owner holding the phone. The
+   access token is never rendered or logged. (Old page inlined ADMIN_SECRET
+   into the HTML — fine when only Juan opened it, a leak once a customer does.)
+
+Verified: `npm run typecheck` clean; `npm test` **238/238 across 23 files**;
+`tests/wa-cloud.test.ts` passes **unmodified** (proves the pure helpers were
+untouched); new `tests/wa-cloud-routing.test.ts` (12 tests) covers routing,
+unknown-number drop, cache invalidation, env fallback, and the shared-phone
+collision. Plus a webhook round-trip against the test branch: bad signature
+403s, known number routes + stays silent for non-employees, unknown number is
+dropped before reaching the engine.
+
+**Not done / still blocked:** Meta Business Verification + App Review are
+Juan's manual track — until they clear, no second number can physically pair,
+so none of this is exercised against a real tenant WABA yet. The 07-17 prod
+health check on the live photo → SI → expense round-trip is **still open**
+(see 2026-07-20 entry); this change doesn't touch `receiptVision.js` or
+`voiceIntent.js`, so it neither fixes nor worsens it.
+
+---
+
 ## 2026-07-27 (Kiosk burrito-builder — Phase 1 seed **DONE**) — Claude Code — closes work order below
 
 Seed applied to prod Neon for tenant `juanbertos`. Script:

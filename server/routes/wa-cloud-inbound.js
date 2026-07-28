@@ -1,6 +1,12 @@
-// Inbound Meta Cloud API webhook → voice ops (coexistence number).
+// Inbound Meta Cloud API webhook → voice ops (coexistence numbers).
 //
-// This is the WhatsApp Business APP number that also takes the restaurant's
+// One webhook serves EVERY connected number — DK's own and each tenant
+// restaurant's. Meta signs all of them with our Tech Provider app secret, so
+// the signature gate is number-independent; the tenant comes from
+// value.metadata.phone_number_id (the number that RECEIVED the message), and
+// an unrecognized number is dropped rather than guessed at.
+//
+// These are WhatsApp Business APP numbers that also take the restaurant's
 // to-go orders — a human answers customers from the phone. Policy here is the
 // inverse of the Twilio route's:
 //
@@ -35,6 +41,8 @@ import {
   fetchCloudMedia,
   sendCloudText,
   markCloudRead,
+  resolveTenantByPhoneNumberId,
+  cloudConfigFor,
 } from '../helpers/waCloud.js';
 
 const router = Router();
@@ -53,6 +61,18 @@ router.get('/webhook', (req, res) => {
 });
 
 async function processMessage(value, message) {
+  const phoneNumberId = value.metadata?.phone_number_id;
+
+  // Which of our numbers received this? That answers which tenant owns it.
+  // A tenant with no stored credentials (DK's own pilot number) falls through
+  // to the platform env config inside cloudConfigFor().
+  const tenantId = await resolveTenantByPhoneNumberId(phoneNumberId);
+  const cfg = await cloudConfigFor(tenantId);
+  if (!isCloudConfigured(cfg)) {
+    console.warn(`[WACloud] message for unknown/unconfigured phone_number_id=${phoneNumberId || 'n/a'} — dropped`);
+    return;
+  }
+
   const fromE164 = normalizeCloudFrom(message.from);
   const toPhone = value.metadata?.display_phone_number
     ? `+${String(value.metadata.display_phone_number).replace(/\D/g, '')}`
@@ -64,13 +84,16 @@ async function processMessage(value, message) {
     messageId: message.id || null,
     fromPhone: fromE164,
     toPhone,
+    // Scopes the employee lookup to the tenant that owns the receiving number,
+    // so the same phone registered in two tenants can't cross wires.
+    tenantId,
     body: messageText(message),
     channel: 'whatsapp',
     source: 'whatsapp',
     hasMedia: Boolean(mediaId),
     mediaRef: mediaId ? `wa-cloud:media:${mediaId}` : null,
-    fetchMedia: mediaId ? () => fetchCloudMedia(mediaId) : undefined,
-    reply: (text) => sendCloudText(fromE164, text),
+    fetchMedia: mediaId ? () => fetchCloudMedia(cfg, mediaId) : undefined,
+    reply: (text) => sendCloudText(cfg, fromE164, text),
     // Non-employees: total silence. The human answers from the phone app.
     // The order bot (planned) replaces this handler.
     onUnknownSender: async ({ fromPhone, isLoyalty }) => {
@@ -81,12 +104,17 @@ async function processMessage(value, message) {
 
   // Blue-tick only what the voice-ops flow actually consumed. Customer chats
   // stay unread so the human sees them as new in the app.
-  if (!unknownSender) await markCloudRead(message.id);
+  if (!unknownSender) await markCloudRead(cfg, message.id);
 }
 
 router.post('/webhook', (req, res) => {
-  if (!isCloudConfigured()) {
-    console.warn('[WACloud] webhook hit but WA_CLOUD_* env not configured');
+  // Dormancy is now keyed on the app secret, not the access token: with
+  // per-tenant numbers, blanking WA_CLOUD_ACCESS_TOKEN only silences DK's own
+  // number, while tenant numbers keep their credentials in the DB. No app
+  // secret means no message from any WABA can be trusted — that is the
+  // platform-wide kill switch.
+  if (!process.env.WA_CLOUD_APP_SECRET && process.env.WA_CLOUD_ALLOW_UNSIGNED !== 'on') {
+    console.warn('[WACloud] webhook hit but WA_CLOUD_APP_SECRET not configured');
     return res.sendStatus(503);
   }
 

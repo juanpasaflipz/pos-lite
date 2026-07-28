@@ -49,6 +49,21 @@ const SERVICE_SCHEMA = {
       { key: 'content_sid_referral_success', label: 'Referral Success Template SID (HX...)', secret: false },
     ],
   },
+  whatsapp: {
+    label: 'WhatsApp (Meta Cloud API)',
+    // Connected through Embedded Signup at /admin/wa-onboarding, which writes
+    // these for you. Manual entry is the fallback when a number was paired in
+    // WhatsApp Manager directly. The app secret + verify token are NOT here:
+    // every tenant WABA delivers to one webhook signed with OUR Tech Provider
+    // app secret, so those stay platform-level env (WA_CLOUD_APP_SECRET /
+    // WA_CLOUD_VERIFY_TOKEN).
+    fields: [
+      { key: 'access_token', label: 'Access Token (Graph API)', secret: true },
+      { key: 'phone_number_id', label: 'Phone Number ID', secret: false },
+      { key: 'waba_id', label: 'WhatsApp Business Account ID', secret: false },
+      { key: 'display_phone_number', label: 'Display Number (+...)', secret: false },
+    ],
+  },
   facturapi: {
     label: 'FacturAPI (CFDI)',
     fields: [

@@ -55,6 +55,7 @@ const SuperAdmin = React.lazy(() => import('./screens/SuperAdmin').then(m => ({ 
 const OrgDashboard = React.lazy(() => import('./screens/OrgDashboard').then(m => ({ default: m.default })));
 const QRMenuScreen = React.lazy(() => import('./screens/QRMenuScreen').then(m => ({ default: m.default || (() => <div>QR Menu</div>) })));
 const KioskAccessScreen = React.lazy(() => import('./screens/KioskAccessScreen').then(m => ({ default: m.default || (() => <div>Kiosk</div>) })));
+const WhatsAppOpsScreen = React.lazy(() => import('./screens/WhatsAppOpsScreen').then(m => ({ default: m.default || (() => <div>WhatsApp</div>) })));
 const KitchenPairScreen = React.lazy(() => import('./screens/KitchenPairScreen').then(m => ({ default: m.default || (() => <div>Pair</div>) })));
 const DevicesScreen = React.lazy(() => import('./screens/DevicesScreen').then(m => ({ default: m.default || (() => <div>Devices</div>) })));
 
@@ -194,6 +195,7 @@ const TenantRoutes: React.FC = () => {
       <Route path="/admin/kiosk" element={<ProtectedRoute element={<KioskAccessScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/invoicing" element={<ProtectedRoute element={<InvoicingScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/integrations" element={<ProtectedRoute element={<IntegrationsScreen />} requiredRole={['manager', 'admin']} />} />
+      <Route path="/admin/whatsapp" element={<ProtectedRoute element={<WhatsAppOpsScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/devices" element={<ProtectedRoute element={<DevicesScreen />} requiredRole={['manager', 'admin']} />} />
       <Route path="/admin/account" element={<ProtectedRoute element={<AccountScreen />} />} />
 
