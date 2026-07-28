@@ -9,6 +9,7 @@ import { getTimeTier, type TimeTier } from '../lib/orderUrgency';
 import { formatTime, formatDate } from '../utils/dateFormat';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import BrandLogo from '../components/BrandLogo';
+import { useUpdateBlocker } from '../hooks/useUpdateBlocker';
 import {
   Clock,
   ArrowLeft,
@@ -54,6 +55,8 @@ export default function KitchenDisplay() {
   // bar station view is Pro (kdsDevices.stations). Server-side, pairing a
   // 2nd device or a bar/expo device is also blocked at /devices/pair/claim.
   const barStationLocked = !limits.kdsDevices?.stations?.includes('bar');
+  // An empty rail is the only safe moment to swap builds on the kitchen screen.
+  useUpdateBlocker(orders.length > 0);
   const [displayFilter, setDisplayFilter] = useState<'all' | 'kitchen' | 'bar'>(
     currentEmployee?.role === 'bar' ? 'bar' : 'all'
   );

@@ -1093,7 +1093,7 @@ router.get('/tenants/:id/kiosk-devices', async (req, res) => {
 
     const devices = await adminSql`
       SELECT id, name, kiosk_mode_override, bound_employee_id,
-             bound_at, last_seen_at, revoked_at
+             bound_at, last_seen_at, client_version, client_platform, revoked_at
       FROM kiosk_devices
       WHERE tenant_id = ${tenant.id}
       ORDER BY revoked_at NULLS FIRST, bound_at DESC

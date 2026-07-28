@@ -1,5 +1,6 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { KioskMenuItem, KioskModifier } from '../lib/kioskApi';
+import { setKioskCartEmptyProbe } from '../lib/kioskUpdate';
 
 export interface KioskCartLine {
   menu_item_id: number;
@@ -55,6 +56,14 @@ export const KioskCartProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [callName, setCallName] = useState<string | null>(null);
   const [fulfillmentType, setFulfillmentType] = useState<KioskFulfillmentType | null>(null);
   const [delivery, setDelivery] = useState<KioskDeliveryDraft | null>(null);
+
+  // The silent self-updater reloads only when nothing is in flight. A ref keeps
+  // the probe reading current lines without re-registering on every add.
+  const linesRef = useRef(lines);
+  linesRef.current = lines;
+  useEffect(() => {
+    setKioskCartEmptyProbe(() => linesRef.current.length === 0);
+  }, []);
 
   const addItem = useCallback((item: KioskMenuItem, modifiers: KioskModifier[] = []) => {
     const lineKey = modifierKey(item.id, modifiers);

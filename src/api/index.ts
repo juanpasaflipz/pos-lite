@@ -87,6 +87,7 @@ import {
   DiscountType,
 } from '../types';
 import type { DisplayAsset, DisplayMenuSettings, MenuBoardDataResponse } from '../types/menu-board';
+import { noteServerVersionHeaders } from '../lib/appUpdate';
 
 // Employee ID for display/sync use - set after login
 let currentEmployeeId: number | null = null;
@@ -246,6 +247,11 @@ async function apiRequest<T>(
       ...(options.headers || {}),
     },
   });
+
+  // Every API response carries the server's build id — piggybacking on traffic
+  // the app was already making is what makes new-deploy detection instant
+  // without a polling hot path.
+  noteServerVersionHeaders(response.headers);
 
   if (!response.ok) {
     let errorMessage = `API Error: ${response.status} ${response.statusText}`;
@@ -4300,6 +4306,24 @@ export async function renamePairedDevice(id: string, deviceLabel: string): Promi
 
 export async function revokePairedDevice(id: string): Promise<{ ok: true }> {
   return apiRequest<{ ok: true }>(`/devices/${id}`, { method: 'DELETE' });
+}
+
+export interface KioskDeviceStatus {
+  id: string;
+  name: string;
+  bound_at: string;
+  last_seen_at: string | null;
+  /** Build the device last reported. Null until it heartbeats once. */
+  client_version: string | null;
+  client_platform: 'web' | 'android' | null;
+  kiosk_mode_override: string | null;
+}
+
+export async function listKioskDevices(): Promise<{
+  devices: KioskDeviceStatus[];
+  current_version: string;
+}> {
+  return apiRequest<{ devices: KioskDeviceStatus[]; current_version: string }>('/devices/kiosks');
 }
 
 // ==================== Manual & imported sales ====================

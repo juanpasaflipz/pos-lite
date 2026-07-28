@@ -93,6 +93,7 @@ import waCloudInboundRoutes from './routes/wa-cloud-inbound.js';
 
 // WhatsApp Embedded Signup onboarding (admin-only, ADMIN_SECRET gated)
 import waOnboardingRoutes from './routes/wa-onboarding.js';
+import { APP_BUILD, MIN_CLIENT_VERSION, versionPayload } from './helpers/appVersion.js';
 
 // ==================== App Setup ====================
 
@@ -122,6 +123,9 @@ app.use(cors({
     cb(new Error('Not allowed by CORS'));
   },
   credentials: true,
+  // The Capacitor kiosk talks cross-origin; without this it cannot read the
+  // version headers and would never notice a new deploy.
+  exposedHeaders: ['X-App-Version', 'X-App-Min-Version'],
 }));
 
 // Stripe webhook needs raw body (before express.json)
@@ -176,6 +180,22 @@ const globalApiLimiter = rateLimit({
 });
 app.use('/api', globalApiLimiter);
 app.use('/admin', globalApiLimiter);
+
+// ==================== App Version ====================
+// Every /api response carries the build the server is serving, so clients
+// detect a new deploy off traffic they were already making — no extra polling
+// on the hot path. Mounted before tenantMiddleware: version is not tenant data
+// and must not open a DB transaction.
+app.use('/api', (_req, res, next) => {
+  res.set('X-App-Version', APP_BUILD.buildId);
+  if (MIN_CLIENT_VERSION) res.set('X-App-Min-Version', MIN_CLIENT_VERSION);
+  next();
+});
+
+app.get('/api/version', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(versionPayload());
+});
 
 // ==================== Pre-Tenant Routes ====================
 
@@ -424,7 +444,7 @@ process.on('SIGINT', () => shutdownWithTimeout('SIGINT'));
     await runMigrations('default');
 
     server = app.listen(PORT, '0.0.0.0', () => {
-      console.log(`POS Lite server running on port ${PORT}`);
+      console.log(`POS Lite server running on port ${PORT} — build ${APP_BUILD.buildId}`);
     });
 
     startAutoCompleteSweep();

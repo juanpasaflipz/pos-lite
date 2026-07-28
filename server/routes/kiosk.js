@@ -646,6 +646,41 @@ router.post('/admin/bind', bindLimiter, async (req, res) => {
   }
 });
 
+// POST /api/kiosk/heartbeat — device liveness + which build it is running.
+//
+// Deliberately NOT plan-gated: a plan-locked kiosk parked on the unavailable
+// screen should still report in, otherwise it looks like a dead tablet. Also
+// cheap by design (one UPDATE, no reads) because every kiosk calls it on boot
+// and every 15 minutes after.
+router.post('/heartbeat', verifyKioskToken, async (req, res) => {
+  const deviceId = req.kioskDeviceId;
+  // Kiosks bound before device naming existed have no device row to update.
+  // Their build still reaches us via the X-App-Version comparison client-side;
+  // there is just nowhere to record it.
+  if (!deviceId) return res.json({ recorded: false });
+
+  const clientVersion = typeof req.body?.client_version === 'string'
+    ? req.body.client_version.slice(0, 40)
+    : null;
+  const clientPlatform = typeof req.body?.client_platform === 'string'
+    ? req.body.client_platform.slice(0, 20)
+    : null;
+
+  try {
+    await adminSql`
+      UPDATE kiosk_devices
+      SET last_seen_at = NOW(),
+          client_version = COALESCE(${clientVersion}, client_version),
+          client_platform = COALESCE(${clientPlatform}, client_platform)
+      WHERE id = ${deviceId} AND tenant_id = ${req.kioskTenantId}
+    `;
+    res.json({ recorded: true });
+  } catch (err) {
+    console.error('[Kiosk] heartbeat failed:', err.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // POST /api/kiosk/orders — create an order from a bound customer tablet
 router.post('/orders', verifyKioskToken, requireKioskPlan, async (req, res) => {
   const tenantId = req.kioskTenantId;

@@ -18,6 +18,7 @@ import { useDeviceType } from './hooks/useDeviceType';
 import { MobileCartProvider } from './context/MobileCartContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import IdleLogoutGuard from './components/IdleLogoutGuard';
+import UpdateBanner from './components/UpdateBanner';
 import { getDeviceToken } from './api';
 
 // ==================== Lazy-loaded Screens (Lean POS) ====================
@@ -350,6 +351,7 @@ export default function App() {
               <AuthProvider>
                 <SyncProvider>
                   <AppContent />
+                  <UpdateBanner />
                 </SyncProvider>
               </AuthProvider>
             </ToastProvider>

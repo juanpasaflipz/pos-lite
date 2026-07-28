@@ -1,3 +1,5 @@
+import { noteKioskServerVersion } from './kioskUpdate';
+
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) || '';
 
 interface BindResponse {
@@ -98,6 +100,8 @@ async function authedFetch(
 ): Promise<Response> {
   const headers = { ...authHeaders(auth), ...(init.headers || {}) };
   const res = await fetch(input, { ...init, headers });
+  // Detect new deploys off traffic the kiosk was already making.
+  noteKioskServerVersion(res.headers);
   if (res.status === 403) {
     // Peek: plan lock (keep binding) vs real auth failure (unbind).
     try {

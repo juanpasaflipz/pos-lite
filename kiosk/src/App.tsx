@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { startKioskUpdateWatcher } from './lib/kioskUpdate';
 import { KioskBindingProvider, useKioskBinding } from './context/KioskBindingContext';
 import { KioskCartProvider } from './context/KioskCartContext';
 import { KioskCustomerProvider } from './context/KioskCustomerContext';
@@ -20,6 +21,14 @@ import KioskUnavailableScreen from './screens/KioskUnavailableScreen';
 
 const Routed: React.FC = () => {
   const { tenantId, kioskToken, planLocked } = useKioskBinding();
+
+  // Version polling + device heartbeat need the kiosk token, so this starts
+  // once bound. Runs even while plan-locked — a parked kiosk should still
+  // report in and still pick up a new build.
+  useEffect(() => {
+    if (!tenantId || !kioskToken) return;
+    startKioskUpdateWatcher({ tenantId, kioskToken });
+  }, [tenantId, kioskToken]);
 
   if (!tenantId || !kioskToken) {
     return (

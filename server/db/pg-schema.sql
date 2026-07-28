@@ -819,6 +819,11 @@ CREATE TABLE IF NOT EXISTS kiosk_devices (
   kiosk_mode_override TEXT,
   bound_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_seen_at TIMESTAMPTZ,
+  -- Build this device last reported (see POST /api/kiosk/heartbeat). Android
+  -- APK kiosks are frozen between rebuilds, so this is how a stale tablet
+  -- becomes visible without walking up to it.
+  client_version TEXT,
+  client_platform TEXT,
   revoked_at TIMESTAMPTZ,
   CONSTRAINT kiosk_devices_mode_override_valid
     CHECK (kiosk_mode_override IS NULL OR kiosk_mode_override IN ('grid', 'wizard'))

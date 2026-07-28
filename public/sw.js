@@ -1,4 +1,10 @@
-const CACHE_NAME = 'dk-pos-v3';
+// The build id arrives as ?v=<buildId> on the registration URL (see
+// src/main.tsx) — sw.js is a static file, so it can't be stamped at build time
+// the way the bundles are. Scoping the asset cache per build is what makes a
+// deploy actually evict the previous build's hashed chunks instead of letting
+// them pile up forever under one fixed key.
+const BUILD_ID = new URL(self.location.href).searchParams.get('v') || 'dev';
+const CACHE_NAME = `dk-pos-${BUILD_ID}`;
 const API_CACHE_NAME = 'dk-api-v1';
 
 // GET API endpoints eligible for stale-while-revalidate caching
@@ -16,9 +22,17 @@ function isApiCacheable(url) {
   return CACHEABLE_API_PATTERNS.some((p) => url.pathname.startsWith(p));
 }
 
-// Install: skip waiting to activate immediately
-self.addEventListener('install', (event) => {
-  self.skipWaiting();
+// Install: do NOT skip waiting.
+//
+// A new worker seizing control of an already-running tab is actively harmful
+// here: the old page still asks for the previous build's chunk hashes, which no
+// longer exist in dist/, so lazy imports 404 and the screen dies mid-shift. The
+// new worker waits until the page reloads into the matching build, and the
+// client tells it to take over then (applyAppUpdate in src/lib/appUpdate.ts).
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 // Activate: clean old caches, claim clients

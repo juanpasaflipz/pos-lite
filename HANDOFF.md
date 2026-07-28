@@ -7,6 +7,32 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-07-28 (App versioning + live update notification) — Claude Code — **local only, NOT pushed**
+
+Tenants had no way to learn a new deploy existed; a tab open since Tuesday ran
+Tuesday's JS forever. Added a build-stamp versioning system and per-surface
+update delivery. Three things another agent needs to know:
+
+- **`public/sw.js` no longer calls `skipWaiting()` on install.** It was letting a
+  new worker seize a *running* tab, which then requested chunk hashes no longer
+  present in `dist/` → dead screen mid-shift. It now waits for a `SKIP_WAITING`
+  message that only `applyAppUpdate()` sends, and its cache key is scoped per
+  build via the `?v=<buildId>` registration query. Do not "restore" the old
+  immediate-activation behavior.
+- **`version.json` is a gitignored build artifact** written by
+  `scripts/gen-version.mjs` (now the first step of `npm run build`). Both Vite
+  builds `define` it into the bundles and `server/helpers/appVersion.js` reads
+  the same file. Don't commit it, don't hand-edit it.
+- **Migration 0094** adds `kiosk_devices.client_version` / `client_platform`
+  (applied on the test branch, not yet in prod — it ships with the next deploy).
+  Next free migration number is 0095.
+
+Any new screen that would lose state on reload should call
+`useUpdateBlocker(busy)` — POS (cart/payment) and KDS (non-empty rail) already
+do. Details in the new "Versioning & app updates" section of CLAUDE.md.
+
+---
+
 ## 2026-07-28 (WhatsApp Ops owner screen — finishes the entry below) — Claude Code — **local only, NOT pushed**
 
 The multi-number work below left `/admin/whatsapp` **dead**: the cockpit card,

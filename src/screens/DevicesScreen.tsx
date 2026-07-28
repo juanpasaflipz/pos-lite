@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Monitor, Plus, Trash2, Pencil, Check, X, ChefHat, Wine, ScanLine } from 'lucide-react';
-import { listPairedDevices, pairDeviceClaim, renamePairedDevice, revokePairedDevice, type PairedDevice } from '../api';
+import { listKioskDevices, listPairedDevices, pairDeviceClaim, renamePairedDevice, revokePairedDevice, type KioskDeviceStatus, type PairedDevice } from '../api';
 import BrandLogo from '../components/BrandLogo';
 import { useToast } from '../context/ToastContext';
 
@@ -30,11 +30,22 @@ export default function DevicesScreen() {
   const [claiming, setClaiming] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
+  const [kioskDevices, setKioskDevices] = useState<KioskDeviceStatus[]>([]);
+  const [currentVersion, setCurrentVersion] = useState('');
 
   const load = async () => {
     try {
       setLoading(true);
       setDevices(await listPairedDevices());
+      // Kiosk builds are secondary information on this screen — a failure here
+      // must not blank out the KDS pairing list.
+      try {
+        const kiosks = await listKioskDevices();
+        setKioskDevices(kiosks.devices);
+        setCurrentVersion(kiosks.current_version);
+      } catch {
+        setKioskDevices([]);
+      }
     } catch (err: any) {
       addToast(err?.message || 'Failed to load devices', 'error');
     } finally {
@@ -128,6 +139,48 @@ export default function DevicesScreen() {
             <li>The TV jumps into the kitchen display automatically — no employee login needed.</li>
           </ol>
         </section>
+
+        {kioskDevices.length > 0 && (
+          <section className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-5">
+            <h2 className="font-semibold mb-1">Kiosk builds</h2>
+            <p className="text-sm text-neutral-400 mb-4">
+              Web and iPad kiosks update themselves between orders. An Android tablet
+              is frozen until someone reinstalls the APK — that&apos;s what shows as
+              outdated here. Server is on{' '}
+              <code className="bg-neutral-800 px-1.5 py-0.5 rounded text-brand-400">{currentVersion}</code>.
+            </p>
+            <ul className="space-y-2">
+              {kioskDevices.map(device => {
+                const outdated =
+                  !!device.client_version &&
+                  !!currentVersion &&
+                  device.client_version !== currentVersion;
+                return (
+                  <li
+                    key={device.id}
+                    className="flex items-center gap-3 px-3 py-2.5 bg-neutral-950/60 border border-neutral-800 rounded-lg"
+                  >
+                    <ScanLine size={16} className="text-neutral-500 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{device.name}</p>
+                      <p className="text-xs text-neutral-500 font-mono">
+                        {device.client_version || 'not reported yet'}
+                        {device.client_platform ? ` · ${device.client_platform}` : ''}
+                        {' · seen '}
+                        {formatLastSeen(device.last_seen_at)}
+                      </p>
+                    </div>
+                    {outdated && (
+                      <span className="flex-shrink-0 text-xs font-semibold px-2 py-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                        Outdated
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
 
         {loading ? (
           <div className="text-neutral-500 text-center py-12">Loading...</div>

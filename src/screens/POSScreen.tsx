@@ -70,6 +70,7 @@ import DeliveryAddressModal, { type DeliveryDraft } from '../components/pos/Deli
 import LiveOrdersStrip from '../components/pos/LiveOrdersStrip';
 import QuickOrdersModal from '../components/pos/QuickOrdersModal';
 import ParkedCartsModal from '../components/pos/ParkedCartsModal';
+import { useUpdateBlocker } from '../hooks/useUpdateBlocker';
 
 /* ==================== Toast Notification ==================== */
 
@@ -134,6 +135,9 @@ const POSScreen: React.FC = () => {
   const [showParkedCarts, setShowParkedCarts] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [cartDiscount, setCartDiscount] = useState<Discount | null>(null);
+  // Hold app updates while a sale is in progress — a reload mid-cart or
+  // mid-payment loses the ticket.
+  useUpdateBlocker(cart.length > 0 || showPaymentModal);
   // Counter-service in MX defaults to take-away; cashier flips to "Aquí"
   // when the customer is going to eat in. Resets to to_go when cart clears.
   const [cartFulfillment, setCartFulfillment] = useState<'for_here' | 'to_go' | 'delivery'>('to_go');

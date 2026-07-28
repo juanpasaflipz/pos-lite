@@ -403,5 +403,12 @@
     "stepPrinterDesc": "Connect it in Settings → Printers.",
     "cashWorksNote": "You can take cash starting today — the rest is optional.",
     "enterMyPos": "Enter my POS"
+  },
+  "appUpdate": {
+    "title": "New version available",
+    "body": "It will install on its own once this screen is free.",
+    "forced": "Update required — restarting…",
+    "action": "Update now",
+    "version": "Version {{version}}"
   }
 }

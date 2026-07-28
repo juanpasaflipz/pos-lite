@@ -3,11 +3,21 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from 'tailwindcss';
 import autoprefixer from 'autoprefixer';
 import path from 'path';
+// @ts-expect-error — plain ESM helper, shared with the server and the POS build
+import { resolveAppVersion } from './scripts/app-version.mjs';
+
+const appVersion = resolveAppVersion();
 
 export default defineConfig({
   root: path.resolve(__dirname, 'kiosk'),
   base: './',
   plugins: [react()],
+  define: {
+    __APP_BUILD_ID__: JSON.stringify(appVersion.buildId),
+    __APP_VERSION__: JSON.stringify(appVersion.version),
+    __APP_COMMIT__: JSON.stringify(appVersion.commit),
+    __APP_BUILT_AT__: JSON.stringify(appVersion.builtAt),
+  },
   publicDir: path.resolve(__dirname, 'kiosk/public'),
   css: {
     postcss: {

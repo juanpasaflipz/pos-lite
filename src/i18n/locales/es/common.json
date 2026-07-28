@@ -403,5 +403,12 @@
     "stepPrinterDesc": "Conéctala en Ajustes → Impresoras.",
     "cashWorksNote": "Puedes cobrar en efectivo desde hoy — lo demás no es obligatorio.",
     "enterMyPos": "Entrar a mi POS"
+  },
+  "appUpdate": {
+    "title": "Nueva versión disponible",
+    "body": "Se instalará sola cuando la pantalla esté libre.",
+    "forced": "Actualización requerida — reiniciando…",
+    "action": "Actualizar ahora",
+    "version": "Versión {{version}}"
   }
 }

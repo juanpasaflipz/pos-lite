@@ -7,6 +7,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { getPlanLimits, planUpgradeError } from '../planLimits.js';
 import { JWT_SECRET } from '../lib/constants.js';
 import { audit } from '../lib/auditLog.js';
+import { APP_BUILD } from '../helpers/appVersion.js';
 
 const router = Router();
 
@@ -236,6 +237,28 @@ router.get('/', requireAuth('manage_devices'), async (req, res) => {
   } catch (err) {
     console.error('[devices list]', err);
     res.status(500).json({ error: 'Failed to list devices' });
+  }
+});
+
+// GET /api/devices/kiosks — bound customer kiosks and the build each is running.
+//
+// Separate table from kds_devices (kiosks bind by PIN, not pairing code), but
+// the same operational question: which screens are alive and are any of them
+// stale? Web/iPad kiosks self-update, so a mismatch here almost always means an
+// Android tablet needs `npm run android:install`.
+router.get('/kiosks', requireAuth('manage_devices'), async (req, res) => {
+  try {
+    const rows = await all(
+      `SELECT id, name, bound_at, last_seen_at, client_version, client_platform,
+              kiosk_mode_override, revoked_at
+       FROM kiosk_devices
+       WHERE revoked_at IS NULL
+       ORDER BY last_seen_at DESC NULLS LAST, bound_at DESC`
+    );
+    res.json({ devices: rows, current_version: APP_BUILD.buildId });
+  } catch (err) {
+    console.error('[kiosk devices list]', err);
+    res.status(500).json({ error: 'Failed to list kiosk devices' });
   }
 });
 

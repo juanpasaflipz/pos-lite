@@ -29,6 +29,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - CI: `.github/workflows/ci.yml` runs typecheck + full suite on every PR to `master` and every push to `master`. Concurrency group serializes runs against the shared test branch. Secrets: `TEST_DATABASE_URL`, `TEST_PG_APP_USER`, `TEST_PG_APP_PASSWORD`.
 - New tests go in `tests/<domain>.test.ts`. Keep the `beforeAll → dropTestTenant → closePools` shape from existing files; deviations break the single-fork determinism.
 
+## Versioning & app updates
+- **Version scheme:** `package.json` `version` is the release semver (`MAJOR.MINOR.PATCH`). The comparison unit is `buildId` = `<semver>+<7-char commit>`, produced by `scripts/app-version.mjs` and written to `version.json` (gitignored) by `npm run build`. Both Vite builds `define` it into the bundles and the server reads the same file, so client and server always agree
+- **Bump policy:** PATCH for fixes/polish, MINOR for a user-visible feature, MAJOR for a breaking API/data change. Bumping is only needed for the human-readable label and the force-update gate — a plain deploy already changes `buildId` via the commit, so update detection works without touching `package.json`
+- **How a tenant gets a new version:** a plain `location.reload()`. `index.html` is served network-first by the SW and revalidated by the server, so one reload pulls new HTML → new content-hashed assets. No hard reload, no cache clearing
+- **How they're told:** every `/api/*` response carries `X-App-Version`; clients compare it to their own build stamp (no polling hot path), backed by a 5-min `/api/version` poll. POS/admin shows a banner (`src/components/UpdateBanner.tsx`) and auto-reloads once idle; KDS reloads on an empty queue; kiosk reloads silently on the attract screen with an empty cart
+- **Never reload mid-work.** Screens declare busy state with `useUpdateBlocker(...)` (`src/hooks/useUpdateBlocker.ts`) — open cart, payment modal, tickets on the rail. Add one to any new surface that would lose state on reload
+- **Force a reload** by setting `MIN_CLIENT_VERSION` (semver) on Railway. Only for genuine API contract breaks — it interrupts whatever the user is doing after a 5-min grace
+- **The SW must not `skipWaiting()` unprompted.** A new worker seizing a running tab makes the old page request chunk hashes that no longer exist in `dist/` → dead screen mid-shift. `public/sw.js` waits for a `SKIP_WAITING` message, which the client only sends on an accepted update. Its cache key is scoped per build via the `?v=<buildId>` registration query
+- **Android APK is frozen** — a reload can't change its bundle. Kiosks POST `/api/kiosk/heartbeat` with their build; stale tablets show as "Outdated" on `/admin/devices` and need `npm run android:install`
+
 ## Deploy
 GitHub → Railway auto-deploy is wired up (`juanpasaflipz/pos-lite`, branch `master`). `git push origin master` triggers a deploy automatically. Verify with `railway deployment list | head -3` and look for `SUCCESS` on the new deployment id.
 
