@@ -22,7 +22,11 @@ const KioskIdentifyScreen: React.FC = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
     setCallName(trimmed);
-    navigate('/menu');
+    // Honor the wizard-mode post-identify destination if the attract screen
+    // set one. Default remains /menu so grid mode is unchanged.
+    const next = sessionStorage.getItem('kiosk-post-identify-path') || '/menu';
+    sessionStorage.removeItem('kiosk-post-identify-path');
+    navigate(next);
   };
 
   return (

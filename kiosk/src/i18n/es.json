@@ -167,5 +167,43 @@
     "retry": "Reintentar",
     "checking": "Verificando…",
     "staffNote": "Staff: el kiosco de autoservicio es parte del plan Pro. Actívalo desde tu POS en Cuenta → Plan y esta pantalla se reactiva sola."
+  },
+  "wizardAttract": {
+    "title": "Arma tu burrito",
+    "buildFromScratch": "Empezar de cero"
+  },
+  "wizard": {
+    "loading": "Cargando…",
+    "loadError": "No pudimos cargar el menú",
+    "startOver": "Comenzar de nuevo",
+    "back": "Atrás",
+    "viewCart": "Ver carrito",
+    "continue": "Continuar",
+    "reviewOrder": "Revisar mi orden",
+    "review": "Revisa tu orden",
+    "editStart": "Editar desde el principio",
+    "addToCart": "Agregar al carrito",
+    "included": "Incluido",
+    "friesWarning": "Fries: tu proteína sobre papas — sin tortilla (NO es burrito)",
+    "pickProtein": "Elige tu proteína",
+    "pickEstilo": "Elige el estilo",
+    "pickSegunda": "¿Segunda proteína?",
+    "segundaOptional": "Opcional — cargo extra según proteína",
+    "noSegunda": "Solo una",
+    "pickQuitar": "¿Quitar algo?",
+    "quitarOptional": "Opcional — sin costo",
+    "pickExtras": "¿Extras?",
+    "extrasOptional": "Opcional",
+    "otherOptions": "Otras opciones",
+    "cartCount_one": "{{count}} artículo en el carrito",
+    "cartCount_other": "{{count}} artículos en el carrito",
+    "step": {
+      "protein": "Proteína",
+      "estilo": "Estilo",
+      "segunda": "Segunda proteína",
+      "quitar": "Quitar",
+      "extras": "Extras",
+      "review": "Revisar"
+    }
   }
 }

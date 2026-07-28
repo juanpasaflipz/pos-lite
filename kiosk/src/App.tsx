@@ -11,6 +11,7 @@ import KioskIdentifyScreen from './screens/KioskIdentifyScreen';
 import KioskFulfillmentScreen from './screens/KioskFulfillmentScreen';
 import KioskDeliveryAddressScreen from './screens/KioskDeliveryAddressScreen';
 import KioskMenuScreen from './screens/KioskMenuScreen';
+import BuilderWizardScreen from './screens/BuilderWizardScreen';
 import KioskCartScreen from './screens/KioskCartScreen';
 import KioskPayExistingScreen from './screens/KioskPayExistingScreen';
 import KioskHoldConfirmationScreen from './screens/KioskHoldConfirmationScreen';
@@ -44,6 +45,7 @@ const Routed: React.FC = () => {
       <Route path="/delivery-address" element={<KioskDeliveryAddressScreen />} />
       <Route path="/identify" element={<KioskIdentifyScreen />} />
       <Route path="/menu" element={<KioskMenuScreen />} />
+      <Route path="/wizard" element={<BuilderWizardScreen />} />
       <Route path="/cart" element={<KioskCartScreen />} />
       <Route path="/pay-existing" element={<KioskPayExistingScreen />} />
       <Route path="/hold-confirmed" element={<KioskHoldConfirmationScreen />} />

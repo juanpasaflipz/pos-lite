@@ -167,5 +167,43 @@
     "retry": "Retry",
     "checking": "Checking…",
     "staffNote": "Staff: the self-service kiosk is part of the Pro plan. Activate it from your POS under Account → Plan and this screen recovers on its own."
+  },
+  "wizardAttract": {
+    "title": "Build your burrito",
+    "buildFromScratch": "Build from scratch"
+  },
+  "wizard": {
+    "loading": "Loading…",
+    "loadError": "We couldn't load the menu",
+    "startOver": "Start over",
+    "back": "Back",
+    "viewCart": "View cart",
+    "continue": "Continue",
+    "reviewOrder": "Review my order",
+    "review": "Review your order",
+    "editStart": "Edit from the beginning",
+    "addToCart": "Add to cart",
+    "included": "Included",
+    "friesWarning": "Fries: your protein over fries — no tortilla (NOT a burrito)",
+    "pickProtein": "Pick your protein",
+    "pickEstilo": "Pick your style",
+    "pickSegunda": "Second protein?",
+    "segundaOptional": "Optional — extra charge depends on protein",
+    "noSegunda": "Just one",
+    "pickQuitar": "Remove anything?",
+    "quitarOptional": "Optional — no charge",
+    "pickExtras": "Extras?",
+    "extrasOptional": "Optional",
+    "otherOptions": "Other options",
+    "cartCount_one": "{{count}} item in cart",
+    "cartCount_other": "{{count}} items in cart",
+    "step": {
+      "protein": "Protein",
+      "estilo": "Style",
+      "segunda": "Second protein",
+      "quitar": "Remove",
+      "extras": "Extras",
+      "review": "Review"
+    }
   }
 }

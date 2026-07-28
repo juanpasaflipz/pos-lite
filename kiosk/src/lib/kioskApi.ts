@@ -4,13 +4,14 @@ interface BindResponse {
   tenant_id: string;
   tenant_name: string;
   kiosk_token: string;
+  device_id?: string;
 }
 
-export async function bindKiosk(pin: string): Promise<BindResponse> {
+export async function bindKiosk(pin: string, deviceName?: string): Promise<BindResponse> {
   const res = await fetch(`${API_BASE}/api/kiosk/bind`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pin }),
+    body: JSON.stringify(deviceName ? { pin, device_name: deviceName } : { pin }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -210,6 +211,60 @@ export async function fetchModifierMap(auth: AuthHeaders): Promise<KioskModifier
   }
   const body = await res.json();
   return body.map || {};
+}
+
+// ==================== Wizard mode ====================
+
+export type KioskMode = 'grid' | 'wizard';
+
+export interface KioskConfig {
+  mode: KioskMode;
+  device_override: KioskMode | null;
+  tenant_mode: KioskMode;
+}
+
+export async function fetchKioskConfig(auth: AuthHeaders): Promise<KioskConfig> {
+  const res = await authedFetch(auth, `${API_BASE}/api/kiosk/config`);
+  if (!res.ok) throw new Error(`Config fetch failed (${res.status})`);
+  return res.json();
+}
+
+// Builder-menu payload — one row per builder item, groups[] carries the split
+// { kind, slug } from the server so the wizard can key on kind === 'Estilo'
+// etc. without parsing names client-side.
+export interface BuilderModifier {
+  id: number;
+  name: string;
+  price_adjustment: number;
+}
+
+export interface BuilderGroup {
+  id: number;
+  kind: string;               // 'Estilo' | 'Segunda proteína' | 'Quitar' | 'Extras' | '¿Con birria o cochinita?'
+  slug: string | null;        // the base-item slug this group is scoped to; null on legacy groups
+  name: string;               // internal "Estilo__asada"
+  selection_type: 'single' | 'multiple';
+  required: boolean;
+  min_selections: number;
+  max_selections: number;
+  options: BuilderModifier[];
+}
+
+export interface BuilderItem {
+  id: number;
+  slug: string | null;        // 'asada' | 'pollo' | ... | 'birria' | 'cochinita' | 'rollbertos'
+  name: string;
+  name_en: string | null;
+  description: string | null;
+  description_en: string | null;
+  price: number;
+  groups: BuilderGroup[];
+}
+
+export async function fetchBuilderMenu(auth: AuthHeaders): Promise<{ items: BuilderItem[] }> {
+  const res = await authedFetch(auth, `${API_BASE}/api/kiosk/builder-menu`);
+  if (!res.ok) throw new Error(`Builder menu fetch failed (${res.status})`);
+  return res.json();
 }
 
 export interface KioskHoldResponse {
