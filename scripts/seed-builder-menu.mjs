@@ -312,6 +312,7 @@ async function main() {
   const groupPlan = [];
   const optionPlan = [];
   const linkPlan = [];
+  const slugMapPlan = [];
 
   // Execute either directly against adminSql (dry-run only reads) or inside a
   // single transaction for the real run. We build up the plan tables inside so
@@ -353,6 +354,13 @@ async function main() {
       }
     }
 
+    // Slug map for wizard — keyed on (tenant_id, slug), decouples
+    // Phase 2 wizard code from menu-item names.
+    const slugRows = [];
+    for (let i = 0; i < PROTEINS.length; i++) {
+      slugRows.push({ slug: PROTEINS[i].slug, item_id: itemPlan[i].id });
+    }
+
     // Fixed items (Birria, Cochinita, Rollbertos)
     for (let i = 0; i < FIXED_ITEMS.length; i++) {
       const f = FIXED_ITEMS[i];
@@ -360,6 +368,8 @@ async function main() {
         name: f.name, name_en: f.name_en, price: f.price, sort_order: PROTEINS.length + i + 1,
       }, !DRY_RUN);
       itemPlan.push({ name: f.name, price: f.price, action: item.action, id: item.id });
+
+      slugRows.push({ slug: f.key, item_id: item.id });
 
       if (f.key === 'rollbertos') {
         const gspec = {
@@ -380,6 +390,34 @@ async function main() {
         }
         const link = await upsertLink(sql, tenant.id, item.id, grp.id, gspec.sort, !DRY_RUN);
         linkPlan.push({ item: f.name, group: gspec.name, sort: gspec.sort, action: link.action });
+      }
+    }
+
+    // Slug map — upsert (tenant_id, slug) → menu_item_id
+    for (const s of slugRows) {
+      if (DRY_RUN) {
+        slugMapPlan.push({ slug: s.slug, item_id: s.item_id, action: 'INSERT' });
+        continue;
+      }
+      const existing = await sql`
+        SELECT menu_item_id FROM kiosk_builder_map
+        WHERE tenant_id = ${tenant.id} AND slug = ${s.slug}
+      `;
+      if (existing.length) {
+        const changed = Number(existing[0].menu_item_id) !== Number(s.item_id);
+        if (changed) {
+          await sql`
+            UPDATE kiosk_builder_map SET menu_item_id = ${s.item_id}
+            WHERE tenant_id = ${tenant.id} AND slug = ${s.slug}
+          `;
+        }
+        slugMapPlan.push({ slug: s.slug, item_id: s.item_id, action: changed ? 'UPDATE' : 'NOOP' });
+      } else {
+        await sql`
+          INSERT INTO kiosk_builder_map (tenant_id, slug, menu_item_id)
+          VALUES (${tenant.id}, ${s.slug}, ${s.item_id})
+        `;
+        slugMapPlan.push({ slug: s.slug, item_id: s.item_id, action: 'INSERT' });
       }
     }
 
@@ -435,6 +473,14 @@ async function main() {
   console.log(`---- LINKS (${linkPlan.length}) ----`);
   const lS = summarize(linkPlan);
   console.log(`  = ${lS.INSERT} INSERT · ${lS.UPDATE} UPDATE · ${lS.NOOP} NOOP\n`);
+
+  console.log(`---- SLUG MAP (${slugMapPlan.length}) ----`);
+  console.log(row('action'.padEnd(8), 'item_id'.padStart(7), 'slug'));
+  for (const s of slugMapPlan) {
+    console.log(row(s.action.padEnd(8), String(s.item_id ?? 'pending').padStart(7), s.slug));
+  }
+  const sS = summarize(slugMapPlan);
+  console.log(`  = ${sS.INSERT} INSERT · ${sS.UPDATE} UPDATE · ${sS.NOOP} NOOP\n`);
 
   // Placeholder summary
   console.log(`---- ⚠️ PLACEHOLDER PRICES (${placeholders.length}) — Juan must confirm ----`);

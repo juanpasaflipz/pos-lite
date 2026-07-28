@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   trial_reminder_sent_at TIMESTAMPTZ,
   trial_ended_notified_at TIMESTAMPTZ,
   timezone TEXT NOT NULL DEFAULT 'America/Mexico_City',
+  kiosk_mode TEXT DEFAULT 'grid',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -807,6 +808,34 @@ CREATE TABLE IF NOT EXISTS expenses (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Kiosk device rows: created by /api/kiosk/bind when caller sends device_name.
+-- kiosk_mode_override lets us flip ONE device to wizard while other devices on
+-- the same tenant stay on their tenant.kiosk_mode default. See migration 0092.
+CREATE TABLE IF NOT EXISTS kiosk_devices (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
+  name TEXT NOT NULL,
+  bound_employee_id INTEGER,
+  kiosk_mode_override TEXT,
+  bound_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_seen_at TIMESTAMPTZ,
+  revoked_at TIMESTAMPTZ,
+  CONSTRAINT kiosk_devices_mode_override_valid
+    CHECK (kiosk_mode_override IS NULL OR kiosk_mode_override IN ('grid', 'wizard'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_kiosk_devices_tenant_name_active
+  ON kiosk_devices (tenant_id, name) WHERE revoked_at IS NULL;
+
+-- Slug → menu_item_id map for the burrito-builder wizard. Decouples the
+-- wizard's protein knobs from item names so a rename in Menu Management
+-- doesn't break the flow. Populated by scripts/seed-builder-menu.mjs.
+CREATE TABLE IF NOT EXISTS kiosk_builder_map (
+  tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
+  slug TEXT NOT NULL,
+  menu_item_id INTEGER NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE,
+  PRIMARY KEY (tenant_id, slug)
+);
+
 -- ==================== Indexes ====================
 
 CREATE INDEX IF NOT EXISTS idx_employees_tenant ON employees(tenant_id);
@@ -894,7 +923,8 @@ BEGIN
       'loyalty_customers', 'stamp_cards', 'stamp_events', 'referral_events',
       'loyalty_messages', 'loyalty_config', 'wallet_passes', 'wallet_registrations',
       'order_templates',
-      'waste_log', 'cfdi_config', 'cfdi_invoices', 'tenant_credentials', 'expenses'
+      'waste_log', 'cfdi_config', 'cfdi_invoices', 'tenant_credentials', 'expenses',
+      'kiosk_devices', 'kiosk_builder_map'
     ])
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);
