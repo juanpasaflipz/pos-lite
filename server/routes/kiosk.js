@@ -582,12 +582,14 @@ router.get('/admin/tenants', async (req, res) => {
 });
 
 // POST /api/kiosk/admin/bind — bind kiosk via ADMIN_SECRET + chosen tenant_id
-// Body: { admin_secret, tenant_id }  (or admin_secret via X-Admin-Secret header)
+// Body: { admin_secret, tenant_id, device_name? }  (admin_secret via X-Admin-Secret header also accepted)
+// device_name is optional but required if super-admin needs to attach a
+// per-device kiosk_mode_override later (the Samsung wizard pilot flow).
 router.post('/admin/bind', bindLimiter, async (req, res) => {
   if (!checkAdminSecret(req)) {
     return res.status(401).json({ error: 'Invalid admin secret' });
   }
-  const { tenant_id } = req.body || {};
+  const { tenant_id, device_name } = req.body || {};
   if (!tenant_id || typeof tenant_id !== 'string') {
     return res.status(400).json({ error: 'tenant_id required' });
   }
@@ -598,8 +600,37 @@ router.post('/admin/bind', bindLimiter, async (req, res) => {
     if (!tenant) {
       return res.status(404).json({ error: 'Tenant not found' });
     }
+
+    let deviceId = null;
+    if (typeof device_name === 'string' && device_name.trim()) {
+      const name = device_name.trim().slice(0, 80);
+      const existing = await adminSql`
+        SELECT id FROM kiosk_devices
+        WHERE tenant_id = ${tenant.id} AND name = ${name} AND revoked_at IS NULL
+        LIMIT 1
+      `;
+      if (existing.length) {
+        deviceId = existing[0].id;
+        await adminSql`
+          UPDATE kiosk_devices SET last_seen_at = NOW() WHERE id = ${deviceId}
+        `;
+      } else {
+        const [row] = await adminSql`
+          INSERT INTO kiosk_devices (tenant_id, name, last_seen_at)
+          VALUES (${tenant.id}, ${name}, NOW())
+          RETURNING id
+        `;
+        deviceId = row.id;
+      }
+    }
+
     const kioskToken = jwt.sign(
-      { tenantId: tenant.id, type: 'kiosk', boundVia: 'admin_secret' },
+      {
+        tenantId: tenant.id,
+        type: 'kiosk',
+        boundVia: 'admin_secret',
+        ...(deviceId ? { deviceId } : {}),
+      },
       JWT_SECRET,
       { expiresIn: '30d' }
     );
@@ -607,6 +638,7 @@ router.post('/admin/bind', bindLimiter, async (req, res) => {
       tenant_id: tenant.id,
       tenant_name: tenant.name,
       kiosk_token: kioskToken,
+      ...(deviceId ? { device_id: deviceId } : {}),
     });
   } catch (err) {
     console.error('[kiosk/admin/bind] error', err);

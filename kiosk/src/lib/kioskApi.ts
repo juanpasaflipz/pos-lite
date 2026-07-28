@@ -40,6 +40,7 @@ export async function listTenantsWithAdminSecret(adminSecret: string): Promise<A
 export async function bindKioskWithAdminSecret(
   adminSecret: string,
   tenantId: string,
+  deviceName?: string,
 ): Promise<BindResponse> {
   const res = await fetch(`${API_BASE}/api/kiosk/admin/bind`, {
     method: 'POST',
@@ -47,7 +48,7 @@ export async function bindKioskWithAdminSecret(
       'Content-Type': 'application/json',
       'X-Admin-Secret': adminSecret,
     },
-    body: JSON.stringify({ tenant_id: tenantId }),
+    body: JSON.stringify(deviceName ? { tenant_id: tenantId, device_name: deviceName } : { tenant_id: tenantId }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

@@ -12,6 +12,7 @@ const AdminBindScreen: React.FC = () => {
   const { bind } = useKioskBinding();
   const [secret, setSecret] = useState('');
   const [tenants, setTenants] = useState<AdminTenant[] | null>(null);
+  const [deviceName, setDeviceName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -37,7 +38,11 @@ const AdminBindScreen: React.FC = () => {
     setBusy(true);
     setError(null);
     try {
-      const result = await bindKioskWithAdminSecret(secret.trim(), tenant.id);
+      // deviceName is optional. When provided, the server creates a
+      // kiosk_devices row and includes deviceId in the token — required for
+      // super-admin to attach a per-device kiosk_mode_override (Samsung
+      // wizard pilot). Bind without it stays backward-compatible.
+      const result = await bindKioskWithAdminSecret(secret.trim(), tenant.id, deviceName.trim() || undefined);
       bind(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Bind failed');
@@ -85,7 +90,24 @@ const AdminBindScreen: React.FC = () => {
 
       {tenants && (
         <div className="flex-1">
-          <p className="text-neutral-400 mb-4">Pick a tenant to bind this iPad to:</p>
+          <div className="mb-6 max-w-2xl">
+            <label className="block text-sm font-bold text-neutral-400 uppercase tracking-wider mb-2">
+              Device name (optional)
+            </label>
+            <input
+              type="text"
+              value={deviceName}
+              onChange={(e) => setDeviceName(e.target.value)}
+              placeholder='e.g. "Samsung Tab S10 FE" — required if super-admin will set a per-device mode override'
+              maxLength={80}
+              className="w-full px-4 py-3 text-lg bg-neutral-900 border-2 border-neutral-800 focus:border-brand-600 rounded-xl outline-none"
+            />
+            <p className="text-xs text-neutral-500 mt-2">
+              Leave blank for a generic bind. Name it if this device needs its own kiosk_mode_override
+              (e.g. wizard-mode pilot on one tablet while others stay on grid).
+            </p>
+          </div>
+          <p className="text-neutral-400 mb-4">Pick a tenant to bind this device to:</p>
           {error && <p className="text-cockpit-out-text mb-4">{error}</p>}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {tenants.map((t) => (
