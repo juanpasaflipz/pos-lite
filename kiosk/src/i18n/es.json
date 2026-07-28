@@ -170,6 +170,8 @@
   },
   "wizardAttract": {
     "title": "Arma tu burrito",
+    "tagline": "Elige un favorito o arma el tuyo",
+    "favorites": "Favoritos de la casa",
     "buildFromScratch": "Empezar de cero"
   },
   "wizard": {
@@ -180,30 +182,36 @@
     "viewCart": "Ver carrito",
     "continue": "Continuar",
     "reviewOrder": "Revisar mi orden",
-    "review": "Revisa tu orden",
     "editStart": "Editar desde el principio",
     "addToCart": "Agregar al carrito",
+    "added": "Agregado",
     "included": "Incluido",
-    "friesWarning": "Fries: tu proteína sobre papas — sin tortilla (NO es burrito)",
-    "pickProtein": "Elige tu proteína",
-    "pickEstilo": "Elige el estilo",
-    "pickSegunda": "¿Segunda proteína?",
-    "segundaOptional": "Opcional — cargo extra según proteína",
+    "proteinHint": "Elige tu proteína principal",
+    "segundaOptional": "Opcional — cargo según proteína",
     "noSegunda": "Solo una",
-    "pickQuitar": "¿Quitar algo?",
-    "quitarOptional": "Opcional — sin costo",
-    "pickExtras": "¿Extras?",
-    "extrasOptional": "Opcional",
+    "noSegundaSub": "sin cargo extra",
+    "quitarHint": "Toca lo que no quieras",
+    "quitarStateOn": "Lleva",
+    "quitarStateOff": "SIN",
+    "extrasOptional": "Opcional — agrega lo que quieras",
     "otherOptions": "Otras opciones",
     "cartCount_one": "{{count}} artículo en el carrito",
     "cartCount_other": "{{count}} artículos en el carrito",
     "step": {
-      "protein": "Proteína",
-      "estilo": "Estilo",
-      "segunda": "Segunda proteína",
-      "quitar": "Quitar",
-      "extras": "Extras",
-      "review": "Revisar"
+      "protein": "Elige tu proteína",
+      "estilo": "Elige tu estilo",
+      "segunda": "¿Segunda proteína?",
+      "quitar": "Quítale lo que no quieras",
+      "extras": "¿Deseas agregar algo?",
+      "review": "Revisa tu orden"
+    },
+    "stepKicker": {
+      "protein": "Paso 1 · Proteína",
+      "estilo": "Paso 2 · Estilo",
+      "segunda": "Paso 3 · Segunda",
+      "quitar": "Paso 4 · A tu gusto",
+      "extras": "Paso 5 · Extras",
+      "review": "Resumen"
     }
   }
 }

@@ -170,6 +170,8 @@
   },
   "wizardAttract": {
     "title": "Build your burrito",
+    "tagline": "Pick a favorite or build your own",
+    "favorites": "House favorites",
     "buildFromScratch": "Build from scratch"
   },
   "wizard": {
@@ -180,30 +182,36 @@
     "viewCart": "View cart",
     "continue": "Continue",
     "reviewOrder": "Review my order",
-    "review": "Review your order",
     "editStart": "Edit from the beginning",
     "addToCart": "Add to cart",
+    "added": "Added",
     "included": "Included",
-    "friesWarning": "Fries: your protein over fries — no tortilla (NOT a burrito)",
-    "pickProtein": "Pick your protein",
-    "pickEstilo": "Pick your style",
-    "pickSegunda": "Second protein?",
+    "proteinHint": "Pick your main protein",
     "segundaOptional": "Optional — extra charge depends on protein",
     "noSegunda": "Just one",
-    "pickQuitar": "Remove anything?",
-    "quitarOptional": "Optional — no charge",
-    "pickExtras": "Extras?",
-    "extrasOptional": "Optional",
+    "noSegundaSub": "no extra charge",
+    "quitarHint": "Tap what you don't want",
+    "quitarStateOn": "Includes",
+    "quitarStateOff": "NO",
+    "extrasOptional": "Optional — add anything you'd like",
     "otherOptions": "Other options",
     "cartCount_one": "{{count}} item in cart",
     "cartCount_other": "{{count}} items in cart",
     "step": {
-      "protein": "Protein",
-      "estilo": "Style",
-      "segunda": "Second protein",
-      "quitar": "Remove",
-      "extras": "Extras",
-      "review": "Review"
+      "protein": "Pick your protein",
+      "estilo": "Pick your style",
+      "segunda": "Second protein?",
+      "quitar": "Take off what you don't want",
+      "extras": "Want to add anything?",
+      "review": "Review your order"
+    },
+    "stepKicker": {
+      "protein": "Step 1 · Protein",
+      "estilo": "Step 2 · Style",
+      "segunda": "Step 3 · Second",
+      "quitar": "Step 4 · Your way",
+      "extras": "Step 5 · Extras",
+      "review": "Summary"
     }
   }
 }

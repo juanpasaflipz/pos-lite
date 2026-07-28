@@ -8,6 +8,7 @@ import { useKioskCart } from '../context/KioskCartContext';
 import { resetKioskLanguage } from '../i18n';
 import LanguageToggle from '../components/LanguageToggle';
 import type { WizardPreset } from './BuilderWizardScreen';
+import { PRESET_ICONS } from '../lib/builderIcons';
 
 const AttractScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -78,15 +79,15 @@ const AttractScreen: React.FC = () => {
   // navigation goes through /fulfillment first (still need for-here/to-go for
   // the kitchen ticket), then hits the wizard with state pre-seeded.
   const en = i18n.language.startsWith('en');
-  const presets: Array<{ label: string; sub: string; preset: WizardPreset }> = [
-    { label: en ? 'El California'      : 'El California',      sub: en ? 'Carne Asada, California style'  : 'Carne Asada, estilo California', preset: { slug: 'asada',      estiloName: 'California' } },
-    { label: en ? 'Pollos Hermanos'    : 'Pollos Hermanos',    sub: en ? 'Grilled Chicken, Mission style' : 'Pollo Asado, estilo Mission',    preset: { slug: 'pollo',      estiloName: 'Mission' } },
-    { label: en ? 'Breakfast'          : 'Breakfast',          sub: en ? 'Egg, California style'          : 'Huevo, estilo California',       preset: { slug: 'huevo',      estiloName: 'California' } },
-    { label: en ? 'Surf-N-Turf'        : 'Surf-N-Turf',        sub: en ? 'Asada + Shrimp, Mission'        : 'Asada + Camarón, Mission',       preset: { slug: 'asada',      estiloName: 'Mission', segundaName: 'Camarón' } },
-    { label: en ? 'Carne Asada Fries'  : 'Carne Asada Fries',  sub: en ? 'Asada over fries'               : 'Asada sobre papas',              preset: { slug: 'asada',      estiloName: 'Fries' } },
-    { label: en ? 'Birria Burrito'     : 'Burrito de Birria',  sub: '$99',                                preset: { slug: 'birria' } },
-    { label: en ? 'Cochinita Burrito'  : 'Burrito Cochinita',  sub: '$99',                                preset: { slug: 'cochinita' } },
-    { label: en ? 'Rollbertos'         : 'Rollbertos',         sub: '$139',                               preset: { slug: 'rollbertos' } },
+  const presets: Array<{ id: string; label: string; sub: string; price: string; preset: WizardPreset }> = [
+    { id: 'california', label: en ? 'The California'   : 'El California',       sub: en ? 'Carne Asada, California style'  : 'Carne Asada, estilo California', price: '$250', preset: { slug: 'asada',      estiloName: 'California' } },
+    { id: 'pollos',     label: 'Pollos Hermanos',                                 sub: en ? 'Grilled Chicken, Mission'       : 'Pollo Asado, estilo Mission',    price: '$219', preset: { slug: 'pollo',      estiloName: 'Mission' } },
+    { id: 'breakfast',  label: 'Breakfast',                                       sub: en ? 'Egg, California'                : 'Huevo, estilo California',       price: '$180', preset: { slug: 'huevo',      estiloName: 'California' } },
+    { id: 'surfnturf',  label: 'Surf-N-Turf',                                     sub: en ? 'Asada + Shrimp, Mission'        : 'Asada + Camarón, Mission',       price: '$340', preset: { slug: 'asada',      estiloName: 'Mission', segundaName: 'Camarón' } },
+    { id: 'asadafries', label: 'Carne Asada Fries',                               sub: en ? 'Asada over fries'               : 'Asada sobre papas',              price: '$299', preset: { slug: 'asada',      estiloName: 'Fries' } },
+    { id: 'birria',     label: en ? 'Birria Burrito'    : 'Burrito de Birria',    sub: en ? 'Beef birria'                    : 'Res deshebrada',                 price: '$99',  preset: { slug: 'birria' } },
+    { id: 'cochinita',  label: en ? 'Cochinita Burrito' : 'Burrito Cochinita',    sub: en ? 'Yucatán-style pork'             : 'Cerdo estilo Yucatán',           price: '$99',  preset: { slug: 'cochinita' } },
+    { id: 'rollbertos', label: 'Rollbertos',                                      sub: en ? 'Rolled cheese taquitos'         : 'Taquitos dorados de queso',      price: '$139', preset: { slug: 'rollbertos' } },
   ];
 
   const startPreset = (preset: WizardPreset) => {
@@ -105,39 +106,62 @@ const AttractScreen: React.FC = () => {
   };
 
   return (
-    <div className="relative h-full w-full bg-neutral-950 text-white flex flex-col pt-safe pb-safe px-4 sm:px-8">
-      <div className="flex items-center justify-between py-4">
-        <div>
+    <div
+      className="relative h-full w-full text-white flex flex-col pt-safe pb-safe px-4 sm:px-6 overflow-y-auto"
+      // Prototype's radial burst — brand tint fading up from the bottom edge.
+      style={{ background: 'radial-gradient(ellipse at 50% 120%, var(--brand-900, #452010) 0%, #0A0A0A 60%)' }}
+    >
+      {/* Header — logo + tagline, language toggle floats right */}
+      <div className="flex items-start justify-between pt-4 pb-2">
+        <div className="flex-1 min-w-0">
           {tenantName && (
-            <div className="text-sm sm:text-lg text-white/70 uppercase tracking-widest font-black">
+            <div className="text-xs sm:text-sm text-brand-300 uppercase tracking-widest font-black mb-1">
               {tenantName}
             </div>
           )}
-          <div className="text-2xl sm:text-4xl font-black">{t('wizardAttract.title')}</div>
+          <div className="text-3xl sm:text-5xl font-black leading-none tracking-tight">
+            {t('wizardAttract.title')}
+          </div>
+          <div className="text-sm sm:text-base text-neutral-400 font-bold mt-2">
+            {t('wizardAttract.tagline')}
+          </div>
         </div>
         <LanguageToggle />
       </div>
 
-      {/* Grid: content-start + auto-rows-min keeps tiles at their natural
-          height so they don't stretch to fill the remaining vertical space.
-          Two rows of four on tablet, one column stacked on phone. */}
-      <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4 pb-4 content-start auto-rows-min">
+      {/* Favorites label */}
+      <div className="text-xs font-black uppercase tracking-[0.14em] text-brand-300 mt-6 mb-3">
+        {t('wizardAttract.favorites')}
+      </div>
+
+      {/* Preset grid — 2/3/4 columns, prototype-style cards with emoji + name + sub + price */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 auto-rows-min">
         {presets.map((p) => (
           <button
-            key={p.label + p.sub}
+            key={p.id}
             onClick={() => startPreset(p.preset)}
-            className="bg-brand-700 hover:bg-brand-800 rounded-2xl p-4 sm:p-5 min-h-[110px] flex flex-col items-start justify-center gap-1 text-left touch-manipulation"
+            className="bg-neutral-900 border-2 border-neutral-800 hover:border-brand-400 active:scale-95 rounded-2xl px-3 py-4 flex flex-col items-center text-center gap-1 touch-manipulation transition-transform"
           >
-            <div className="text-lg sm:text-xl font-black leading-tight">{p.label}</div>
-            <div className="text-sm sm:text-base text-white/75 leading-snug">{p.sub}</div>
+            <div className="text-3xl leading-none mb-1">{PRESET_ICONS[p.id] || '🌯'}</div>
+            <div className="text-sm sm:text-base font-black leading-tight">{p.label}</div>
+            <div className="text-[11px] sm:text-xs font-bold text-neutral-400 leading-snug">{p.sub}</div>
+            <div className="text-sm font-black text-brand-300 mt-1">{p.price}</div>
           </button>
         ))}
       </div>
 
-      <div className="pb-2">
+      {/* OR divider */}
+      <div className="flex items-center gap-3 my-5 text-neutral-500 text-xs font-black tracking-widest uppercase">
+        <div className="flex-1 h-px bg-neutral-800" />
+        {en ? 'OR' : 'O'}
+        <div className="flex-1 h-px bg-neutral-800" />
+      </div>
+
+      {/* Build from scratch — bigger, prototype-style primary button */}
+      <div className="pb-4">
         <button
           onClick={startFromScratch}
-          className="w-full py-4 sm:py-6 bg-neutral-800 hover:bg-neutral-700 rounded-2xl text-xl font-black flex items-center justify-center gap-3 touch-manipulation"
+          className="w-full py-5 bg-brand-600 active:bg-brand-700 rounded-2xl text-xl sm:text-2xl font-black flex items-center justify-center gap-3 touch-manipulation shadow-lg shadow-brand-900/40"
         >
           <Hand className="h-6 w-6" />
           {t('wizardAttract.buildFromScratch')}
