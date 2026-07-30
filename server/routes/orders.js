@@ -5,7 +5,7 @@ import { all, get, run, getConn } from '../db/index.js';
 import { adminSql } from '../db/index.js';
 // AI data pipeline removed in pos-lite
 const recordOrderItemPairs = () => {};
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, verifyApprovalToken } from '../middleware/auth.js';
 import { audit } from '../lib/auditLog.js';
 import { sendReceiptMessage, sendReceiptLoyaltyMessage, sendOrderReadyMessage } from '../helpers/twilio.js';
 import { findOrCreateCustomer, addStampsForOrder, getConfigValue } from '../helpers/loyalty.js';
@@ -186,6 +186,19 @@ async function insertOrderWithNumber(conn, {
 /**
  * Verify the actor (or their manager-approver) is authorized to apply a discount.
  * Returns the authorizing employee_id, or throws an Error with .status set.
+ *
+ * KNOWN WEAKNESS — do not copy this shape into new code. `authorizedByEmployeeId`
+ * arrives as a bare integer in the request body with nothing binding it to the
+ * PIN that produced it, so a client can name any manager's employee id and
+ * self-authorize a discount (including `comp`, i.e. 100% off). Every other
+ * approval gate now takes a signed X-Approval-Token instead — see
+ * authorizeOrderEdit below and requireAuth({ allowApproval }) in middleware/auth.
+ *
+ * This one is not a straight port: at order-creation time the approver rides
+ * inside the cart payload, a cart can carry several separately-approved
+ * discounts (per-line plus cart-level), and a cart can sit open far longer than
+ * the token's 5-minute TTL. Closing it needs a different design — likely
+ * server-side approval records the cart references by id — not a header swap.
  */
 async function authorizeDiscount({ actorEmployee, authorizedByEmployeeId }) {
   // Actor has permission directly
@@ -1382,12 +1395,33 @@ router.post('/:id/sms-receipt', requireAuth('pos_access'), async (req, res) => {
 const EDIT_BLOCKED_STATUSES = new Set(['completed', 'cancelled']);
 
 /**
+ * Shape a thrown authorization error for the wire. `code`/`permission` are what
+ * tell the client to raise the manager PIN pad instead of showing a dead end, so
+ * they have to survive the throw — a bare `{ error: message }` reads as a hard
+ * denial and the cashier is stuck.
+ */
+function authErrorBody(error) {
+  return {
+    error: error.message,
+    ...(error.code && { code: error.code }),
+    ...(error.permission && { permission: error.permission }),
+  };
+}
+
+/**
  * Gate an edit on an already-sent order.
  * - Unpaid: pos_access (already enforced by route middleware) is enough.
- * - Paid:   actor must have void_orders, OR an approver with void_orders
- *           must be supplied (mirrors the discount authorization pattern).
+ * - Paid:   actor must have void_orders, OR present a signed manager approval
+ *           for void_orders (X-Approval-Token).
+ *
+ * The gate can't be middleware: whether approval is needed at all depends on the
+ * order's payment_status, which the handler has to load first.
+ *
+ * Returns the employee id to credit the edit to — the actor when they're
+ * self-authorized, otherwise the approving manager (this lands in
+ * order_items.voided_by, so it must name whoever actually authorized it).
  */
-async function authorizeOrderEdit({ actorEmployee, authorizedByEmployeeId, isPaid }) {
+async function authorizeOrderEdit({ req, actorEmployee, isPaid }) {
   if (!isPaid) return actorEmployee.id;
 
   const actorPerm = await get(
@@ -1396,27 +1430,15 @@ async function authorizeOrderEdit({ actorEmployee, authorizedByEmployeeId, isPai
   );
   if (actorPerm?.granted) return actorEmployee.id;
 
-  if (!authorizedByEmployeeId) {
+  // Trusting a bare employee id from the request body — as this used to — let a
+  // cashier self-authorize by naming any manager. The token is signed by us,
+  // scoped to void_orders and to this tenant, and expires in 5 minutes.
+  const approver = verifyApprovalToken(req, 'void_orders');
+  if (!approver) {
     const err = new Error('Manager approval required to edit a paid order');
     err.status = 403;
-    throw err;
-  }
-  const approver = await get(
-    'SELECT id, role, active FROM employees WHERE id = $1',
-    [authorizedByEmployeeId]
-  );
-  if (!approver || !approver.active) {
-    const err = new Error('Invalid approver');
-    err.status = 403;
-    throw err;
-  }
-  const approverPerm = await get(
-    'SELECT granted FROM role_permissions WHERE role = $1 AND permission = $2',
-    [approver.role, 'void_orders']
-  );
-  if (!approverPerm?.granted) {
-    const err = new Error('Approver lacks void_orders permission');
-    err.status = 403;
+    err.code = 'approval_required';
+    err.permission = 'void_orders';
     throw err;
   }
   return approver.id;
@@ -1529,10 +1551,10 @@ async function resolveAppendItem(item, conn) {
 // ---------- Edit-existing-order endpoints ----------
 
 // POST /api/orders/:id/items — append items to a sent (non-completed) order.
-// Body: { items: [...], authorized_by_employee_id?: number }
+// Body: { items: [...] }. Paid orders additionally need X-Approval-Token.
 router.post('/:id/items', requireAuth('pos_access'), async (req, res) => {
   const { id } = req.params;
-  const { items, authorized_by_employee_id } = req.body || {};
+  const { items } = req.body || {};
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'items array is required' });
   }
@@ -1550,8 +1572,8 @@ router.post('/:id/items', requireAuth('pos_access'), async (req, res) => {
 
     const isPaid = order.payment_status === 'paid' || order.payment_status === 'completed';
     const authorizedBy = await authorizeOrderEdit({
+      req,
       actorEmployee: req.employee,
-      authorizedByEmployeeId: authorized_by_employee_id,
       isPaid,
     });
 
@@ -1606,17 +1628,17 @@ router.post('/:id/items', requireAuth('pos_access'), async (req, res) => {
 
     res.json({ success: true, order_id: Number(id), inserted_item_ids: insertedIds, ...totals });
   } catch (error) {
-    if (error?.status) return res.status(error.status).json({ error: error.message });
+    if (error?.status) return res.status(error.status).json(authErrorBody(error));
     console.error('Error appending order items:', error);
     res.status(500).json({ error: 'Failed to append items' });
   }
 });
 
 // PATCH /api/orders/:id/items/:itemId — change quantity on a sent order line.
-// Body: { quantity: number, authorized_by_employee_id?: number }
+// Body: { quantity: number }. Paid orders additionally need X-Approval-Token.
 router.patch('/:id/items/:itemId', requireAuth('pos_access'), async (req, res) => {
   const { id, itemId } = req.params;
-  const { quantity, authorized_by_employee_id } = req.body || {};
+  const { quantity } = req.body || {};
   if (!Number.isInteger(quantity) || quantity <= 0) {
     return res.status(400).json({ error: 'quantity must be a positive integer' });
   }
@@ -1641,8 +1663,8 @@ router.patch('/:id/items/:itemId', requireAuth('pos_access'), async (req, res) =
 
     const isPaid = order.payment_status === 'paid' || order.payment_status === 'completed';
     await authorizeOrderEdit({
+      req,
       actorEmployee: req.employee,
-      authorizedByEmployeeId: authorized_by_employee_id,
       isPaid,
     });
 
@@ -1677,17 +1699,17 @@ router.patch('/:id/items/:itemId', requireAuth('pos_access'), async (req, res) =
 
     res.json({ success: true, item_id: Number(itemId), quantity, ...totals });
   } catch (error) {
-    if (error?.status) return res.status(error.status).json({ error: error.message });
+    if (error?.status) return res.status(error.status).json(authErrorBody(error));
     console.error('Error updating order item quantity:', error);
     res.status(500).json({ error: 'Failed to update quantity' });
   }
 });
 
 // DELETE /api/orders/:id/items/:itemId — soft-void a line on a sent order.
-// Body: { void_reason: string, authorized_by_employee_id?: number }
+// Body: { void_reason: string }. Paid orders additionally need X-Approval-Token.
 router.delete('/:id/items/:itemId', requireAuth('pos_access'), async (req, res) => {
   const { id, itemId } = req.params;
-  const { void_reason, authorized_by_employee_id } = req.body || {};
+  const { void_reason } = req.body || {};
   if (!void_reason || typeof void_reason !== 'string' || void_reason.trim().length < 2) {
     return res.status(400).json({ error: 'void_reason is required' });
   }
@@ -1712,8 +1734,8 @@ router.delete('/:id/items/:itemId', requireAuth('pos_access'), async (req, res) 
 
     const isPaid = order.payment_status === 'paid' || order.payment_status === 'completed';
     const authorizedBy = await authorizeOrderEdit({
+      req,
       actorEmployee: req.employee,
-      authorizedByEmployeeId: authorized_by_employee_id,
       isPaid,
     });
 
@@ -1756,7 +1778,7 @@ router.delete('/:id/items/:itemId', requireAuth('pos_access'), async (req, res) 
 
     res.json({ success: true, item_id: Number(itemId), voided: true, ...totals });
   } catch (error) {
-    if (error?.status) return res.status(error.status).json({ error: error.message });
+    if (error?.status) return res.status(error.status).json(authErrorBody(error));
     console.error('Error voiding order item:', error);
     res.status(500).json({ error: 'Failed to void item' });
   }
@@ -1898,6 +1920,9 @@ router.delete('/:id', requireAuth('void_orders', { allowApproval: true }), async
     await conn.unsafe(`DELETE FROM order_payments WHERE order_id = $1`, [id]);
     await conn.unsafe(`DELETE FROM refunds WHERE order_id = $1`, [id]);
     await conn.unsafe(`DELETE FROM delivery_orders WHERE order_id = $1`, [id]);
+    // order_tip_adjustments FKs to orders with NO ACTION — omitting it here made
+    // any order carrying a cash tip adjustment fail the delete outright.
+    await conn.unsafe(`DELETE FROM order_tip_adjustments WHERE order_id = $1`, [id]);
     await conn.unsafe(`UPDATE stamp_events SET order_id = NULL WHERE order_id = $1`, [id]);
     await conn.unsafe(`DELETE FROM order_items WHERE order_id = $1`, [id]);
     const deleted = await conn.unsafe(`DELETE FROM orders WHERE id = $1 RETURNING id`, [id]);
@@ -1948,6 +1973,7 @@ router.post('/purge-unpaid', requireAuth('void_orders'), async (req, res) => {
     await conn.unsafe(`DELETE FROM order_payments WHERE order_id = ANY($1::int[])`, [ids]);
     await conn.unsafe(`DELETE FROM refunds WHERE order_id = ANY($1::int[])`, [ids]);
     await conn.unsafe(`DELETE FROM delivery_orders WHERE order_id = ANY($1::int[])`, [ids]);
+    await conn.unsafe(`DELETE FROM order_tip_adjustments WHERE order_id = ANY($1::int[])`, [ids]);
     await conn.unsafe(`UPDATE stamp_events SET order_id = NULL WHERE order_id = ANY($1::int[])`, [ids]);
     await conn.unsafe(`DELETE FROM order_items WHERE order_id = ANY($1::int[])`, [ids]);
     const deleted = await conn.unsafe(`DELETE FROM orders WHERE id = ANY($1::int[]) RETURNING id`, [ids]);

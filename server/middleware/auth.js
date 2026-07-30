@@ -9,11 +9,11 @@ const APPROVAL_TTL_SECONDS = 300;
 /**
  * Mint a signed one-shot approval for a single permission.
  *
- * The older approver pattern (see authorizeOrderEdit in routes/orders.js) has
- * the client echo back a bare `authorized_by_employee_id` after a PIN check.
- * Nothing binds that id to the PIN that produced it, so any client could name
- * a manager's employee id and self-authorize. For money-adjacent actions the
- * approval must be unforgeable, hence a signed token instead of an integer.
+ * Replaces an earlier pattern where the client echoed back a bare
+ * `authorized_by_employee_id` after a PIN check. Nothing bound that id to the
+ * PIN that produced it, so any client could name a manager's employee id and
+ * self-authorize. `authorizeDiscount` in routes/orders.js is the last holdout —
+ * see the note there.
  */
 export function signApprovalToken({ tenantId, approverId, approverName, permission }) {
   return jwt.sign(
@@ -26,8 +26,12 @@ export function signApprovalToken({ tenantId, approverId, approverName, permissi
 /**
  * Verify an X-Approval-Token against the tenant and the permission being
  * exercised. Returns the approver, or null if there is no usable approval.
+ *
+ * Exported for gates that can't live in middleware because they depend on state
+ * the handler has to load first — e.g. an order edit that only needs approval
+ * once the order turns out to be paid.
  */
-function readApprovalToken(req, permission) {
+export function verifyApprovalToken(req, permission) {
   const raw = req.headers['x-approval-token'];
   if (!raw) return null;
 
@@ -132,7 +136,7 @@ export function requireAuth(permission, { allowApproval = false } = {}) {
         });
       }
 
-      const approver = readApprovalToken(req, permission);
+      const approver = verifyApprovalToken(req, permission);
       if (!approver) {
         return res.status(403).json({
           error: `Manager approval required: ${permission} is not granted for role ${employee.role}`,

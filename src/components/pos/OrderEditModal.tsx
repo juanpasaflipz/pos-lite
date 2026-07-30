@@ -110,32 +110,19 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
     onChanged();
   };
 
-  // Wraps a mutation so we can retry it with a manager-approver id when the
-  // backend returns 403 ("Manager approval required to edit a paid order").
-  // PIN is NOT cached; each subsequent paid-order edit re-prompts.
+  // Wraps a paid-order mutation: the hook raises the manager PIN pad when the
+  // backend answers approval_required, then replays the call with a signed
+  // token. The PIN is NOT cached — each subsequent paid-order edit re-prompts.
   const callWithMaybeApproval = async (
-    runner: (approverId?: number) => Promise<unknown>,
+    runner: (approvalToken?: string) => Promise<unknown>,
   ): Promise<boolean> => {
     setError(null);
     try {
-      await runner(undefined);
+      await withApproval(runner);
       return true;
     } catch (err) {
-      const status = (err as { status?: number }).status;
-      if (status === 403) {
-        // Queue the retry so ManagerApprovalModal's onApproved can call it.
-        setPendingRetry(() => async (approverId: number) => {
-          try {
-            await runner(approverId);
-            setPendingRetry(null);
-            await refreshItems();
-          } catch (retryErr) {
-            setError(retryErr instanceof Error ? retryErr.message : 'Falló después de aprobación');
-            setPendingRetry(null);
-          }
-        });
-        return false;
-      }
+      // Operator dismissed the pad — no change, and nothing to report.
+      if (err instanceof ApprovalCancelled) return false;
       setError(err instanceof Error ? err.message : 'No se pudo aplicar el cambio');
       return false;
     }
@@ -151,9 +138,8 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
       return;
     }
     setBusyItemId(item.id);
-    const ok = await callWithMaybeApproval((approverId) =>
-      updateOrderItemQuantity(order.id, item.id!, newQty,
-        approverId ? { authorized_by_employee_id: approverId } : undefined)
+    const ok = await callWithMaybeApproval((token) =>
+      updateOrderItemQuantity(order.id, item.id!, newQty, token)
     );
     setBusyItemId(null);
     if (ok) await refreshItems();
@@ -164,9 +150,8 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
     setVoidingPick(null);
     if (!pick) return;
     setBusyItemId(pick.itemId);
-    const ok = await callWithMaybeApproval((approverId) =>
-      voidOrderItem(order.id, pick.itemId, reason,
-        approverId ? { authorized_by_employee_id: approverId } : undefined)
+    const ok = await callWithMaybeApproval((token) =>
+      voidOrderItem(order.id, pick.itemId, reason, token)
     );
     setBusyItemId(null);
     if (ok) await refreshItems();
@@ -182,12 +167,40 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
       modifiers: l.modifier_ids,
       notes: l.notes,
     }));
-    const ok = await callWithMaybeApproval((approverId) =>
-      appendOrderItems(order.id, payload,
-        approverId ? { authorized_by_employee_id: approverId } : undefined)
+    const ok = await callWithMaybeApproval((token) =>
+      appendOrderItems(order.id, payload, token)
     );
     setAddingItems(false);
     if (ok) await refreshItems();
+  };
+
+  // Legacy sibling of callWithMaybeApproval, kept for the discount path only.
+  // POST /:id/discount goes through authorizeDiscount, which still takes a bare
+  // approver id in the body and returns a plain 403 with no approval_required
+  // code — so the token flow can't drive it. Retire this when that gate moves to
+  // signed approvals (see the KNOWN WEAKNESS note in server/routes/orders.js).
+  const callWithApproverId = async (
+    runner: (approverId?: number) => Promise<unknown>,
+  ): Promise<void> => {
+    setError(null);
+    try {
+      await runner(undefined);
+    } catch (err) {
+      if ((err as { status?: number }).status === 403) {
+        setPendingRetry(() => async (approverId: number) => {
+          try {
+            await runner(approverId);
+            setPendingRetry(null);
+            await refreshItems();
+          } catch (retryErr) {
+            setError(retryErr instanceof Error ? retryErr.message : 'Falló después de aprobación');
+            setPendingRetry(null);
+          }
+        });
+        return;
+      }
+      setError(err instanceof Error ? err.message : 'No se pudo aplicar el cambio');
+    }
   };
 
   const onManagerApproved = (result: ManagerApprovalResult) => {
@@ -215,9 +228,9 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
     setShowDiscount(false);
     setError(null);
     // DiscountModal returns the manager-approval result baked into the
-    // Discount payload itself — the server's 403 path is rare, but
-    // callWithMaybeApproval handles it just like the qty/void edits.
-    await callWithMaybeApproval((approverId) =>
+    // Discount payload itself; the server's 403 path is rare but still needs
+    // the PIN pad, so this stays on the approver-id retry.
+    await callWithApproverId((approverId) =>
       applyOrderDiscount(order.id, next, {
         authorized_by_employee_id:
           approverId ?? next?.authorized_by_employee_id,

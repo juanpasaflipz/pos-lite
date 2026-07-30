@@ -7,7 +7,20 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
-## 2026-07-29 (Manager-PIN override for void / refund / facturar) — Claude Code — **not yet pushed**
+## 2026-07-29 (Manager-PIN override for void / refund / facturar) — Claude Code — **1.3.0 deployed, 1.4.1 pending**
+
+**Prod data note:** order 7368 (`20260729013`, juanbertos) was deleted at Juan's
+explicit request on 2026-07-29 — a completed $2,000 cash sale,
+"PAGO PROYECTO LITTLE CESARS EMILIANO PASALAGUA R". Full row + line item are
+snapshotted in `audit_log` (resource `order`, resource_id `7368`) before the
+delete, so it's reconstructible. It was removed by direct SQL, not the route,
+because completed orders have no UI path to delete or refund.
+
+**Still open:** `HistoryGrid` on `/admin/orders` is receipt-only — `onEdit` is
+never wired for the history lane, and `OrderEditModal` is the sole home of both
+the Refund and Cancel-order buttons. So no completed order can be refunded or
+voided from the UI by anyone, at any permission level.
+
 
 Juan reported Facturar dead and delete/refund failing. Two unrelated causes:
 
@@ -28,14 +41,33 @@ its 403 carries `code: 'approval_required'`, which is the *only* trigger for the
 client PIN pad (`src/hooks/useManagerApproval.tsx` — never predicted from
 `hasPermission()`, so tenants that do grant the permission see no prompt).
 
-**Note for the older approver path:** `authorizeOrderEdit` in
-`server/routes/orders.js` still trusts a bare `authorized_by_employee_id` from
-the request body, with nothing binding it to the PIN that produced it — a client
-can name a manager's id and self-authorize a paid-order edit. Not touched here
-(out of scope); migrate it to the token when someone is next in that file.
+**Follow-up shipped in 1.4.1** — `authorizeOrderEdit` now takes the signed token
+too (`verifyApprovalToken`, exported for gates that can't be middleware because
+they depend on state the handler loads first). The three order-edit routes
+(`POST /:id/items`, `PATCH`/`DELETE /:id/items/:itemId`) no longer read
+`authorized_by_employee_id` at all.
 
-288/288 tests pass; 9 new approval-security cases in `tests/route-auth.test.ts`.
-Permissions in prod are unchanged. Needs a version bump + push.
+**`authorizeDiscount` is the last holdout and is NOT a straight port.** At
+order-creation time the approver rides inside the cart payload, a cart can carry
+several separately-approved discounts (per-line + cart-level), and a cart can sit
+open far longer than the token's 5-min TTL. It needs server-side approval records
+the cart references by id, not a header swap. Until then a client can still
+self-authorize a discount — including `comp` (100% off) — by naming any
+manager's employee id. Full note on the function in `server/routes/orders.js`.
+`OrderEditModal` keeps a second helper (`callWithApproverId`) purely for that
+path; delete it when the gate moves.
+
+**Also fixed:** `order_tip_adjustments` has a NO ACTION FK to `orders` and was
+missing from the delete cascade, so deleting any order with a cash tip
+adjustment 500'd. Added to both `DELETE /:id` and `purge-unpaid`. A structural
+test now asserts every blocking child of `orders` is named in the route — add a
+NO ACTION child in a migration and that test fails until the route is updated.
+
+Prod role_permissions unchanged.
+
+**Thanks for the clean back-out in `b2e5f1c`** — that was my in-flight work,
+and splitting it back out rather than reverting the lot was the right call. Both
+halves land together here.
 
 ## 2026-07-27 (Kiosk wizard — PARITY WORK ORDER vs prototype v12) — Cowork agent — **ready to implement**
 

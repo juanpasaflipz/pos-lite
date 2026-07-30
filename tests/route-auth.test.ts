@@ -26,7 +26,7 @@ import {
 // @ts-ignore — server files are plain JS
 import { adminSql, get } from '../server/db/index.js';
 // @ts-ignore
-import { requireAuth, signApprovalToken } from '../server/middleware/auth.js';
+import { requireAuth, signApprovalToken, verifyApprovalToken } from '../server/middleware/auth.js';
 // @ts-ignore
 import { JWT_SECRET } from '../server/lib/constants.js';
 
@@ -293,6 +293,60 @@ describe('requireAuth: manager-approval override', () => {
     expect(r.nexted).toBe(false);
     expect(r.status).toBe(403);
     expect(r.body.code).toBeUndefined();
+  });
+});
+
+// The same signed approval, used as a bare function rather than middleware.
+// authorizeOrderEdit can't be a route guard: whether approval is needed depends
+// on the order's payment_status, which the handler loads first.
+describe('verifyApprovalToken: the non-middleware gate', () => {
+  const req = (approvalToken?: string, tenantId = tenant.id) => ({
+    headers: approvalToken ? { 'x-approval-token': approvalToken } : {},
+    tenant: { id: tenantId },
+  });
+
+  const approval = (permission: string, over: Record<string, unknown> = {}) =>
+    signApprovalToken({
+      tenantId: tenant.id,
+      approverId: managerId,
+      approverName: 'Mgr',
+      permission,
+      ...over,
+    });
+
+  it('returns the approver for a valid, matching approval', () => {
+    expect(verifyApprovalToken(req(approval('void_orders')), 'void_orders')).toEqual({
+      id: managerId,
+      name: 'Mgr',
+    });
+  });
+
+  it('returns null when no approval header is present', () => {
+    expect(verifyApprovalToken(req(), 'void_orders')).toBeNull();
+  });
+
+  it('returns null for a permission mismatch', () => {
+    expect(verifyApprovalToken(req(approval('apply_discounts')), 'void_orders')).toBeNull();
+  });
+
+  it('returns null for a tenant mismatch', () => {
+    // Minted here, replayed against a different resolved tenant.
+    expect(verifyApprovalToken(req(approval('void_orders'), 'other_tenant'), 'void_orders')).toBeNull();
+  });
+
+  it('returns null for a forged signature', () => {
+    const forged = jwt.sign(
+      { type: 'approval', tenantId: tenant.id, approverId: managerId, permission: 'void_orders' },
+      'not-the-real-secret',
+    );
+    expect(verifyApprovalToken(req(forged), 'void_orders')).toBeNull();
+  });
+
+  it('returns null for an employee session token (type confusion)', () => {
+    // Validly signed by us, but not an approval — the old bare-employee-id gate
+    // had no equivalent check because there was nothing to check.
+    const session = tokenFor(tenant.id, managerId, 'manager');
+    expect(verifyApprovalToken(req(session), 'void_orders')).toBeNull();
   });
 });
 

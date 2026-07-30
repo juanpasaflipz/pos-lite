@@ -162,4 +162,70 @@ describe('DELETE cascade', () => {
     expect(items.n).toBe(0);
     expect(pays.n).toBe(0);
   });
+
+  // order_tip_adjustments was added with a NO ACTION FK to orders and never
+  // wired into the route, so deleting any order carrying a cash tip adjustment
+  // failed outright with "Failed to delete order".
+  it('deletes an order that carries a cash tip adjustment', async () => {
+    const orderId = await insertDraftKioskOrder();
+
+    await asTenant(tenant.id, async () => {
+      await run(
+        `INSERT INTO order_items (order_id, menu_item_id, item_name, quantity, unit_price)
+         VALUES ($1, $2, 'Test Burrito', 1, 100)`,
+        [orderId, menuItemId],
+      );
+      await run(
+        `INSERT INTO order_tip_adjustments (order_id, amount, payment_method, by_employee_id)
+         VALUES ($1, 25, 'cash', $2)`,
+        [orderId, employeeId],
+      );
+    });
+
+    // Route's cascade sequence, including the tip-adjustment step.
+    await asTenant(tenant.id, async () => {
+      await run(`DELETE FROM order_payments WHERE order_id = $1`, [orderId]);
+      await run(`DELETE FROM refunds WHERE order_id = $1`, [orderId]);
+      await run(`DELETE FROM delivery_orders WHERE order_id = $1`, [orderId]);
+      await run(`DELETE FROM order_tip_adjustments WHERE order_id = $1`, [orderId]);
+      await run(`DELETE FROM order_items WHERE order_id = $1`, [orderId]);
+      await run(`DELETE FROM orders WHERE id = $1`, [orderId]);
+    });
+
+    const [order] = await adminSql`SELECT id FROM orders WHERE id = ${orderId}`;
+    const [tips] = await adminSql`SELECT COUNT(*)::int AS n FROM order_tip_adjustments WHERE order_id = ${orderId}`;
+    expect(order).toBeUndefined();
+    expect(tips.n).toBe(0);
+  });
+
+  // The generalized guard. The route hand-rolls its cascade, so any child table
+  // that blocks a delete (NO ACTION / RESTRICT) must be named in it. Tables that
+  // CASCADE or SET NULL clean themselves up and need no route change. When a
+  // migration adds a blocking child, this fails and points at the route —
+  // which is how the order_tip_adjustments gap should have surfaced.
+  it('every blocking child of orders is handled by the delete route', async () => {
+    const HANDLED = new Set([
+      'order_items',
+      'order_payments',
+      'refunds',
+      'delivery_orders',
+      'order_tip_adjustments',
+      'stamp_events', // nulled rather than deleted — loyalty history outlives the order
+    ]);
+
+    const blocking = await adminSql`
+      SELECT DISTINCT c.conrelid::regclass::text AS child_table
+      FROM pg_constraint c
+      WHERE c.contype = 'f'
+        AND c.confrelid = 'orders'::regclass
+        AND c.confdeltype IN ('a', 'r')
+      ORDER BY 1
+    `;
+
+    const unhandled = blocking
+      .map((r: { child_table: string }) => r.child_table)
+      .filter((t: string) => !HANDLED.has(t));
+
+    expect(unhandled).toEqual([]);
+  });
 });

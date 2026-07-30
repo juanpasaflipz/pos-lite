@@ -699,14 +699,18 @@ export type OrderEditTotals = {
   payment_status: string;
 };
 
+// The three order-edit mutations. Editing a *paid* order needs void_orders, so
+// they take an optional approval token — pass them through useManagerApproval's
+// run() and the PIN pad handles it.
 export async function appendOrderItems(
   orderId: number,
   items: CreateOrderData['items'],
-  opts?: { authorized_by_employee_id?: number }
+  approvalToken?: string
 ): Promise<OrderEditTotals & { success: true; order_id: number; inserted_item_ids: number[] }> {
   return apiRequest(`/orders/${orderId}/items`, {
     method: 'POST',
-    body: JSON.stringify({ items, authorized_by_employee_id: opts?.authorized_by_employee_id }),
+    body: JSON.stringify({ items }),
+    headers: approvalHeader(approvalToken),
   });
 }
 
@@ -714,11 +718,12 @@ export async function updateOrderItemQuantity(
   orderId: number,
   itemId: number,
   quantity: number,
-  opts?: { authorized_by_employee_id?: number }
+  approvalToken?: string
 ): Promise<OrderEditTotals & { success: true; item_id: number; quantity: number }> {
   return apiRequest(`/orders/${orderId}/items/${itemId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ quantity, authorized_by_employee_id: opts?.authorized_by_employee_id }),
+    body: JSON.stringify({ quantity }),
+    headers: approvalHeader(approvalToken),
   });
 }
 
@@ -726,14 +731,12 @@ export async function voidOrderItem(
   orderId: number,
   itemId: number,
   voidReason: string,
-  opts?: { authorized_by_employee_id?: number }
+  approvalToken?: string
 ): Promise<OrderEditTotals & { success: true; item_id: number; voided: true }> {
   return apiRequest(`/orders/${orderId}/items/${itemId}`, {
     method: 'DELETE',
-    body: JSON.stringify({
-      void_reason: voidReason,
-      authorized_by_employee_id: opts?.authorized_by_employee_id,
-    }),
+    body: JSON.stringify({ void_reason: voidReason }),
+    headers: approvalHeader(approvalToken),
   });
 }
 
@@ -743,6 +746,8 @@ export async function purgeUnpaidOrders(): Promise<{ success: boolean; deleted_c
 
 // Apply (or clear with discount=null) an order-level discount on an existing order.
 // 403 → manager approval required; caller should re-call with authorized_by_employee_id.
+// Still on the bare-employee-id approver rather than a signed token — see the
+// KNOWN WEAKNESS note on authorizeDiscount in server/routes/orders.js.
 export async function applyOrderDiscount(
   orderId: number,
   discount: Discount | null,
