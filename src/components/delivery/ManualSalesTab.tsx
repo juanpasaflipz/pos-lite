@@ -9,8 +9,9 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Upload, CalendarDays, ListPlus, Trash2, AlertTriangle, CheckCircle2,
-  Plus, Minus, FileSpreadsheet, RotateCcw, Info,
+  Plus, Minus, FileSpreadsheet, RotateCcw, Info, PackageSearch,
 } from 'lucide-react';
+import ProductImportPanel from './ProductImportPanel';
 import {
   getManualSalesChannels,
   getManualSalesBatches,
@@ -27,7 +28,7 @@ import {
 import { MenuItem } from '../../types';
 import { formatPrice } from '../../utils/currency';
 
-type Mode = 'aggregate' | 'itemized' | 'import';
+type Mode = 'aggregate' | 'itemized' | 'import' | 'products';
 interface Line { key: string; menu_item_id: number | null; item_name: string; quantity: number; unit_price: number }
 
 const todayISO = () => {
@@ -159,11 +160,16 @@ export default function ManualSalesTab() {
   }
 
   async function undoBatch(b: ManualSalesBatch) {
-    if (!window.confirm(k('confirmUndo', 'Remove this entry and the {{count}} order(s) it created?', { count: b.live_order_count }))) return;
+    const prompt = b.entry_mode === 'products'
+      ? k('confirmUndoProducts', 'Remove this entry and put the ingredients for {{count}} units back into stock?', { count: b.product_units })
+      : k('confirmUndo', 'Remove this entry and the {{count}} order(s) it created?', { count: b.live_order_count });
+    if (!window.confirm(prompt)) return;
     setBusy(true);
     try {
       const res = await deleteManualSalesBatch(b.id);
-      flash(k('undone', '{{count}} order(s) removed', { count: res.orders_deleted }));
+      flash(res.product_lines_reversed
+        ? k('undoneProducts', '{{count}} product line(s) reversed and stock restored', { count: res.product_lines_reversed })
+        : k('undone', '{{count}} order(s) removed', { count: res.orders_deleted }));
       await loadAll();
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
@@ -178,6 +184,7 @@ export default function ManualSalesTab() {
     { id: 'aggregate', icon: <CalendarDays size={15} />, label: k('modeAggregate', 'By day'), hint: k('modeAggregateHint', 'Fastest — one platform, one day, gross + order count') },
     { id: 'itemized', icon: <ListPlus size={15} />, label: k('modeItemized', 'Itemized'), hint: k('modeItemizedHint', 'One order with real menu items — feeds costs and inventory') },
     { id: 'import', icon: <FileSpreadsheet size={15} />, label: k('modeImport', 'Import file'), hint: k('modeImportHint', 'Best — upload the platform sales export, real commission per order') },
+    { id: 'products', icon: <PackageSearch size={15} />, label: k('modeProducts', 'Products & stock'), hint: k('modeProductsHint', 'Upload the per-product report — deducts ingredients and records cost. Adds no revenue') },
   ];
 
   const inputCls = 'w-full min-h-[40px] px-3 py-2 rounded-lg bg-neutral-900 border border-neutral-700 text-neutral-100 focus:border-brand-500 focus:outline-none';
@@ -237,7 +244,9 @@ export default function ManualSalesTab() {
         </div>
         <div>
           <label className={labelCls} htmlFor="ms-date">
-            {mode === 'import' ? k('dateFallback', 'Date (only used if the file has none)') : k('date', 'Business date')}
+            {mode === 'import' || mode === 'products'
+              ? k('dateFallback', 'Date (only used if the file has none)')
+              : k('date', 'Business date')}
           </label>
           <input id="ms-date" type="date" className={inputCls} value={businessDate} max={todayISO()}
                  onChange={(e) => setBusinessDate(e.target.value)} />
@@ -480,6 +489,19 @@ export default function ManualSalesTab() {
         </div>
       )}
 
+      {/* ===== Products & stock ===== */}
+      {mode === 'products' && (
+        <ProductImportPanel
+          channel={channel}
+          businessDate={businessDate}
+          note={note}
+          inputCls={inputCls}
+          labelCls={labelCls}
+          onDone={(msg) => { flash(msg); setNote(''); void loadAll(); }}
+          onError={fail}
+        />
+      )}
+
       {/* ===== Recent entries ===== */}
       <div>
         <h3 className="text-sm font-semibold text-neutral-200 mb-2">{k('recent', 'Recent manual entries')}</h3>
@@ -493,15 +515,23 @@ export default function ManualSalesTab() {
                   <p className="text-sm text-neutral-100 truncate">
                     <span className="font-medium">{b.platform_display_name || b.channel}</span>
                     <span className="text-neutral-500"> · {b.business_date} · </span>
-                    {k('nOrders', '{{count}} orders', { count: b.live_order_count })}
+                    {/* A products batch books no orders and no revenue — showing
+                        it as "0 orders · $X" would read as a failed import. */}
+                    {b.entry_mode === 'products'
+                      ? k('nUnits', '{{count}} units', { count: b.product_units })
+                      : k('nOrders', '{{count}} orders', { count: b.live_order_count })}
                     <span className="text-neutral-500"> · </span>
-                    {formatPrice(Number(b.gross_total))}
+                    {b.entry_mode === 'products'
+                      ? k('cogsShortValue', '{{cogs}} cost', { cogs: formatPrice(Number(b.product_cogs)) })
+                      : formatPrice(Number(b.gross_total))}
                   </p>
                   <p className="text-xs text-neutral-500 truncate">
                     {k(`mode_${b.entry_mode}`, b.entry_mode)}
                     {b.source_filename ? ` · ${b.source_filename}` : ''}
                     {b.created_by_name ? ` · ${b.created_by_name}` : ''}
-                    {` · ${k('netShort', 'net')} ${formatPrice(Number(b.net_total))}`}
+                    {b.entry_mode === 'products'
+                      ? ` · ${k('noRevenue', 'stock only, no revenue')}`
+                      : ` · ${k('netShort', 'net')} ${formatPrice(Number(b.net_total))}`}
                   </p>
                 </div>
                 <button type="button" disabled={busy} onClick={() => undoBatch(b)}

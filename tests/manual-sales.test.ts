@@ -17,7 +17,12 @@ import { createTestTenant, dropTestTenant, asTenant, closePools, type TestTenant
 // @ts-ignore — server files are plain JS
 import {
   parseAmount, parseBusinessDate, detectMapping, splitAmount, parseUpload, normalizeRows,
+  detectProductMapping, aggregateProductRows, suggestPlatformPrice, deriveQuantity,
 } from '../server/lib/salesImport.js';
+// @ts-ignore
+import { matchPlatformItem } from '../server/lib/platformItemMatch.js';
+// @ts-ignore
+import { adjustInventoryForMenuQuantities, unitCostForMenuItems } from '../server/helpers/inventory.js';
 // @ts-ignore
 import { insertSaleOrders, createBatch, resolvePlatform } from '../server/routes/manual-sales.js';
 // @ts-ignore
@@ -441,6 +446,171 @@ describe('abbreviated month-name dates', () => {
   });
 });
 
+// ==================== 1b. Product report parsing ====================
+
+describe("DiDi per-product report (real juanbertos export, 2026-07-25..28)", () => {
+  // Transcribed verbatim from "_Reporte diario de productos(25-07-2026_
+  // 28-07-2026).xlsx", downloaded 2026-07-29. What it exposed:
+  //   - THREE constant columns whose header starts with "Nombre" ("de la
+  //     tienda", "del firmante", "del artículo"). Matching on bare "nombre"
+  //     collapses the whole file to a single product.
+  //   - No quantity column at all, so units must come from money ÷ price.
+  //   - Platform prices are NOT the POS prices: Bean-n-Cheese is $99 in the
+  //     POS and bills $129 here.
+  //   - Free modifiers (the salsas) bill 0.00 and carry no units.
+  const HEADER = [
+    'Ciudad', 'Nombre de la tienda', 'Núm. de id. de la tienda', 'Nombre del firmante',
+    'Número de identificación del firmante', 'Fecha', 'Nombre del artículo',
+    'Ventas con precios sin descuento', 'Ventas finales', 'Valor de la transacción del pedido',
+  ].join(',');
+  const R = (date: string, item: string, sinDesc: string, finales: string, valor: string) =>
+    `Mexico City,Juanbertos,5764614120993983259,Juanberto's - Calle Coahuila 192,5764614441438808209,${date},${item},${sinDesc},${finales},${valor}`;
+  const CSV = [
+    HEADER,
+    R('2026-07-28', 'Cochinita Burrito', '2363.00', '833.00', '1346.68'),
+    R('2026-07-28', 'Salsa mango-habanero', '0.00', '0.00', '545.00'),
+    R('2026-07-28', 'Bean-n-Cheese Burrito', '516.00', '196.00', '440.21'),
+    R('2026-07-28', 'BREAKFAST BURRITO', '360.00', '98.00', '135.00'),
+    R('2026-07-28', 'CALIFORNIA BURRITO', '250.00', '175.00', '261.68'),
+    R('2026-07-28', 'PORK BELLY BURRITO', '230.00', '154.00', '242.21'),
+    R('2026-07-26', 'Cochinita Burrito', '417.00', '147.00', '210.00'),
+    R('2026-07-26', 'BREAKFAST BURRITO', '360.00', '98.00', '141.00'),
+    R('2026-07-26', 'Bean-n-Cheese Burrito', '258.00', '178.00', '352.19'),
+    R('2026-07-25', 'BREAKFAST BURRITO', '180.00', '49.00', '67.00'),
+  ].join('\n');
+
+  const parse = async () => {
+    const { headers, rows } = await parseUpload(Buffer.from(CSV, 'utf8'), 'productos.csv');
+    return { headers, rows, mapping: detectProductMapping(headers) };
+  };
+
+  it('picks the product-name column, not the store or signatory name', async () => {
+    const { mapping } = await parse();
+    expect(mapping.item_name).toBe('Nombre del artículo');
+    expect(mapping.business_date).toBe('Fecha');
+    expect(mapping.quantity).toBeNull();          // this report has none
+  });
+
+  it('picks list-price sales, not the discounted "Ventas finales"', async () => {
+    // Only the undiscounted column divides cleanly by a unit price. Deriving
+    // units from "Ventas finales" yields fractions and wrong stock.
+    const { mapping } = await parse();
+    expect(mapping.gross).toBe('Ventas con precios sin descuento');
+  });
+
+  it('collapses to one entry per product-day and drops zero-value modifiers', async () => {
+    const { rows, mapping } = await parse();
+    const { rows: agg, skipped } = aggregateProductRows(rows, mapping, null);
+    expect(agg).toHaveLength(9);                                  // 10 rows - 1 salsa
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0].reason).toBe('no sales and no quantity');
+    expect(skipped[0].item_name).toBe('Salsa mango-habanero');
+  });
+
+  it('recovers the real platform price for every item with a POS anchor', async () => {
+    const { rows, mapping } = await parse();
+    const { rows: agg } = aggregateProductRows(rows, mapping, null);
+    const grossFor = (n: string) => agg.filter((r: any) => r.norm_name === n).map((r: any) => r.gross);
+
+    // Marked up: $99 in the POS, $129 on DiDi. The naive answer (the POS price)
+    // would read 5.2 units instead of 4.
+    expect(suggestPlatformPrice(grossFor('bean-n-cheese burrito'), 99))
+      .toEqual({ price: 129, basis: 'pos_anchor' });
+    // Not marked up — must anchor to itself, not to a smaller divisor.
+    expect(suggestPlatformPrice(grossFor('breakfast burrito'), 180))
+      .toEqual({ price: 180, basis: 'pos_anchor' });
+    expect(suggestPlatformPrice(grossFor('california burrito'), 250))
+      .toEqual({ price: 250, basis: 'pos_anchor' });
+    expect(suggestPlatformPrice(grossFor('pork belly burrito'), 230))
+      .toEqual({ price: 230, basis: 'pos_anchor' });
+  });
+
+  it('still finds the price for a platform-only item from several days of totals', async () => {
+    const { rows, mapping } = await parse();
+    const { rows: agg } = aggregateProductRows(rows, mapping, null);
+    // "Cochinita Burrito" has no POS row, so there is no anchor — but $2363
+    // and $417 share exactly one plausible divisor.
+    expect(suggestPlatformPrice(agg.filter((r: any) => r.norm_name === 'cochinita burrito').map((r: any) => r.gross), null))
+      .toEqual({ price: 139, basis: 'divisor' });
+  });
+
+  it('flags a single-day product as a guess rather than asserting one unit', () => {
+    // One total is divisible by anything; there is no evidence here and the UI
+    // must say so instead of silently deducting one unit's ingredients.
+    expect(suggestPlatformPrice([973], null)).toEqual({ price: 973, basis: 'single' });
+  });
+
+  it('derives whole units at the recovered prices', async () => {
+    const { rows, mapping } = await parse();
+    const { rows: agg } = aggregateProductRows(rows, mapping, null);
+    const units = (norm: string, price: number) => agg
+      .filter((r: any) => r.norm_name === norm)
+      .map((r: any) => deriveQuantity({ gross: r.gross, quantity: r.quantity, platform_price: price }));
+
+    expect(units('bean-n-cheese burrito', 129).map((u: any) => u.quantity)).toEqual([4, 2]);
+    expect(units('breakfast burrito', 180).map((u: any) => u.quantity)).toEqual([2, 2, 1]);
+    expect(units('cochinita burrito', 139).map((u: any) => u.quantity)).toEqual([17, 3]);
+    expect(units('breakfast burrito', 180).every((u: any) => u.exact)).toBe(true);
+  });
+
+  it('marks a wrong price as inexact instead of rounding stock away quietly', async () => {
+    // The POS price, not the platform price — the mistake this screen exists
+    // to catch. 516/99 = 5.2, which must NOT pass as "5 units".
+    const q = deriveQuantity({ gross: 516, quantity: null, platform_price: 99 });
+    expect(q.quantity).toBe(5);
+    expect(q.exact).toBe(false);
+  });
+
+  it('prefers an explicit quantity column over any derivation', () => {
+    const q = deriveQuantity({ gross: 516, quantity: 4, platform_price: 999 });
+    expect(q).toEqual({ quantity: 4, exact: true, source: 'column' });
+  });
+
+  it('sums a product that appears twice on one day rather than overwriting it', async () => {
+    const dupe = [HEADER, R('2026-07-28', 'CALIFORNIA BURRITO', '250.00', '175.00', '261.68'),
+      R('2026-07-28', 'California Burrito', '500.00', '350.00', '523.36')].join('\n');
+    const { headers, rows } = await parseUpload(Buffer.from(dupe, 'utf8'), 'dupe.csv');
+    const { rows: agg } = aggregateProductRows(rows, detectProductMapping(headers), null);
+    expect(agg).toHaveLength(1);          // case differs; same product
+    expect(agg[0].gross).toBe(750);
+  });
+});
+
+describe('matchPlatformItem', () => {
+  const MENU = [
+    { id: 1, name: 'Bean & Cheese', price: 99 },
+    { id: 2, name: 'Breakfast', price: 180 },
+    { id: 3, name: 'California', price: 250 },
+    { id: 4, name: 'Porkbelly', price: 230 },
+    { id: 5, name: 'Surf-N-Turf (Mar y Tierra)', price: 340 },
+    { id: 6, name: 'Cerveza', price: 67 },
+  ];
+
+  it('matches across the spacing and punctuation drift between the two menus', () => {
+    // Real DiDi names against the real juanbertos POS menu.
+    expect(matchPlatformItem('PORK BELLY BURRITO', MENU).name).toBe('Porkbelly');
+    expect(matchPlatformItem('BREAKFAST BURRITO', MENU).name).toBe('Breakfast');
+    expect(matchPlatformItem('CALIFORNIA BURRITO', MENU).name).toBe('California');
+    expect(matchPlatformItem('Bean-n-Cheese Burrito', MENU).name).toBe('Bean & Cheese');
+    expect(matchPlatformItem('SURF-N-TURF BURRITO (Mar y Tierra)', MENU).name).toBe('Surf-N-Turf (Mar y Tierra)');
+  });
+
+  it('returns no match for a platform-only item rather than forcing a wrong one', () => {
+    // A forced match deducts another item's ingredients — strictly worse than
+    // asking the owner.
+    expect(matchPlatformItem('Cochinita Burrito', MENU).menu_item_id).toBeNull();
+    expect(matchPlatformItem('El Tijuana', MENU).menu_item_id).toBeNull();
+    expect(matchPlatformItem('Salsa morita roja', MENU).menu_item_id).toBeNull();
+  });
+
+  it('reports how it matched, so the UI can flag the weak ones', () => {
+    expect(matchPlatformItem('Cerveza', MENU).confidence).toBe('exact');
+    expect(matchPlatformItem('BREAKFAST BURRITO', MENU).confidence).toBe('contains');
+    expect(matchPlatformItem('Bean-n-Cheese Burrito', MENU).confidence).toBe('fuzzy');
+    expect(matchPlatformItem('Cochinita Burrito', MENU).confidence).toBe('none');
+  });
+});
+
 // ==================== 2. Fan-out write path (real tenant, RLS) ====================
 
 let tenant: TestTenant;
@@ -663,6 +833,138 @@ describe('import fan-out', () => {
         ['2026-07-01', 2], ['2026-07-02', 1], ['2026-07-03', 1],
       ]);
     });
+  });
+});
+
+describe('product-level consumption (inventory + COGS)', () => {
+  // The whole point of the product import: money-per-product in, stock and
+  // cost out. These check the two things that would be silently wrong —
+  // deducting the recipe rather than the menu item, and failing to put it back.
+  let menuItemId: number;
+  let tortillaId: number;
+  let carneId: number;
+
+  beforeAll(async () => {
+    await asTenant(tenant.id, async () => {
+      const t = await run(
+        `INSERT INTO inventory_items (tenant_id, name, unit, quantity, cost_price) VALUES ($1,$2,$3,$4,$5)`,
+        [tenant.id, 'Tortilla Harina', 'pcs', 500, 2.5]
+      );
+      tortillaId = t.lastInsertRowid;
+      const c = await run(
+        `INSERT INTO inventory_items (tenant_id, name, unit, quantity, cost_price) VALUES ($1,$2,$3,$4,$5)`,
+        [tenant.id, 'Carne Asada', 'kg', 40, 180]
+      );
+      carneId = c.lastInsertRowid;
+
+      const cat = await run(
+        `INSERT INTO menu_categories (tenant_id, name) VALUES ($1, 'Burritos')`, [tenant.id]
+      );
+      const mi = await run(
+        `INSERT INTO menu_items (tenant_id, category_id, name, price, active) VALUES ($1,$2,$3,$4,true)`,
+        [tenant.id, cat.lastInsertRowid, 'California', 250]
+      );
+      menuItemId = mi.lastInsertRowid;
+
+      // One burrito = 1 tortilla ($2.50) + 0.2 kg carne ($36) => $38.50/unit.
+      await run(
+        `INSERT INTO menu_item_ingredients (tenant_id, menu_item_id, inventory_item_id, quantity_used) VALUES ($1,$2,$3,$4)`,
+        [tenant.id, menuItemId, tortillaId, 1]
+      );
+      await run(
+        `INSERT INTO menu_item_ingredients (tenant_id, menu_item_id, inventory_item_id, quantity_used) VALUES ($1,$2,$3,$4)`,
+        [tenant.id, menuItemId, carneId, 0.2]
+      );
+    });
+  });
+
+  it('prices a unit from its recipe at current ingredient costs', async () => {
+    await asTenant(tenant.id, async () => {
+      const costs = await unitCostForMenuItems([menuItemId]);
+      expect(costs.get(menuItemId)).toBeCloseTo(38.5, 2);
+    });
+  });
+
+  it('reports no cost — not zero cost — for a menu item with no recipe', async () => {
+    await asTenant(tenant.id, async () => {
+      const cat = await get(`SELECT id FROM menu_categories WHERE name = 'Burritos'`);
+      const bare = await run(
+        `INSERT INTO menu_items (tenant_id, category_id, name, price, active) VALUES ($1,$2,$3,$4,true)`,
+        [tenant.id, cat.id, 'Refresco', 49]
+      );
+      const costs = await unitCostForMenuItems([bare.lastInsertRowid]);
+      // A missing recipe must be distinguishable from a free item, or the COGS
+      // report quietly under-states itself.
+      expect(costs.has(bare.lastInsertRowid)).toBe(false);
+    });
+  });
+
+  it('deducts each ingredient by recipe x units sold', async () => {
+    await asTenant(tenant.id, async () => {
+      await adjustInventoryForMenuQuantities([{ menu_item_id: menuItemId, quantity: 17 }], -1);
+      const t = await get('SELECT quantity FROM inventory_items WHERE id = $1', [tortillaId]);
+      const c = await get('SELECT quantity FROM inventory_items WHERE id = $1', [carneId]);
+      expect(Number(t.quantity)).toBeCloseTo(500 - 17, 4);      // 1 each
+      expect(Number(c.quantity)).toBeCloseTo(40 - 17 * 0.2, 4); // 0.2 kg each
+    });
+  });
+
+  it('restores exactly what it took when the batch is undone', async () => {
+    await asTenant(tenant.id, async () => {
+      await adjustInventoryForMenuQuantities([{ menu_item_id: menuItemId, quantity: 17 }], 1);
+      const t = await get('SELECT quantity FROM inventory_items WHERE id = $1', [tortillaId]);
+      const c = await get('SELECT quantity FROM inventory_items WHERE id = $1', [carneId]);
+      expect(Number(t.quantity)).toBeCloseTo(500, 4);
+      expect(Number(c.quantity)).toBeCloseTo(40, 4);
+    });
+  });
+
+  it('ignores lines with no menu item instead of throwing', async () => {
+    await asTenant(tenant.id, async () => {
+      // Platform-only products (no POS row) reach this with menu_item_id null.
+      await adjustInventoryForMenuQuantities([
+        { menu_item_id: null as any, quantity: 9 },
+        { menu_item_id: menuItemId, quantity: 0 },
+      ], -1);
+      const t = await get('SELECT quantity FROM inventory_items WHERE id = $1', [tortillaId]);
+      expect(Number(t.quantity)).toBeCloseTo(500, 4);
+    });
+  });
+
+  it('never drives stock negative on a deduct', async () => {
+    await asTenant(tenant.id, async () => {
+      await adjustInventoryForMenuQuantities([{ menu_item_id: menuItemId, quantity: 100000 }], -1);
+      const t = await get('SELECT quantity FROM inventory_items WHERE id = $1', [tortillaId]);
+      expect(Number(t.quantity)).toBe(0);
+      // Put the fixture back for any later test in this file.
+      await run('UPDATE inventory_items SET quantity = 500 WHERE id = $1', [tortillaId]);
+      await run('UPDATE inventory_items SET quantity = 40 WHERE id = $1', [carneId]);
+    });
+  });
+
+  it('keeps product sales inside the tenant boundary', async () => {
+    const other = await createTestTenant('manualsales-c');
+    try {
+      await asTenant(tenant.id, async () => {
+        const platform = await resolvePlatform('didi_food');
+        const batchId = await createBatch({
+          channel: 'didi_food', platform_id: platform.id, entry_mode: 'products',
+          business_date: '2026-07-28', order_count: 0, gross_total: 2363,
+          commission_total: 0, net_total: 0, commission_percent: 0, created_by: employeeId,
+        });
+        await run(
+          `INSERT INTO platform_product_sales (tenant_id, batch_id, platform_id, business_date, platform_item_name, menu_item_id, quantity, gross, unit_cost, cogs)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          [tenant.id, batchId, platform.id, '2026-07-28', 'CALIFORNIA BURRITO', menuItemId, 17, 2363, 38.5, 654.5]
+        );
+      });
+      const mine = await asTenant(tenant.id, () => all('SELECT id FROM platform_product_sales'));
+      expect(mine.length).toBeGreaterThan(0);
+      const theirs = await asTenant(other.id, () => all('SELECT id FROM platform_product_sales'));
+      expect(theirs).toHaveLength(0);
+    } finally {
+      await dropTestTenant(other.id);
+    }
   });
 });
 

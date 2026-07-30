@@ -156,6 +156,66 @@ export async function deductInventoryForOrder(orderId) {
 }
 
 /**
+ * Deduct (or restore) inventory straight from menu-item quantities, with no
+ * order to hang them off.
+ *
+ * The delivery product-report import needs this: it knows "17 Cochinita
+ * Burritos were sold on the 28th" but deliberately creates no orders, because
+ * the settlement import already booked that revenue and a second set of orders
+ * would double-count it (see migration 0095).
+ *
+ * @param {Array<{menu_item_id:number, quantity:number}>} pairs
+ * @param {1|-1} direction  -1 deducts (a sale), +1 restores (undoing a batch)
+ */
+export async function adjustInventoryForMenuQuantities(pairs, direction = -1) {
+  const usable = (pairs || []).filter((p) => p.menu_item_id && Number(p.quantity) > 0);
+  if (!usable.length) return;
+
+  const conn = getConn();
+  const menuItemIds = usable.map((p) => Number(p.menu_item_id));
+  const quantities = usable.map((p) => Number(p.quantity) * (direction < 0 ? -1 : 1));
+
+  // GREATEST(0, …) on the deduct side only — a restore must be free to climb
+  // back up past whatever the floor clamped away.
+  await conn`
+    UPDATE inventory_items ii
+    SET quantity = GREATEST(0, ii.quantity + adjustments.delta)
+    FROM (
+      SELECT mii.inventory_item_id,
+             SUM(mii.quantity_used * sold.qty) AS delta
+      FROM unnest(${menuItemIds}::int[], ${quantities}::numeric[]) AS sold(menu_item_id, qty)
+      JOIN menu_item_ingredients mii ON mii.menu_item_id = sold.menu_item_id
+      GROUP BY mii.inventory_item_id
+    ) adjustments
+    WHERE ii.id = adjustments.inventory_item_id
+  `;
+}
+
+/**
+ * Recipe cost per unit for a set of menu items, from current ingredient costs.
+ * Items with no recipe come back absent, not zero — "no recipe" and "costs
+ * nothing" are different answers and only the caller can say which matters.
+ *
+ * @param {number[]} menuItemIds
+ * @returns {Promise<Map<number, number>>} menu_item_id -> unit cost
+ */
+export async function unitCostForMenuItems(menuItemIds) {
+  const ids = [...new Set((menuItemIds || []).filter(Boolean).map(Number))];
+  if (!ids.length) return new Map();
+
+  const conn = getConn();
+  const rows = await conn`
+    SELECT mii.menu_item_id,
+           SUM(mii.quantity_used * COALESCE(ii.cost_price, 0)) AS unit_cost
+    FROM menu_item_ingredients mii
+    JOIN inventory_items ii ON ii.id = mii.inventory_item_id
+    WHERE mii.menu_item_id = ANY(${ids}::int[])
+    GROUP BY mii.menu_item_id
+  `;
+  return new Map(rows.map((r) => [Number(r.menu_item_id), Number(r.unit_cost) || 0]));
+}
+
+/**
  * Restore inventory for specific refunded items.
  * Single UPDATE+JOIN with unnest: passes per-item refund quantities
  * to handle partial refunds correctly.

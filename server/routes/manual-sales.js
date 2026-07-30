@@ -17,6 +17,15 @@
 //                  not a multiplier column). Fastest backfill; no item detail,
 //                  so no COGS and no inventory deduction.
 //
+// And one path that is NOT a revenue path:
+//
+//   4. products  — the platform's per-product daily report (DiDi's "Reporte
+//                  diario de productos"). Creates NO orders: the settlement or
+//                  operations import above already booked that money, and a
+//                  second set of orders would double-count it. What it does is
+//                  turn money-per-product into units-per-product and deduct
+//                  inventory + record COGS. See migration 0095.
+//
 // Everything writes through `manual_sales_batches`, so any entry is reversible
 // as one unit via DELETE /batches/:id.
 //
@@ -29,7 +38,12 @@ import multer from 'multer';
 import { all, get, run, getConn, getTenantId } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { audit } from '../lib/auditLog.js';
-import { deductInventoryForOrder } from '../helpers/inventory.js';
+import {
+  deductInventoryForOrder,
+  adjustInventoryForMenuQuantities,
+  unitCostForMenuItems,
+} from '../helpers/inventory.js';
+import { matchPlatformItem } from '../lib/platformItemMatch.js';
 import {
   TAX_RATE,
   parseAmount,
@@ -39,6 +53,11 @@ import {
   parseUpload,
   normalizeRows,
   splitAmount,
+  detectProductMapping,
+  aggregateProductRows,
+  suggestPlatformPrice,
+  deriveQuantity,
+  normProductName,
 } from '../lib/salesImport.js';
 
 const router = Router();
@@ -242,7 +261,10 @@ router.get('/batches', requireAuth('manage_delivery'), async (req, res) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
     const batches = await all(`
       SELECT b.*, dp.display_name AS platform_display_name, e.name AS created_by_name,
-             (SELECT COUNT(*)::int FROM orders o WHERE o.manual_batch_id = b.id) AS live_order_count
+             (SELECT COUNT(*)::int FROM orders o WHERE o.manual_batch_id = b.id) AS live_order_count,
+             -- A 'products' batch has no orders; these are what it did instead.
+             (SELECT COALESCE(SUM(ps.quantity), 0)::int FROM platform_product_sales ps WHERE ps.batch_id = b.id) AS product_units,
+             (SELECT COALESCE(SUM(ps.cogs), 0)::numeric FROM platform_product_sales ps WHERE ps.batch_id = b.id) AS product_cogs
       FROM manual_sales_batches b
       LEFT JOIN delivery_platforms dp ON dp.id = b.platform_id
       LEFT JOIN employees e ON e.id = b.created_by
@@ -659,6 +681,411 @@ router.post('/import/commit', requireAuth('manage_delivery'), async (req, res) =
   }
 });
 
+// ==================== Product-level import ====================
+//
+// Reads a per-product daily report and turns it into inventory consumption and
+// COGS. Writes no orders — see the header note and migration 0095.
+
+const MAX_PRODUCT_ROWS = 5000;
+
+/** Persisted mapping for a platform, keyed by normalized product name. */
+async function loadItemMap(platformId) {
+  const rows = await all(
+    `SELECT id, platform_item_name, norm_name, menu_item_id, platform_price, ignored
+     FROM platform_item_map WHERE platform_id = $1`,
+    [platformId]
+  );
+  return new Map(rows.map((r) => [r.norm_name, r]));
+}
+
+// POST /api/manual-sales/products/preview — parse a product report, write nothing
+router.post('/products/preview', requireAuth('manage_delivery'), (req, res, next) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message || 'Upload failed' });
+    next();
+  });
+}, async (req, res) => {
+  try {
+    if (!req.file?.buffer?.length) return res.status(400).json({ error: 'No file uploaded' });
+    const channel = typeof req.body?.channel === 'string' ? req.body.channel : null;
+    if (!channel) return res.status(400).json({ error: 'channel is required' });
+
+    const requestedSheet = typeof req.body?.sheet === 'string' && req.body.sheet ? req.body.sheet : null;
+    const { headers, rows, sheets, sheet } = await parseUpload(
+      req.file.buffer, req.file.originalname, requestedSheet
+    );
+    if (!rows.length) return res.status(400).json({ error: 'That file has columns but no data rows.' });
+    if (rows.length > MAX_PRODUCT_ROWS) {
+      return res.status(400).json({ error: `That file has ${rows.length} rows; the limit is ${MAX_PRODUCT_ROWS} per import. Split it by month.` });
+    }
+
+    let mapping = detectProductMapping(headers);
+    if (req.body?.mapping) {
+      try {
+        const override = typeof req.body.mapping === 'string' ? JSON.parse(req.body.mapping) : req.body.mapping;
+        mapping = { ...mapping, ...override };
+      } catch { /* ignore malformed override, keep detection */ }
+    }
+
+    const fallbackDate = isValidDate(req.body?.business_date) ? req.body.business_date : null;
+    const { rows: productDays, skipped } = aggregateProductRows(rows, mapping, fallbackDate);
+
+    const platform = await resolvePlatform(channel);
+    const [itemMap, menuItems] = await Promise.all([
+      loadItemMap(platform.id),
+      all('SELECT id, name, price FROM menu_items WHERE active = true ORDER BY name'),
+    ]);
+
+    // Days already imported for this platform. Re-running an overlapping file
+    // would deduct the same stock twice, so those days are excluded outright
+    // rather than merely warned about.
+    const dates = [...new Set(productDays.map((r) => r.business_date))];
+    const covered = new Set();
+    if (dates.length) {
+      const rowsCovered = await all(
+        `SELECT DISTINCT business_date::text AS d FROM platform_product_sales
+         WHERE platform_id = $1 AND business_date = ANY($2::date[])`,
+        [platform.id, dates]
+      );
+      rowsCovered.forEach((r) => covered.add(r.d));
+    }
+
+    // Group by product so price inference sees every day at once — one day's
+    // total rarely pins the unit price, several usually do.
+    const byProduct = new Map();
+    for (const r of productDays) {
+      if (!byProduct.has(r.norm_name)) byProduct.set(r.norm_name, []);
+      byProduct.get(r.norm_name).push(r);
+    }
+
+    const items = [];
+    for (const [normName, days] of byProduct) {
+      const saved = itemMap.get(normName) || null;
+      const suggestion = saved?.menu_item_id
+        ? { menu_item_id: Number(saved.menu_item_id), name: null, price: null, confidence: 'saved', candidates: [] }
+        : matchPlatformItem(days[0].platform_item_name, menuItems);
+
+      const menuItemId = saved ? (saved.menu_item_id != null ? Number(saved.menu_item_id) : null) : suggestion.menu_item_id;
+      const menuItem = menuItemId ? menuItems.find((m) => Number(m.id) === menuItemId) : null;
+
+      // A saved price is the tenant's confirmed answer and always wins.
+      const inferred = suggestPlatformPrice(days.map((d) => d.gross), Number(menuItem?.price) || null);
+      const platformPrice = saved?.platform_price != null
+        ? Number(saved.platform_price)
+        : (inferred?.price ?? null);
+
+      const dayRows = days.map((d) => {
+        const q = deriveQuantity({ gross: d.gross, quantity: d.quantity, platform_price: platformPrice });
+        return {
+          business_date: d.business_date,
+          gross: d.gross,
+          quantity: q.quantity,
+          exact: q.exact,
+          quantity_source: q.source,
+          already_imported: covered.has(d.business_date),
+        };
+      });
+
+      items.push({
+        platform_item_name: days[0].platform_item_name,
+        norm_name: normName,
+        menu_item_id: menuItemId,
+        menu_item_name: menuItem?.name ?? null,
+        pos_price: Number(menuItem?.price) || null,
+        platform_price: platformPrice,
+        price_basis: saved?.platform_price != null ? 'saved' : (inferred?.basis ?? 'none'),
+        match_confidence: saved ? 'saved' : suggestion.confidence,
+        candidates: suggestion.candidates || [],
+        ignored: !!saved?.ignored,
+        days: dayRows,
+        total_quantity: dayRows.reduce((s, d) => s + (d.already_imported ? 0 : (d.quantity || 0)), 0),
+        total_gross: Math.round(dayRows.reduce((s, d) => s + (d.already_imported ? 0 : d.gross), 0) * 100) / 100,
+      });
+    }
+
+    items.sort((a, b) => b.total_gross - a.total_gross);
+
+    const unresolved = items.filter((i) => !i.ignored && (!i.menu_item_id || !(i.platform_price > 0)));
+    const inexact = items.filter((i) => !i.ignored && i.days.some((d) => !d.already_imported && d.quantity && !d.exact));
+    const noRecipe = items.filter((i) => !i.ignored && i.menu_item_id).map((i) => i.menu_item_id);
+    const recipeCosts = await unitCostForMenuItems(noRecipe);
+
+    const warnings = [];
+    if (!mapping.item_name) warnings.push('No product-name column was recognized — pick one below or nothing can be imported.');
+    if (!mapping.gross && !mapping.quantity) warnings.push('Neither a sales column nor a quantity column was recognized — pick at least one below.');
+    if (!mapping.quantity) {
+      warnings.push('This file has no quantity column, so units are worked out as sales ÷ the price on this platform. Check the quantities below before importing — a wrong price deducts the wrong stock.');
+    }
+    if (covered.size) {
+      warnings.push(`${covered.size} day(s) in this file were already imported for ${platform.display_name} and are excluded, so stock is not deducted twice.`);
+    }
+    if (unresolved.length) {
+      warnings.push(`${unresolved.length} product(s) still need a menu item and/or a platform price. They will be skipped until you set them.`);
+    }
+    if (inexact.length) {
+      warnings.push(`${inexact.length} product(s) do not divide evenly into whole units at the price shown — the price is probably wrong, or that day carried a discount.`);
+    }
+    const missingRecipe = items.filter((i) => !i.ignored && i.menu_item_id && !recipeCosts.has(i.menu_item_id));
+    if (missingRecipe.length) {
+      warnings.push(`${missingRecipe.length} matched product(s) have no recipe, so they record units but no ingredient deduction and no COGS: ${missingRecipe.slice(0, 5).map((i) => i.menu_item_name).join(', ')}.`);
+    }
+    if (skipped.length) {
+      const names = [...new Set(skipped.map((s) => s.item_name).filter(Boolean))];
+      warnings.push(`${skipped.length} row(s) skipped with no sales and no quantity${names.length ? ` (${names.slice(0, 4).join(', ')}${names.length > 4 ? '…' : ''}) — free modifiers bill at 0.00 and carry no units` : ''}.`);
+    }
+    if (sheets && sheets.length > 1) warnings.push(`This workbook has ${sheets.length} sheets; reading "${sheet}". Switch below if that is the wrong one.`);
+
+    res.json({
+      headers,
+      mapping,
+      sheets: sheets || [],
+      sheet: sheet || null,
+      platform: { id: platform.id, name: platform.name, display_name: platform.display_name },
+      items: items.map((i) => ({ ...i, unit_cost: recipeCosts.get(i.menu_item_id) ?? null })),
+      row_count: rows.length,
+      product_count: items.length,
+      unresolved_count: unresolved.length,
+      already_imported_dates: [...covered].sort(),
+      skipped_count: skipped.length,
+      date_range: productDays.length
+        ? { from: productDays.reduce((a, r) => (r.business_date < a ? r.business_date : a), productDays[0].business_date),
+            to: productDays.reduce((a, r) => (r.business_date > a ? r.business_date : a), productDays[0].business_date) }
+        : null,
+      warnings,
+    });
+  } catch (error) {
+    console.error('[manual-sales] product preview error:', error);
+    res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : 'Failed to read that file' });
+  }
+});
+
+// POST /api/manual-sales/products/commit — record consumption + COGS, deduct stock
+router.post('/products/commit', requireAuth('manage_delivery'), async (req, res) => {
+  try {
+    const { channel, items, source_filename, note, deduct_inventory = true } = req.body || {};
+    if (!channel || typeof channel !== 'string') return res.status(400).json({ error: 'channel is required' });
+    if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'items must be a non-empty array' });
+    if (items.length > MAX_PRODUCT_ROWS) return res.status(400).json({ error: `cannot import more than ${MAX_PRODUCT_ROWS} products at once` });
+
+    const platform = await resolvePlatform(channel);
+    const employeeId = employeeIdFrom(req) || await fallbackEmployeeId();
+    if (!employeeId) return res.status(400).json({ error: 'No active employee to attribute the entry to' });
+
+    // Persist every decision the tenant made, including "ignore this one", so
+    // the next import of the same report needs no confirmation at all.
+    const conn = getConn();
+    const tid = getTenantId();
+    for (const it of items) {
+      const rawName = typeof it?.platform_item_name === 'string' ? it.platform_item_name.trim() : '';
+      if (!rawName) continue;
+      const key = normProductName(rawName);
+      if (!key) continue;
+      const price = it?.platform_price != null && parseAmount(it.platform_price) > 0
+        ? Math.round(parseAmount(it.platform_price) * 100) / 100
+        : null;
+      await conn.unsafe(`
+        INSERT INTO platform_item_map (tenant_id, platform_id, platform_item_name, norm_name, menu_item_id, platform_price, ignored)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (tenant_id, platform_id, norm_name) DO UPDATE
+          SET platform_item_name = EXCLUDED.platform_item_name,
+              menu_item_id = EXCLUDED.menu_item_id,
+              platform_price = EXCLUDED.platform_price,
+              ignored = EXCLUDED.ignored,
+              updated_at = NOW()
+      `, [tid, platform.id, rawName.slice(0, 200), key, it?.menu_item_id ?? null, price, !!it?.ignored]);
+    }
+
+    // Re-derive which days are already covered; the client's preview could be
+    // stale if someone else imported in between.
+    const allDates = [...new Set(items.flatMap((it) => (it?.days || []).map((d) => d?.business_date)).filter(isValidDate))];
+    const covered = new Set();
+    if (allDates.length) {
+      const rowsCovered = await all(
+        `SELECT DISTINCT business_date::text AS d FROM platform_product_sales
+         WHERE platform_id = $1 AND business_date = ANY($2::date[])`,
+        [platform.id, allDates]
+      );
+      rowsCovered.forEach((r) => covered.add(r.d));
+    }
+
+    const menuIds = items.map((it) => it?.menu_item_id).filter(Boolean).map(Number);
+    const recipeCosts = await unitCostForMenuItems(menuIds);
+
+    const lines = [];
+    let skippedUnresolved = 0;
+    let skippedCovered = 0;
+    for (const it of items) {
+      if (it?.ignored) continue;
+      const menuItemId = it?.menu_item_id != null ? Number(it.menu_item_id) : null;
+      const rawName = typeof it?.platform_item_name === 'string' ? it.platform_item_name.trim() : '';
+      if (!rawName) continue;
+
+      for (const d of it?.days || []) {
+        const date = parseBusinessDate(d?.business_date);
+        if (!isValidDate(date)) continue;
+        if (covered.has(date)) { skippedCovered++; continue; }
+        const qty = Math.round(Number(d?.quantity) || 0);
+        if (qty < 1) { skippedUnresolved++; continue; }
+
+        const unitCost = menuItemId != null ? (recipeCosts.get(menuItemId) ?? null) : null;
+        lines.push({
+          business_date: date,
+          platform_item_name: rawName.slice(0, 200),
+          menu_item_id: menuItemId,
+          quantity: qty,
+          gross: Math.round((parseAmount(d?.gross) || 0) * 100) / 100,
+          unit_cost: unitCost,
+          cogs: unitCost != null ? Math.round(unitCost * qty * 100) / 100 : null,
+        });
+      }
+    }
+
+    if (!lines.length) {
+      return res.status(400).json({
+        error: skippedCovered
+          ? 'Every day in that file was already imported for this platform.'
+          : 'No product had both a resolved quantity and a usable date.',
+      });
+    }
+
+    const totalGross = Math.round(lines.reduce((s, l) => s + l.gross, 0) * 100) / 100;
+    const totalCogs = Math.round(lines.reduce((s, l) => s + (l.cogs || 0), 0) * 100) / 100;
+    const totalUnits = lines.reduce((s, l) => s + l.quantity, 0);
+    const dates = lines.map((l) => l.business_date).sort();
+
+    // order_count 0 and net_total 0 are deliberate: this batch created no
+    // orders and booked no revenue. gross_total is carried for reconciliation
+    // against the settlement import, not as income.
+    const batchId = await createBatch({
+      channel, platform_id: platform.id, entry_mode: 'products', business_date: dates[0],
+      order_count: 0, gross_total: totalGross, commission_total: 0, net_total: 0,
+      commission_percent: 0,
+      source_filename: source_filename ? String(source_filename).slice(0, 255) : null,
+      note, created_by: employeeId,
+    });
+
+    await conn.unsafe(`
+      INSERT INTO platform_product_sales (
+        tenant_id, batch_id, platform_id, business_date, platform_item_name,
+        menu_item_id, quantity, gross, unit_cost, cogs
+      )
+      SELECT $1, $2, $3, n.business_date::date, n.platform_item_name,
+             n.menu_item_id, n.quantity, n.gross, n.unit_cost, n.cogs
+      FROM unnest(
+        $4::text[], $5::text[], $6::int[], $7::numeric[], $8::numeric[], $9::numeric[], $10::numeric[]
+      ) AS n(business_date, platform_item_name, menu_item_id, quantity, gross, unit_cost, cogs)
+    `, [
+      tid, batchId, platform.id,
+      lines.map((l) => l.business_date),
+      lines.map((l) => l.platform_item_name),
+      lines.map((l) => l.menu_item_id),
+      lines.map((l) => l.quantity),
+      lines.map((l) => l.gross),
+      lines.map((l) => l.unit_cost),
+      lines.map((l) => l.cogs),
+    ]);
+
+    let inventoryDeducted = false;
+    if (deduct_inventory !== false) {
+      await adjustInventoryForMenuQuantities(
+        lines.filter((l) => l.menu_item_id).map((l) => ({ menu_item_id: l.menu_item_id, quantity: l.quantity })),
+        -1
+      );
+      inventoryDeducted = true;
+    }
+
+    audit({
+      tenantId: req.tenant?.id || 'default',
+      actorType: 'employee',
+      actorId: employeeId != null ? String(employeeId) : null,
+      action: 'create',
+      resource: 'manual_sales_batch',
+      resourceId: String(batchId),
+      details: {
+        entry_mode: 'products', channel, lines: lines.length, units: totalUnits,
+        gross_total: totalGross, cogs_total: totalCogs,
+        inventory_deducted: inventoryDeducted, source_filename: source_filename || null,
+      },
+      ip: req.ip,
+    });
+
+    res.status(201).json({
+      success: true, batch_id: batchId, lines: lines.length, units: totalUnits,
+      gross_total: totalGross, cogs_total: totalCogs,
+      skipped_unresolved: skippedUnresolved, skipped_already_imported: skippedCovered,
+      inventory_deducted: inventoryDeducted,
+      date_range: { from: dates[0], to: dates[dates.length - 1] },
+    });
+  } catch (error) {
+    console.error('[manual-sales] product commit error:', error);
+    res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : 'Failed to import products' });
+  }
+});
+
+// GET /api/manual-sales/product-map?channel=didi_food — the learned mapping
+router.get('/product-map', requireAuth('manage_delivery'), async (req, res) => {
+  try {
+    const channel = typeof req.query.channel === 'string' ? req.query.channel : null;
+    if (!channel) return res.status(400).json({ error: 'channel is required' });
+    const platform = await get('SELECT id FROM delivery_platforms WHERE name = $1', [channel]);
+    if (!platform) return res.json({ mappings: [] });
+
+    const mappings = await all(`
+      SELECT m.id, m.platform_item_name, m.menu_item_id, m.platform_price, m.ignored,
+             mi.name AS menu_item_name, mi.price AS pos_price
+      FROM platform_item_map m
+      LEFT JOIN menu_items mi ON mi.id = m.menu_item_id
+      WHERE m.platform_id = $1
+      ORDER BY m.platform_item_name
+    `, [platform.id]);
+    res.json({ mappings });
+  } catch (error) {
+    console.error('[manual-sales] product-map error:', error);
+    res.status(500).json({ error: 'Failed to load product mapping' });
+  }
+});
+
+// DELETE /api/manual-sales/product-map/:id — forget one learned mapping
+router.delete('/product-map/:id', requireAuth('manage_delivery'), async (req, res) => {
+  try {
+    const row = await get('SELECT id FROM platform_item_map WHERE id = $1', [req.params.id]);
+    if (!row) return res.status(404).json({ error: 'Mapping not found' });
+    await run('DELETE FROM platform_item_map WHERE id = $1', [row.id]);
+    res.json({ success: true, id: Number(row.id) });
+  } catch (error) {
+    console.error('[manual-sales] product-map delete error:', error);
+    res.status(500).json({ error: 'Failed to remove that mapping' });
+  }
+});
+
+// GET /api/manual-sales/product-sales — what the product imports recorded
+router.get('/product-sales', requireAuth('manage_delivery'), async (req, res) => {
+  try {
+    const from = isValidDate(req.query.from) ? req.query.from : null;
+    const to = isValidDate(req.query.to) ? req.query.to : null;
+    const rows = await all(`
+      SELECT ps.menu_item_id, ps.platform_item_name,
+             MIN(mi.name) AS menu_item_name,
+             MIN(dp.display_name) AS platform_display_name,
+             SUM(ps.quantity)::numeric AS units,
+             SUM(ps.gross)::numeric AS gross,
+             SUM(COALESCE(ps.cogs, 0))::numeric AS cogs
+      FROM platform_product_sales ps
+      LEFT JOIN menu_items mi ON mi.id = ps.menu_item_id
+      LEFT JOIN delivery_platforms dp ON dp.id = ps.platform_id
+      WHERE ($1::date IS NULL OR ps.business_date >= $1::date)
+        AND ($2::date IS NULL OR ps.business_date <= $2::date)
+      GROUP BY ps.menu_item_id, ps.platform_item_name
+      ORDER BY SUM(ps.gross) DESC
+      LIMIT 200
+    `, [from, to]);
+    res.json({ rows });
+  } catch (error) {
+    console.error('[manual-sales] product-sales error:', error);
+    res.status(500).json({ error: 'Failed to load product sales' });
+  }
+});
+
 // DELETE /api/manual-sales/batches/:id — reverse an entry completely
 router.delete('/batches/:id', requireAuth('manage_delivery'), async (req, res) => {
   const conn = getConn();
@@ -669,6 +1096,21 @@ router.delete('/batches/:id', requireAuth('manage_delivery'), async (req, res) =
     const actorId = employeeIdFrom(req);
     const orders = await all('SELECT id FROM orders WHERE manual_batch_id = $1', [batch.id]);
     const ids = orders.map((o) => o.id);
+
+    // A products batch created no orders — what it did was move stock, so
+    // undoing it means putting the ingredients back. Restore BEFORE the delete:
+    // platform_product_sales cascades off the batch row and the quantities go
+    // with it.
+    const productLines = await all(
+      'SELECT menu_item_id, quantity FROM platform_product_sales WHERE batch_id = $1 AND menu_item_id IS NOT NULL',
+      [batch.id]
+    );
+    if (productLines.length) {
+      await adjustInventoryForMenuQuantities(
+        productLines.map((l) => ({ menu_item_id: Number(l.menu_item_id), quantity: Number(l.quantity) })),
+        1
+      );
+    }
 
     if (ids.length) {
       // Same cascade order as DELETE /api/orders/:id — FK constraints block a
@@ -693,11 +1135,17 @@ router.delete('/batches/:id', requireAuth('manage_delivery'), async (req, res) =
       action: 'delete',
       resource: 'manual_sales_batch',
       resourceId: String(batch.id),
-      details: { entry_mode: batch.entry_mode, channel: batch.channel, orders_deleted: ids.length, gross_total: batch.gross_total },
+      details: {
+        entry_mode: batch.entry_mode, channel: batch.channel, orders_deleted: ids.length,
+        product_lines_reversed: productLines.length, gross_total: batch.gross_total,
+      },
       ip: req.ip,
     });
 
-    res.json({ success: true, batch_id: Number(batch.id), orders_deleted: ids.length });
+    res.json({
+      success: true, batch_id: Number(batch.id),
+      orders_deleted: ids.length, product_lines_reversed: productLines.length,
+    });
   } catch (error) {
     console.error('[manual-sales] delete error:', error);
     res.status(500).json({ error: 'Failed to reverse that entry' });

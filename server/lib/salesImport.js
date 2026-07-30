@@ -442,3 +442,195 @@ export function splitAmount(total, count) {
   const extra = cents - base * count;
   return Array.from({ length: count }, (_, i) => (base + (i < extra ? 1 : 0)) / 100);
 }
+
+// ==================== Product-level reports ====================
+//
+// A different file shape from the settlement/operations exports above: one row
+// per (date x product), e.g. DiDi's "Reporte diario de productos". This is the
+// only export either platform publishes that can feed inventory and COGS.
+//
+// It does NOT feed revenue — see migration 0095 for why (the settlement import
+// already booked that money; counting it twice is the failure mode).
+
+const PRODUCT_COLUMN_CANDIDATES = {
+  // Most specific first — detection claims columns first-come.
+  business_date: [
+    'fecha de la orden', 'fecha del pedido', 'fecha de venta', 'fecha', 'order date', 'date',
+  ],
+  item_name: [
+    'nombre del articulo', 'nombre del producto', 'nombre de producto', 'nombre del item',
+    'articulo', 'producto', 'item name', 'product name', 'menu item', 'item', 'product',
+    // NOTE: bare 'nombre' is deliberately absent. DiDi's product report also
+    // carries "Nombre de la tienda" and "Nombre del firmante", both constant on
+    // every row — matching either collapses the whole file to one product.
+  ],
+  // Some platforms do publish a real count. When present it wins outright and
+  // no price derivation is needed.
+  quantity: [
+    'cantidad vendida', 'unidades vendidas', 'articulos vendidos', 'productos vendidos',
+    'cantidad', 'unidades', 'units sold', 'quantity sold', 'quantity', 'units', 'qty',
+  ],
+  gross: [
+    // 'sin descuento' must lead: it is list-price x quantity, which divides
+    // cleanly by the unit price. 'Ventas finales' is net of per-order discounts
+    // and does NOT, so deriving quantity from it yields fractions.
+    'ventas con precios sin descuento', 'precio total del producto sin promocion',
+    'precio original del producto', 'ventas brutas del producto', 'venta bruta',
+    'ventas finales', 'ventas totales', 'ventas', 'importe', 'total',
+  ],
+};
+
+/** Same matching rules as detectMapping, over the product-report field set. */
+export function detectProductMapping(headers) {
+  const norm = headers.map(normalizeHeader);
+  const mapping = {};
+  const taken = new Set();
+
+  for (const [field, candidates] of Object.entries(PRODUCT_COLUMN_CANDIDATES)) {
+    let hit = -1;
+    for (const cand of candidates) {
+      const c = normalizeHeader(cand);
+      hit = norm.findIndex((h, i) => !taken.has(i) && h === c);
+      if (hit >= 0) break;
+      hit = norm.findIndex((h, i) => !taken.has(i) && h.includes(c));
+      if (hit >= 0) break;
+      hit = norm.findIndex((h, i) => !taken.has(i) && h.length > 3 && c.includes(h));
+      if (hit >= 0) break;
+    }
+    if (hit >= 0) {
+      mapping[field] = headers[hit];
+      taken.add(hit);
+    } else {
+      mapping[field] = null;
+    }
+  }
+  return mapping;
+}
+
+/** Accent/case-folded key used to match a platform product name across imports. */
+export const normProductName = (s) => String(s ?? '')
+  .normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .toLowerCase().replace(/\s+/g, ' ').trim();
+
+/**
+ * Apply a product mapping to raw rows, collapsing to one entry per
+ * (business_date, product). A platform can emit the same product twice on one
+ * day (per store, per channel); summing is correct, taking the last is not.
+ */
+export function aggregateProductRows(rows, mapping, fallbackDate) {
+  const byKey = new Map();
+  const skipped = [];
+
+  rows.forEach((raw, i) => {
+    const rowNo = i + 2; // 1-indexed, +1 for the header row
+    const name = mapping.item_name ? String(raw[mapping.item_name] ?? '').trim() : '';
+    const date = (mapping.business_date ? parseBusinessDate(raw[mapping.business_date]) : null) || fallbackDate;
+    const gross = mapping.gross ? parseAmount(raw[mapping.gross]) : 0;
+    const qty = mapping.quantity ? parseAmount(raw[mapping.quantity]) : null;
+
+    if (!name) { skipped.push({ row: rowNo, reason: 'no product name' }); return; }
+    if (!isValidDate(date)) { skipped.push({ row: rowNo, reason: 'unreadable date' }); return; }
+    // A zero-gross row with no quantity carries no information at all. This is
+    // the free-modifier case (DiDi bills salsas at 0.00) — not an error.
+    if (!(gross > 0) && !(qty > 0)) { skipped.push({ row: rowNo, reason: 'no sales and no quantity', item_name: name }); return; }
+
+    const key = `${date}::${normProductName(name)}`;
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.gross = Math.round((existing.gross + gross) * 100) / 100;
+      if (qty != null) existing.quantity = (existing.quantity ?? 0) + qty;
+    } else {
+      byKey.set(key, {
+        business_date: date,
+        platform_item_name: name,
+        norm_name: normProductName(name),
+        gross: Math.round(gross * 100) / 100,
+        quantity: qty != null && qty > 0 ? qty : null,
+      });
+    }
+  });
+
+  const out = [...byKey.values()].sort((a, b) =>
+    (a.business_date < b.business_date ? 1 : a.business_date > b.business_date ? -1 : 0)
+    || a.platform_item_name.localeCompare(b.platform_item_name));
+
+  return { rows: out, skipped };
+}
+
+const QTY_TOLERANCE = 0.02; // 2% — absorbs rounding in the platform's own totals
+const MAX_UNITS_PER_DAY = 60;
+
+/** Is every gross value an integer multiple of `price`, within tolerance? */
+function divisesCleanly(values, price) {
+  if (!(price > 0)) return false;
+  return values.every((v) => {
+    const units = v / price;
+    if (units < 0.98) return false;
+    return Math.abs(units - Math.round(units)) <= QTY_TOLERANCE * Math.max(1, Math.round(units));
+  });
+}
+
+/**
+ * Infer the platform's list price for a product from its gross figures.
+ *
+ * The report gives money, not units, so the unit price is what turns one into
+ * the other. Every exact divisor of the observed grosses is mathematically
+ * valid ($516 and $258 divide by 258, 129, 86, 64.5 …), so the POS price is
+ * used as an anchor: delivery menus are marked UP, never down, so the answer is
+ * the SMALLEST valid divisor at or above the POS price. That picks $129 for a
+ * $99 POS item — verified against a real juanbertos DiDi export, where it also
+ * recovers $180 Breakfast, $250 California and $230 Porkbelly exactly.
+ *
+ * With no POS anchor (a platform-only item) it falls back to the largest valid
+ * divisor, which is right when the product has several distinct daily totals to
+ * constrain it and a guess when it has one. Either way the caller shows the
+ * resulting quantity for confirmation — this is a suggestion, never a silent
+ * decision.
+ *
+ * @returns {{ price: number, basis: 'pos_anchor'|'divisor'|'single' } | null}
+ */
+export function suggestPlatformPrice(grossValues, posPrice = null) {
+  const values = (grossValues || []).filter((v) => v > 0);
+  if (!values.length) return null;
+
+  const gMin = Math.min(...values);
+  const valid = [];
+  for (let n = 1; n <= MAX_UNITS_PER_DAY; n++) {
+    const p = Math.round((gMin / n) * 100) / 100;
+    if (!(p > 0)) break;
+    if (divisesCleanly(values, p)) valid.push(p);
+  }
+  if (!valid.length) return null;
+
+  if (posPrice > 0) {
+    // 0.99 slack so an unmarked-up item whose platform price rounds a cent
+    // below the POS price still anchors to itself.
+    const atOrAbove = valid.filter((p) => p >= posPrice * 0.99).sort((a, b) => a - b);
+    if (atOrAbove.length) return { price: atOrAbove[0], basis: 'pos_anchor' };
+  }
+
+  const largest = valid.sort((a, b) => b - a)[0];
+  return { price: largest, basis: values.length > 1 ? 'divisor' : 'single' };
+}
+
+/**
+ * Quantity for one product-day. An explicit quantity column always wins; only
+ * when the file has none is it derived from gross / platform price.
+ *
+ * `exact` is false when the division did not land on a whole number — the
+ * price is probably wrong (or the day carried a discount), and the caller
+ * surfaces it rather than silently deducting a bad quantity from stock.
+ */
+export function deriveQuantity({ gross, quantity, platform_price }) {
+  if (quantity != null && quantity > 0) {
+    return { quantity: Math.round(quantity), exact: true, source: 'column' };
+  }
+  if (!(platform_price > 0) || !(gross > 0)) {
+    return { quantity: null, exact: false, source: 'none' };
+  }
+  const raw = gross / platform_price;
+  const rounded = Math.round(raw);
+  if (rounded < 1) return { quantity: null, exact: false, source: 'derived' };
+  const drift = Math.abs(raw - rounded) / rounded;
+  return { quantity: rounded, exact: drift <= QTY_TOLERANCE, source: 'derived' };
+}

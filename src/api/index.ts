@@ -699,14 +699,18 @@ export type OrderEditTotals = {
   payment_status: string;
 };
 
+// The three order-edit mutations. Editing a *paid* order needs void_orders, so
+// they take an optional approval token — pass them through useManagerApproval's
+// run() and the PIN pad handles it.
 export async function appendOrderItems(
   orderId: number,
   items: CreateOrderData['items'],
-  opts?: { authorized_by_employee_id?: number }
+  approvalToken?: string
 ): Promise<OrderEditTotals & { success: true; order_id: number; inserted_item_ids: number[] }> {
   return apiRequest(`/orders/${orderId}/items`, {
     method: 'POST',
-    body: JSON.stringify({ items, authorized_by_employee_id: opts?.authorized_by_employee_id }),
+    body: JSON.stringify({ items }),
+    headers: approvalHeader(approvalToken),
   });
 }
 
@@ -714,11 +718,12 @@ export async function updateOrderItemQuantity(
   orderId: number,
   itemId: number,
   quantity: number,
-  opts?: { authorized_by_employee_id?: number }
+  approvalToken?: string
 ): Promise<OrderEditTotals & { success: true; item_id: number; quantity: number }> {
   return apiRequest(`/orders/${orderId}/items/${itemId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ quantity, authorized_by_employee_id: opts?.authorized_by_employee_id }),
+    body: JSON.stringify({ quantity }),
+    headers: approvalHeader(approvalToken),
   });
 }
 
@@ -726,14 +731,12 @@ export async function voidOrderItem(
   orderId: number,
   itemId: number,
   voidReason: string,
-  opts?: { authorized_by_employee_id?: number }
+  approvalToken?: string
 ): Promise<OrderEditTotals & { success: true; item_id: number; voided: true }> {
   return apiRequest(`/orders/${orderId}/items/${itemId}`, {
     method: 'DELETE',
-    body: JSON.stringify({
-      void_reason: voidReason,
-      authorized_by_employee_id: opts?.authorized_by_employee_id,
-    }),
+    body: JSON.stringify({ void_reason: voidReason }),
+    headers: approvalHeader(approvalToken),
   });
 }
 
@@ -743,6 +746,8 @@ export async function purgeUnpaidOrders(): Promise<{ success: boolean; deleted_c
 
 // Apply (or clear with discount=null) an order-level discount on an existing order.
 // 403 → manager approval required; caller should re-call with authorized_by_employee_id.
+// Still on the bare-employee-id approver rather than a signed token — see the
+// KNOWN WEAKNESS note on authorizeDiscount in server/routes/orders.js.
 export async function applyOrderDiscount(
   orderId: number,
   discount: Discount | null,
@@ -4394,7 +4399,7 @@ export interface ManualSalesBatch {
   channel: string;
   platform_id: number | null;
   platform_display_name: string | null;
-  entry_mode: 'aggregate' | 'itemized' | 'import';
+  entry_mode: 'aggregate' | 'itemized' | 'import' | 'products';
   business_date: string;
   order_count: number;
   gross_total: number;
@@ -4406,6 +4411,9 @@ export interface ManualSalesBatch {
   created_by_name: string | null;
   created_at: string;
   live_order_count: number;
+  /** 'products' batches create no orders — these are what they did instead. */
+  product_units: number;
+  product_cogs: number;
 }
 
 export interface ManualSalesImportRow {
@@ -4477,16 +4485,18 @@ export async function createItemizedManualSale(payload: {
   return apiRequest('/manual-sales/itemized', { method: 'POST', body: JSON.stringify(payload) });
 }
 
-export async function previewManualSalesImport(
+/** Shared multipart POST for the two manual-sales file previews. */
+async function postManualSalesFile<T>(
+  path: string,
   file: File,
-  opts: { business_date?: string; mapping?: Record<string, string | null>; sheet?: string } = {}
-): Promise<ManualSalesImportPreview> {
+  fields: Record<string, string | undefined>
+): Promise<T> {
   const base = FALLBACK_URLS.length ? await resolveBaseUrl() : activeBaseUrl;
   const formData = new FormData();
   formData.append('file', file);
-  if (opts.business_date) formData.append('business_date', opts.business_date);
-  if (opts.mapping) formData.append('mapping', JSON.stringify(opts.mapping));
-  if (opts.sheet) formData.append('sheet', opts.sheet);
+  for (const [key, value] of Object.entries(fields)) {
+    if (value) formData.append(key, value);
+  }
   const headers: Record<string, string> = {};
   const auth = authHeader();
   if (auth) headers['Authorization'] = auth;
@@ -4494,16 +4504,23 @@ export async function previewManualSalesImport(
     const tenantId = localStorage.getItem('tenant_id');
     if (tenantId) headers['X-Tenant-ID'] = tenantId;
   }
-  const response = await fetch(`${base}/manual-sales/import/preview`, {
-    method: 'POST',
-    headers,
-    body: formData,
-  });
+  const response = await fetch(`${base}${path}`, { method: 'POST', headers, body: formData });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
     throw new Error(err.error || 'Failed to read that file');
   }
   return response.json();
+}
+
+export async function previewManualSalesImport(
+  file: File,
+  opts: { business_date?: string; mapping?: Record<string, string | null>; sheet?: string } = {}
+): Promise<ManualSalesImportPreview> {
+  return postManualSalesFile('/manual-sales/import/preview', file, {
+    business_date: opts.business_date,
+    mapping: opts.mapping ? JSON.stringify(opts.mapping) : undefined,
+    sheet: opts.sheet,
+  });
 }
 
 export async function commitManualSalesImport(payload: {
@@ -4519,6 +4536,123 @@ export async function commitManualSalesImport(payload: {
   return apiRequest('/manual-sales/import/commit', { method: 'POST', body: JSON.stringify(payload) });
 }
 
-export async function deleteManualSalesBatch(id: number): Promise<{ success: boolean; batch_id: number; orders_deleted: number }> {
+export async function deleteManualSalesBatch(id: number): Promise<{
+  success: boolean; batch_id: number; orders_deleted: number; product_lines_reversed: number;
+}> {
   return apiRequest(`/manual-sales/batches/${id}`, { method: 'DELETE' });
+}
+
+// ==================== Product-level delivery import ====================
+// A per-product daily report (DiDi's "Reporte diario de productos") feeds
+// inventory and COGS. It creates NO orders — the settlement import already
+// booked that revenue. See migration 0095.
+
+export interface ProductImportDay {
+  business_date: string;
+  gross: number;
+  /** null when the price is unknown, so units could not be worked out. */
+  quantity: number | null;
+  /** false when gross ÷ price did not land on a whole number. */
+  exact: boolean;
+  quantity_source: 'column' | 'derived' | 'none';
+  already_imported: boolean;
+}
+
+export interface ProductImportItem {
+  platform_item_name: string;
+  norm_name: string;
+  menu_item_id: number | null;
+  menu_item_name: string | null;
+  pos_price: number | null;
+  platform_price: number | null;
+  /** How the platform price was arrived at. 'single' is the weakest — one
+   *  day's total cannot pin a unit price, so it needs a human. */
+  price_basis: 'saved' | 'pos_anchor' | 'divisor' | 'single' | 'none';
+  match_confidence: 'saved' | 'exact' | 'contains' | 'fuzzy' | 'none';
+  candidates: { menu_item_id: number; name: string; price: number; score: number }[];
+  ignored: boolean;
+  days: ProductImportDay[];
+  total_quantity: number;
+  total_gross: number;
+  /** Recipe cost per unit; null when the menu item has no recipe. */
+  unit_cost: number | null;
+}
+
+export interface ProductImportPreview {
+  headers: string[];
+  mapping: Record<string, string | null>;
+  sheets: string[];
+  sheet: string | null;
+  platform: { id: number; name: string; display_name: string };
+  items: ProductImportItem[];
+  row_count: number;
+  product_count: number;
+  unresolved_count: number;
+  already_imported_dates: string[];
+  skipped_count: number;
+  date_range: { from: string; to: string } | null;
+  warnings: string[];
+}
+
+export async function previewProductImport(
+  file: File,
+  opts: { channel: string; business_date?: string; mapping?: Record<string, string | null>; sheet?: string }
+): Promise<ProductImportPreview> {
+  return postManualSalesFile('/manual-sales/products/preview', file, {
+    channel: opts.channel,
+    business_date: opts.business_date,
+    mapping: opts.mapping ? JSON.stringify(opts.mapping) : undefined,
+    sheet: opts.sheet,
+  });
+}
+
+export async function commitProductImport(payload: {
+  channel: string;
+  items: ProductImportItem[];
+  source_filename?: string;
+  note?: string;
+  deduct_inventory?: boolean;
+}): Promise<{
+  success: boolean; batch_id: number; lines: number; units: number;
+  gross_total: number; cogs_total: number;
+  skipped_unresolved: number; skipped_already_imported: number;
+  inventory_deducted: boolean; date_range: { from: string; to: string };
+}> {
+  return apiRequest('/manual-sales/products/commit', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export interface PlatformItemMapping {
+  id: number;
+  platform_item_name: string;
+  menu_item_id: number | null;
+  menu_item_name: string | null;
+  platform_price: number | null;
+  pos_price: number | null;
+  ignored: boolean;
+}
+
+export async function getPlatformItemMap(channel: string): Promise<{ mappings: PlatformItemMapping[] }> {
+  return apiRequest(`/manual-sales/product-map?channel=${encodeURIComponent(channel)}`);
+}
+
+export async function deletePlatformItemMapping(id: number): Promise<{ success: boolean; id: number }> {
+  return apiRequest(`/manual-sales/product-map/${id}`, { method: 'DELETE' });
+}
+
+export interface ProductSalesRow {
+  menu_item_id: number | null;
+  platform_item_name: string;
+  menu_item_name: string | null;
+  platform_display_name: string | null;
+  units: number;
+  gross: number;
+  cogs: number;
+}
+
+export async function getProductSales(opts: { from?: string; to?: string } = {}): Promise<{ rows: ProductSalesRow[] }> {
+  const q = new URLSearchParams();
+  if (opts.from) q.set('from', opts.from);
+  if (opts.to) q.set('to', opts.to);
+  const qs = q.toString();
+  return apiRequest(`/manual-sales/product-sales${qs ? `?${qs}` : ''}`);
 }
