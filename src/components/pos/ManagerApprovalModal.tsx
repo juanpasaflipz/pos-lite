@@ -2,19 +2,23 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Lock } from 'lucide-react';
-import { managerApprove } from '../../api';
+import { managerApprove, type DiscountApprovalContext } from '../../api';
 
 export interface ManagerApprovalResult {
   employee_id: number;
   employee_name: string;
   /** One-shot signed approval for routes that accept X-Approval-Token. */
   approval_token: string;
+  /** Discounts only — id of the single-use record bound to this discount. */
+  approval_id?: string;
 }
 
 interface ManagerApprovalModalProps {
   permission: string;
   title?: string;
   message?: string;
+  /** Required for `apply_discounts`: what the manager is approving. */
+  context?: DiscountApprovalContext;
   onApproved: (result: ManagerApprovalResult) => void;
   onClose: () => void;
 }
@@ -23,6 +27,7 @@ const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
   permission,
   title,
   message,
+  context,
   onApproved,
   onClose,
 }) => {
@@ -36,11 +41,12 @@ const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
     setSubmitting(true);
     setError(null);
     try {
-      const result = await managerApprove(pin, permission);
+      const result = await managerApprove(pin, permission, context);
       onApproved({
         employee_id: result.employee_id,
         employee_name: result.employee_name,
         approval_token: result.approval_token,
+        approval_id: result.approval_id,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : t('managerApproval.invalidPin');

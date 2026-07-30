@@ -183,62 +183,113 @@ async function insertOrderWithNumber(conn, {
   };
 }
 
+/** Normalize a discount's value the same way on mint and on consume. */
+function bindingValue(discount) {
+  // A comp is always 100% off; its `value` is meaningless and clients have sent
+  // both 0 and 100. Pinning it here keeps the binding comparable.
+  if (discount?.type === 'comp') return 100;
+  return Math.round((Number(discount?.value) || 0) * 100) / 100;
+}
+
 /**
- * Verify the actor (or their manager-approver) is authorized to apply a discount.
- * Returns the authorizing employee_id, or throws an Error with .status set.
+ * Verify the actor (or a manager who put their PIN behind this exact discount)
+ * is authorized to apply it. Returns the authorizing employee_id, or throws an
+ * Error with .status set.
  *
- * KNOWN WEAKNESS — do not copy this shape into new code. `authorizedByEmployeeId`
- * arrives as a bare integer in the request body with nothing binding it to the
- * PIN that produced it, so a client can name any manager's employee id and
- * self-authorize a discount (including `comp`, i.e. 100% off). Every other
- * approval gate now takes a signed X-Approval-Token instead — see
- * authorizeOrderEdit below and requireAuth({ allowApproval }) in middleware/auth.
+ * Two paths:
+ *   1. The actor's own role grants apply_discounts — self-stamp, no record.
+ *      This is also what keeps discounts working offline, since minting an
+ *      approval requires the server.
+ *   2. Otherwise the discount must carry an `approval_id` naming a
+ *      discount_approvals row. It is validated and consumed in one UPDATE, so
+ *      the binding check and the single-use claim cannot race each other.
  *
- * This one is not a straight port: at order-creation time the approver rides
- * inside the cart payload, a cart can carry several separately-approved
- * discounts (per-line plus cart-level), and a cart can sit open far longer than
- * the token's 5-minute TTL. Closing it needs a different design — likely
- * server-side approval records the cart references by id — not a header swap.
+ * The bare `authorized_by_employee_id` this used to accept is gone; it let any
+ * client name any manager's (enumerable) employee id and self-authorize a
+ * discount, comp included. Anything sending the old shape now gets a 403 with
+ * code `approval_required`, which is the client's cue to raise the PIN pad.
+ *
+ * Known and accepted: the binding cannot pin the base amount, so a cart-level
+ * percentage approved against a small cart still applies if the cart grows
+ * before checkout. Enforcing the base would break honest flows (carts grow all
+ * the time); `base_amount` is recorded so the drift is at least visible, and
+ * `amount`/`comp` approvals are bounded by their value binding.
  */
-async function authorizeDiscount({ actorEmployee, authorizedByEmployeeId }) {
-  // Actor has permission directly
+async function authorizeDiscount({ actorEmployee, discount, scope, orderId = null, orderItemId = null }) {
   const actorPerm = await get(
     'SELECT granted FROM role_permissions WHERE role = $1 AND permission = $2',
     [actorEmployee.role, 'apply_discounts']
   );
   if (actorPerm?.granted) return actorEmployee.id;
 
-  // Otherwise an approver must have been supplied (set by /manager-approve)
-  if (!authorizedByEmployeeId) {
+  const approvalId = discount?.approval_id || null;
+  if (!approvalId) {
     const err = new Error('Manager approval required to apply discount');
     err.status = 403;
+    err.code = 'approval_required';
+    err.permission = 'apply_discounts';
     throw err;
   }
 
-  const approver = await get(
-    'SELECT id, role, active FROM employees WHERE id = $1',
-    [authorizedByEmployeeId]
-  );
-  if (!approver || !approver.active) {
-    const err = new Error('Invalid approver');
+  // Validate + consume atomically. RLS scopes this to the caller's tenant, and
+  // the tenant middleware's transaction means a rollback later un-consumes it —
+  // an approval is never burned by an order that failed to save.
+  let claimed;
+  try {
+    claimed = await all(
+      `UPDATE discount_approvals
+          SET consumed_at = NOW(),
+              consumed_order_id = $5,
+              consumed_order_item_id = $6
+        WHERE id = $1
+          AND consumed_at IS NULL
+          AND expires_at > NOW()
+          AND scope = $2
+          AND discount_type = $3
+          AND discount_value = $4
+        RETURNING approver_employee_id`,
+      [approvalId, scope, discount?.type || null, bindingValue(discount), orderId, orderItemId]
+    );
+  } catch {
+    // A malformed id reaches Postgres as an invalid uuid rather than a miss.
+    const err = new Error('Invalid discount approval');
     err.status = 403;
+    err.code = 'approval_required';
+    err.permission = 'apply_discounts';
     throw err;
   }
-  const approverPerm = await get(
-    'SELECT granted FROM role_permissions WHERE role = $1 AND permission = $2',
-    [approver.role, 'apply_discounts']
+
+  if (claimed.length > 0) return Number(claimed[0].approver_employee_id);
+
+  // Nothing claimed — say which of the four reasons it was, both so the cashier
+  // gets a useful message and so a replay attempt is legible in the audit log.
+  const existing = await get(
+    `SELECT consumed_at, expires_at, scope, discount_type, discount_value
+       FROM discount_approvals WHERE id = $1`,
+    [approvalId]
+  ).catch(() => null);
+
+  let reason = 'not_found';
+  if (existing?.consumed_at) reason = 'already_used';
+  else if (existing && new Date(existing.expires_at) <= new Date()) reason = 'expired';
+  else if (existing) reason = 'binding_mismatch';
+
+  const err = new Error(
+    reason === 'already_used' ? 'That approval was already used'
+      : reason === 'expired' ? 'That approval expired — ask for the PIN again'
+      : reason === 'binding_mismatch' ? 'The discount changed after it was approved'
+      : 'Manager approval required to apply discount'
   );
-  if (!approverPerm?.granted) {
-    const err = new Error('Approver lacks apply_discounts permission');
-    err.status = 403;
-    throw err;
-  }
-  return approver.id;
+  err.status = 403;
+  err.code = 'approval_required';
+  err.permission = 'apply_discounts';
+  err.approvalRejected = reason;
+  throw err;
 }
 
 /**
  * Resolve a discount payload to an absolute dollar amount, capped at the line/order base.
- * Discount payload: { type: 'percent'|'amount'|'comp', value: number, reason: string, authorized_by_employee_id?: number }
+ * Discount payload: { type: 'percent'|'amount'|'comp', value: number, reason: string, approval_id?: string }
  */
 function resolveDiscountAmount(discount, base) {
   if (!discount) return 0;
@@ -762,6 +813,8 @@ async function buildOrderFromRequest(req) {
       discount_type: lineDiscountType,
       discount_reason: lineDiscountReason,
       _lineHasDiscount: lineDiscountAmount > 0,
+      // Kept so each line can be authorized against its OWN approval below.
+      _discount: item.discount || null,
     });
   }
 
@@ -769,20 +822,27 @@ async function buildOrderFromRequest(req) {
   const orderDiscountAmount = resolveDiscountAmount(orderDiscount, itemsTotal);
   const total = Math.round((itemsTotal - orderDiscountAmount) * 100) / 100;
 
-  // Authorize discounts (line-level or order-level)
-  const anyLineDiscount = orderItems.some((it) => it._lineHasDiscount);
-  let lineAuthorizedBy = null;
+  // Authorize discounts (line-level and order-level).
+  //
+  // Every discounted line is authorized on its own. This used to read the FIRST
+  // discounted line's approver, authorize once, and stamp that id onto every
+  // discounted line — so one approval silently covered N different discounts of
+  // different amounts. Approvals are single-use, so reusing one id across two
+  // lines now fails on the second consume.
   let orderAuthorizedBy = null;
-  if (anyLineDiscount) {
-    lineAuthorizedBy = await authorizeDiscount({
+  for (const oi of orderItems) {
+    if (!oi._lineHasDiscount) continue;
+    oi._authorizedBy = await authorizeDiscount({
       actorEmployee: req.employee,
-      authorizedByEmployeeId: items.find((i) => i.discount)?.discount?.authorized_by_employee_id || null,
+      discount: oi._discount,
+      scope: 'line',
     });
   }
   if (orderDiscountAmount > 0) {
     orderAuthorizedBy = await authorizeDiscount({
       actorEmployee: req.employee,
-      authorizedByEmployeeId: orderDiscount?.authorized_by_employee_id || null,
+      discount: orderDiscount,
+      scope: 'cart',
     });
   }
 
@@ -841,7 +901,7 @@ async function buildOrderFromRequest(req) {
     item.discount_amount || 0,
     item.discount_type,
     item.discount_reason,
-    item._lineHasDiscount ? lineAuthorizedBy : null,
+    item._lineHasDiscount ? (item._authorizedBy ?? null) : null,
   ]);
 
   const insertedItems = await conn.unsafe(`
@@ -857,6 +917,25 @@ async function buildOrderFromRequest(req) {
   // Correlate by index — Postgres preserves VALUES order in RETURNING
   for (let i = 0; i < orderItems.length; i++) {
     orderItems[i]._orderItemId = insertedItems[i].id;
+  }
+
+  // Point each consumed approval at what it ended up authorizing. The consume
+  // happened before the order existed, so this is the earliest the ids are
+  // known; it rides the same transaction, so the link is never half-written.
+  const lineApprovalIds = orderItems
+    .filter((it) => it._lineHasDiscount && it._discount?.approval_id)
+    .map((it) => [it._discount.approval_id, it._orderItemId]);
+  for (const [approvalId, orderItemId] of lineApprovalIds) {
+    await conn.unsafe(
+      `UPDATE discount_approvals SET consumed_order_id = $1, consumed_order_item_id = $2 WHERE id = $3`,
+      [orderId, orderItemId, approvalId]
+    );
+  }
+  if (orderDiscountAmount > 0 && orderDiscount?.approval_id) {
+    await conn.unsafe(
+      `UPDATE discount_approvals SET consumed_order_id = $1 WHERE id = $2`,
+      [orderId, orderDiscount.approval_id]
+    );
   }
 
   // Batch insert all modifiers (1 query instead of M)
@@ -928,7 +1007,12 @@ async function buildOrderFromRequest(req) {
 
 function handleOrderError(error, res) {
   if (error?.status) {
-    return res.status(error.status).json({ error: error.message });
+    return res.status(error.status).json({
+      error: error.message,
+      // `approval_required` is the client's only trigger for the PIN pad, so a
+      // discount that needs a manager must surface it here too.
+      ...(error.code ? { code: error.code, permission: error.permission } : {}),
+    });
   }
   console.error('Error creating order:', error);
   return res.status(500).json({ error: 'Failed to create order' });
@@ -1789,13 +1873,13 @@ router.delete('/:id/items/:itemId', requireAuth('pos_access'), async (req, res) 
 // gate as cart-creation discounts. Paid orders are rejected — refund instead.
 //
 // Body: {
-//   discount: { type: 'percent'|'amount'|'comp', value: number, reason: string } | null,
-//   authorized_by_employee_id?: number
+//   discount: { type: 'percent'|'amount'|'comp', value: number, reason: string,
+//               approval_id?: string } | null
 // }
 // Sending `discount: null` clears any existing order-level discount.
 router.post('/:id/discount', requireAuth('pos_access'), async (req, res) => {
   const { id } = req.params;
-  const { discount, authorized_by_employee_id } = req.body || {};
+  const { discount } = req.body || {};
   const conn = getConn();
   try {
     const orderRow = await get(
@@ -1841,10 +1925,17 @@ router.post('/:id/discount', requireAuth('pos_access'), async (req, res) => {
     try {
       authorizedBy = await authorizeDiscount({
         actorEmployee: req.employee,
-        authorizedByEmployeeId: authorized_by_employee_id,
+        discount,
+        scope: 'cart',
+        orderId: Number(id),
       });
     } catch (err) {
-      return res.status(err.status || 403).json({ error: err.message });
+      // Carry `code` so the client raises the PIN pad instead of just showing
+      // the message — same contract as requireAuth({ allowApproval }).
+      return res.status(err.status || 403).json({
+        error: err.message,
+        ...(err.code ? { code: err.code, permission: err.permission } : {}),
+      });
     }
 
     // Resolve discount against the pre-discount line total (live items only).
@@ -2008,5 +2099,8 @@ router.post('/purge-unpaid', requireAuth('void_orders'), async (req, res) => {
   }
 });
 
-export { insertOrderWithNumber, estimatePrepTime };
+// authorizeDiscount is exported as a test seam — it is the gate that decides
+// whether a discount is allowed at all, so it is worth exercising directly
+// rather than only through a full order-create round trip.
+export { insertOrderWithNumber, estimatePrepTime, authorizeDiscount };
 export default router;

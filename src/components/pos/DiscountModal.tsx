@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Percent, DollarSign, Gift } from 'lucide-react';
 import { Discount, DiscountType } from '../../types';
@@ -33,7 +33,7 @@ const DiscountModal: React.FC<DiscountModalProps> = ({
     initialDiscount && initialDiscount.type !== 'comp' ? String(initialDiscount.value) : ''
   );
   const [reason, setReason] = useState(initialDiscount?.reason || '');
-  const [authorizer, setAuthorizer] = useState<{ id: number; name: string } | null>(
+  const [authorizer, setAuthorizer] = useState<{ id: number; name: string; approvalId?: string } | null>(
     initialDiscount?.authorized_by_employee_id && initialDiscount.authorized_by_employee_name
       ? { id: initialDiscount.authorized_by_employee_id, name: initialDiscount.authorized_by_employee_name }
       : null
@@ -55,6 +55,21 @@ const DiscountModal: React.FC<DiscountModalProps> = ({
   const canApply = hasPermission(PERMISSION) || !!authorizer;
   const ownerHasPerm = hasPermission(PERMISSION);
 
+  // An approval is bound to the exact type+value it was granted for, so editing
+  // either afterwards invalidates it. Drop it here rather than letting the
+  // server reject the mismatch — the cashier gets the PIN pad again instead of
+  // a confusing "the discount changed after it was approved".
+  const bindingKey = `${type}:${type === 'comp' ? 100 : numericValue}`;
+  const approvedBindingKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (!authorizer?.approvalId) return;
+    if (approvedBindingKey.current === null) return;
+    if (approvedBindingKey.current !== bindingKey) {
+      setAuthorizer(null);
+      approvedBindingKey.current = null;
+    }
+  }, [bindingKey, authorizer]);
+
   const valid =
     reason.trim().length > 0 &&
     (type === 'comp' || numericValue > 0) &&
@@ -72,6 +87,9 @@ const DiscountModal: React.FC<DiscountModalProps> = ({
       reason: reason.trim(),
     };
     if (!ownerHasPerm && authorizer) {
+      // The approval id is the authorization. The employee id/name ride along
+      // for display only — the server ignores them.
+      discount.approval_id = authorizer.approvalId;
       discount.authorized_by_employee_id = authorizer.id;
       discount.authorized_by_employee_name = authorizer.name;
     } else if (ownerHasPerm && currentEmployee) {
@@ -192,8 +210,20 @@ const DiscountModal: React.FC<DiscountModalProps> = ({
           permission={PERMISSION}
           title={t('discount.managerTitle')}
           message={t('discount.managerMessage')}
+          context={{
+            scope: scope === 'cart' ? 'cart' : 'line',
+            discount_type: type,
+            discount_value: type === 'comp' ? 100 : numericValue,
+            base_amount: base,
+            item_label: itemName,
+          }}
           onApproved={(result) => {
-            setAuthorizer({ id: result.employee_id, name: result.employee_name });
+            setAuthorizer({
+              id: result.employee_id,
+              name: result.employee_name,
+              approvalId: result.approval_id,
+            });
+            approvedBindingKey.current = bindingKey;
             setShowApproval(false);
           }}
           onClose={() => setShowApproval(false)}

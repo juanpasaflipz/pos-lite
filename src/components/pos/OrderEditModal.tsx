@@ -13,7 +13,6 @@ import type { Discount, Order, OrderItem } from '../../types';
 import { formatPrice } from '../../utils/currency';
 import CashTipModal from './CashTipModal';
 import DiscountModal from './DiscountModal';
-import ManagerApprovalModal, { type ManagerApprovalResult } from './ManagerApprovalModal';
 import OrderEditMenuPicker, { type PickerLine } from './OrderEditMenuPicker';
 import VoidReasonModal from './VoidReasonModal';
 import { useManagerApproval, ApprovalCancelled } from '../../hooks/useManagerApproval';
@@ -28,8 +27,6 @@ interface OrderEditModalProps {
   onRefund?: (orderId: number) => void;
 }
 
-type RetryFn = (approverId: number) => Promise<void>;
-
 interface VoidPick {
   itemId: number;
   itemName: string;
@@ -43,7 +40,6 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
   const [busyItemId, setBusyItemId] = useState<number | null>(null);
   const [addingItems, setAddingItems] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pendingRetry, setPendingRetry] = useState<RetryFn | null>(null);
   const [voidingPick, setVoidingPick] = useState<VoidPick | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -176,39 +172,6 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
     if (ok) await refreshItems();
   };
 
-  // Legacy sibling of callWithMaybeApproval, kept for the discount path only.
-  // POST /:id/discount goes through authorizeDiscount, which still takes a bare
-  // approver id in the body and returns a plain 403 with no approval_required
-  // code — so the token flow can't drive it. Retire this when that gate moves to
-  // signed approvals (see the KNOWN WEAKNESS note in server/routes/orders.js).
-  const callWithApproverId = async (
-    runner: (approverId?: number) => Promise<unknown>,
-  ): Promise<void> => {
-    setError(null);
-    try {
-      await runner(undefined);
-    } catch (err) {
-      if ((err as { status?: number }).status === 403) {
-        setPendingRetry(() => async (approverId: number) => {
-          try {
-            await runner(approverId);
-            setPendingRetry(null);
-            await refreshItems();
-          } catch (retryErr) {
-            setError(retryErr instanceof Error ? retryErr.message : 'Falló después de aprobación');
-            setPendingRetry(null);
-          }
-        });
-        return;
-      }
-      setError(err instanceof Error ? err.message : 'No se pudo aplicar el cambio');
-    }
-  };
-
-  const onManagerApproved = (result: ManagerApprovalResult) => {
-    if (pendingRetry) pendingRetry(result.employee_id);
-  };
-
   const handleConfirmDelete = async () => {
     if (!order || deleting) return;
     setDeleting(true);
@@ -229,15 +192,13 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
   const handleDiscountSave = async (next: Discount | null) => {
     setShowDiscount(false);
     setError(null);
-    // DiscountModal returns the manager-approval result baked into the
-    // Discount payload itself; the server's 403 path is rare but still needs
-    // the PIN pad, so this stays on the approver-id retry.
-    await callWithApproverId((approverId) =>
-      applyOrderDiscount(order.id, next, {
-        authorized_by_employee_id:
-          approverId ?? next?.authorized_by_employee_id,
-      })
-    );
+    // DiscountModal already raised the PIN pad if the operator lacked
+    // apply_discounts, and baked the single-use approval id into the payload.
+    try {
+      await applyOrderDiscount(order.id, next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo aplicar el descuento');
+    }
     await refreshItems();
   };
 
@@ -560,17 +521,9 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
         />
       )}
 
-      {pendingRetry && (
-        <ManagerApprovalModal
-          permission="void_orders"
-          title="Aprobación requerida"
-          message="Edita una orden pagada — pin de manager"
-          onApproved={onManagerApproved}
-          onClose={() => setPendingRetry(null)}
-        />
-      )}
-
-      {/* Cancel-the-whole-order path; the pad above covers paid-order item edits. */}
+      {/* One pad for every gate in this modal now: item edits, cancel-order and
+          delete all go through useManagerApproval's signed-token retry, and
+          discounts raise their own inside DiscountModal. */}
       {approvalModal}
 
       {showDiscount && (

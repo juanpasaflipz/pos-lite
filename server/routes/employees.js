@@ -338,10 +338,36 @@ router.post('/login', pinLoginLimiter, async (req, res) => {
 // Does NOT issue a JWT — the caller's existing session continues; this is a one-shot authorization.
 router.post('/manager-approve', managerApproveLimiter, requireAuth(), async (req, res) => {
   try {
-    const { pin, permission } = req.body;
+    const { pin, permission, context } = req.body;
 
     if (!pin || !permission) {
       return res.status(400).json({ error: 'PIN and permission required' });
+    }
+
+    // A discount approval is a record, not a header token — the approver rides
+    // inside the cart payload, several can be open at once, and a cart outlives
+    // the token's 5-minute TTL. The client sends what the manager is putting
+    // their PIN behind so it can be bound to that exact discount.
+    let discountBinding = null;
+    if (permission === 'apply_discounts') {
+      const scope = context?.scope;
+      const type = context?.discount_type;
+      if (!['cart', 'line'].includes(scope) || !['percent', 'amount', 'comp'].includes(type)) {
+        return res.status(400).json({
+          error: 'apply_discounts approval requires context { scope, discount_type, discount_value }',
+        });
+      }
+      const rawValue = type === 'comp' ? 100 : Number(context?.discount_value);
+      if (!Number.isFinite(rawValue) || rawValue < 0) {
+        return res.status(400).json({ error: 'context.discount_value must be a non-negative number' });
+      }
+      discountBinding = {
+        scope,
+        type,
+        value: Math.round((type === 'percent' ? Math.min(100, rawValue) : rawValue) * 100) / 100,
+        baseAmount: Number.isFinite(Number(context?.base_amount)) ? Number(context.base_amount) : null,
+        itemLabel: typeof context?.item_label === 'string' ? context.item_label.slice(0, 200) : null,
+      };
     }
 
     const tenantId = req.tenant?.id || 'default';
@@ -412,6 +438,29 @@ router.post('/manager-approve', managerApproveLimiter, requireAuth(), async (req
 
     clearAttempts(req);
 
+    // Single-use, binding-checked record consumed by authorizeDiscount. Only
+    // minted once the PIN and the approver's permission have both been proven.
+    let approvalId = null;
+    if (discountBinding) {
+      const row = await get(
+        `INSERT INTO discount_approvals
+           (approver_employee_id, requested_by_employee_id, scope, discount_type,
+            discount_value, base_amount, item_label)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id`,
+        [
+          approver.id,
+          req.employee?.id ?? null,
+          discountBinding.scope,
+          discountBinding.type,
+          discountBinding.value,
+          discountBinding.baseAmount,
+          discountBinding.itemLabel,
+        ]
+      );
+      approvalId = row?.id ?? null;
+    }
+
     audit({
       tenantId,
       actorType: 'employee',
@@ -419,7 +468,11 @@ router.post('/manager-approve', managerApproveLimiter, requireAuth(), async (req
       action: 'manager_approve',
       resource: 'auth',
       resourceId: String(approver.id),
-      details: { permission, approver_role: approver.role },
+      details: {
+        permission,
+        approver_role: approver.role,
+        ...(approvalId ? { approval_id: approvalId, binding: discountBinding } : {}),
+      },
       ip: req.ip,
     });
 
@@ -427,10 +480,12 @@ router.post('/manager-approve', managerApproveLimiter, requireAuth(), async (req
       employee_id: approver.id,
       employee_name: approver.name,
       role: approver.role,
+      // Discount approvals only. Bound to this exact discount and single-use;
+      // the cart carries it per line / per cart-level discount.
+      ...(approvalId ? { approval_id: approvalId } : {}),
       // Signed, permission-scoped, 5-minute one-shot. Routes that use
       // requireAuth(perm, { allowApproval: true }) accept this as
-      // X-Approval-Token; the bare employee_id above is kept for the older
-      // discount flow that embeds the approver on the order row.
+      // X-Approval-Token.
       approval_token: signApprovalToken({
         tenantId,
         approverId: approver.id,

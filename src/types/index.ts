@@ -63,6 +63,13 @@ export interface Discount {
   type: DiscountType;
   value: number;
   reason: string;
+  /**
+   * Single-use server-side approval bound to this exact discount, minted by
+   * /employees/manager-approve when the operator lacks apply_discounts. Sent
+   * per line and per cart-level discount; one approval cannot cover two.
+   */
+  approval_id?: string;
+  /** Display only — who approved. Never sent as authorization. */
   authorized_by_employee_id?: number;
   authorized_by_employee_name?: string;
 }

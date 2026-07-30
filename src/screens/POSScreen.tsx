@@ -883,7 +883,9 @@ const POSScreen: React.FC = () => {
           type: item.discount.type,
           value: item.discount.value,
           reason: item.discount.reason,
-          authorized_by_employee_id: item.discount.authorized_by_employee_id,
+          // Each discounted line carries its OWN single-use approval; the
+          // server consumes them one per line.
+          approval_id: item.discount.approval_id,
         }
       : null,
   }));
@@ -893,7 +895,7 @@ const POSScreen: React.FC = () => {
         type: cartDiscount.type,
         value: cartDiscount.value,
         reason: cartDiscount.reason,
-        authorized_by_employee_id: cartDiscount.authorized_by_employee_id,
+        approval_id: cartDiscount.approval_id,
       }
     : null;
 

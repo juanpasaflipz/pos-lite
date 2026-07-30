@@ -12,8 +12,12 @@ const APPROVAL_TTL_SECONDS = 300;
  * Replaces an earlier pattern where the client echoed back a bare
  * `authorized_by_employee_id` after a PIN check. Nothing bound that id to the
  * PIN that produced it, so any client could name a manager's employee id and
- * self-authorize. `authorizeDiscount` in routes/orders.js is the last holdout —
- * see the note there.
+ * self-authorize. That shape is gone everywhere.
+ *
+ * Discounts are the one gate that does NOT use this token: their approver rides
+ * inside the cart payload, several can be open at once, and a cart outlives
+ * this TTL. They use single-use `discount_approvals` rows instead — see
+ * authorizeDiscount in routes/orders.js.
  */
 export function signApprovalToken({ tenantId, approverId, approverName, permission }) {
   return jwt.sign(

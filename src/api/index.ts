@@ -616,7 +616,8 @@ interface DiscountPayload {
   type: 'percent' | 'amount' | 'comp';
   value: number;
   reason: string;
-  authorized_by_employee_id?: number;
+  /** Single-use approval bound to this discount; one per discounted line. */
+  approval_id?: string;
 }
 
 interface CreateOrderData {
@@ -656,13 +657,34 @@ export async function syncOfflineOrder(
   });
 }
 
+/**
+ * Context for an `apply_discounts` approval — required for that permission and
+ * ignored for every other. Binds the minted record to the exact discount the
+ * manager is putting their PIN behind, so a 10%-off approval can't be replayed
+ * as a comp.
+ */
+export interface DiscountApprovalContext {
+  scope: 'cart' | 'line';
+  discount_type: DiscountType;
+  discount_value: number;
+  base_amount?: number;
+  item_label?: string;
+}
+
 export async function managerApprove(
   pin: string,
-  permission: string
-): Promise<{ employee_id: number; employee_name: string; role: string; approval_token: string }> {
+  permission: string,
+  context?: DiscountApprovalContext
+): Promise<{
+  employee_id: number;
+  employee_name: string;
+  role: string;
+  approval_token: string;
+  approval_id?: string;
+}> {
   return apiRequest('/employees/manager-approve', {
     method: 'POST',
-    body: JSON.stringify({ pin, permission }),
+    body: JSON.stringify({ pin, permission, context }),
   });
 }
 
@@ -745,13 +767,12 @@ export async function purgeUnpaidOrders(): Promise<{ success: boolean; deleted_c
 }
 
 // Apply (or clear with discount=null) an order-level discount on an existing order.
-// 403 → manager approval required; caller should re-call with authorized_by_employee_id.
-// Still on the bare-employee-id approver rather than a signed token — see the
-// KNOWN WEAKNESS note on authorizeDiscount in server/routes/orders.js.
+// A 403 carrying code 'approval_required' means the operator lacks
+// apply_discounts: mint an approval via managerApprove(pin, 'apply_discounts',
+// context) and re-send with `approval_id` on the discount.
 export async function applyOrderDiscount(
   orderId: number,
-  discount: Discount | null,
-  opts?: { authorized_by_employee_id?: number }
+  discount: Discount | null
 ): Promise<OrderEditTotals & {
   success: true;
   order_id: number;
@@ -761,9 +782,13 @@ export async function applyOrderDiscount(
     method: 'POST',
     body: JSON.stringify({
       discount: discount
-        ? { type: discount.type, value: discount.value, reason: discount.reason }
+        ? {
+            type: discount.type,
+            value: discount.value,
+            reason: discount.reason,
+            approval_id: discount.approval_id,
+          }
         : null,
-      authorized_by_employee_id: opts?.authorized_by_employee_id,
     }),
   });
 }

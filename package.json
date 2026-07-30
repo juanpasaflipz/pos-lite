@@ -1,6 +1,6 @@
 {
   "name": "pos-lite",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "description": "Lean, multi-tenant POS system — $20/mo SaaS",
   "type": "module",
   "scripts": {
