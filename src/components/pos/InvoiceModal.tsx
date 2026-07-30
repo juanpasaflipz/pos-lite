@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { X, FileText, Download, Copy, Check, AlertCircle, Loader2, Mail } from 'lucide-react';
 import { Order, CfdiInvoice, SatCatalogItem, CfdiCatalogs } from '../../types';
 import { issueCfdiInvoice, getCfdiCatalogs, getInvoiceToken } from '../../api';
 import { formatPrice } from '../../utils/currency';
+import { useManagerApproval, ApprovalCancelled } from '../../hooks/useManagerApproval';
 
 const ResendEmailModal = lazy(() => import('../cfdi/ResendEmailModal'));
 
@@ -31,6 +33,7 @@ const FALLBACK_USO_CFDI: SatCatalogItem[] = [
 
 const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onInvoiceIssued }) => {
   const { t } = useTranslation('pos');
+  const { run: withApproval, approvalModal } = useManagerApproval();
   const [modalState, setModalState] = useState<ModalState>('form');
   const [publicoGeneral, setPublicoGeneral] = useState(true);
 
@@ -88,7 +91,7 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onInvoiceIs
         };
       }
 
-      const invoice = await issueCfdiInvoice(payload);
+      const invoice = await withApproval((token) => issueCfdiInvoice(payload, token));
       setIssuedInvoice(invoice);
 
       // Fetch the invoice token URL for the copy link feature
@@ -102,10 +105,16 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onInvoiceIs
       setModalState('success');
       onInvoiceIssued(invoice);
     } catch (err: any) {
+      // Operator backed out of the manager PIN pad — return them to the form,
+      // not to an error screen they didn't cause.
+      if (err instanceof ApprovalCancelled) {
+        setModalState('form');
+        return;
+      }
       setErrorMessage(err?.message || t('invoice.errorGeneric'));
       setModalState('error');
     }
-  }, [order.id, publicoGeneral, rfc, razonSocial, regimenFiscal, codigoPostal, usoCfdi, email, onInvoiceIssued, t]);
+  }, [order.id, publicoGeneral, rfc, razonSocial, regimenFiscal, codigoPostal, usoCfdi, email, onInvoiceIssued, withApproval, t]);
 
   const handleCopyLink = useCallback(async () => {
     if (!invoiceTokenUrl) return;
@@ -136,8 +145,14 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onInvoiceIs
     codigoPostal.trim().length === 5
   ));
 
-  return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+  // Portaled to <body> at z-60. The ReceiptModal that opens this one is itself
+  // portaled to <body> (so the print stylesheet can display:none the rest of
+  // the document), which makes it a *later* body sibling than anything rendered
+  // in the React tree under #root. At an equal z-index the later sibling wins,
+  // so an in-tree z-50 invoice modal mounts underneath the receipt's backdrop —
+  // invisible and unclickable. Same treatment as CashTipModal.
+  return createPortal(
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
       <div className="bg-neutral-900 border border-neutral-700 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-neutral-700">
@@ -429,7 +444,9 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onInvoiceIs
           </div>
         )}
       </div>
-    </div>
+      {approvalModal}
+    </div>,
+    document.body,
   );
 };
 

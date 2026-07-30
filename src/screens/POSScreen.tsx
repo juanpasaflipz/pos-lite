@@ -29,6 +29,7 @@ import {
 } from '../lib/menuCache';
 import { MenuCategory, MenuItem, CartItem, Order, AISuggestion, LoyaltyCustomer, ComboDefinition, OrderTemplate, VirtualBrand, Discount } from '../types';
 import RefundModal from '../components/RefundModal';
+import { useManagerApproval, ApprovalCancelled } from '../hooks/useManagerApproval';
 import KioskHeldOrdersBanner from '../components/pos/KioskHeldOrdersBanner';
 import PrintBridgeBanner from '../components/pos/PrintBridgeBanner';
 import type { KioskHeldOrder } from '../api';
@@ -91,6 +92,7 @@ const POSScreen: React.FC = () => {
   const { isTablet, isPortrait } = useDeviceType();
   const showDrawerCart = isTablet && isPortrait;
   const { plan, ownerEmail, isMpConnected, isGetnetEnabled } = usePlan();
+  const { run: withApproval, approvalModal } = useManagerApproval();
 
   // State Management
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -726,6 +728,20 @@ const POSScreen: React.FC = () => {
     addToast(`Orden #${order.order_number} cargada del kiosko`, 'success');
   };
 
+  // Shared by the cart sidebar and the tablet cart drawer. Cashiers don't hold
+  // void_orders by default, so the delete goes through the manager-PIN gate;
+  // roles that do hold it never see the pad.
+  const handleDeleteUnpaidOrder = useCallback(async (order: Order) => {
+    if (!window.confirm(t('deleteOrder.confirm', { number: order.order_number }))) return;
+    try {
+      await withApproval((token) => deleteOrder(order.id, token));
+      setUnpaidOrders((prev) => prev.filter((o) => o.id !== order.id));
+    } catch (err) {
+      if (err instanceof ApprovalCancelled) return;
+      addToast(err instanceof Error ? err.message : t('deleteOrder.failed'), 'error');
+    }
+  }, [withApproval, t]);
+
   const applyLineDiscount = (cartId: string, discount: Discount | null) => {
     setCart((prev) => prev.map((ci) => (ci.cart_id === cartId ? { ...ci, discount } : ci)));
   };
@@ -1283,15 +1299,7 @@ const POSScreen: React.FC = () => {
         onToggleUnpaidSelected={handleToggleUnpaidSelected}
         onClearUnpaidSelection={handleClearUnpaidSelection}
         onCobrarJuntas={handleOpenPayTogether}
-        onDeleteUnpaidOrder={async (order) => {
-          if (!window.confirm(t('deleteOrder.confirm', { number: order.order_number }))) return;
-          try {
-            await deleteOrder(order.id);
-            setUnpaidOrders((prev) => prev.filter((o) => o.id !== order.id));
-          } catch (err) {
-            window.alert(err instanceof Error ? err.message : t('deleteOrder.failed'));
-          }
-        }}
+        onDeleteUnpaidOrder={handleDeleteUnpaidOrder}
       />
 
       {/* Tablet Portrait: Cart Drawer + Mini Button */}
@@ -1325,15 +1333,7 @@ const POSScreen: React.FC = () => {
             onLogout={handleLogout}
             onCobrar={handleCobrar}
             onToggleUnpaidOrders={() => setShowUnpaidOrders(!showUnpaidOrders)}
-            onDeleteUnpaidOrder={async (order) => {
-              if (!window.confirm(t('deleteOrder.confirm', { number: order.order_number }))) return;
-              try {
-                await deleteOrder(order.id);
-                setUnpaidOrders((prev) => prev.filter((o) => o.id !== order.id));
-              } catch (err) {
-                window.alert(err instanceof Error ? err.message : t('deleteOrder.failed'));
-              }
-            }}
+            onDeleteUnpaidOrder={handleDeleteUnpaidOrder}
             selectedUnpaidIds={selectedUnpaidIds}
             unpaidSelectMode={unpaidSelectMode}
             onToggleUnpaidSelectMode={handleToggleUnpaidSelectMode}
@@ -1590,6 +1590,8 @@ const POSScreen: React.FC = () => {
           }}
         />
       )}
+
+      {approvalModal}
 
       {/* Toast Notifications */}
       <div className={`fixed right-4 space-y-2 z-[60] pointer-events-none ${plan === 'free' ? 'bottom-16' : 'bottom-4'}`}>

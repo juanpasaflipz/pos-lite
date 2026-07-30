@@ -15,6 +15,7 @@ import DiscountModal from './DiscountModal';
 import ManagerApprovalModal, { type ManagerApprovalResult } from './ManagerApprovalModal';
 import OrderEditMenuPicker, { type PickerLine } from './OrderEditMenuPicker';
 import VoidReasonModal from './VoidReasonModal';
+import { useManagerApproval, ApprovalCancelled } from '../../hooks/useManagerApproval';
 
 interface OrderEditModalProps {
   isOpen: boolean;
@@ -34,6 +35,7 @@ interface VoidPick {
 }
 
 const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose, onChanged, onRefund }) => {
+  const { run: withApproval, approvalModal } = useManagerApproval();
   const [items, setItems] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyItemId, setBusyItemId] = useState<number | null>(null);
@@ -197,11 +199,12 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
     setDeleting(true);
     setError(null);
     try {
-      await deleteOrder(order.id);
+      await withApproval((token) => deleteOrder(order.id, token));
       setShowDeleteConfirm(false);
       onChanged();
       onClose();
     } catch (err) {
+      if (err instanceof ApprovalCancelled) return;
       setError(err instanceof Error ? err.message : 'No se pudo cancelar la orden');
     } finally {
       setDeleting(false);
@@ -520,6 +523,9 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
           onClose={() => setPendingRetry(null)}
         />
       )}
+
+      {/* Cancel-the-whole-order path; the pad above covers paid-order item edits. */}
+      {approvalModal}
 
       {showDiscount && (
         <DiscountModal

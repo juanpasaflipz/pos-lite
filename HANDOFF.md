@@ -7,194 +7,57 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
-## 2026-07-28 (App versioning + live update notification) — Claude Code — **local only, NOT pushed**
+## 2026-07-29 (Manager-PIN override for void / refund / facturar) — Claude Code — **not yet pushed**
 
-Tenants had no way to learn a new deploy existed; a tab open since Tuesday ran
-Tuesday's JS forever. Added a build-stamp versioning system and per-surface
-update delivery. Three things another agent needs to know:
+Juan reported Facturar dead and delete/refund failing. Two unrelated causes:
 
-- **`public/sw.js` no longer calls `skipWaiting()` on install.** It was letting a
-  new worker seize a *running* tab, which then requested chunk hashes no longer
-  present in `dist/` → dead screen mid-shift. It now waits for a `SKIP_WAITING`
-  message that only `applyAppUpdate()` sends, and its cache key is scoped per
-  build via the `?v=<buildId>` registration query. Do not "restore" the old
-  immediate-activation behavior.
-- **`version.json` is a gitignored build artifact** written by
-  `scripts/gen-version.mjs` (now the first step of `npm run build`). Both Vite
-  builds `define` it into the bundles and `server/helpers/appVersion.js` reads
-  the same file. Don't commit it, don't hand-edit it.
-- **Migration 0094** adds `kiosk_devices.client_version` / `client_platform`
-  (applied on the test branch, not yet in prod — it ships with the next deploy).
-  Next free migration number is 0095.
+1. **Facturar opened invisibly.** `ReceiptModal` was portaled to `<body>` in
+   `8d9132e` (the loyalty-QR print fix, 2026-07-26). That made its backdrop a
+   later body sibling than `#root`, so the in-tree `z-50` `InvoiceModal` mounted
+   *underneath* it. Fixed by portaling `InvoiceModal` at `z-[60]`.
+   **If you add a modal that opens from the receipt, portal it and go above
+   z-50** — `CashTipModal` (z-60) survived this by luck, not design.
+2. **Cashiers hold none of `void_orders` / `process_refunds` /
+   `manage_invoicing`** (seeded that way in `seedTenantDefaults`), and the POS
+   renders those buttons for every role, so `Caja` tapped and got a 403 string.
 
-Any new screen that would lose state on reload should call
-`useUpdateBlocker(busy)` — POS (cart/payment) and KDS (non-empty rail) already
-do. Details in the new "Versioning & app updates" section of CLAUDE.md.
+New shared mechanism rather than granting the permissions:
+`requireAuth(perm, { allowApproval: true })` accepts a signed 5-minute
+`X-Approval-Token` from `/employees/manager-approve` and sets `req.approver`;
+its 403 carries `code: 'approval_required'`, which is the *only* trigger for the
+client PIN pad (`src/hooks/useManagerApproval.tsx` — never predicted from
+`hasPermission()`, so tenants that do grant the permission see no prompt).
 
----
+**Note for the older approver path:** `authorizeOrderEdit` in
+`server/routes/orders.js` still trusts a bare `authorized_by_employee_id` from
+the request body, with nothing binding it to the PIN that produced it — a client
+can name a manager's id and self-authorize a paid-order edit. Not touched here
+(out of scope); migrate it to the token when someone is next in that file.
 
-## 2026-07-28 (WhatsApp Ops owner screen — finishes the entry below) — Claude Code — **local only, NOT pushed**
+288/288 tests pass; 9 new approval-security cases in `tests/route-auth.test.ts`.
+Permissions in prod are unchanged. Needs a version bump + push.
 
-The multi-number work below left `/admin/whatsapp` **dead**: the cockpit card,
-the `whatsappOps` i18n namespace (ES+EN, full copy), `GET /api/whatsapp/status`
-and the `getWhatsAppStatus()` client fn all existed, but no screen did. Built it.
+## 2026-07-27 (Kiosk wizard — PARITY WORK ORDER vs prototype v12) — Cowork agent — **ready to implement**
 
-- **NEW `src/screens/WhatsAppOpsScreen.tsx`** + route in `App.tsx`
-  (manager/admin, lazy, same shape as `/admin/kiosk`). Read-only by design —
-  connecting a number is the ADMIN_SECRET `wa-onboarding` flow we drive with
-  the owner, so there is nothing to configure here. Sections follow the two
-  questions owners actually ask, in order: which number do we message, then
-  who is allowed to (masked phones + count of employees missing one +
-  deep-link to `/admin/staff?tab=roster`), then what you can send, how it
-  works, tips, privacy.
+Juan reviewed the shipped wizard against the approved prototype and it has
+drifted: separate Segunda step (should be multi-select on the protein grid),
+forced Quitar/Extras path (should be opt-in behind "Asi esta bien / Deseas
+modificar algo?"), extras-only agregar step (should include live sides+drinks),
+fixed items inside the wizard (should be Favoritos-only), presets landing on
+review (should land on Estilo pre-selected), hardcoded preset prices, emojis
+instead of the v12 outline icon set, missing Breakfast/Rollbertos ask overlays
+and the "solo bebidas" door.
 
-**One bug found and fixed while wiring it.** `whatsapp.js` read
-`display_phone_number` from `tenant_credentials` only. A tenant on the platform
-fallback (i.e. **juanbertos today**) has no such row, so the endpoint answered
-`connected: true, source: 'platform', display_phone_number: null` — the screen
-would have shown "Connected — Desktop Kitchen number" directly above "No number
-is connected yet", and never printed the number the whole screen exists to give
-them. Now falls back to **`WA_CLOUD_DISPLAY_PHONE_NUMBER`** (new, documented in
-`.env.example`; display-only, never used to send). The UI also handles
-connected-but-unknown-number without contradicting itself, so an unset env
-degrades instead of lying.
+**Full work order: `design/kiosk-builder-parity-spec.md`. The prototype
+`design/kiosk-builder-prototype.html` (v12) is the normative source of truth —
+match it exactly; the spec enumerates divergences D1–D10, the only two accepted
+deviations (fulfillment/identify interpose; existing pay pipes), and the
+acceptance checklist.**
 
-**→ Juan: set `WA_CLOUD_DISPLAY_PHONE_NUMBER=5613096835` in Railway** (DK's own
-number, the one already in the `.env.example` comment) or the platform-number
-case shows no number to save.
-
-Verified: `npm run typecheck` clean, `build:client` green, `wa-cloud-routing`
-**19/19** (12 existing + 7 new pinning `prettyPhone`/`maskPhone` — the first
-feeds the `wa.me` link via digit-stripping so it must regroup without losing or
-inventing a digit; the second must never render a full number, since that
-endpoint is readable by any logged-in employee).
-
-Full suite: **238 total, 193 passed + 45 skipped** — `tests/manual-sales.test.ts`
-lost its `beforeAll` to the 60 s hook timeout at the 626 s mark (shared test
-branch, single-fork pool) and skipped its 45. Reran alone: **45/45 in 25 s**.
-Contention flake, same pattern as the 07-20 payment-status one — not a
-regression, but that file is now the suite's canary for test-branch latency.
-
----
-
-## 2026-07-28 (WhatsApp goes multi-number) — Claude Code — **local only, NOT pushed**
-
-Juan asked whether the visual-inventory pipeline (photo → `receiptVision.js` →
-purchase/count → SI/NO) could run on any WhatsApp Business number. It couldn't:
-`waCloud.js` read `WA_CLOUD_ACCESS_TOKEN`/`PHONE_NUMBER_ID` straight off
-`process.env`, so exactly one number was ever connectable, and tenant came from
-the *sender's* phone with an `ORDER BY id DESC` tiebreak. Now per-tenant:
-
-- **Credentials moved to `tenant_credentials` (`service='whatsapp'`)** —
-  `access_token`, `phone_number_id`, `waba_id`, `display_phone_number`. Env
-  `WA_CLOUD_*` is now only the platform fallback (DK's own number), so the
-  pilot keeps working with zero DB rows.
-- **Inbound routes by `value.metadata.phone_number_id`** →
-  `resolveTenantByPhoneNumberId()` (memoized 5 min, negatives cached). Unknown
-  number is **dropped, never guessed onto a tenant**.
-- **`resolveEmployeeByPhone(phone, tenantId)`** — scoping closes the
-  cross-tenant collision the code flagged at `inboundVoiceOps.js:65-67`. Twilio
-  passes no tenantId, so its behavior is byte-for-byte unchanged.
-- **`fetchCloudMedia` now caps media at 10 MB** (was unbounded — full download
-  + base64 happened *before* the content-type reject).
-- **Migration 0093** — partial index for the reverse lookup. Applied clean on
-  the test branch.
-
-**Two things that change your mental model:**
-1. The kill switch in the runbook moved. Blanking `WA_CLOUD_ACCESS_TOKEN` now
-   only silences DK's own number; tenant numbers keep their token in the DB.
-   Platform-wide stop is blanking **`WA_CLOUD_APP_SECRET`** (route 503s).
-2. `wa-onboarding.js` is committed now and no longer prints env to copy — it
-   **writes** creds to the tenant. It's a two-page flow: super-admin picks a
-   tenant and mints a **signed 1-hour link that carries no ADMIN_SECRET**, so
-   the link can be handed to the restaurant owner holding the phone. The
-   access token is never rendered or logged. (Old page inlined ADMIN_SECRET
-   into the HTML — fine when only Juan opened it, a leak once a customer does.)
-
-Verified: `npm run typecheck` clean; `npm test` **238/238 across 23 files**;
-`tests/wa-cloud.test.ts` passes **unmodified** (proves the pure helpers were
-untouched); new `tests/wa-cloud-routing.test.ts` (12 tests) covers routing,
-unknown-number drop, cache invalidation, env fallback, and the shared-phone
-collision. Plus a webhook round-trip against the test branch: bad signature
-403s, known number routes + stays silent for non-employees, unknown number is
-dropped before reaching the engine.
-
-**Not done / still blocked:** Meta Business Verification + App Review are
-Juan's manual track — until they clear, no second number can physically pair,
-so none of this is exercised against a real tenant WABA yet. The 07-17 prod
-health check on the live photo → SI → expense round-trip is **still open**
-(see 2026-07-20 entry); this change doesn't touch `receiptVision.js` or
-`voiceIntent.js`, so it neither fixes nor worsens it.
-
----
-
-## 2026-07-27 (Kiosk burrito-builder — Phase 1 seed **DONE**) — Claude Code — closes work order below
-
-Seed applied to prod Neon for tenant `juanbertos`. Script:
-`scripts/seed-builder-menu.mjs` (`--tenant <id|subdomain>` required, `--dry-run`
-optional, idempotent, single transaction).
-
-**What landed:**
-- Category `Arma tu burrito` (id **2392**, `active=false`)
-- 10 items, all `active=false`: 7 builder burritos + Birria + Cochinita + Rollbertos
-- 29 modifier groups (per-item `__<slug>` copies of Estilo/Segunda/Quitar/Extras
-  for each of the 7 builders + 1 required `¿Con birria o cochinita?` for Rollbertos)
-- 136 modifier options
-- 29 item↔group links
-
-**Schema reality vs spec:** modifier_groups is tenant-scoped and shared, no
-per-item price overrides on the join. Followed the spec's contingency plan —
-one group instance per item with internal `__<protein-slug>` suffix (invisible
-to customers, wizard keys on `modifierMap[item.id]`). No schema change needed.
-
-**Verifications:**
-- ✓ 5 acceptance-check totals passed (Asada+Fries=299, Asada+Camarón=340,
-  Huevo+Chorizo=210, Pescado+Asada=355, Rollbertos=139) — computed from the
-  seed's own numbers so any spec/matrix drift would fail loud
-- ✓ Rerun: 0 INSERT / 0 UPDATE / 10 NOOP (idempotent)
-- ✓ Live `/api/customer-order/menu` for `juanbertos.desktop.kitchen` returns
-  zero seeded items — empirically invisible
-- ✓ Post-seed safety query: 0 seeded items with `active=true`
-
-**Still pending Juan's confirmation:** 67 ⚠️ placeholder prices — all fries
-adjustments except Asada($49→confirmed) and Porkbelly($69→confirmed), every
-non-anchor Segunda cell (+$90 fallback rule), and Extras (35/25/20). Full
-table prints at the end of any seed run. Fix by editing the constants at the
-top of `scripts/seed-builder-menu.mjs` and re-running — the script will
-UPDATE-in-place, no ID churn.
-
-**Untouched, per handoff:** the 07-26 kiosk responsive changes still sitting
-uncommitted (nothing in this seed goes near `kiosk/`).
-
----
-
-## 2026-07-27 (Kiosk burrito-builder — Phase 1 menu seed) — Cowork agent — **WORK ORDER, ready to implement**
-
-Juan is redesigning the kiosk into a guided burrito-builder (protein → estilo →
-quitar → extras), prototyped and approved in `design/kiosk-builder-prototype.html`
-(v11 — open it in a browser to see the exact flow). Rollout plan agreed with Juan:
-Phase 1 = model the builder menu in the REAL menu system, invisible to customers;
-Phase 2 = wizard UI in kiosk/ behind a per-tenant flag; Phase 3 = pilot on juanbertos.
-
-**This entry is the Phase 1 work order.** Full spec — every item, modifier group,
-and computed price adjustment (Estilo per-item Fries adjustments, the complete
-7×7 Segunda-proteina matrix with the two real anchors asada+camaron=$340 and
-huevo+chorizo=$210, Quitar, Extras, and the three fixed items Birria $99 /
-Cochinita $99 / Rollbertos $139 with its required con-birria-o-cochinita group) —
-is in **`design/kiosk-builder-menu-spec.md`**. Follow it exactly; the matrix is
-machine-verified against the pricing rules.
-
-Non-negotiables (details in the spec): (1) everything seeded INVISIBLE to live
-customers — verify empirically against the kiosk/QR menu payloads, don't assume;
-(2) zero changes to existing live items; (3) idempotent seed script with
---dry-run, scoped to the juanbertos tenant only; (4) check the real modifier
-schema first (per-item groups assumed) and flag mismatches rather than
-approximating; (5) print the placeholder-price table (marked with warning signs in the spec) for
-Juan at the end — those numbers are unconfirmed.
-
-Out of scope here: wizard UI, tenant flag, ticket format, hiding today's items.
-Also still pending in this repo, unrelated: the 07-26 kiosk responsive changes
-are uncommitted/untested — commit those first if you touch kiosk/.
+**Tenant scoping restated (Juan, emphatic): juanbertos ONLY. Grid mode and
+every other tenant stay byte-for-byte unchanged.** Coordinate deploy timing
+with Juan if the tenant is already flipped to wizard. Samsung needs a fresh
+APK after (`npm run android:install`).
 
 ## 2026-07-25 (Manual & imported sales entry) — Cowork agent — **NEEDS `npm test` + PUSH**
 

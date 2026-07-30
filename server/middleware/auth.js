@@ -2,6 +2,48 @@ import jwt from 'jsonwebtoken';
 import { get } from '../db/index.js';
 import { JWT_SECRET } from '../lib/constants.js';
 
+// A manager approval is a one-shot authorization, not a session: short TTL so a
+// cashier can't bank one at the start of a shift and spend it hours later.
+const APPROVAL_TTL_SECONDS = 300;
+
+/**
+ * Mint a signed one-shot approval for a single permission.
+ *
+ * The older approver pattern (see authorizeOrderEdit in routes/orders.js) has
+ * the client echo back a bare `authorized_by_employee_id` after a PIN check.
+ * Nothing binds that id to the PIN that produced it, so any client could name
+ * a manager's employee id and self-authorize. For money-adjacent actions the
+ * approval must be unforgeable, hence a signed token instead of an integer.
+ */
+export function signApprovalToken({ tenantId, approverId, approverName, permission }) {
+  return jwt.sign(
+    { type: 'approval', tenantId, approverId, approverName, permission },
+    JWT_SECRET,
+    { expiresIn: APPROVAL_TTL_SECONDS }
+  );
+}
+
+/**
+ * Verify an X-Approval-Token against the tenant and the permission being
+ * exercised. Returns the approver, or null if there is no usable approval.
+ */
+function readApprovalToken(req, permission) {
+  const raw = req.headers['x-approval-token'];
+  if (!raw) return null;
+
+  let decoded;
+  try {
+    decoded = jwt.verify(raw, JWT_SECRET);
+  } catch {
+    return null;
+  }
+  if (decoded.type !== 'approval') return null;
+  if (decoded.permission !== permission) return null;
+  if (decoded.tenantId !== (req.tenant?.id || 'default')) return null;
+
+  return { id: decoded.approverId, name: decoded.approverName };
+}
+
 /**
  * Auth middleware factory.
  * Validates employee JWT from Authorization header, cross-checks tenant,
@@ -10,8 +52,16 @@ import { JWT_SECRET } from '../lib/constants.js';
  * Usage:
  *   router.post('/', requireAuth('manage_menu'), handler)
  *   router.get('/', requireAuth(), handler)            // just requires login
+ *
+ * Pass `{ allowApproval: true }` for actions a cashier should be able to
+ * perform with a manager standing next to them. The actor's own role is
+ * checked first; failing that, an `X-Approval-Token` minted by
+ * POST /api/employees/manager-approve for the same permission is accepted and
+ * the approver lands on `req.approver` for the handler to audit. When neither
+ * holds, the 403 carries `code: 'approval_required'` so the client knows to
+ * raise the manager PIN pad rather than showing a dead end.
  */
-export function requireAuth(permission) {
+export function requireAuth(permission, { allowApproval = false } = {}) {
   return async (req, res, next) => {
     const authHeader = req.headers.authorization;
 
@@ -76,9 +126,21 @@ export function requireAuth(permission) {
     );
 
     if (!perm || !perm.granted) {
-      return res.status(403).json({
-        error: `Permission denied: ${permission} is not granted for role ${employee.role}`,
-      });
+      if (!allowApproval) {
+        return res.status(403).json({
+          error: `Permission denied: ${permission} is not granted for role ${employee.role}`,
+        });
+      }
+
+      const approver = readApprovalToken(req, permission);
+      if (!approver) {
+        return res.status(403).json({
+          error: `Manager approval required: ${permission} is not granted for role ${employee.role}`,
+          code: 'approval_required',
+          permission,
+        });
+      }
+      req.approver = approver;
     }
 
     next();

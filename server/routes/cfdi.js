@@ -191,7 +191,7 @@ router.post('/config/test', requireAuth('manage_invoicing'), async (req, res) =>
 // ==================== Invoice Issuance ====================
 
 // POST /api/cfdi/invoices — issue a CFDI for an order
-router.post('/invoices', requireAuth('manage_invoicing'), async (req, res) => {
+router.post('/invoices', requireAuth('manage_invoicing', { allowApproval: true }), async (req, res) => {
   try {
     const { order_id, receptor, publico_general, email } = req.body;
 
@@ -464,6 +464,10 @@ router.post('/invoices', requireAuth('manage_invoicing'), async (req, res) => {
         extract_source: extractSource,
         publico_general: !!publico_general,
         receptor_email: emailNormalized || null,
+        ...(req.approver && {
+          approved_by_employee_id: req.approver.id,
+          approved_by_name: req.approver.name,
+        }),
       },
       ip: req.ip,
     });

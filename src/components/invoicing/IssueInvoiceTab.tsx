@@ -13,6 +13,7 @@ import {
 } from '../../api';
 import type { CfdiInvoice, CfdiCatalogs, Order } from '../../types';
 import { formatPrice } from '../../utils/currency';
+import { useManagerApproval, ApprovalCancelled } from '../../hooks/useManagerApproval';
 
 // paymentMethodLabel now receives t function
 const paymentMethodLabel = (method: string | null | undefined, t: (key: string) => string): string => {
@@ -36,6 +37,7 @@ interface IssueInvoiceTabProps {
 
 export default function IssueInvoiceTab({ catalogs, onError, onSuccess }: IssueInvoiceTabProps) {
   const { t } = useTranslation('admin');
+  const { run: withApproval, approvalModal } = useManagerApproval();
   const [orderNumber, setOrderNumber] = useState('');
   const [searchingOrder, setSearchingOrder] = useState(false);
   const [foundOrder, setFoundOrder] = useState<Order | null>(null);
@@ -115,10 +117,11 @@ export default function IssueInvoiceTab({ catalogs, onError, onSuccess }: IssueI
         };
       }
 
-      const invoice = await issueCfdiInvoice(payload);
+      const invoice = await withApproval((token) => issueCfdiInvoice(payload, token));
       setIssuedInvoice(invoice);
       onSuccess(t('invoicing.invoiceIssued'));
     } catch (err) {
+      if (err instanceof ApprovalCancelled) return;
       onError(err instanceof Error ? err.message : t('invoicing.errorIssuingInvoice'));
     } finally {
       setIssuing(false);
@@ -417,6 +420,7 @@ export default function IssueInvoiceTab({ catalogs, onError, onSuccess }: IssueI
           </div>
         </div>
       )}
+      {approvalModal}
     </div>
   );
 }

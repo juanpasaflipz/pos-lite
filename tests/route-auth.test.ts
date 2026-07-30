@@ -26,7 +26,7 @@ import {
 // @ts-ignore — server files are plain JS
 import { adminSql, get } from '../server/db/index.js';
 // @ts-ignore
-import { requireAuth } from '../server/middleware/auth.js';
+import { requireAuth, signApprovalToken } from '../server/middleware/auth.js';
 // @ts-ignore
 import { JWT_SECRET } from '../server/lib/constants.js';
 
@@ -174,6 +174,125 @@ describe('requireAuth: permission checks', () => {
     });
     expect(r.nexted).toBe(false);
     expect(r.status).toBe(403);
+  });
+});
+
+// Manager-PIN override for the money-adjacent actions a cashier legitimately
+// performs with a manager standing next to them: void an order, refund a
+// payment, stamp a CFDI. The permission grid still says no; a signed one-shot
+// approval from POST /employees/manager-approve says yes for one request.
+//
+// The security property under test is that the approval is UNFORGEABLE and
+// NON-TRANSFERABLE: it must be signed by us, scoped to the exact permission
+// being exercised, and scoped to the tenant that minted it. Anything less and a
+// cashier could self-authorize a refund by naming a manager.
+describe('requireAuth: manager-approval override', () => {
+  const approvalFor = (permission: string, over: Record<string, unknown> = {}) =>
+    signApprovalToken({
+      tenantId: tenant.id,
+      approverId: managerId,
+      approverName: 'Mgr',
+      permission,
+      ...over,
+    });
+
+  const cashierReq = (approvalToken?: string) => ({
+    headers: {
+      authorization: `Bearer ${tokenFor(tenant.id, cashierId, 'cashier')}`,
+      ...(approvalToken ? { 'x-approval-token': approvalToken } : {}),
+    },
+    tenant: { id: tenant.id },
+  });
+
+  it('tells the client to raise the PIN pad when no approval is presented', async () => {
+    const r = await runGuard(requireAuth('void_orders', { allowApproval: true }), cashierReq());
+    expect(r.nexted).toBe(false);
+    expect(r.status).toBe(403);
+    // The machine-readable code is the contract the client keys off — without
+    // it the cashier gets a dead-end error string instead of the PIN pad.
+    expect(r.body.code).toBe('approval_required');
+    expect(r.body.permission).toBe('void_orders');
+  });
+
+  it('lets a cashier through with a manager approval for the same permission', async () => {
+    const req: any = cashierReq(approvalFor('void_orders'));
+    const r = await runGuard(requireAuth('void_orders', { allowApproval: true }), req);
+    expect(r.nexted).toBe(true);
+    // The handler audits who approved it.
+    expect(req.approver).toEqual({ id: managerId, name: 'Mgr' });
+  });
+
+  it('does not accept an approval minted for a different permission', async () => {
+    // Approve a CFDI, spend it on a void — the whole point of scoping.
+    const r = await runGuard(
+      requireAuth('void_orders', { allowApproval: true }),
+      cashierReq(approvalFor('manage_invoicing')),
+    );
+    expect(r.nexted).toBe(false);
+    expect(r.status).toBe(403);
+    expect(r.body.code).toBe('approval_required');
+  });
+
+  it('does not accept an approval minted by another tenant', async () => {
+    const r = await runGuard(
+      requireAuth('void_orders', { allowApproval: true }),
+      cashierReq(approvalFor('void_orders', { tenantId: 'some_other_tenant' })),
+    );
+    expect(r.nexted).toBe(false);
+    expect(r.status).toBe(403);
+  });
+
+  it('does not accept a self-signed approval', async () => {
+    // A client forging the payload without our secret must not get through —
+    // this is what a bare `authorized_by_employee_id` in the body could not stop.
+    const forged = jwt.sign(
+      { type: 'approval', tenantId: tenant.id, approverId: managerId, approverName: 'Mgr', permission: 'void_orders' },
+      'not-the-real-secret',
+      { expiresIn: '5m' },
+    );
+    const r = await runGuard(requireAuth('void_orders', { allowApproval: true }), cashierReq(forged));
+    expect(r.nexted).toBe(false);
+    expect(r.status).toBe(403);
+  });
+
+  it('does not accept an expired approval', async () => {
+    const stale = jwt.sign(
+      { type: 'approval', tenantId: tenant.id, approverId: managerId, approverName: 'Mgr', permission: 'void_orders' },
+      JWT_SECRET,
+      { expiresIn: '-1s' },
+    );
+    const r = await runGuard(requireAuth('void_orders', { allowApproval: true }), cashierReq(stale));
+    expect(r.nexted).toBe(false);
+    expect(r.status).toBe(403);
+  });
+
+  it('does not accept an employee session token in the approval header', async () => {
+    // Type confusion: a cashier's own JWT is validly signed by us. If the
+    // approval reader only checked the signature it would sail through.
+    const r = await runGuard(
+      requireAuth('void_orders', { allowApproval: true }),
+      cashierReq(tokenFor(tenant.id, cashierId, 'cashier')),
+    );
+    expect(r.nexted).toBe(false);
+    expect(r.status).toBe(403);
+  });
+
+  it('ignores the approval path entirely when the actor already holds the permission', async () => {
+    const req: any = {
+      headers: { authorization: `Bearer ${tokenFor(tenant.id, managerId, 'manager')}` },
+      tenant: { id: tenant.id },
+    };
+    const r = await runGuard(requireAuth('void_orders', { allowApproval: true }), req);
+    expect(r.nexted).toBe(true);
+    // No approver on the request — a manager acting alone isn't an override.
+    expect(req.approver).toBeUndefined();
+  });
+
+  it('still hard-denies when the route did not opt into approvals', async () => {
+    const r = await runGuard(requireAuth('void_orders'), cashierReq(approvalFor('void_orders')));
+    expect(r.nexted).toBe(false);
+    expect(r.status).toBe(403);
+    expect(r.body.code).toBeUndefined();
   });
 });
 

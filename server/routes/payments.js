@@ -6,6 +6,7 @@ import { JWT_SECRET } from '../lib/constants.js';
 import { all, get, run, adminSql, getTenantId } from '../db/index.js';
 import { createPaymentIntent, createRefund, getPaymentIntent } from '../stripe.js';
 import { requireAuth } from '../middleware/auth.js';
+import { audit } from '../lib/auditLog.js';
 import { deductInventoryForOrder, restoreInventoryForItems } from '../helpers/inventory.js';
 import { generateInvoiceToken } from '../helpers/facturapi.js';
 import { enqueueCustomerTicket } from '../lib/printQueue.js';
@@ -696,7 +697,7 @@ router.post('/split', requireAuth('pos_access'), async (_req, res) => {
 });
 
 // POST /api/payments/refund - refund payment (full, partial by items, or partial by amount)
-router.post('/refund', refundLimiter, requireAuth('process_refunds'), async (req, res) => {
+router.post('/refund', refundLimiter, requireAuth('process_refunds', { allowApproval: true }), async (req, res) => {
   try {
     const { order_id, amount, items, reason } = req.body;
 
@@ -833,6 +834,25 @@ router.post('/refund', refundLimiter, requireAuth('process_refunds'), async (req
     if (refundItems.length > 0) {
       await restoreInventoryForItems(refundItems);
     }
+
+    audit({
+      tenantId: req.tenant?.id || 'default',
+      actorType: 'employee',
+      actorId: employeeId != null ? String(employeeId) : null,
+      action: 'refund',
+      resource: 'order',
+      resourceId: String(order_id),
+      details: {
+        amount: refundAmount,
+        refund_type: refundType,
+        fully_refunded: fullyRefunded,
+        ...(req.approver && {
+          approved_by_employee_id: req.approver.id,
+          approved_by_name: req.approver.name,
+        }),
+      },
+      ip: req.ip,
+    });
 
     res.json({
       success: true,

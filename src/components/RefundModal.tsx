@@ -4,6 +4,7 @@ import { getOrder, refundPayment } from '../api';
 import { Order, OrderItem } from '../types';
 import { formatPrice } from '../utils/currency';
 import { X, RotateCcw } from 'lucide-react';
+import { useManagerApproval, ApprovalCancelled } from '../hooks/useManagerApproval';
 
 interface RefundModalProps {
   orderId: number;
@@ -15,6 +16,7 @@ type RefundMode = 'full' | 'by_items' | 'by_amount';
 
 export default function RefundModal({ orderId, onClose, onRefunded }: RefundModalProps) {
   const { t } = useTranslation('pos');
+  const { run: withApproval, approvalModal } = useManagerApproval();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
@@ -102,9 +104,11 @@ export default function RefundModal({ orderId, onClose, onRefunded }: RefundModa
         data.amount = parseFloat(customAmount);
       }
 
-      await refundPayment(data);
+      await withApproval((token) => refundPayment(data, token));
       onRefunded();
     } catch (err) {
+      // Dismissing the manager PIN pad isn't a failure — leave the form as-is.
+      if (err instanceof ApprovalCancelled) return;
       setError(err instanceof Error ? err.message : t('refund.refundFailed'));
     } finally {
       setProcessing(false);
@@ -271,6 +275,7 @@ export default function RefundModal({ orderId, onClose, onRefunded }: RefundModa
           </div>
         </div>
       </div>
+      {approvalModal}
     </div>
   );
 }

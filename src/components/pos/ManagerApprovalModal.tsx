@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Lock } from 'lucide-react';
 import { managerApprove } from '../../api';
@@ -6,6 +7,8 @@ import { managerApprove } from '../../api';
 export interface ManagerApprovalResult {
   employee_id: number;
   employee_name: string;
+  /** One-shot signed approval for routes that accept X-Approval-Token. */
+  approval_token: string;
 }
 
 interface ManagerApprovalModalProps {
@@ -34,7 +37,11 @@ const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
     setError(null);
     try {
       const result = await managerApprove(pin, permission);
-      onApproved({ employee_id: result.employee_id, employee_name: result.employee_name });
+      onApproved({
+        employee_id: result.employee_id,
+        employee_name: result.employee_name,
+        approval_token: result.approval_token,
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : t('managerApproval.invalidPin');
       setError(msg);
@@ -47,8 +54,11 @@ const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
   const append = (digit: string) => setPin((p) => (p.length < 8 ? p + digit : p));
   const backspace = () => setPin((p) => p.slice(0, -1));
 
-  return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
+  // Portaled at z-70: this pad is always the top layer, and it can be raised
+  // from inside another portaled modal (the receipt's Facturar flow), where an
+  // in-tree z-60 would land underneath whichever overlay mounted last.
+  return createPortal(
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[70] p-4">
       <div className="bg-neutral-900 rounded-2xl shadow-2xl w-full max-w-sm border border-neutral-800">
         <div className="bg-cockpit-yellow text-neutral-900 p-5 rounded-t-2xl flex items-center gap-3">
           <Lock className="w-5 h-5" />
@@ -110,7 +120,8 @@ const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 

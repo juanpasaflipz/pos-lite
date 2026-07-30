@@ -1883,7 +1883,7 @@ router.post('/:id/discount', requireAuth('pos_access'), async (req, res) => {
 });
 
 // DELETE /api/orders/:id — delete one order and all its child rows (test cleanup)
-router.delete('/:id', requireAuth('void_orders'), async (req, res) => {
+router.delete('/:id', requireAuth('void_orders', { allowApproval: true }), async (req, res) => {
   const { id } = req.params;
   const conn = getConn();
   try {
@@ -1912,6 +1912,9 @@ router.delete('/:id', requireAuth('void_orders'), async (req, res) => {
       action: 'delete',
       resource: 'order',
       resourceId: String(id),
+      details: req.approver
+        ? { approved_by_employee_id: req.approver.id, approved_by_name: req.approver.name }
+        : undefined,
       ip: req.ip,
     });
     res.json({ success: true, deleted_id: id });

@@ -262,8 +262,15 @@ async function apiRequest<T>(
     } catch {
       // Use default error message if response is not JSON
     }
-    const err = new Error(errorMessage) as Error & { status?: number; planUpgradeRequired?: boolean; requiredPlan?: string; feature?: string; conflictWith?: string };
+    const err = new Error(errorMessage) as Error & { status?: number; planUpgradeRequired?: boolean; requiredPlan?: string; feature?: string; conflictWith?: string; approvalRequired?: boolean; permission?: string };
     err.status = response.status;
+    // The actor's role lacks the permission, but the route accepts a manager
+    // approval — callers use this to raise the PIN pad and retry with a token
+    // instead of dead-ending on the error string.
+    if (response.status === 403 && errorData.code === 'approval_required') {
+      err.approvalRequired = true;
+      err.permission = errorData.permission as string;
+    }
     // Uniqueness conflicts name the row they collided with so callers can build
     // a translated "X already has that" message instead of echoing the server's
     // English error string.
@@ -652,11 +659,20 @@ export async function syncOfflineOrder(
 export async function managerApprove(
   pin: string,
   permission: string
-): Promise<{ employee_id: number; employee_name: string; role: string }> {
+): Promise<{ employee_id: number; employee_name: string; role: string; approval_token: string }> {
   return apiRequest('/employees/manager-approve', {
     method: 'POST',
     body: JSON.stringify({ pin, permission }),
   });
+}
+
+/**
+ * Header carrying a one-shot manager approval. Routes declared with
+ * `requireAuth(perm, { allowApproval: true })` accept it in place of the
+ * actor's own role permission.
+ */
+export function approvalHeader(token?: string): Record<string, string> {
+  return token ? { 'X-Approval-Token': token } : {};
 }
 
 export async function updateOrderStatus(
@@ -669,8 +685,11 @@ export async function updateOrderStatus(
   });
 }
 
-export async function deleteOrder(id: number): Promise<{ success: boolean; deleted_id: number }> {
-  return apiRequest(`/orders/${id}`, { method: 'DELETE' });
+export async function deleteOrder(
+  id: number,
+  approvalToken?: string
+): Promise<{ success: boolean; deleted_id: number }> {
+  return apiRequest(`/orders/${id}`, { method: 'DELETE', headers: approvalHeader(approvalToken) });
 }
 
 export type OrderEditTotals = {
@@ -852,10 +871,11 @@ interface RefundPaymentData {
   reason?: string;
 }
 
-export async function refundPayment(data: RefundPaymentData): Promise<any> {
+export async function refundPayment(data: RefundPaymentData, approvalToken?: string): Promise<any> {
   return apiRequest('/payments/refund', {
     method: 'POST',
     body: JSON.stringify(data),
+    headers: approvalHeader(approvalToken),
   });
 }
 
@@ -2841,10 +2861,11 @@ export async function issueCfdiInvoice(data: {
   receptor?: { rfc: string; name: string; tax_regime: string; postal_code: string; uso_cfdi?: string };
   publico_general?: boolean;
   email?: string;
-}): Promise<CfdiInvoice> {
+}, approvalToken?: string): Promise<CfdiInvoice> {
   return apiRequest<CfdiInvoice>('/cfdi/invoices', {
     method: 'POST',
     body: JSON.stringify(data),
+    headers: approvalHeader(approvalToken),
   });
 }
 

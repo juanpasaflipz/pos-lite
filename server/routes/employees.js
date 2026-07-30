@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { all, get, run, getTenantId } from '../db/index.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, signApprovalToken } from '../middleware/auth.js';
 import { checkLimit, planUpgradeError } from '../planLimits.js';
 import { audit } from '../lib/auditLog.js';
 import { sendPinEmail, sendSecurityAlertEmail } from '../helpers/email.js';
@@ -427,6 +427,16 @@ router.post('/manager-approve', managerApproveLimiter, requireAuth(), async (req
       employee_id: approver.id,
       employee_name: approver.name,
       role: approver.role,
+      // Signed, permission-scoped, 5-minute one-shot. Routes that use
+      // requireAuth(perm, { allowApproval: true }) accept this as
+      // X-Approval-Token; the bare employee_id above is kept for the older
+      // discount flow that embeds the approver on the order row.
+      approval_token: signApprovalToken({
+        tenantId,
+        approverId: approver.id,
+        approverName: approver.name,
+        permission,
+      }),
     });
   } catch (error) {
     console.error('Error in manager approval:', error);
