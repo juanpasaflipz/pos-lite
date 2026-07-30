@@ -99,6 +99,19 @@ that entry asked.
   CREATE TABLE.**
 - `purgeTenant` needs no change — it discovers tables via `information_schema`
   and derives FK order from `pg_catalog`, so the new table is picked up.
+- **Default-ACL gotcha, worth knowing before you write a GRANT.** This database
+  has `ALTER DEFAULT PRIVILEGES` handing `app_user` `arwd` on *every* newly
+  created table, so a narrow `GRANT SELECT, INSERT, UPDATE` in a migration is a
+  silent no-op — 0098 shipped `discount_approvals` fully DELETE-able despite
+  saying otherwise. **You must `REVOKE` to withhold anything.** 0099 fixed that
+  table; **0100 does the same for `audit_log`** (1.4.5), which had been
+  erasable by the request role all along — that matters more now that
+  `DELETE /orders/:id` snapshots into it. Both revokes are DELETE + TRUNCATE
+  only; INSERT/SELECT/UPDATE stay so a future tenant-connection audit write
+  fails loudly instead of silently dropping its line. Verified nothing deletes
+  either table through the app path: no `DELETE FROM` in the codebase, no
+  retention sweep, and `purgeTenant` / test teardown both run on `adminSql`
+  (owner), which keeps DELETE.
 - **The positional-`audit()` claim from the 07-25 entry does not reproduce.**
   All 11 `audit()` calls in `orders.js` already use the options-object form and
   a repo-wide grep finds no positional callers. Treat that item as resolved.
