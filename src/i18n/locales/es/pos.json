@@ -553,7 +553,16 @@
     "clearDate": "Quitar",
     "openReceipt": "Ver recibo / imprimir",
     "noItems": "Sin partidas",
-    "totalWithTipLabel": "Total + Propina"
+    "totalWithTipLabel": "Total + Propina",
+    "manageOrder": "Reembolsar / eliminar"
+  },
+  "orderEdit": {
+    "closedNotice": "Orden cerrada — las partidas ya no se editan. Puedes reembolsar o eliminar la orden.",
+    "deletePaidOrder": "Eliminar orden pagada",
+    "deleting": "Eliminando…",
+    "confirmDeletePaidTitle": "¿Eliminar la orden pagada #{{number}}?",
+    "confirmDeletePaidBody": "Esta venta de {{amount}} desaparecerá de los reportes y del corte. Si el cliente pidió su dinero de vuelta, usa Reembolsar — deja registro. Eliminar solo es correcto si la orden nunca debió existir. Queda una copia en la bitácora.",
+    "confirmDeletePaidCta": "Sí, eliminar"
   },
   "ordersScreen": {
     "title": "Órdenes",

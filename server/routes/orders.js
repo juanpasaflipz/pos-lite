@@ -1909,6 +1909,17 @@ router.delete('/:id', requireAuth('void_orders', { allowApproval: true }), async
   const { id } = req.params;
   const conn = getConn();
   try {
+    // Snapshot before the cascade. The history lane now offers this on paid,
+    // completed sales, so a mistap can destroy revenue that exists nowhere
+    // else — audit_log is the only place the row survives. Order 7368 was
+    // reconstructible on 2026-07-29 only because someone did this by hand.
+    const [snapshotOrder] = await conn.unsafe(`SELECT * FROM orders WHERE id = $1`, [id]);
+    if (!snapshotOrder) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    const snapshotItems = await conn.unsafe(`SELECT * FROM order_items WHERE order_id = $1`, [id]);
+    const snapshotPayments = await conn.unsafe(`SELECT * FROM order_payments WHERE order_id = $1`, [id]);
+
     await conn.unsafe(
       `DELETE FROM order_item_modifiers WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = $1)`,
       [id]
@@ -1937,9 +1948,12 @@ router.delete('/:id', requireAuth('void_orders', { allowApproval: true }), async
       action: 'delete',
       resource: 'order',
       resourceId: String(id),
-      details: req.approver
-        ? { approved_by_employee_id: req.approver.id, approved_by_name: req.approver.name }
-        : undefined,
+      details: {
+        ...(req.approver
+          ? { approved_by_employee_id: req.approver.id, approved_by_name: req.approver.name }
+          : {}),
+        snapshot: { order: snapshotOrder, items: snapshotItems, payments: snapshotPayments },
+      },
       ip: req.ip,
     });
     res.json({ success: true, deleted_id: id });

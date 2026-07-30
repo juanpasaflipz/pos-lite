@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Check, Coins, Loader2, Minus, Pencil, Plus, RotateCcw, Tag, Trash2, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { Check, Coins, Loader2, Lock, Minus, Pencil, Plus, RotateCcw, Tag, Trash2, X } from 'lucide-react';
 import {
   appendOrderItems,
   applyOrderDiscount,
@@ -35,6 +36,7 @@ interface VoidPick {
 }
 
 const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose, onChanged, onRefund }) => {
+  const { t } = useTranslation('pos');
   const { run: withApproval, approvalModal } = useManagerApproval();
   const [items, setItems] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -239,6 +241,13 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
     await refreshItems();
   };
 
+  // Mirrors EDIT_BLOCKED_STATUSES in server/routes/orders.js — the item routes
+  // 400 on these, so rendering the controls would only produce a dead button.
+  // Refund and delete stay available; they are the whole point of opening a
+  // closed order from the history lane.
+  const isClosed = order.status === 'completed' || order.status === 'cancelled';
+  const isPaidOrder = order.payment_status === 'paid' || order.payment_status === 'completed';
+
   const liveItems = items.filter((it) => !it.voided_at);
   const voidedItems = items.filter((it) => it.voided_at);
   const total = liveItems.reduce(
@@ -283,6 +292,15 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
                 {error && (
                   <div className="rounded-lg bg-cockpit-red/20 border border-cockpit-red/60 px-4 py-3 text-sm font-bold text-white">
                     {error}
+                  </div>
+                )}
+
+                {isClosed && (
+                  <div className="rounded-lg bg-neutral-800/60 border border-neutral-700 px-4 py-3 text-xs font-bold text-neutral-300 inline-flex items-start gap-2 w-full">
+                    <Lock className="w-4 h-4 shrink-0 mt-0.5 text-neutral-400" />
+                    <span>
+                      {t('orderEdit.closedNotice', 'Orden cerrada — las partidas ya no se editan. Puedes reembolsar o eliminar la orden.')}
+                    </span>
                   </div>
                 )}
 
@@ -332,37 +350,43 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
                           {item.modifiers.map((m) => m.modifier_name).join(' · ')}
                         </p>
                       )}
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1">
+                      {isClosed ? (
+                        <div className="text-sm font-bold text-neutral-400">
+                          {item.quantity}× {formatPrice(Number(item.unit_price))}
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1">
+                            <button
+                              disabled={busy}
+                              onClick={() => handleQtyChange(item, -1)}
+                              className="h-10 w-10 rounded-md bg-neutral-800 hover:bg-neutral-700 disabled:opacity-40 flex items-center justify-center"
+                              aria-label="Menos"
+                            >
+                              <Minus className="w-4 h-4 text-white" />
+                            </button>
+                            <span className="h-10 min-w-[44px] flex items-center justify-center font-black text-white text-lg">
+                              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : item.quantity}
+                            </span>
+                            <button
+                              disabled={busy}
+                              onClick={() => handleQtyChange(item, 1)}
+                              className="h-10 w-10 rounded-md bg-neutral-800 hover:bg-neutral-700 disabled:opacity-40 flex items-center justify-center"
+                              aria-label="Más"
+                            >
+                              <Plus className="w-4 h-4 text-white" />
+                            </button>
+                          </div>
                           <button
-                            disabled={busy}
-                            onClick={() => handleQtyChange(item, -1)}
-                            className="h-10 w-10 rounded-md bg-neutral-800 hover:bg-neutral-700 disabled:opacity-40 flex items-center justify-center"
-                            aria-label="Menos"
+                            disabled={busy || item.id == null}
+                            onClick={() => item.id != null && setVoidingPick({ itemId: item.id, itemName: item.item_name })}
+                            className="h-10 px-3 rounded-md bg-cockpit-red/20 hover:bg-cockpit-red/30 disabled:opacity-40 text-cockpit-out-text font-bold text-sm inline-flex items-center gap-1.5"
                           >
-                            <Minus className="w-4 h-4 text-white" />
-                          </button>
-                          <span className="h-10 min-w-[44px] flex items-center justify-center font-black text-white text-lg">
-                            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : item.quantity}
-                          </span>
-                          <button
-                            disabled={busy}
-                            onClick={() => handleQtyChange(item, 1)}
-                            className="h-10 w-10 rounded-md bg-neutral-800 hover:bg-neutral-700 disabled:opacity-40 flex items-center justify-center"
-                            aria-label="Más"
-                          >
-                            <Plus className="w-4 h-4 text-white" />
+                            <Trash2 className="w-4 h-4" />
+                            Cancelar
                           </button>
                         </div>
-                        <button
-                          disabled={busy || item.id == null}
-                          onClick={() => item.id != null && setVoidingPick({ itemId: item.id, itemName: item.item_name })}
-                          className="h-10 px-3 rounded-md bg-cockpit-red/20 hover:bg-cockpit-red/30 disabled:opacity-40 text-cockpit-out-text font-bold text-sm inline-flex items-center gap-1.5"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          Cancelar
-                        </button>
-                      </div>
+                      )}
                     </div>
                   );
                 })}
@@ -398,23 +422,25 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
 
           {/* Footer */}
           <div className="px-4 py-3 border-t border-neutral-800 bg-neutral-900 rounded-b-2xl">
-            <button
-              disabled={addingItems || loading}
-              onClick={() => setShowPicker(true)}
-              className="w-full h-12 rounded-lg bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white font-black inline-flex items-center justify-center gap-2 mb-3 transition-colors"
-            >
-              {addingItems ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Agregando…
-                </>
-              ) : (
-                <>
-                  <Plus className="w-5 h-5" />
-                  Agregar producto
-                </>
-              )}
-            </button>
+            {!isClosed && (
+              <button
+                disabled={addingItems || loading}
+                onClick={() => setShowPicker(true)}
+                className="w-full h-12 rounded-lg bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white font-black inline-flex items-center justify-center gap-2 mb-3 transition-colors"
+              >
+                {addingItems ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Agregando…
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-5 h-5" />
+                    Agregar producto
+                  </>
+                )}
+              </button>
+            )}
             {/* Discount line — visible whenever an order-level discount is active. */}
             {currentDiscount && currentDiscountAmount > 0 && (
               <div className="flex items-center justify-between mb-1 text-cockpit-in-text">
@@ -460,18 +486,6 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
               <Check className="w-4 h-4" />
               Listo
             </button>
-            {/* Cancel-entire-order — only for unpaid orders. Paid orders must
-                go through refund instead, to keep an audit trail. */}
-            {order.payment_status !== 'paid' && (
-              <button
-                onClick={() => setShowDeleteConfirm(true)}
-                disabled={deleting || loading}
-                className="w-full h-11 mt-2 rounded-lg bg-cockpit-red/20 hover:bg-cockpit-red/30 disabled:opacity-40 text-cockpit-out-text font-bold transition-colors inline-flex items-center justify-center gap-1.5 border border-cockpit-red/40"
-              >
-                <Trash2 className="w-4 h-4" />
-                Cancelar orden completa
-              </button>
-            )}
             {(order.payment_status === 'paid' || order.payment_status === 'completed') &&
               (order.payment_method === 'cash' || order.payment_method === 'split') && (
                 <button
@@ -493,6 +507,25 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
                 Reembolsar
               </button>
             )}
+            {/* Delete sits below refund on a paid sale: refund is the reversible,
+                auditable correction and should be reached first. Delete stays
+                available because a mis-rung paid order (wrong tenant, test ring,
+                duplicate) has no refund that makes it right — that gap is why
+                order 7368 had to be removed with direct SQL. */}
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={deleting || loading}
+              className={`w-full h-11 mt-2 rounded-lg disabled:opacity-40 font-bold transition-colors inline-flex items-center justify-center gap-1.5 ${
+                isPaidOrder
+                  ? 'bg-transparent hover:bg-cockpit-red/20 text-cockpit-out-text border border-cockpit-red/40'
+                  : 'bg-cockpit-red/20 hover:bg-cockpit-red/30 text-cockpit-out-text border border-cockpit-red/40'
+              }`}
+            >
+              <Trash2 className="w-4 h-4" />
+              {isPaidOrder
+                ? t('orderEdit.deletePaidOrder', 'Eliminar orden pagada')
+                : 'Cancelar orden completa'}
+            </button>
           </div>
         </div>
       </div>
@@ -557,10 +590,20 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
               <div className="h-10 w-10 rounded-full bg-cockpit-red/20 flex items-center justify-center">
                 <Trash2 className="w-5 h-5 text-cockpit-out-text" />
               </div>
-              <h3 className="text-lg font-black text-white">¿Cancelar orden #{order.order_number}?</h3>
+              <h3 className="text-lg font-black text-white">
+                {isPaidOrder
+                  ? t('orderEdit.confirmDeletePaidTitle', '¿Eliminar la orden pagada #{{number}}?', { number: order.order_number })
+                  : `¿Cancelar orden #${order.order_number}?`}
+              </h3>
             </div>
             <p className="text-sm text-neutral-400 mb-5">
-              Se eliminarán todos los productos. La cocina dejará de verla. Esta acción no se puede deshacer.
+              {isPaidOrder
+                ? t(
+                    'orderEdit.confirmDeletePaidBody',
+                    'Esta venta de {{amount}} desaparecerá de los reportes y del corte. Si el cliente pidió su dinero de vuelta, usa Reembolsar — deja registro. Eliminar solo es correcto si la orden nunca debió existir. Queda una copia en la bitácora.',
+                    { amount: formatPrice(Number(order.total) + (Number(order.tip) || 0)) },
+                  )
+                : 'Se eliminarán todos los productos. La cocina dejará de verla. Esta acción no se puede deshacer.'}
             </p>
             <div className="flex gap-2">
               <button
@@ -576,7 +619,11 @@ const OrderEditModal: React.FC<OrderEditModalProps> = ({ isOpen, order, onClose,
                 className="flex-1 h-12 rounded-lg bg-cockpit-red hover:brightness-110 disabled:opacity-50 text-white font-black inline-flex items-center justify-center gap-1.5"
               >
                 {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                {deleting ? 'Cancelando…' : 'Sí, cancelar'}
+                {deleting
+                  ? t('orderEdit.deleting', 'Eliminando…')
+                  : isPaidOrder
+                    ? t('orderEdit.confirmDeletePaidCta', 'Sí, eliminar')
+                    : 'Sí, cancelar'}
               </button>
             </div>
           </div>

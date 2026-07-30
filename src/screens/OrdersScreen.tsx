@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ScanLine,
   Printer,
+  RotateCcw,
 } from 'lucide-react';
 import {
   getKitchenOrders,
@@ -467,6 +468,7 @@ export default function OrdersScreen() {
                 orders={filteredHistory}
                 openingId={openingReceiptId}
                 onOpen={handleOpenReceipt}
+                onEdit={setEditingOrder}
               />
             ) : lane === 'cancelled' ? (
               <CancelledGrid orders={cancelledOrders} onOpen={handleOpenReceipt} openingId={openingReceiptId} />
@@ -496,7 +498,13 @@ export default function OrdersScreen() {
         isOpen={editingOrder !== null}
         order={editingOrder}
         onClose={() => setEditingOrder(null)}
-        onChanged={() => { fetchKitchen(); fetchUnpaid(); }}
+        onChanged={() => {
+          fetchKitchen();
+          fetchUnpaid();
+          // A delete from the history lane has to drop the card too, or the
+          // row lingers until the next manual refresh and reads as a failure.
+          if (lane === 'history') fetchHistory();
+        }}
         onRefund={handleRefund}
       />
 
@@ -741,7 +749,8 @@ const HistoryGrid: React.FC<{
   orders: Order[];
   openingId: number | null;
   onOpen: (id: number) => void;
-}> = ({ orders, openingId, onOpen }) => {
+  onEdit: (order: Order) => void;
+}> = ({ orders, openingId, onOpen, onEdit }) => {
   const { t } = useTranslation(['pos', 'common']);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [detailsCache, setDetailsCache] = useState<Record<number, Order>>({});
@@ -917,7 +926,17 @@ const HistoryGrid: React.FC<{
                       </div>
                     </div>
 
-                    <div className="pt-3 flex justify-end">
+                    <div className="pt-3 flex justify-end gap-2">
+                      {/* Refund / delete for a closed sale. Until this existed the
+                          history lane was receipt-only and a completed order could
+                          only be corrected with direct SQL. */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onEdit(detail ?? o); }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-bold rounded-md min-h-[32px]"
+                      >
+                        <RotateCcw size={12} />
+                        {t('ordersPanel.manageOrder', 'Reembolsar / eliminar')}
+                      </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); onOpen(o.id); }}
                         disabled={opening}

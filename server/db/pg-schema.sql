@@ -468,6 +468,9 @@ CREATE TABLE IF NOT EXISTS refunds (
   tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
   order_id INTEGER NOT NULL REFERENCES orders(id),
   stripe_refund_id TEXT,
+  -- Conekta was dropped 2026-07-16; the column stays for historical rows.
+  conekta_refund_id TEXT,
+  getnet_refund_id TEXT,
   amount NUMERIC(10,2) NOT NULL,
   reason TEXT,
   refund_type TEXT DEFAULT 'full',

@@ -553,7 +553,16 @@
     "clearDate": "Clear",
     "openReceipt": "View / print receipt",
     "noItems": "No line items",
-    "totalWithTipLabel": "Total + Tip"
+    "totalWithTipLabel": "Total + Tip",
+    "manageOrder": "Refund / delete"
+  },
+  "orderEdit": {
+    "closedNotice": "Order is closed — line items can no longer be edited. You can still refund or delete it.",
+    "deletePaidOrder": "Delete paid order",
+    "deleting": "Deleting…",
+    "confirmDeletePaidTitle": "Delete paid order #{{number}}?",
+    "confirmDeletePaidBody": "This {{amount}} sale will disappear from reports and the daily close. If the customer asked for their money back, use Refund — it leaves a record. Deleting is only right when the order should never have existed. A copy is kept in the audit log.",
+    "confirmDeletePaidCta": "Yes, delete"
   },
   "ordersScreen": {
     "title": "Orders",

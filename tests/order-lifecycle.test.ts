@@ -229,3 +229,94 @@ describe('DELETE cascade', () => {
     expect(unhandled).toEqual([]);
   });
 });
+
+// Completed orders were refundable and deletable on the server all along —
+// `POST /payments/refund` gates only on payment_status and `DELETE /orders/:id`
+// checks no status at all — but the history lane exposed neither, so order 7368
+// had to be removed with direct SQL on 2026-07-29. These pin the server half of
+// the path the history-lane buttons now drive.
+describe('completed orders stay correctable', () => {
+  async function insertCompletedPaidOrder(): Promise<number> {
+    const orderId = await asTenant(tenant.id, async () => {
+      const row = await get(
+        `INSERT INTO orders
+           (order_number, employee_id, status, subtotal, tax, total, payment_status, payment_method, paid_at)
+         VALUES ($1, $2, 'completed', 100, 16, 116, 'paid', 'cash', NOW())
+         RETURNING id`,
+        [Date.now() % 1_000_000, employeeId],
+      );
+      return Number(row.id);
+    });
+    await asTenant(tenant.id, () =>
+      run(
+        `INSERT INTO order_items (order_id, menu_item_id, item_name, quantity, unit_price)
+         VALUES ($1, $2, 'Test Burrito', 1, 100)`,
+        [orderId, menuItemId],
+      ),
+    );
+    return orderId;
+  }
+
+  // Guards migration 0097. conekta_refund_id / getnet_refund_id were INSERTed by
+  // payments.js but existed only in prod — the test branch inherited them by
+  // being branched off prod, so this passed everywhere while a DB built from
+  // schema + migrations would fail every refund on a missing column.
+  it('records a refund against a completed order with the processor id columns', async () => {
+    const orderId = await insertCompletedPaidOrder();
+
+    // Same column list as the INSERT in server/routes/payments.js.
+    await asTenant(tenant.id, () =>
+      run(
+        `INSERT INTO refunds
+           (order_id, stripe_refund_id, conekta_refund_id, getnet_refund_id, amount,
+            reason, refund_type, refunded_by, items_json, inventory_restored)
+         VALUES ($1, NULL, NULL, NULL, $2, 'customer complaint', 'full', $3, NULL, false)`,
+        [orderId, 116, employeeId],
+      ),
+    );
+
+    // Mirrors the route's post-insert bookkeeping for a fully covered refund.
+    await asTenant(tenant.id, () =>
+      run(`UPDATE orders SET refund_total = $1, payment_status = 'refunded' WHERE id = $2`, [116, orderId]),
+    );
+
+    const [order] = await adminSql`
+      SELECT payment_status, refund_total::float8 AS refund_total FROM orders WHERE id = ${orderId}
+    `;
+    const [refunds] = await adminSql`SELECT COUNT(*)::int AS n FROM refunds WHERE order_id = ${orderId}`;
+
+    expect(order.payment_status).toBe('refunded');
+    expect(order.refund_total).toBe(116);
+    expect(refunds.n).toBe(1);
+  });
+
+  it('deletes a completed paid order through the route cascade, refunds included', async () => {
+    const orderId = await insertCompletedPaidOrder();
+    await asTenant(tenant.id, async () => {
+      await run(
+        `INSERT INTO order_payments (order_id, payment_method, amount, status)
+         VALUES ($1, 'cash', 116, 'succeeded')`,
+        [orderId],
+      );
+      await run(
+        `INSERT INTO refunds (order_id, amount, reason, refund_type, refunded_by)
+         VALUES ($1, 50, 'partial', 'partial_amount', $2)`,
+        [orderId, employeeId],
+      );
+    });
+
+    await asTenant(tenant.id, async () => {
+      await run(`DELETE FROM order_payments WHERE order_id = $1`, [orderId]);
+      await run(`DELETE FROM refunds WHERE order_id = $1`, [orderId]);
+      await run(`DELETE FROM delivery_orders WHERE order_id = $1`, [orderId]);
+      await run(`DELETE FROM order_tip_adjustments WHERE order_id = $1`, [orderId]);
+      await run(`DELETE FROM order_items WHERE order_id = $1`, [orderId]);
+      await run(`DELETE FROM orders WHERE id = $1`, [orderId]);
+    });
+
+    const [order] = await adminSql`SELECT id FROM orders WHERE id = ${orderId}`;
+    const [refunds] = await adminSql`SELECT COUNT(*)::int AS n FROM refunds WHERE order_id = ${orderId}`;
+    expect(order).toBeUndefined();
+    expect(refunds.n).toBe(0);
+  });
+});
