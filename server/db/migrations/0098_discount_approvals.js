@@ -84,6 +84,9 @@ export async function up(sql) {
     END $$
   `;
 
-  // No DELETE: nothing in the app removes an approval record.
+  // Nothing in the app removes an approval record. Note this GRANT does not by
+  // itself withhold DELETE — a database-level default ACL hands app_user `arwd`
+  // on every new table, so the REVOKE that actually enforces append-only lives
+  // in migration 0099.
   await sql`GRANT SELECT, INSERT, UPDATE ON discount_approvals TO app_user`;
 }

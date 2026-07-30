@@ -7,6 +7,111 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-07-30 (closed the four open items from the 07-29 entry) — Claude Code — **1.4.2 + 1.4.3 pushed**
+
+All four "still open" items below are now closed. Taking them in order of how
+much they changed what we believed:
+
+**1. Railway GraphQL escape hatch was never broken.** The 07-30 conclusion
+("auth failed every way tried") was a misread of two *field-level* errors:
+- `{ me { … } }` returns `Not Authorized` for our token and always will — it is
+  a workspace token with no user behind it. Same reason `railway whoami` fails
+  while `railway status` / `deployment list` work fine. **Never use `me` or
+  `whoami` as the auth probe.**
+- `project(id:)` with the wrong id returns `Project not found`, which also
+  reads like auth. **pos-lite is `ecb8f414-37a9-448d-a5d4-f78224521ce4`.** The
+  `1e7d9a11-…` in the *global* `~/CLAUDE.md` is the desktop-kitchen monorepo's
+  POS — a different Railway project. An agent working here that grabs the id
+  from global CLAUDE.md gets exactly that error.
+
+`Authorization: Bearer $RAILWAY_API_TOKEN` authenticates fine and returns real
+project data. `serviceInstanceDeployV2(commitSha, environmentId, serviceId)`
+confirmed present via schema introspection, alongside `serviceInstanceRedeploy`
+and `deploymentRedeploy`. The mutation itself is still unfired — proving auth
+stopped short of triggering a gratuitous prod deploy. CLI upgraded 4.12.0 →
+5.30.1; a stale Homebrew 4.12.0 is still installed but shadowed by the nvm copy.
+
+**2. Facturar z-index — verified, though not by a logged-in click-through.**
+The tenant PIN is a credential I won't type, so instead this was verified
+against the *deployed artifacts* plus real browser stacking:
+- Shipped CSS defines `.z-\[60\]{z-index:60}` and `.z-\[70\]` — worth checking,
+  since Tailwind purges arbitrary values it can't see statically. Had they been
+  purged the fix would have silently done nothing.
+- Deployed `InvoiceModal-B33Som5V.js` (its own lazy chunk — that's why it isn't
+  in the OrderEditModal chunk) does `createPortal(<div className="… z-[60] …">,
+  document.body)`. ReceiptModal portals at `z-50`; the PIN pad chunk at `z-[70]`.
+- In the live browser, against the real production stylesheet, the pre-fix
+  arrangement was reconstructed and reproduces the bug exactly
+  (`elementFromPoint` returns the receipt backdrop, invoice unreachable); the
+  shipped arrangement puts the invoice on top and the PIN pad above it.
+
+Still owed if you want it airtight: one real receipt → Facturar click-through
+on a logged-in session. Everything short of the React mount is now evidence,
+not reasoning.
+
+**3. `1.4.2` — completed orders are correctable from the UI.** The server
+always allowed it (`/payments/refund` gates only on `payment_status`,
+`DELETE /orders/:id` checks no status at all); only the client was missing.
+`HistoryGrid` now takes `onEdit` and offers "Reembolsar / eliminar";
+`OrderEditModal` goes read-only on items for completed/cancelled orders
+(mirrors `EDIT_BLOCKED_STATUSES` — those routes 400, so the controls were dead
+buttons) and offers Delete on paid orders, rendered *below* Refund and visually
+secondary.
+
+**Two things found on the way that mattered more than the wiring:**
+- **`DELETE /orders/:id` never snapshotted anything.** Order 7368 was
+  reconstructible only because someone wrote the snapshot by hand. Exposing
+  delete in the UI without that would make a mistap unrecoverable, so the route
+  now writes order + items + payments into `audit_log.details` before the
+  cascade.
+- **`refunds.conekta_refund_id` / `getnet_refund_id` existed only in prod.**
+  `payments.js` has always INSERTed them; they were in no migration and not in
+  `pg-schema.sql`. The test branch inherited them *from prod*, so the whole
+  suite passed while any DB built from schema + migrations would fail **every
+  refund**. Migration **0097** codifies them (0088 pattern).
+
+**4. `1.4.3` — `authorizeDiscount` is closed.** Migration **0098** adds
+`discount_approvals`: UUID id, binding on scope + type + value, single-use via
+`consumed_at`, 12-hour expiry, `consumed_order_id`/`consumed_order_item_id`
+with no FK so the record outlives the order. Minted by `/manager-approve` when
+permission is `apply_discounts` (it already owns the rate limit, lockout,
+bcrypt sweep and permission check — no second PIN oracle). Consumed by a single
+`UPDATE … WHERE id AND consumed_at IS NULL AND expires_at > NOW() AND scope AND
+discount_type AND discount_value`, so validation and the single-use claim can't
+race, and a failed order un-consumes rather than burns the approval.
+
+**Hard cut** — the bare `authorized_by_employee_id` is rejected immediately, no
+grace window (a compat window can't distinguish a stale client from an
+attacker, which is the bug). **Also fixed the second defect in that code:** line
+discounts read only the *first* discounted line's approver and stamped it onto
+every discounted line, so one approval silently covered N different discounts.
+
+`callWithApproverId` and OrderEditModal's second PIN pad are **deleted**, as
+that entry asked.
+
+**Notes for whoever picks this up:**
+- **`pg-schema.sql` deliberately NOT mirrored for `discount_approvals`.** It is
+  bootstrap-only and migration 0098 is authoritative (table + index + RLS +
+  policy + grants, idempotent). The reason for skipping: the RLS table array in
+  `pg-schema.sql` is a single line that the in-flight `kiosk_addon_map` work is
+  already editing, and both agents appending to it would collide. **When that
+  kiosk work lands, add `discount_approvals` to that array and mirror the
+  CREATE TABLE.**
+- `purgeTenant` needs no change — it discovers tables via `information_schema`
+  and derives FK order from `pg_catalog`, so the new table is picked up.
+- **The positional-`audit()` claim from the 07-25 entry does not reproduce.**
+  All 11 `audit()` calls in `orders.js` already use the options-object form and
+  a repo-wide grep finds no positional callers. Treat that item as resolved.
+- `OrderEditModal` is still ~40 hardcoded Spanish strings; new copy went through
+  `t()` (`orderEdit.*` in es/en `pos.json`) but the file wants a full i18n pass.
+- Suites: 334/334 at 1.4.2, 346/346 at 1.4.3 (12 new in
+  `tests/discount-approvals.test.ts`, incl. a regression test that the old
+  exploit shape grants nothing). Typecheck clean at both.
+- Staged by hunk, not by file — `pg-schema.sql`, `src/api/index.ts` and both
+  `pos.json` locales carry your in-flight work, which was left unstaged. Each
+  commit was verified by typechecking and running the suite against the *staged
+  tree* in a detached worktree before landing.
+
 ## 2026-07-29 (Manager-PIN override for void / refund / facturar) — Claude Code — **1.3.0 deployed, 1.4.1 pending**
 
 **Prod data note:** order 7368 (`20260729013`, juanbertos) was deleted at Juan's
@@ -16,10 +121,12 @@ snapshotted in `audit_log` (resource `order`, resource_id `7368`) before the
 delete, so it's reconstructible. It was removed by direct SQL, not the route,
 because completed orders have no UI path to delete or refund.
 
-**Still open:** `HistoryGrid` on `/admin/orders` is receipt-only — `onEdit` is
-never wired for the history lane, and `OrderEditModal` is the sole home of both
-the Refund and Cancel-order buttons. So no completed order can be refunded or
-voided from the UI by anyone, at any permission level.
+**RESOLVED in 1.4.2** (see the 07-30 entry above): `HistoryGrid` was
+receipt-only — `onEdit` was never wired for the history lane, and
+`OrderEditModal` was the sole home of the Refund and Cancel-order buttons, so
+no completed order could be refunded or voided from the UI at any permission
+level. Both are now reachable, and `DELETE /orders/:id` snapshots the order
+first (it did not when 7368 was removed).
 
 
 Juan reported Facturar dead and delete/refund failing. Two unrelated causes:
@@ -47,15 +154,12 @@ they depend on state the handler loads first). The three order-edit routes
 (`POST /:id/items`, `PATCH`/`DELETE /:id/items/:itemId`) no longer read
 `authorized_by_employee_id` at all.
 
-**`authorizeDiscount` is the last holdout and is NOT a straight port.** At
-order-creation time the approver rides inside the cart payload, a cart can carry
-several separately-approved discounts (per-line + cart-level), and a cart can sit
-open far longer than the token's 5-min TTL. It needs server-side approval records
-the cart references by id, not a header swap. Until then a client can still
-self-authorize a discount — including `comp` (100% off) — by naming any
-manager's employee id. Full note on the function in `server/routes/orders.js`.
-`OrderEditModal` keeps a second helper (`callWithApproverId`) purely for that
-path; delete it when the gate moves.
+**`authorizeDiscount` — RESOLVED in 1.4.3** (see the 07-30 entry above). It was
+correctly diagnosed here as not a straight port: the approver rides inside the
+cart payload, a cart carries several separately-approved discounts, and a cart
+outlives the 5-min TTL. It became server-side approval records the cart
+references by id (migration 0098), exactly as this entry predicted.
+`callWithApproverId` is deleted.
 
 **Also fixed:** `order_tip_adjustments` has a NO ACTION FK to `orders` and was
 missing from the delete cascade, so deleting any order with a cash tip
