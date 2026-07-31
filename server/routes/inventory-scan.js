@@ -31,7 +31,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
-import { all, get, run, getTenantId } from '../db/index.js';
+import { all, get, run, getTenantId, tenantContext } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getPlanLimits, planUpgradeError } from '../planLimits.js';
 import { audit } from '../lib/auditLog.js';
@@ -94,6 +94,36 @@ const scanLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'scan_rate_limited' },
 });
+
+// ---------------------------------------------------------------------------
+// AsyncLocalStorage across multer
+// ---------------------------------------------------------------------------
+// tenantMiddleware establishes the request context with tenantContext.run().
+// multer then consumes the request STREAM, and stream events fire in the
+// connection's async context — created when the socket was accepted, long
+// before run() — so ALS is EMPTY once upload.single() calls back.
+//
+// That broke this route two ways. The visible one: getTenantId() returned null
+// and the voice_intents INSERT died on a NOT NULL violation. The dangerous one:
+// getConn() falls back to adminSql when the store is missing, so every query
+// after multer ran with RLS BYPASSED — parseReceiptImage's inventory SELECT was
+// returning items across all tenants and putting them in the Claude prompt.
+//
+// expenses.js never hit this because its multer routes don't touch the DB after
+// upload; this is the first multer route that writes.
+function captureTenantContext(req, _res, next) {
+  req._tenantStore = tenantContext.getStore();
+  next();
+}
+
+function restoreTenantContext(req, _res, next) {
+  const store = req._tenantStore;
+  if (!store) return next();
+  // Re-enter the SAME store — not a new transaction. The connection and its
+  // BEGIN are still owned by tenantMiddleware (see CLAUDE.md: never nest
+  // BEGIN/COMMIT in /api/* routes).
+  tenantContext.run(store, next);
+}
 
 /**
  * Committing a count and committing a purchase are different acts.
@@ -158,6 +188,7 @@ router.post(
   requireAuth('scan_inventory'),
   requireAiPlan,
   scanLimiter,
+  captureTenantContext,
   (req, res, next) => {
     upload.single('photo')(req, res, (err) => {
       if (!err) return next();
@@ -168,6 +199,7 @@ router.post(
       return next(err);
     });
   },
+  restoreTenantContext,
   async (req, res) => {
     try {
       if (!req.file?.buffer?.length) {
@@ -178,11 +210,20 @@ router.post(
         return res.status(401).json({ error: 'Employee context required' });
       }
 
+      // Assert the context BEFORE the vision call, not after. Without it,
+      // parseReceiptImage's inventory SELECT silently falls back to adminSql and
+      // reads every tenant's items into the prompt — a cross-tenant read with no
+      // error anywhere. Failing loudly here also saves a paid vision call.
+      const tid = getTenantId();
+      if (!tid) {
+        console.error('[InventoryScan] tenant context lost after upload — refusing');
+        return res.status(500).json({ error: 'tenant_context_lost' });
+      }
+
       const caption = String(req.body?.caption || '').trim() || null;
       const contentType = req.file.mimetype || 'image/jpeg';
 
-      // Already inside the tenant middleware's transaction, so the inventory
-      // SELECT inside parseReceiptImage is RLS-scoped without withTenant().
+      // RLS-scoped via the restored ALS store (see restoreTenantContext).
       let parsed;
       try {
         parsed = await parseReceiptImage(req.file.buffer, contentType, caption);
@@ -215,7 +256,6 @@ router.post(
         console.warn('[InventoryScan] enrich failed (non-fatal):', err.message);
       }
 
-      const tid = getTenantId();
       const row = await run(
         `INSERT INTO voice_intents
            (tenant_id, employee_id, source, raw_body, media_url, media_content_type,

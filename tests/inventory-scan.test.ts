@@ -22,6 +22,7 @@
 //      lines do not.
 
 import express from 'express';
+import multer from 'multer';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -33,7 +34,7 @@ import {
   type TestTenant,
 } from './helpers/db.js';
 // @ts-ignore — server files are plain JS
-import { adminSql, get } from '../server/db/index.js';
+import { adminSql, get, getTenantId, tenantContext } from '../server/db/index.js';
 // @ts-ignore
 import inventoryScanRouter, { applyOverrides } from '../server/routes/inventory-scan.js';
 // @ts-ignore
@@ -66,6 +67,9 @@ function appForTenant(tenantId: string, plan = 'pro') {
   app.use('/api/inventory-scan', inventoryScanRouter);
   return app;
 }
+
+/** Same memory-storage shape the route uses, for the ALS probe below. */
+const multerProbe = multer({ storage: multer.memoryStorage() });
 
 function tokenFor(employeeId: number, role: string) {
   return jwt.sign(
@@ -519,6 +523,63 @@ describe('POST /api/inventory-scan', () => {
       .set('Authorization', `Bearer ${managerToken}`)
       .attach('photo', Buffer.from('not an image'), { filename: 'notes.txt', contentType: 'text/plain' });
     expect(res.status).toBe(400);
+  });
+
+  it('keeps the tenant context alive across multer', async () => {
+    // THE regression. multer consumes the request stream, and stream events
+    // fire in the connection's async context — created when the socket was
+    // accepted, before tenantContext.run() — so ALS was empty by the time the
+    // handler ran. Two consequences in prod: getTenantId() returned null and
+    // the voice_intents INSERT died on NOT NULL, and (worse) getConn() fell
+    // back to adminSql, so parseReceiptImage's inventory SELECT read across
+    // ALL tenants into the Claude prompt.
+    //
+    // Reproduced against the real middleware chain rather than the route, so it
+    // costs no vision call: same asTenant harness, same multipart body, same
+    // capture/restore pair. Without restoreTenantContext this reports null.
+    const express2 = express();
+    let seenTenant: string | null | undefined;
+    let seenConn = false;
+
+    express2.use((req: any, res, next) => {
+      void asTenant(tenant.id, () => new Promise<void>((resolve) => {
+        res.on('finish', resolve);
+        res.on('close', resolve);
+        next();
+      }));
+    });
+    // Mirrors the route's chain: capture → multer → restore.
+    express2.post(
+      '/probe',
+      (req: any, _res, next) => { req._tenantStore = tenantContext.getStore(); next(); },
+      multerProbe.single('photo'),
+      (req: any, _res, next) => {
+        const store = req._tenantStore;
+        if (!store) return next();
+        tenantContext.run(store, next);
+      },
+      (_req, res) => {
+        seenTenant = getTenantId();
+        seenConn = Boolean(tenantContext.getStore()?.conn);
+        res.json({ ok: true });
+      },
+    );
+
+    const res = await request(express2)
+      .post('/probe')
+      // Size matters: a few bytes are consumed in one synchronous pass and ALS
+      // survives by luck. A real phone photo is megabytes, so busboy emits many
+      // data events from the SOCKET's async context and the store is gone.
+      .attach('photo', Buffer.alloc(3 * 1024 * 1024, 7), {
+        filename: 'shelf.jpg',
+        contentType: 'image/jpeg',
+      });
+
+    expect(res.status).toBe(200);
+    expect(seenTenant).toBe(tenant.id);
+    // The connection matters as much as the id: without it getConn() returns
+    // adminSql and every query silently bypasses RLS.
+    expect(seenConn).toBe(true);
   });
 
   it('is rate limited per employee', async () => {
