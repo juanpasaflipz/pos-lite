@@ -7,6 +7,40 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-07-30 (night) — Claude Code — **photo → inventory shipped (1.5.0); vision path NOT yet validated on real photos**
+
+Shipped `9bd3f59` + `fb46db7`, live in prod as `1.5.0+fb46db7`. Staff can now
+photograph a supplier nota or a shelf from the mobile POS and have it land in
+inventory — no WhatsApp, no Meta app, no per-employee phone registration. Meta
+was only ever the delivery pipe; `parseReceiptImage()` takes a buffer and the
+employee JWT identifies the sender better than a phone lookup does.
+
+New surface: `POST /api/inventory-scan` (+ `/:id/confirm`, `/:id/cancel`) and
+`/m/scan-photo`, reached from a card on `/m/scan`. Drafts live in
+`voice_intents` with `source='pos_scan'` — same audit trail as the WhatsApp
+path, so query by source if you need to tell them apart.
+
+**Open item — needs a human with the phone.** The Claude vision call is the one
+link no test exercises (paid round-trip, live model). Juan tests 07-31 at the
+tenant's site: one handwritten supplier nota, one fridge shelf. Until then treat
+prompt behavior on *real* MX paperwork as unproven. If parses come back wrong,
+tune `RECEIPT_VISION_PROMPT` in `server/helpers/receiptVision.js` — shared with
+the WhatsApp path, so changes affect both.
+
+**Known overlap, deliberate:** `POST /api/expenses/scan-receipt` still does
+receipt → expense on the same screen with its own prompt and match step. The new
+route also handles `record_purchase` because the vision prompt classifies
+receipt-vs-shelf in one call — refusing one would force the operator to choose a
+button before taking the photo. Worth consolidating; don't merge blind, the
+desktop expense flow depends on the old path.
+
+If you touch `applyOverrides()` in `routes/inventory-scan.js`: it must keep
+honoring ONLY quantity/line_total/include/create. `inventory_item_id` comes from
+the stored draft, never the request — otherwise any authenticated client can
+rewrite any inventory row by guessing ids. Six tests guard this.
+
+---
+
 ## 2026-07-30 (evening) — Claude Code — **card splits were dead in prod since 07-17; fixed, NOT yet pushed**
 
 Juanberto's had to void and re-ring an $856 check tonight (order 7389, 18:50
