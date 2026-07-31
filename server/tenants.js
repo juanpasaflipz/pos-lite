@@ -82,15 +82,18 @@ async function seedTenantDefaults(tenantId, subdomain) {
     'manage_modifiers', 'manage_ai', 'process_refunds', 'void_orders',
     'apply_discounts', 'view_dashboard', 'manage_permissions', 'manage_purchase_orders',
     'manage_loyalty', 'manage_branding', 'manage_invoicing', 'manage_payroll',
-    'manage_cash_paid_outs',
+    'manage_cash_paid_outs', 'scan_inventory',
   ];
 
+  // scan_inventory reaches kitchen and bar deliberately: photographing a shelf
+  // is the job of whoever stands in front of it, and it only commits a COUNT.
+  // Booking a purchase still needs manage_inventory (see migration 0101).
   const roleDefaults = {
     admin: allPermissions,
     manager: allPermissions.filter(p => p !== 'manage_permissions'),
-    cashier: ['pos_access', 'view_dashboard', 'manage_cash_paid_outs'],
-    kitchen: ['kitchen_access'],
-    bar: ['bar_access'],
+    cashier: ['pos_access', 'view_dashboard', 'manage_cash_paid_outs', 'scan_inventory'],
+    kitchen: ['kitchen_access', 'scan_inventory'],
+    bar: ['bar_access', 'scan_inventory'],
   };
 
   const permRows = [];

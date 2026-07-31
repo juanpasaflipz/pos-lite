@@ -243,7 +243,8 @@
       "manage_purchase_orders": "Manage Purchase Orders",
       "manage_branding": "Manage Branding",
       "manage_invoicing": "Manage Invoicing",
-      "manage_cash_paid_outs": "Cash Paid Out"
+      "manage_cash_paid_outs": "Cash Paid Out",
+      "scan_inventory": "Photo to inventory (count)"
     }
   },
   "branding": {

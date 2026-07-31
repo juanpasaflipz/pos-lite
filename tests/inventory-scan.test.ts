@@ -125,10 +125,14 @@ beforeAll(async () => {
     `;
   };
   await grant('manager', 'manage_inventory', true);
-  await grant('manager', 'pos_access', true);
+  await grant('manager', 'scan_inventory', true);
   // The cook is the whole point of the split: may count, may not book money.
-  await grant('kitchen', 'pos_access', true);
+  // These mirror the shipped defaults (server/tenants.js + migration 0101) —
+  // 1.6.0 gated on pos_access, which prod grants to NEITHER kitchen nor bar,
+  // so the split passed here while being inert against real tenants.
+  await grant('kitchen', 'scan_inventory', true);
   await grant('kitchen', 'manage_inventory', false);
+  await grant('kitchen', 'pos_access', false);
 
   const a = await adminSql`
     INSERT INTO inventory_items (tenant_id, name, quantity, unit, cost_price)
@@ -358,6 +362,41 @@ describe('plan gate', () => {
     expect(res.body.error).toBe('PLAN_UPGRADE_REQUIRED');
     expect(res.body.requiredPlan).toBe('pro');
   });
+});
+
+describe('shipped permission defaults', () => {
+  // The test that would have caught the 1.6.0 mistake. Every other test in this
+  // file grants permissions explicitly, so they proved the split worked against
+  // a matrix this file invented — while in prod `kitchen` had exactly
+  // `kitchen_access` and the feature was unreachable for the people it targets.
+  // This asserts the matrix a REAL tenant is provisioned with.
+  it('grants scan_inventory to the roles that stand near stock', async () => {
+    const fresh = await createTestTenant('invperm');
+    try {
+      const rows = await adminSql`
+        SELECT role, granted FROM role_permissions
+        WHERE tenant_id = ${fresh.id} AND permission = 'scan_inventory'
+      `;
+      const byRole = Object.fromEntries(rows.map((r: any) => [r.role, r.granted]));
+
+      expect(byRole.kitchen).toBe(true);
+      expect(byRole.bar).toBe(true);
+      expect(byRole.cashier).toBe(true);
+      expect(byRole.manager).toBe(true);
+      expect(byRole.admin).toBe(true);
+
+      // And it must NOT have been achieved by handing them the register —
+      // that was the tempting wrong fix.
+      const pos = await adminSql`
+        SELECT role, granted FROM role_permissions
+        WHERE tenant_id = ${fresh.id} AND permission = 'pos_access'
+          AND role IN ('kitchen', 'bar')
+      `;
+      for (const r of pos) expect(r.granted).toBe(false);
+    } finally {
+      await dropTestTenant(fresh.id);
+    }
+  }, 60_000);
 });
 
 describe('permission split', () => {

@@ -107,7 +107,7 @@ const scanLimiter = rateLimit({
  * required permission isn't known until the stored draft is read.
  */
 async function canCommitIntent(employee, intent) {
-  const permission = intent === 'record_purchase' ? 'manage_inventory' : 'pos_access';
+  const permission = intent === 'record_purchase' ? 'manage_inventory' : 'scan_inventory';
   const perm = await get(
     'SELECT granted FROM role_permissions WHERE role = $1 AND permission = $2',
     [employee.role, permission]
@@ -151,11 +151,11 @@ function toDraft(parsed) {
 
 // POST /api/inventory-scan — photo in, draft out. Nothing is written to
 // inventory here; the operator still has to confirm.
-// Drafting writes nothing to inventory, so any employee may shoot a photo —
-// the privilege check happens at commit, where the write actually lands.
+// Drafting writes nothing to inventory, so anyone with scan_inventory may
+// shoot a photo — the privilege check happens at commit, where the write lands.
 router.post(
   '/',
-  requireAuth('pos_access'),
+  requireAuth('scan_inventory'),
   requireAiPlan,
   scanLimiter,
   (req, res, next) => {
@@ -305,7 +305,7 @@ async function loadPendingDraft(id, employeeId) {
 }
 
 // POST /api/inventory-scan/:id/confirm — commit the draft.
-router.post('/:id/confirm', requireAuth('pos_access'), async (req, res) => {
+router.post('/:id/confirm', requireAuth('scan_inventory'), async (req, res) => {
   try {
     const employeeId = req.employee?.id;
     if (!employeeId) return res.status(401).json({ error: 'Employee context required' });
@@ -421,8 +421,8 @@ router.get('/recent', requireAuth('manage_inventory'), async (req, res) => {
 });
 
 // POST /api/inventory-scan/:id/cancel — discard the draft. Own drafts only
-// (loadPendingDraft scopes by employee), so pos_access is sufficient.
-router.post('/:id/cancel', requireAuth('pos_access'), async (req, res) => {
+// (loadPendingDraft scopes by employee), so scan_inventory is sufficient.
+router.post('/:id/cancel', requireAuth('scan_inventory'), async (req, res) => {
   try {
     const employeeId = req.employee?.id;
     if (!employeeId) return res.status(401).json({ error: 'Employee context required' });

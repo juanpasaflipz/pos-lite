@@ -242,7 +242,8 @@
       "manage_permissions": "Gestionar Permisos",
       "manage_purchase_orders": "Gestionar Órdenes de Compra",
       "manage_branding": "Gestionar Marca",
-      "manage_invoicing": "Gestionar Facturación"
+      "manage_invoicing": "Gestionar Facturación",
+      "scan_inventory": "Foto a inventario (contar)"
     }
   },
   "branding": {
