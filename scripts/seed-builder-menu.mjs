@@ -29,15 +29,27 @@ if (!tenantArg) {
 // ---------- Spec data ----------
 const CATEGORY = { name: 'Arma tu burrito', sort_order: 999 };
 
+// Fries surcharge = FRIES_FLAT − protein price, so EVERY single-protein fries
+// entrée rings at $299 — the price all three real fries items on the menu
+// already carry (Carne Asada / Chorizo / Porkbelly Fries). Confirmed by Juan
+// 2026-07-31. Before this the surcharge was a flat +$49 (+$69 porkbelly)
+// reverse-engineered to hit $299 for those two, which left the other five
+// drifting from $219 to $314.
+//
+// It also makes two-protein fries uniform: the wizard picks the pricier
+// protein as the base (see resolveSelection in kiosk/src/lib/builderPricing.ts),
+// whose Segunda adjustment is exactly +$90, so every combo fries is
+// $299 + $90 = $389 no matter which two proteins.
+const FRIES_FLAT = 299;
 const PROTEINS = [
-  { slug: 'asada',      name: 'Burrito Carne Asada',  name_en: 'Carne Asada Burrito',      price: 250, friesAdj: 49, friesConfirmed: true  },
-  { slug: 'pollo',      name: 'Burrito Pollo Asado',  name_en: 'Grilled Chicken Burrito',  price: 219, friesAdj: 49, friesConfirmed: false },
-  { slug: 'porkbelly',  name: 'Burrito Porkbelly',    name_en: 'Pork Belly Burrito',       price: 230, friesAdj: 69, friesConfirmed: true  },
-  { slug: 'huevo',      name: 'Burrito Huevo',        name_en: 'Egg Burrito',              price: 180, friesAdj: 49, friesConfirmed: false },
-  { slug: 'portobello', name: 'Burrito Portobello',   name_en: 'Portobello Burrito',       price: 170, friesAdj: 49, friesConfirmed: false },
-  { slug: 'camaron',    name: 'Burrito Camarón',      name_en: 'Shrimp Burrito',           price: 240, friesAdj: 49, friesConfirmed: false },
-  { slug: 'pescado',    name: 'Burrito Pescado',      name_en: 'Baja Fish Burrito',        price: 265, friesAdj: 49, friesConfirmed: false },
-];
+  { slug: 'asada',      name: 'Burrito Carne Asada',  name_en: 'Carne Asada Burrito',      price: 250 },
+  { slug: 'pollo',      name: 'Burrito Pollo Asado',  name_en: 'Grilled Chicken Burrito',  price: 219 },
+  { slug: 'porkbelly',  name: 'Burrito Porkbelly',    name_en: 'Pork Belly Burrito',       price: 230 },
+  { slug: 'huevo',      name: 'Burrito Huevo',        name_en: 'Egg Burrito',              price: 180 },
+  { slug: 'portobello', name: 'Burrito Portobello',   name_en: 'Portobello Burrito',       price: 170 },
+  { slug: 'camaron',    name: 'Burrito Camarón',      name_en: 'Shrimp Burrito',           price: 240 },
+  { slug: 'pescado',    name: 'Burrito Pescado',      name_en: 'Baja Fish Burrito',        price: 265 },
+].map((p) => ({ ...p, friesAdj: FRIES_FLAT - p.price, friesConfirmed: true }));
 
 const PROTEIN_LABELS = {
   asada:      { es: 'Carne Asada', en: 'Carne Asada' },
@@ -50,9 +62,15 @@ const PROTEIN_LABELS = {
   chorizo:    { es: 'Chorizo',     en: 'Chorizo' },
 };
 
-// SECOND_MATRIX[base][add] = [adj, confirmed]. Only two cells are confirmed
-// anchors — asada+camaron=340 and huevo+chorizo=210 — everything else is the
-// +$90 fallback (max(pA,pB)+90 - base) and gets a ⚠️ in the placeholder summary.
+// SECOND_MATRIX[base][add] = [adj, confirmed]. Every cell is derived from the
+// rule "pricier protein + $90", which is itself derived from a real menu
+// price: Surf-N-Turf is $340 = asada $250 + $90. Juan confirmed the rule for
+// all 21 pairs on 2026-07-31, so the numbers below are no longer placeholders
+// even where the per-cell flag still reads false (the flag only annotates the
+// script's summary output). huevo+chorizo=210 stays a hand-set anchor.
+//
+// The adjustments are built so the TOTAL is symmetric: asada-base + porkbelly
+// and porkbelly-base + asada both come to $340. Verified across all 21 pairs.
 const SECOND_MATRIX = {
   asada:      { pollo:[90,false],  porkbelly:[90,false],  huevo:[90,false],  portobello:[90,false],  camaron:[90,true],   pescado:[105,false] },
   pollo:      { asada:[121,false], porkbelly:[101,false], huevo:[90,false],  portobello:[90,false],  camaron:[111,false], pescado:[136,false] },
@@ -69,9 +87,10 @@ const QUITAR = [
 ];
 
 const EXTRAS = [
-  { name: 'Guacamole extra', adj: 35, confirmed: false },
-  { name: 'Queso extra',     adj: 25, confirmed: false },
-  { name: 'Cebollita asada', adj: 20, confirmed: false },
+  { name: 'Guacamole extra', adj: 35, confirmed: true },  // Juan 07-31
+  { name: 'Queso extra',     adj: 25, confirmed: true },  // Juan 07-31
+  { name: 'Cebollita asada', adj: 20, confirmed: true },  // Juan 07-31
+  { name: 'Chorizo extra',   adj: 35, confirmed: true },  // Juan 07-27
 ];
 
 const FIXED_ITEMS = [

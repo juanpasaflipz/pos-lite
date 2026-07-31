@@ -7,6 +7,59 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-07-31 (Kiosk wizard — parity with prototype v12 DONE) — Claude Code — **NOT PUSHED; needs Juan's deploy + APK**
+
+Implements `design/kiosk-builder-parity-spec.md` D1–D10 against prototype v12.
+All 8 acceptance items verified in a browser side-by-side with the prototype.
+`npm run typecheck` clean, `npm test` 379/379 green. **Nothing pushed** — Juan
+drives the deploy and the `npm run android:install` APK rebuild.
+
+**Tenant scoping holds.** The grid branch of `AttractScreen` is byte-for-byte
+identical (verified by extracting the branch from HEAD and from the working
+tree and diffing — 36 lines, zero differences). No grid-mode surface reads any
+new table. `kiosk_addon_map` is empty for every tenant but juanbertos.
+
+**Two things worth knowing beyond the spec:**
+
+1. **D1's premise was wrong and it was a live pricing bug.** The spec says
+   "totals are symmetric by construction, so selection order can't change the
+   price". Combo totals are (verified across all 21 pairs) — but the **Fries**
+   surcharge is seeded per base item and porkbelly's is $69 where every other
+   protein's is $49. With a naive "first tapped is the base", porkbelly+asada
+   Fries priced at $409 one way and $389 the other; a guest could change the
+   price by changing tap order. `resolveSelection()` in
+   `kiosk/src/lib/builderPricing.ts` now canonicalises the base to the lowest
+   Fries surcharge, which reproduces the prototype exactly (one flat +$49 on
+   every two-protein Fries, per-protein pricing for singles) and is
+   order-independent. Pinned by tests.
+
+2. **A StrictMode bug in the old wizard.** The preset was read *and removed*
+   from sessionStorage inside a `useState` initializer, so React's discarded
+   first mount ate it — every favorito landed on a blank protein grid instead
+   of the pre-filled Estilo screen. Dev-only (StrictMode doesn't double-invoke
+   in prod builds) but it broke verification and was one refactor away from
+   shipping. AttractScreen now owns the key's lifecycle; the wizard only reads.
+
+**Prod DB already touched (safe, additive):** migration 0096 `kiosk_addon_map`
+applied + recorded, and seeded for juanbertos with Orden Papas / Brownie con
+crema (sides) and Refresco / Cerveza / CHELA 3X2 (drinks). Michelada, Café and
+Aguas Frescas are `active=false` so they're commented out in
+`scripts/seed-kiosk-addons.mjs` — uncomment a line each if Juan activates them.
+
+**Deviations Juan should veto if he disagrees:** (a) the wizard now has the
+same 120s idle→attract timer every other kiosk ordering screen has; the
+prototype models no timeouts, but without it a walk-away strands the next
+guest inside a half-built burrito. (b) `npm run typecheck` now also covers
+`kiosk/` (new `kiosk/tsconfig.json`) — it never did, which is how the wizard
+shipped unchecked. That surfaced one pre-existing type error in
+`CartUpsellStrip.tsx`, fixed, behaviour-neutral.
+
+**Still open from the 2026-07-20 readiness review, NOT in this work order:**
+builder items 8982–8991 still have zero rows in `menu_item_ingredients`, so
+wizard orders deduct no inventory and book $0 food cost. Placeholder prices
+(`confirmed: false`) remain throughout `SECOND_MATRIX` and most Fries
+adjustments.
+
 ## 2026-07-30 (night) — Claude Code — **photo → inventory shipped (1.5.0); vision path NOT yet validated on real photos**
 
 Shipped `9bd3f59` + `fb46db7`, live in prod as `1.5.0+fb46db7`. Staff can now
@@ -251,7 +304,7 @@ Prod role_permissions unchanged.
 and splitting it back out rather than reverting the lot was the right call. Both
 halves land together here.
 
-## 2026-07-27 (Kiosk wizard — PARITY WORK ORDER vs prototype v12) — Cowork agent — **ready to implement**
+## 2026-07-27 (Kiosk wizard — PARITY WORK ORDER vs prototype v12) — Cowork agent — **IMPLEMENTED 2026-07-31, see entry above**
 
 Juan reviewed the shipped wizard against the approved prototype and it has
 drifted: separate Segunda step (should be multi-select on the protein grid),

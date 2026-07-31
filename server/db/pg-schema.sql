@@ -844,6 +844,20 @@ CREATE TABLE IF NOT EXISTS kiosk_builder_map (
   PRIMARY KEY (tenant_id, slug)
 );
 
+-- Curated sides / drinks for the wizard's "¿Deseas agregar algo?" step. An
+-- allowlist rather than a category read: juanbertos keeps `Orden Papas` in
+-- `otros` next to $299 fries entrées and a bookkeeping row, so a category
+-- would pull entrées into an upsell strip. Rows are ordinary active menu
+-- items and go through the normal cart path as their own lines.
+CREATE TABLE IF NOT EXISTS kiosk_addon_map (
+  tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
+  section TEXT NOT NULL,
+  menu_item_id INTEGER NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (tenant_id, section, menu_item_id),
+  CONSTRAINT kiosk_addon_map_section_valid CHECK (section IN ('side', 'drink'))
+);
+
 -- ==================== Indexes ====================
 
 CREATE INDEX IF NOT EXISTS idx_employees_tenant ON employees(tenant_id);
@@ -932,7 +946,7 @@ BEGIN
       'loyalty_messages', 'loyalty_config', 'wallet_passes', 'wallet_registrations',
       'order_templates',
       'waste_log', 'cfdi_config', 'cfdi_invoices', 'tenant_credentials', 'expenses',
-      'kiosk_devices', 'kiosk_builder_map'
+      'kiosk_devices', 'kiosk_builder_map', 'kiosk_addon_map'
     ])
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);

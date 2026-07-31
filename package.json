@@ -1,6 +1,6 @@
 {
   "name": "pos-lite",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Lean, multi-tenant POS system — $20/mo SaaS",
   "type": "module",
   "scripts": {
@@ -19,7 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ci": "vitest run --reporter=verbose",
-    "typecheck": "tsc --noEmit -p .",
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p kiosk",
     "smoketest:orders": "node scripts/load-test-orders.mjs",
     "smoketest:kds": "node scripts/verify-kds-seen.mjs"
   },

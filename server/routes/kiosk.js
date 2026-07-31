@@ -2197,7 +2197,32 @@ router.get('/builder-menu', verifyKioskToken, requireKioskPlan, async (req, res)
       groups: groupsByItem.get(Number(it.id)) || [],
     }));
 
-    res.json({ items: payload });
+    // Sides + drinks for the "¿Deseas agregar algo?" step (prototype v12, D5).
+    // Curated per tenant in kiosk_addon_map rather than read from a category —
+    // see migration 0096 for why. These are ordinary active menu items, so the
+    // client adds them as their own cart lines through the normal path; an
+    // item deactivated in Menu Management drops out here automatically.
+    const addonRows = await adminSql`
+      SELECT kam.section, kam.sort_order, mi.id, mi.name, mi.name_en, mi.price, mi.image_url
+      FROM kiosk_addon_map kam
+      JOIN menu_items mi
+        ON mi.id = kam.menu_item_id AND mi.tenant_id = kam.tenant_id AND mi.active = true
+      WHERE kam.tenant_id = ${tenantId}
+      ORDER BY kam.section, kam.sort_order, mi.name
+    `;
+    const addons = { sides: [], drinks: [] };
+    for (const row of addonRows) {
+      const bucket = row.section === 'side' ? addons.sides : addons.drinks;
+      bucket.push({
+        id: Number(row.id),
+        name: row.name,
+        name_en: row.name_en || null,
+        price: Number(row.price),
+        image_url: row.image_url || null,
+      });
+    }
+
+    res.json({ items: payload, addons });
   } catch (err) {
     console.error('[kiosk/builder-menu] error', err);
     res.status(500).json({ error: 'Failed to load builder menu' });

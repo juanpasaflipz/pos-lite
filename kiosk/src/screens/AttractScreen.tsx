@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Hand } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -7,15 +7,51 @@ import { useKioskCustomer } from '../context/KioskCustomerContext';
 import { useKioskCart } from '../context/KioskCartContext';
 import { resetKioskLanguage } from '../i18n';
 import LanguageToggle from '../components/LanguageToggle';
+import { fetchBuilderMenu, type BuilderMenu } from '../lib/kioskApi';
+import { BuilderIcon, type BuilderIconName } from '../lib/builderIcons';
+import { PRESET_ICON, proteinLabel } from '../lib/builderMeta';
+import { choiceGroup, proteinPrice, stylePrice, pesos } from '../lib/builderPricing';
 import type { WizardPreset } from './BuilderWizardScreen';
-import { PRESET_ICONS } from '../lib/builderIcons';
+
+/**
+ * House favoritos, mirroring the prototype's PRESETS[] (v12) including order.
+ *
+ * `builder` presets pre-fill the wizard and land on the ESTILO screen with
+ * everything selected — one tap from "Así está bien" (D7). `fixed` presets are
+ * whole menu items: they go straight into the order and land on the add-ons
+ * step as the upsell. Birria / Cochinita / Rollbertos exist ONLY here — they
+ * are not proteins on the builder grid (D2).
+ *
+ * No prices live in this table. Every number is computed from the fetched
+ * builder data so a price edit in Menu Management can't leave the attract
+ * screen advertising a stale one (D6).
+ */
+type Favorito =
+  | { id: string; kind: 'builder'; proteins: string[]; estilo: string; ask?: { protein: string } }
+  | { id: string; kind: 'fixed'; slug: string; hasChoice?: boolean };
+
+const FAVORITOS: Favorito[] = [
+  { id: 'california', kind: 'builder', proteins: ['asada'], estilo: 'California' },
+  { id: 'pollos', kind: 'builder', proteins: ['pollo'], estilo: 'Mission' },
+  { id: 'breakfast', kind: 'builder', proteins: ['huevo'], estilo: 'California', ask: { protein: 'chorizo' } },
+  { id: 'surfnturf', kind: 'builder', proteins: ['asada', 'camaron'], estilo: 'Mission' },
+  { id: 'birria', kind: 'fixed', slug: 'birria' },
+  { id: 'cochinita', kind: 'fixed', slug: 'cochinita' },
+  { id: 'rollbertos', kind: 'fixed', slug: 'rollbertos', hasChoice: true },
+  { id: 'asadafries', kind: 'builder', proteins: ['asada'], estilo: 'Fries' },
+];
+
+const CHOICE_ICON: Record<string, BuilderIconName> = {
+  'Con birria': 'soup',
+  'Con cochinita': 'pig',
+};
 
 const AttractScreen: React.FC = () => {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
-  const { tenantName, kioskMode } = useKioskBinding();
+  const { tenantName, kioskMode, tenantId, kioskToken } = useKioskBinding();
   const { clearSession } = useKioskCustomer();
-  const { clearCart } = useKioskCart();
+  const { clearCart, addItem } = useKioskCart();
 
   // The attract screen is the start of every order — reset any leftover
   // customer session, cart, or language choice from a previous interaction.
@@ -37,6 +73,26 @@ const AttractScreen: React.FC = () => {
       navigate('/terminal-settings');
     }
   };
+
+  // Favorito prices and the fixed-item add-to-cart both need live builder data.
+  // Guarded on wizard mode so a grid device makes no extra request — hooks
+  // can't be conditional, but the fetch inside one can.
+  const [menu, setMenu] = useState<BuilderMenu | null>(null);
+  const [overlay, setOverlay] = useState<Favorito | null>(null);
+  useEffect(() => {
+    if (kioskMode !== 'wizard' || !tenantId || !kioskToken) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fetchBuilderMenu({ tenantId, kioskToken });
+        if (!cancelled) setMenu(data);
+      } catch {
+        // Leave prices blank rather than showing a wrong one; the wizard
+        // itself surfaces the real load error when the guest goes in.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [kioskMode, tenantId, kioskToken]);
 
   // Grid mode — unchanged from before Phase 2. iPad + every non-wizard device
   // sees exactly this UI, byte-for-byte.
@@ -75,98 +131,137 @@ const AttractScreen: React.FC = () => {
     );
   }
 
-  // Wizard mode — preset tiles + fallback to /wizard from scratch. Preset
-  // navigation goes through /fulfillment first (still need for-here/to-go for
-  // the kitchen ticket), then hits the wizard with state pre-seeded.
+  // ── Wizard mode ───────────────────────────────────────────────────────────
+  // Every route out of here goes through /fulfillment then /identify first (the
+  // accepted deviation from the prototype) and hands the destination over in
+  // sessionStorage, so those two screens don't have to forward router state.
   const en = i18n.language.startsWith('en');
-  const presets: Array<{ id: string; label: string; sub: string; price: string; preset: WizardPreset }> = [
-    { id: 'california', label: en ? 'The California'   : 'El California',       sub: en ? 'Carne Asada, California style'  : 'Carne Asada, estilo California', price: '$250', preset: { slug: 'asada',      estiloName: 'California' } },
-    { id: 'pollos',     label: 'Pollos Hermanos',                                 sub: en ? 'Grilled Chicken, Mission'       : 'Pollo Asado, estilo Mission',    price: '$219', preset: { slug: 'pollo',      estiloName: 'Mission' } },
-    { id: 'breakfast',  label: 'Breakfast',                                       sub: en ? 'Egg, California'                : 'Huevo, estilo California',       price: '$180', preset: { slug: 'huevo',      estiloName: 'California' } },
-    { id: 'surfnturf',  label: 'Surf-N-Turf',                                     sub: en ? 'Asada + Shrimp, Mission'        : 'Asada + Camarón, Mission',       price: '$340', preset: { slug: 'asada',      estiloName: 'Mission', segundaName: 'Camarón' } },
-    { id: 'asadafries', label: 'Carne Asada Fries',                               sub: en ? 'Asada over fries'               : 'Asada sobre papas',              price: '$299', preset: { slug: 'asada',      estiloName: 'Fries' } },
-    { id: 'birria',     label: en ? 'Birria Burrito'    : 'Burrito de Birria',    sub: en ? 'Beef birria'                    : 'Res deshebrada',                 price: '$99',  preset: { slug: 'birria' } },
-    { id: 'cochinita',  label: en ? 'Cochinita Burrito' : 'Burrito Cochinita',    sub: en ? 'Yucatán-style pork'             : 'Cerdo estilo Yucatán',           price: '$99',  preset: { slug: 'cochinita' } },
-    { id: 'rollbertos', label: 'Rollbertos',                                      sub: en ? 'Rolled cheese taquitos'         : 'Taquitos dorados de queso',      price: '$139', preset: { slug: 'rollbertos' } },
-  ];
+  const items = menu?.items || [];
+  const itemBySlug = new Map(items.map((i) => [i.slug || '', i]));
 
-  const startPreset = (preset: WizardPreset) => {
-    // Stash preset + wizard-destination flag in sessionStorage so the intervening
-    // fulfillment + identify screens don't need to forward router state. Read
-    // and cleared in BuilderWizardScreen; identify redirects to /wizard when
-    // this flag is set instead of the default /menu.
-    sessionStorage.setItem('kiosk-wizard-preset', JSON.stringify(preset));
-    sessionStorage.setItem('kiosk-post-identify-path', '/wizard');
+  const goVia = (path: string) => {
+    sessionStorage.setItem('kiosk-post-identify-path', path);
     navigate('/fulfillment');
   };
+
+  const startBuilder = (proteins: string[], estilo: string) => {
+    const preset: WizardPreset = { proteins, estiloName: estilo };
+    sessionStorage.setItem('kiosk-wizard-preset', JSON.stringify(preset));
+    goVia('/wizard');
+  };
+
   const startFromScratch = () => {
     sessionStorage.removeItem('kiosk-wizard-preset');
-    sessionStorage.setItem('kiosk-post-identify-path', '/wizard');
-    navigate('/fulfillment');
+    goVia('/wizard');
+  };
+
+  /** Fixed favorito → straight into the order, then the add-ons upsell. */
+  const addFixed = (slug: string, modifierIds: { id: number; name: string; price_adjustment: number }[] = [], nameSuffix = '') => {
+    const item = itemBySlug.get(slug);
+    if (!item) return;
+    const label = (en && item.name_en ? item.name_en : item.name) + nameSuffix;
+    addItem(
+      {
+        id: item.id,
+        name: label,
+        name_en: null,
+        price: item.price,
+        description: null,
+        description_en: null,
+        image_url: null,
+        category_id: 0,
+        active: true,
+      },
+      modifierIds,
+    );
+    sessionStorage.removeItem('kiosk-wizard-preset');
+    goVia('/wizard?mode=addons');
+  };
+
+  const favPrice = (f: Favorito): string | null => {
+    if (!menu) return null;
+    if (f.kind === 'fixed') {
+      const item = itemBySlug.get(f.slug);
+      return item ? pesos(item.price) : null;
+    }
+    return pesos(stylePrice(f.proteins, f.estilo, items));
+  };
+
+  const favSub = (f: Favorito): string => {
+    if (f.kind === 'fixed') return t(`wizardAttract.presets.${f.id}Sub`);
+    // "Carne Asada · California" / "Carne Asada + Camarón · Mission"
+    return `${f.proteins.map((s) => proteinLabel(s, en)).join(' + ')} · ${f.estilo}`;
+  };
+
+  const onFavorito = (f: Favorito) => {
+    if (f.kind === 'fixed') {
+      if (f.hasChoice) { setOverlay(f); return; }
+      addFixed(f.slug);
+      return;
+    }
+    if (f.ask) { setOverlay(f); return; }
+    startBuilder(f.proteins, f.estilo);
   };
 
   return (
     <div
-      className="relative h-full w-full text-white flex flex-col pt-safe pb-safe px-4 sm:px-6 overflow-y-auto"
-      // Prototype's radial burst — brand tint fading up from the bottom edge.
-      style={{ background: 'radial-gradient(ellipse at 50% 120%, var(--brand-900, #452010) 0%, #0A0A0A 60%)' }}
+      className="relative h-full w-full text-neutral-50 flex flex-col items-center gap-5 text-center px-6 py-6 pt-safe pb-safe overflow-y-auto bg-[radial-gradient(ellipse_at_50%_120%,rgb(var(--brand-900))_0%,rgb(var(--n-950))_60%)]"
     >
-      {/* Header — logo + tagline, language toggle floats right */}
-      <div className="flex items-start justify-between pt-4 pb-2">
-        <div className="flex-1 min-w-0">
-          {tenantName && (
-            <div className="text-xs sm:text-sm text-brand-300 uppercase tracking-widest font-black mb-1">
-              {tenantName}
-            </div>
-          )}
-          <div className="text-3xl sm:text-5xl font-black leading-none tracking-tight">
-            {t('wizardAttract.title')}
-          </div>
-          <div className="text-sm sm:text-base text-neutral-400 font-bold mt-2">
-            {t('wizardAttract.tagline')}
-          </div>
+      <div>
+        <div className="text-[clamp(30px,6vw,60px)] font-black leading-none tracking-[-0.02em]">
+          {tenantName || 'JUANBERTO'}
+          <em className="not-italic text-brand-300">&apos;S</em>
         </div>
-        <LanguageToggle />
+        <p className="text-[clamp(14px,2.6vw,19px)] font-bold text-neutral-300 mt-1">
+          {t('wizardAttract.tagline')}
+        </p>
       </div>
 
-      {/* Favorites label */}
-      <div className="text-xs font-black uppercase tracking-[0.14em] text-brand-300 mt-6 mb-3">
+      <p className="text-xs font-black uppercase tracking-[0.14em] text-brand-300">
         {t('wizardAttract.favorites')}
-      </div>
+      </p>
 
-      {/* Preset grid — 2/3/4 columns, prototype-style cards with emoji + name + sub + price */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 auto-rows-min">
-        {presets.map((p) => (
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 w-full max-w-[640px] auto-rows-min">
+        {FAVORITOS.map((f) => (
           <button
-            key={p.id}
-            onClick={() => startPreset(p.preset)}
-            className="bg-neutral-900 border-2 border-neutral-800 hover:border-brand-400 active:scale-95 rounded-2xl px-3 py-4 flex flex-col items-center text-center gap-1 touch-manipulation transition-transform"
+            key={f.id}
+            onClick={() => onFavorito(f)}
+            className="bg-neutral-900 border-2 border-neutral-800 active:scale-95 active:border-brand-400 rounded-[14px] px-2.5 py-3 flex flex-col items-center gap-1 touch-manipulation transition-transform"
           >
-            <div className="text-3xl leading-none mb-1">{PRESET_ICONS[p.id] || '🌯'}</div>
-            <div className="text-sm sm:text-base font-black leading-tight">{p.label}</div>
-            <div className="text-[11px] sm:text-xs font-bold text-neutral-400 leading-snug">{p.sub}</div>
-            <div className="text-sm font-black text-brand-300 mt-1">{p.price}</div>
+            <BuilderIcon name={PRESET_ICON[f.id] || 'burrito'} className="h-[30px] w-[30px] text-brand-300" />
+            <span className="text-[15px] font-black leading-[1.1]">{t(`wizardAttract.presets.${f.id}`)}</span>
+            <span className="text-[11px] font-bold text-neutral-400">{favSub(f)}</span>
+            <span className="text-sm font-extrabold text-brand-300">{favPrice(f) ?? ' '}</span>
           </button>
         ))}
       </div>
 
-      {/* OR divider */}
-      <div className="flex items-center gap-3 my-5 text-neutral-500 text-xs font-black tracking-widest uppercase">
-        <div className="flex-1 h-px bg-neutral-800" />
-        {en ? 'OR' : 'O'}
-        <div className="flex-1 h-px bg-neutral-800" />
+      <div className="flex items-center gap-3 w-full max-w-[640px] text-neutral-500 text-xs font-black tracking-[0.12em] uppercase">
+        <span className="flex-1 h-px bg-neutral-800" />
+        {t('wizardAttract.or')}
+        <span className="flex-1 h-px bg-neutral-800" />
       </div>
 
-      {/* Build from scratch — bigger, prototype-style primary button */}
-      <div className="pb-4">
-        <button
-          onClick={startFromScratch}
-          className="w-full py-5 bg-brand-600 active:bg-brand-700 rounded-2xl text-xl sm:text-2xl font-black flex items-center justify-center gap-3 touch-manipulation shadow-lg shadow-brand-900/40"
-        >
-          <Hand className="h-6 w-6" />
-          {t('wizardAttract.buildFromScratch')}
-        </button>
-      </div>
+      <button
+        onClick={startFromScratch}
+        className="w-full max-w-[640px] min-h-[80px] rounded-[14px] bg-brand-600 active:bg-brand-700 text-[clamp(19px,3.6vw,28px)] font-black flex flex-col items-center justify-center gap-1 touch-manipulation shadow-[0_12px_40px_rgba(168,84,42,0.35)] flex-shrink-0 px-5 py-3"
+      >
+        <span className="flex items-center gap-2.5">
+          <BuilderIcon name="burrito" className="h-[1.05em] w-[1.05em]" />
+          {t('wizardAttract.title')}
+        </span>
+        <small className="text-sm font-bold opacity-80">{t('wizardAttract.startSub')}</small>
+      </button>
+
+      <button
+        onClick={() => { sessionStorage.removeItem('kiosk-wizard-preset'); goVia('/wizard?mode=addons'); }}
+        className="w-full max-w-[640px] min-h-[60px] rounded-[14px] bg-transparent border-2 border-neutral-700 text-neutral-100 text-[17px] font-black flex items-center justify-center gap-2.5 touch-manipulation flex-shrink-0 px-5 py-3"
+      >
+        <BuilderIcon name="cupsoda" className="h-[1.05em] w-[1.05em]" />
+        {t('wizardAttract.drinksJump')}
+      </button>
+
+      <LanguageToggle />
 
       <button
         type="button"
@@ -176,6 +271,140 @@ const AttractScreen: React.FC = () => {
       >
         <span className="block w-2 h-2 rounded-full bg-white/30" aria-hidden="true" />
       </button>
+
+      {overlay && (
+        <FavoritoOverlay
+          favorito={overlay}
+          menu={menu}
+          en={en}
+          onClose={() => setOverlay(null)}
+          onBuilder={startBuilder}
+          onFixed={addFixed}
+        />
+      )}
+    </div>
+  );
+};
+
+/**
+ * The one-tap question a favorito can ask before entering the flow:
+ *  · Breakfast — optional second protein ("¿Con chorizo?"), the "with" option
+ *    leading because most guests take it.
+ *  · Rollbertos — a required either/or at the same price, so the kitchen knows
+ *    what goes on top before the item reaches the cart.
+ */
+const FavoritoOverlay: React.FC<{
+  favorito: Favorito;
+  menu: BuilderMenu | null;
+  en: boolean;
+  onClose: () => void;
+  onBuilder: (proteins: string[], estilo: string) => void;
+  onFixed: (slug: string, modifiers: { id: number; name: string; price_adjustment: number }[], nameSuffix: string) => void;
+}> = ({ favorito, menu, en, onClose, onBuilder, onFixed }) => {
+  const { t } = useTranslation();
+  const items = menu?.items || [];
+
+  if (favorito.kind === 'builder' && favorito.ask) {
+    const extra = favorito.ask.protein;
+    const label = proteinLabel(extra, en).toLowerCase();
+    const withProteins = [...favorito.proteins, extra];
+    const withPrice = proteinPrice(withProteins, items);
+    const plain = proteinPrice(favorito.proteins, items);
+    const delta = withPrice - plain;
+    return (
+      <AskBox
+        icons={[PRESET_ICON[favorito.id] || 'burrito', 'sausage']}
+        title={t('wizardAttract.askTitle', { item: label })}
+        sub={t(`wizardAttract.presets.${favorito.id}`)}
+        onClose={onClose}
+        buttons={[
+          {
+            key: 'yes',
+            label: t('wizardAttract.askWith', { item: label }),
+            note: `+${pesos(delta)} · ${pesos(withPrice)}`,
+            onClick: () => onBuilder(withProteins, favorito.estilo),
+          },
+          {
+            key: 'no',
+            variant: 'ghost',
+            label: t('wizardAttract.askWithout', { item: label }),
+            note: pesos(plain),
+            onClick: () => onBuilder(favorito.proteins, favorito.estilo),
+          },
+        ]}
+      />
+    );
+  }
+
+  if (favorito.kind === 'fixed' && favorito.hasChoice) {
+    const item = items.find((i) => i.slug === favorito.slug) || null;
+    const group = choiceGroup(item);
+    return (
+      <AskBox
+        icons={[PRESET_ICON[favorito.id] || 'taquitos']}
+        title={t('wizardAttract.rollbertosQuestion')}
+        sub={`${t(`wizardAttract.presets.${favorito.id}`)} · ${t(`wizardAttract.presets.${favorito.id}Sub`)}${item ? ` · ${pesos(item.price)}` : ''}`}
+        onClose={onClose}
+        buttons={(group?.options || []).map((o) => ({
+          key: String(o.id),
+          icon: CHOICE_ICON[o.name],
+          label: o.name === 'Con cochinita' ? t('wizardAttract.withCochinita') : t('wizardAttract.withBirria'),
+          note: item ? pesos(item.price) : undefined,
+          onClick: () => onFixed(favorito.slug, [o], ` — ${o.name.toLowerCase()}`),
+        }))}
+      />
+    );
+  }
+  return null;
+};
+
+const AskBox: React.FC<{
+  icons: BuilderIconName[];
+  title: string;
+  sub: string;
+  onClose: () => void;
+  buttons: Array<{
+    key: string;
+    label: string;
+    note?: string;
+    icon?: BuilderIconName;
+    variant?: 'primary' | 'ghost';
+    onClick: () => void;
+  }>;
+}> = ({ icons, title, sub, onClose, buttons }) => {
+  const { t } = useTranslation();
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/[0.82] flex items-center justify-center p-5">
+      <div className="w-full max-w-[440px] rounded-[24px] bg-neutral-900 border border-neutral-800 p-[28px_24px] text-center flex flex-col gap-4">
+        <span className="inline-flex gap-1.5 justify-center text-brand-300">
+          {icons.map((n) => (
+            <BuilderIcon key={n} name={n} className="h-[52px] w-[52px]" />
+          ))}
+        </span>
+        <h2 className="text-[28px] font-black m-0">{title}</h2>
+        <p className="-mt-2 text-sm font-bold text-neutral-400 m-0">{sub}</p>
+        {buttons.map((b) => (
+          <button
+            key={b.key}
+            onClick={b.onClick}
+            className={`w-full min-h-[56px] rounded-[14px] px-5 py-3 text-[18px] font-black text-white flex items-center justify-between gap-2.5 active:scale-[0.98] transition-transform ${
+              b.variant === 'ghost' ? 'bg-neutral-800 active:bg-neutral-700' : 'bg-brand-600 active:bg-brand-700'
+            }`}
+          >
+            <span className="flex items-center gap-2.5">
+              {b.icon && <BuilderIcon name={b.icon} className="h-[1.2em] w-[1.2em] flex-shrink-0" />}
+              {b.label}
+            </span>
+            {b.note && <small className="text-sm font-bold opacity-80">{b.note}</small>}
+          </button>
+        ))}
+        <button
+          onClick={onClose}
+          className="h-11 px-3.5 self-center rounded-[10px] bg-neutral-800 active:bg-neutral-700 text-sm font-extrabold"
+        >
+          {t('wizard.back')}
+        </button>
+      </div>
     </div>
   );
 };

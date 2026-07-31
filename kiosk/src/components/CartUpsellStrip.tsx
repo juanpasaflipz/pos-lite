@@ -14,8 +14,12 @@ function suggestionToMenuItem(s: SuggestionItem): KioskMenuItem {
   return {
     id: s.menu_item_id,
     name: s.name,
+    // The suggestions payload carries no translated fields; the cart renders
+    // `name` verbatim, so null here changes nothing at runtime.
+    name_en: null,
     price: s.price,
     description: null,
+    description_en: null,
     image_url: s.image_url,
     category_id: 0,
     active: true,

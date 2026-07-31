@@ -266,10 +266,35 @@ export interface BuilderItem {
   groups: BuilderGroup[];
 }
 
-export async function fetchBuilderMenu(auth: AuthHeaders): Promise<{ items: BuilderItem[] }> {
+// Curated sides + drinks for the "¿Deseas agregar algo?" step (prototype v12,
+// D5). Ordinary active menu items chosen per tenant in kiosk_addon_map, so
+// they go into the cart as their own lines rather than as burrito modifiers.
+export interface BuilderAddon {
+  id: number;
+  name: string;
+  name_en: string | null;
+  price: number;
+  image_url: string | null;
+}
+
+export interface BuilderAddons {
+  sides: BuilderAddon[];
+  drinks: BuilderAddon[];
+}
+
+export interface BuilderMenu {
+  items: BuilderItem[];
+  addons: BuilderAddons;
+}
+
+export async function fetchBuilderMenu(auth: AuthHeaders): Promise<BuilderMenu> {
   const res = await authedFetch(auth, `${API_BASE}/api/kiosk/builder-menu`);
   if (!res.ok) throw new Error(`Builder menu fetch failed (${res.status})`);
-  return res.json();
+  const body = (await res.json()) as Partial<BuilderMenu>;
+  return {
+    items: body.items || [],
+    addons: { sides: body.addons?.sides || [], drinks: body.addons?.drinks || [] },
+  };
 }
 
 export interface KioskHoldResponse {

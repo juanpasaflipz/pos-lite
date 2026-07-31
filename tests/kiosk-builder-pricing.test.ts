@@ -1,0 +1,187 @@
+// Pricing arithmetic for the kiosk burrito-builder wizard.
+//
+// Pure-function tests against a fixture shaped exactly like the
+// /api/kiosk/builder-menu payload, with the real numbers seeded by
+// scripts/seed-builder-menu.mjs for juanbertos. No DB: the risk here is
+// arithmetic and option resolution, and a fixture pins the exact prices the
+// parity spec's acceptance checklist calls out.
+import { describe, it, expect } from 'vitest';
+import type { BuilderItem } from '../kiosk/src/lib/kioskApi';
+import {
+  resolveSelection, proteinPrice, stylePrice, draftPrice, draftModifiers,
+  emptyDraft, extrasCount,
+} from '../kiosk/src/lib/builderPricing';
+
+let nextId = 1000;
+const mod = (name: string, adj: number) => ({ id: nextId++, name, price_adjustment: adj });
+
+function group(kind: string, slug: string, options: ReturnType<typeof mod>[], extra: Partial<{ required: boolean; min: number; max: number }> = {}) {
+  return {
+    id: nextId++,
+    kind,
+    slug,
+    name: `${kind}__${slug}`,
+    selection_type: (extra.max ?? 1) > 1 ? ('multiple' as const) : ('single' as const),
+    required: extra.required ?? false,
+    min_selections: extra.min ?? 0,
+    max_selections: extra.max ?? 1,
+    options,
+  };
+}
+
+/**
+ * Base prices and adjustments are the ones actually seeded for juanbertos.
+ * Note porkbelly's Fries adjustment is $69 where every other protein is $49 —
+ * that asymmetry is the whole reason resolveSelection canonicalises the base.
+ */
+const P = { asada: 250, pollo: 219, porkbelly: 230, huevo: 180, camaron: 240 };
+// Fries surcharge = 299 − price, so every single-protein fries rings at $299
+// (Juan 2026-07-31). Because the surcharge falls as the protein price rises,
+// resolveSelection's "lowest Fries surcharge" base is always the PRICIER
+// protein, whose Segunda adjustment is exactly +$90 — which is what makes
+// every two-protein fries land on $389.
+const FRIES = { asada: 49, pollo: 80, porkbelly: 69, huevo: 119, camaron: 59 };
+// SECOND_MATRIX[base][added] from the seed script.
+const SEGUNDA: Record<string, Record<string, number>> = {
+  asada: { 'Pollo Asado': 90, Porkbelly: 90, Huevo: 90, Camarón: 90 },
+  pollo: { 'Carne Asada': 121, Porkbelly: 101, Huevo: 90, Camarón: 111 },
+  porkbelly: { 'Carne Asada': 110, 'Pollo Asado': 90, Huevo: 90, Camarón: 100 },
+  huevo: { 'Carne Asada': 160, 'Pollo Asado': 129, Porkbelly: 140, Camarón: 150, Chorizo: 30 },
+  camaron: { 'Carne Asada': 100, 'Pollo Asado': 90, Porkbelly: 90, Huevo: 90 },
+};
+
+function buildItem(slug: keyof typeof P): BuilderItem {
+  return {
+    id: nextId++,
+    slug,
+    name: `Burrito ${slug}`,
+    name_en: null,
+    description: null,
+    description_en: null,
+    price: P[slug],
+    groups: [
+      group('Estilo', slug, [mod('California', 0), mod('Mission', 0), mod('Fries', FRIES[slug])], { required: true, min: 1, max: 1 }),
+      group('Segunda proteína', slug, Object.entries(SEGUNDA[slug]).map(([n, a]) => mod(n, a)), { max: 1 }),
+      group('Quitar', slug, [mod('Sin queso', 0), mod('Sin arroz', 0), mod('Sin crema', 0)], { max: 7 }),
+      group('Extras', slug, [mod('Guacamole extra', 35), mod('Queso extra', 25), mod('Chorizo extra', 35)], { max: 4 }),
+    ],
+  } as BuilderItem;
+}
+
+const ITEMS = (Object.keys(P) as Array<keyof typeof P>).map(buildItem);
+
+describe('kiosk builder pricing', () => {
+  describe('single protein', () => {
+    it('prices each style off the base item', () => {
+      // Acceptance item 3: the three Estilo cards for asada.
+      expect(stylePrice(['asada'], 'California', ITEMS)).toBe(250);
+      expect(stylePrice(['asada'], 'Mission', ITEMS)).toBe(250);
+      expect(stylePrice(['asada'], 'Fries', ITEMS)).toBe(299);
+    });
+
+    it('rings every single-protein Fries at the flat $299 menu price', () => {
+      for (const slug of Object.keys(P)) {
+        expect(stylePrice([slug], 'Fries', ITEMS)).toBe(299);
+      }
+    });
+  });
+
+  describe('two proteins', () => {
+    it('shows $340 for asada + camarón before a style is picked', () => {
+      // Acceptance item 2.
+      expect(proteinPrice(['asada', 'camaron'], ITEMS)).toBe(340);
+    });
+
+    it('is independent of selection order for every pair', () => {
+      const slugs = Object.keys(P);
+      for (const a of slugs) {
+        for (const b of slugs) {
+          if (a === b) continue;
+          expect(proteinPrice([a, b], ITEMS)).toBe(proteinPrice([b, a], ITEMS));
+        }
+      }
+    });
+
+    it('rings every two-protein Fries at $389, in either tap order', () => {
+      // $299 flat + the $90 combo upcharge. This is also the regression guard
+      // for the original defect: with a naive "first tapped is the base",
+      // porkbelly+asada Fries came to $409 one way and $389 the other, so a
+      // guest could move the price by changing tap order.
+      const slugs = Object.keys(P);
+      for (const a of slugs) {
+        for (const b of slugs) {
+          if (a === b) continue;
+          expect(stylePrice([a, b], 'Fries', ITEMS)).toBe(389);
+        }
+      }
+    });
+
+    it('resolves the second protein to a Segunda option on the chosen base', () => {
+      const sel = resolveSelection(['asada', 'camaron'], ITEMS);
+      expect(sel).not.toBeNull();
+      expect(sel!.base.slug).toBe('asada');
+      expect(sel!.segunda?.name).toBe('Camarón');
+    });
+  });
+
+  describe('chorizo — reachable only via the Breakfast overlay', () => {
+    it('totals $210 for huevo + chorizo', () => {
+      // Acceptance item 5. 180 + 30.
+      expect(proteinPrice(['huevo', 'chorizo'], ITEMS)).toBe(210);
+      expect(stylePrice(['huevo', 'chorizo'], 'California', ITEMS)).toBe(210);
+    });
+
+    it('makes huevo the base, since chorizo has no base item of its own', () => {
+      const sel = resolveSelection(['huevo', 'chorizo'], ITEMS);
+      expect(sel!.base.slug).toBe('huevo');
+      expect(sel!.segunda?.name).toBe('Chorizo');
+    });
+
+    it('refuses a selection with no usable base item', () => {
+      // Deselecting huevo after backing out of Breakfast leaves chorizo alone;
+      // there is no chorizo menu item, so Continue must stay disabled rather
+      // than build an order the server would reject.
+      expect(resolveSelection(['chorizo'], ITEMS)).toBeNull();
+      expect(proteinPrice(['chorizo'], ITEMS)).toBe(0);
+    });
+
+    it('refuses a pair the base cannot carry', () => {
+      // camaron's Segunda group has no Chorizo option.
+      expect(resolveSelection(['camaron', 'chorizo'], ITEMS)).toBeNull();
+    });
+  });
+
+  describe('draft totals', () => {
+    it('adds extras on top of the styled price', () => {
+      const draft = { ...emptyDraft(), proteins: ['asada'], estiloName: 'California' };
+      const guac = ITEMS[0].groups.find((g) => g.kind === 'Extras')!.options.find((o) => o.name === 'Guacamole extra')!;
+      draft.extras = { [guac.id]: 2 };
+      expect(draftPrice(draft, ITEMS)).toBe(250 + 70);
+      expect(extrasCount(draft)).toBe(2);
+    });
+
+    it('emits every pick as a flat modifier list, repeating extras by quantity', () => {
+      const base = ITEMS[0];
+      const estilo = base.groups.find((g) => g.kind === 'Estilo')!.options.find((o) => o.name === 'Fries')!;
+      const quitar = base.groups.find((g) => g.kind === 'Quitar')!.options[0];
+      const queso = base.groups.find((g) => g.kind === 'Extras')!.options.find((o) => o.name === 'Queso extra')!;
+      const draft = {
+        proteins: ['asada', 'camaron'],
+        estiloName: estilo.name,
+        removed: [quitar.id],
+        extras: { [queso.id]: 2 },
+      };
+      const mods = draftModifiers(draft, ITEMS);
+      expect(mods.map((m) => m.name)).toEqual([
+        'Fries', 'Camarón', 'Sin queso', 'Queso extra', 'Queso extra',
+      ]);
+      // 250 base + 90 segunda + 49 fries + 50 extras
+      expect(draftPrice(draft, ITEMS)).toBe(439);
+    });
+
+    it('returns zero rather than a partial price when nothing resolves', () => {
+      expect(draftPrice(emptyDraft(), ITEMS)).toBe(0);
+      expect(draftModifiers(emptyDraft(), ITEMS)).toEqual([]);
+    });
+  });
+});
