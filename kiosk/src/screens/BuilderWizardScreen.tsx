@@ -115,12 +115,20 @@ const BuilderWizardScreen: React.FC = () => {
     return () => { cancelled = true; };
   }, [tenantId, kioskToken]);
 
-  // A favorito lands on the ESTILO screen with protein(s) + style already
-  // chosen — one tap from "Así está bien", everything still changeable (D7).
+  // A favorito is a one-tap path: protein(s) and style come pre-chosen and the
+  // guest lands straight on "¿Deseas agregar algo?", skipping Estilo entirely.
+  //
+  // This is a deliberate departure from the parity spec's D7, which had
+  // favoritos land on Estilo pre-selected. Juan's call on 2026-07-31 — a
+  // favorito is meant to be the fast lane, and the favoritos are slated for
+  // deprecation anyway, so making the guest confirm a style they already chose
+  // by name is friction for no decision. Estilo stays reachable: Atrás from
+  // here goes to it with the preset's style selected, so a guest who wants to
+  // change it still can.
   useEffect(() => {
     if (loading || !preset || !menu || addonsOnly) return;
     setDraft({ ...emptyDraft(), proteins: [...preset.proteins], estiloName: preset.estiloName });
-    setStep('estilo');
+    setStep('agregar');
   }, [loading, preset, menu, addonsOnly]);
 
   const items = menu?.items || [];
