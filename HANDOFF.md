@@ -20,9 +20,19 @@ and reporting `1.7.0+4bfcd9f` on heartbeat. Web + iPad got it on deploy.
 - **Pricing confirmed** — combos = pricier protein + $90; Fries = flat $299 any
   single protein (so every two-protein Fries is $389); extras $35/$25/$20.
 
-**One price is neither $299 nor $389: Breakfast con chorizo over Fries = $329**
-(huevo+chorizo is the hand-set $210 anchor, not the +$90 rule, so 210 + 119).
-Reachable via the Breakfast favorito → Atrás → Fries. Juan hasn't ruled on it.
+**Fries pricing settled (`8a8b141`).** Egg + chorizo over fries is $299, on the
+same line as Carne Asada / Porkbelly / Chorizo Fries. Modifiers are additive so
+that forced huevo's fries surcharge 119 → 89, which drops plain egg-over-fries
+to $269 — a tier, not an anomaly. Two knock-ons, both deliberate and asserted
+in `tests/kiosk-builder-pricing.test.ts`:
+- plain egg over fries $269
+- **huevo + portobello over fries = $359**, not the uniform $389: huevo's $89
+  undercuts portobello's $129 so huevo takes the base slot. Juan reviewed and
+  chose to leave it — two cheap proteins, a pair nobody orders, cheaper not
+  dearer. Do not "fix" this to $389 without asking him.
+
+Everything else: six other proteins flat $299, the other 20 combo fries $389,
+Breakfast con chorizo on a tortilla $210.
 
 **Fixed a version-stamp trap** (`6f25885`): `android:sync` ran `build:kiosk`,
 which never calls gen-version, and `resolveAppVersion()` prefers an existing
