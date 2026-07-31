@@ -655,7 +655,9 @@
     "noItemFound": "No se encontró producto para código: {{barcode}}",
     "failedCapture": "Error al capturar imagen",
     "failedScan": "Error al escanear recibo",
-    "restockFailed": "Error al reabastecer"
+    "restockFailed": "Error al reabastecer",
+    "photoScanTitle": "Foto a inventario",
+    "photoScanSubtitle": "Nota del proveedor o foto del anaquel — con IA"
   },
   "getnetTap": {
     "notAvailable": "Tap on Phone no disponible en este dispositivo",
@@ -673,5 +675,36 @@
     "offline": "El puente de la impresora de cocina está desconectado — los tickets se imprimirán al reconectar. Toca para revisar.",
     "stuck": "{{count}} ticket esperando impresión — toca para revisar la impresora",
     "stuck_plural": "{{count}} tickets esperando impresión — toca para revisar la impresora"
+  },
+  "photoScan": {
+    "title": "Foto a inventario",
+    "whatToShoot": "¿Qué puedes fotografiar?",
+    "hintReceipt": "Una nota, remisión o ticket del proveedor → se registra la compra y entra al inventario.",
+    "hintShelf": "Un refri, congelador o anaquel → se cuenta lo que se ve y se ajusta el inventario.",
+    "takePhoto": "Tomar foto",
+    "reading": "Leyendo la foto…",
+    "notRecognized": "Esa foto no parece nota ni anaquel. Intenta con otra.",
+    "visionFailed": "No pude leer la foto. Intenta con mejor luz o más cerca.",
+    "failed": "No se pudo procesar la foto",
+    "reviewCount": "Revisar conteo",
+    "reviewPurchase": "Revisar compra",
+    "noVendor": "Proveedor sin nombre",
+    "noItems": "No se detectaron productos en la foto.",
+    "unnamed": "(sin nombre)",
+    "counted": "Contado",
+    "quantity": "Cantidad",
+    "lineTotal": "Total línea",
+    "tagNew": "NUEVO",
+    "tagFuzzy": "Aproximado",
+    "tagUnmatched": "Sin coincidencia",
+    "createSku": "Crear este producto",
+    "willCreate": "Se va a crear",
+    "include": "Incluir",
+    "exclude": "Quitar",
+    "save": "Guardar {{count}} producto(s)",
+    "saving": "Guardando…",
+    "retake": "Descartar y tomar otra",
+    "scanAnother": "Escanear otra",
+    "createdSkus": "{{count}} producto(s) nuevo(s) creado(s)"
   }
 }

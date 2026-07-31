@@ -68,6 +68,7 @@ const MobileShell = React.lazy(() => import('./components/mobile/MobileShell').t
 const MobileOrdersScreen = React.lazy(() => import('./screens/mobile/MobileOrdersScreen').then(m => ({ default: m.default })));
 const MobileKitchenScreen = React.lazy(() => import('./screens/mobile/MobileKitchenScreen').then(m => ({ default: m.default })));
 const MobileScannerScreen = React.lazy(() => import('./screens/mobile/MobileScannerScreen').then(m => ({ default: m.default })));
+const MobilePhotoScanScreen = React.lazy(() => import('./screens/mobile/MobilePhotoScanScreen').then(m => ({ default: m.default })));
 const MobileProfileScreen = React.lazy(() => import('./screens/mobile/MobileProfileScreen').then(m => ({ default: m.default })));
 const MobilePOSScreen = React.lazy(() => import('./screens/mobile/MobilePOSScreen').then(m => ({ default: m.default })));
 const MobileCartScreen = React.lazy(() => import('./screens/mobile/MobileCartScreen').then(m => ({ default: m.default })));
@@ -146,6 +147,7 @@ const TenantRoutes: React.FC = () => {
             <Route path="/m/orders" element={<MobileOrdersScreen />} />
             <Route path="/m/kitchen" element={<MobileKitchenScreen />} />
             <Route path="/m/scan" element={<ProtectedRoute element={<MobileScannerScreen />} requiredRole={['manager', 'admin']} />} />
+            <Route path="/m/scan-photo" element={<ProtectedRoute element={<MobilePhotoScanScreen />} requiredRole={['manager', 'admin']} />} />
             <Route path="/m/profile" element={<MobileProfileScreen />} />
             <Route path="*" element={<Navigate to="/m/pos" replace />} />
           </Routes>

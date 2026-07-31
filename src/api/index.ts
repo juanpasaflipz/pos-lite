@@ -4234,6 +4234,105 @@ export async function scanReceipt(file: File): Promise<ReceiptScanResult> {
   return response.json();
 }
 
+/* ==================== Inventory photo scan ==================== */
+// Photo → Claude vision → draft → operator review → commit. Same engine the
+// WhatsApp voice-ops path uses (server/routes/inventory-scan.js); the review
+// step is what a screen can do that a chat confirmation cannot.
+
+export type InventoryScanIntent = 'record_purchase' | 'count_inventory' | 'unknown';
+
+export interface InventoryScanItem {
+  index: number;
+  inventory_item_id: number | null;
+  raw_name: string;
+  quantity: number | null;
+  unit: string | null;
+  pack_size: number | null;
+  line_total: number | null;
+  /** No inventory row yet — committing creates one. */
+  will_create: boolean;
+  /** Could not bind; dropped on commit unless promoted with `create: true`. */
+  unmatched: boolean;
+  fuzzy_matched: boolean;
+}
+
+export interface InventoryScanDraft {
+  intent: InventoryScanIntent;
+  confidence: number | null;
+  clarifying_question: string | null;
+  vendor: string | null;
+  total_amount: number | null;
+  payment_method: string | null;
+  note: string | null;
+  receipt_image_url: string | null;
+  items: InventoryScanItem[];
+}
+
+export interface InventoryScanResponse {
+  /** Null when the photo was neither a receipt nor a countable shelf. */
+  id: number | null;
+  draft: InventoryScanDraft;
+}
+
+/** Per-line edits. Only these scalars are honored — the server reads every
+ *  identifying field (inventory_item_id above all) from its stored draft. */
+export interface InventoryScanOverride {
+  index: number;
+  include?: boolean;
+  quantity?: number;
+  line_total?: number;
+  /** Promote an unmatched count line into a new SKU (the AGREGAR equivalent). */
+  create?: boolean;
+}
+
+export interface InventoryScanResult {
+  intent: InventoryScanIntent;
+  message: string;
+  summary: Array<Record<string, unknown>>;
+  created_skus: Array<{ id: number; name: string }>;
+}
+
+export async function scanInventoryPhoto(file: File, caption?: string): Promise<InventoryScanResponse> {
+  const formData = new FormData();
+  formData.append('photo', file);
+  if (caption) formData.append('caption', caption);
+  const base = FALLBACK_URLS.length ? await resolveBaseUrl() : activeBaseUrl;
+  const headers: Record<string, string> = {};
+  if (currentEmployeeToken) {
+    headers['Authorization'] = `Bearer ${currentEmployeeToken}`;
+  }
+  if (!isCapacitor && window.location.hostname === 'localhost') {
+    const tenantId = localStorage.getItem('tenant_id');
+    if (tenantId) headers['X-Tenant-ID'] = tenantId;
+  }
+  const response = await fetch(`${base}/inventory-scan`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    const e = new Error((err as Record<string, string>).error || 'Failed to scan photo') as Error & { status?: number };
+    e.status = response.status;
+    throw e;
+  }
+  return response.json();
+}
+
+export async function confirmInventoryScan(
+  id: number,
+  items?: InventoryScanOverride[]
+): Promise<InventoryScanResult> {
+  return apiRequest<InventoryScanResult>(`/inventory-scan/${id}/confirm`, {
+    method: 'POST',
+    body: JSON.stringify({ items: items || [] }),
+  });
+}
+
+export async function cancelInventoryScan(id: number): Promise<{ cancelled: boolean }> {
+  return apiRequest(`/inventory-scan/${id}/cancel`, { method: 'POST' });
+}
+
 export async function exportExpenses(params?: { from?: string; to?: string }): Promise<Blob> {
   const qs = new URLSearchParams();
   if (params?.from) qs.set('from', params.from);

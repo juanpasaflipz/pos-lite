@@ -12,7 +12,8 @@ import {
 import { InventoryItem } from '../../types';
 import { successFeedback, errorFeedback, tapFeedback } from '../../lib/haptics';
 import MobileHeader from '../../components/mobile/MobileHeader';
-import { Camera, CameraOff, Search, Check, Package, Loader2, Receipt, X, CircleCheck } from 'lucide-react';
+import { Camera, CameraOff, Search, Check, Package, Loader2, Receipt, X, CircleCheck, ImagePlus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const InventoryMatchStep = React.lazy(() => import('../../components/expenses/InventoryMatchStep'));
 
@@ -26,6 +27,7 @@ type ReceiptStep = 'idle' | 'scanning' | 'results' | 'inventory-match' | 'saving
 
 const MobileScannerScreen: React.FC = () => {
   const { t } = useTranslation('pos');
+  const navigate = useNavigate();
   const [cameraActive, setCameraActive] = useState(false);
   const [manualInput, setManualInput] = useState('');
   const [foundItem, setFoundItem] = useState<InventoryItem | null>(null);
@@ -354,6 +356,25 @@ const MobileScannerScreen: React.FC = () => {
         </div>
 
         <div className="p-4 space-y-4">
+          {/* Photo → inventory. The barcode scanner above handles one known
+              SKU at a time; this handles a whole shelf or a supplier nota in
+              one shot, and is the only in-app path for a stock COUNT from a
+              photo (the receipt capture above books an expense instead). */}
+          {receiptStep === 'idle' && !cameraActive && (
+            <button
+              onClick={() => { tapFeedback(); navigate('/m/scan-photo'); }}
+              className="w-full min-h-[56px] bg-neutral-900 border border-neutral-700 hover:border-brand-600 rounded-xl p-4 flex items-center gap-3 text-left transition-colors touch-manipulation"
+            >
+              <div className="w-10 h-10 rounded-lg bg-brand-600/20 flex items-center justify-center shrink-0">
+                <ImagePlus className="w-5 h-5 text-brand-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-white font-bold">{t('mobileScanner.photoScanTitle')}</p>
+                <p className="text-neutral-400 text-xs leading-snug">{t('mobileScanner.photoScanSubtitle')}</p>
+              </div>
+            </button>
+          )}
+
           {/* Receipt results */}
           {receiptStep === 'results' && receiptResult && (
             <div className="space-y-3">
