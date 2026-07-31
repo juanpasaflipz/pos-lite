@@ -113,6 +113,12 @@ export default function ProductImportPanel({
       const res = await commitProductImport({
         channel, items, source_filename: file?.name, note: note || undefined,
         deduct_inventory: deductInventory,
+        // Teach the shared registry this layout — see migration 0102.
+        fingerprint: preview.fingerprint,
+        headers: preview.headers,
+        mapping: preview.mapping,
+        detected_mapping: preview.detected_mapping,
+        format_source: preview.format_source,
       });
       onDone(k('saved', '{{units}} units recorded across {{lines}} product-days — {{cogs}} in ingredient cost', {
         units: res.units, lines: res.lines, cogs: formatPrice(res.cogs_total),

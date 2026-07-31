@@ -147,6 +147,13 @@ export default function ManualSalesTab() {
       const res = await commitManualSalesImport({
         channel, rows: preview.rows,
         source_filename: file?.name, note: note || undefined,
+        // Echoed back so the shared format registry learns this layout —
+        // whatever the user confirmed here pre-maps it for everyone next time.
+        fingerprint: preview.fingerprint,
+        headers: preview.headers,
+        mapping: preview.mapping,
+        detected_mapping: preview.detected_mapping,
+        format_source: preview.format_source,
       });
       flash(res.orders_created
         ? k('savedImport', '{{count}} orders imported ({{skipped}} duplicates skipped)', {

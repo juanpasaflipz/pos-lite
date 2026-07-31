@@ -11,6 +11,7 @@
 // revenue.
 
 import Papa from 'papaparse';
+import { createHash } from 'node:crypto';
 
 export const TAX_RATE = 0.16; // 16% IVA (Mexico) — platform prices are tax-inclusive
 
@@ -441,6 +442,35 @@ export function splitAmount(total, count) {
   const base = Math.floor(cents / count);
   const extra = cents - base * count;
   return Array.from({ length: count }, (_, i) => (base + (i < extra ? 1 : 0)) / 100);
+}
+
+// ==================== Format fingerprinting ====================
+
+/**
+ * Stable identity for a file LAYOUT, independent of which merchant exported it.
+ *
+ * Rappi's "Relación de ventas" ships the same 71 columns to every restaurant in
+ * Mexico, so the same normalized header set must hash identically no matter
+ * whose file it is — that is what lets one tenant's confirmed mapping serve
+ * everyone else (see migration 0096).
+ *
+ * Sorted, so a platform reordering its columns without renaming them still
+ * matches. Normalized, so accents and casing don't fork the entry. `kind` is
+ * folded in because the settlement and product parsers map to different
+ * logical fields and must never share a mapping.
+ *
+ * Header NAMES only — never cell values. The registry is shared across
+ * tenants and must not carry merchant data.
+ */
+export function fingerprintHeaders(headers, kind) {
+  const normalized = (headers || [])
+    .map(normalizeHeader)
+    .filter(Boolean)
+    .sort();
+  if (!normalized.length) return null;
+  return createHash('sha256')
+    .update(`${kind}\n${normalized.join(' ')}`)
+    .digest('hex');
 }
 
 // ==================== Product-level reports ====================

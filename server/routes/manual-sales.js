@@ -44,6 +44,8 @@ import {
   unitCostForMenuItems,
 } from '../helpers/inventory.js';
 import { matchPlatformItem } from '../lib/platformItemMatch.js';
+import { lookupFormat, recordFormat, mappingDiffers } from '../lib/importFormatRegistry.js';
+import { aiDetectMapping } from '../lib/aiColumnMap.js';
 import {
   TAX_RATE,
   parseAmount,
@@ -53,6 +55,7 @@ import {
   parseUpload,
   normalizeRows,
   splitAmount,
+  fingerprintHeaders,
   detectProductMapping,
   aggregateProductRows,
   suggestPlatformPrice,
@@ -226,6 +229,87 @@ export async function createBatch(fields) {
     fields.commission_percent, fields.source_filename || null, fields.note || null, fields.created_by,
   ]);
   return result.lastInsertRowid;
+}
+
+/**
+ * Work out which column is which, cheapest source first:
+ *
+ *   1. the shared format registry — a layout some tenant already confirmed
+ *      (migration 0102). Free, instant, and the reason a second tenant
+ *      uploading the same Rappi export never has to map anything.
+ *   2. the candidate lists in salesImport.js — free, but only knows the
+ *      layouts we have written strings for.
+ *   3. Claude — only when the two above left a field we cannot import without.
+ *      Costs a call, so it fires once per unseen format, not once per upload.
+ *
+ * Whatever comes back is a suggestion: every caller renders it for
+ * confirmation before anything is written.
+ *
+ * @returns {Promise<{mapping: object, source: string, fingerprint: string|null, detected: object}>}
+ */
+async function resolveMapping({ kind, headers, rows, detect, requiredFields }) {
+  const detected = detect(headers);
+  const fingerprint = fingerprintHeaders(headers, kind);
+
+  const known = fingerprint ? await lookupFormat(fingerprint) : null;
+  if (known) {
+    // A confirmed entry wins outright, including its nulls — a user who set a
+    // field to "ignore" for this layout meant it. Detection only backfills
+    // fields the stored entry has no opinion on at all.
+    const mapping = { ...detected };
+    for (const [field, column] of Object.entries(known.mapping)) mapping[field] = column;
+    return { mapping, source: 'registry', fingerprint, detected };
+  }
+
+  // Unknown layout: ask the model even when the candidate lists filled every
+  // required field. They can be confidently WRONG on a platform they were
+  // never written for — on an Uber-shaped export they picked "Total Payout"
+  // (net, after fees) as gross, which imports ~29% low with no symptom. The
+  // cost is bounded: one call per layout ever, across all tenants, because
+  // the first confirmation puts it in the registry.
+  const ai = await aiDetectMapping(kind, headers, rows);
+  if (!ai) return { mapping: detected, source: 'heuristic', fingerprint, detected };
+
+  // The heuristics stay authoritative where they fired: their candidate order
+  // encodes traps verified against real Rappi and DiDi files (penalty vs
+  // commission, sales-base vs fee, store-id vs order-id) that a cold read of
+  // the column names would not catch. The model fills gaps only.
+  const merged = { ...detected };
+  const taken = new Set(Object.values(detected).filter(Boolean));
+  const conflicts = [];
+  for (const [field, column] of Object.entries(ai)) {
+    if (!column) continue;
+    if (!merged[field] && !taken.has(column)) {
+      merged[field] = column;
+      taken.add(column);
+    } else if (merged[field] && merged[field] !== column) {
+      // Don't silently override — surface it. Everything here is confirmed by
+      // a human before import anyway, so an arbitrable disagreement is far
+      // more useful than a silent pick either way.
+      conflicts.push({ field, detected: merged[field], suggested: column });
+    }
+  }
+  const missing = (requiredFields || []).filter((f) => !merged[f]);
+  return { mapping: merged, source: 'ai', fingerprint, detected, conflicts, missing };
+}
+
+/**
+ * Teach the shared registry what this import confirmed.
+ *
+ * Called on commit rather than preview on purpose: a mapping someone actually
+ * imported against is evidence; one they merely looked at is not. If they
+ * edited what we detected, that edit is recorded as 'human' — the strongest
+ * signal the registry takes, and the one that fixes a bad AI or heuristic
+ * guess for every tenant that uploads the same layout afterwards.
+ *
+ * Fire-and-forget: never let a registry write fail a completed import.
+ */
+function learnFormat(kind, body, label) {
+  const { fingerprint, headers, mapping, detected_mapping: detected } = body || {};
+  if (!fingerprint || !mapping || typeof mapping !== 'object') return;
+  const source = detected && mappingDiffers(mapping, detected) ? 'human' : (body.format_source === 'ai' ? 'ai' : 'heuristic');
+  recordFormat(fingerprint, kind, headers, mapping, source, label)
+    .catch((e) => console.warn('[manual-sales] format learn skipped:', e.message));
 }
 
 const employeeIdFrom = (req) => req.employee?.id || req.user?.employee_id || req.user?.id || null;
@@ -471,8 +555,19 @@ router.post('/import/preview', requireAuth('manage_delivery'), (req, res, next) 
       return res.status(400).json({ error: `That file has ${rows.length} rows; the limit is ${MAX_IMPORT_ROWS} per import. Split it by week and import each part.` });
     }
 
+    // Registry → candidate lists → Claude, in that order. `gross` and
+    // `business_date` are the two fields without which nothing can be
+    // imported at all, so they're what justifies a model call.
+    const resolved = await resolveMapping({
+      kind: 'settlement',
+      headers,
+      rows,
+      detect: detectMapping,
+      requiredFields: ['gross', 'business_date'],
+    });
+    let mapping = resolved.mapping;
+
     // Client may pass a corrected mapping back into preview to re-check it.
-    let mapping = detectMapping(headers);
     if (req.body?.mapping) {
       try {
         const override = typeof req.body.mapping === 'string' ? JSON.parse(req.body.mapping) : req.body.mapping;
@@ -532,9 +627,21 @@ router.post('/import/preview', requireAuth('manage_delivery'), (req, res, next) 
     if (duplicates.length) warnings.push(`${duplicates.length} order(s) are already in the system and will be skipped.`);
     if (totalOrders > MAX_IMPORT_ORDERS) warnings.push(`That is ${totalOrders} orders, over the ${MAX_IMPORT_ORDERS} limit for one import. Split the file by week.`);
 
+    if (resolved.source === 'registry') {
+      warnings.unshift('This file layout has been imported before, so the columns below are already mapped. Check them and import.');
+    } else if (resolved.source === 'ai') {
+      warnings.unshift('This file layout is new, so the columns below were worked out automatically. Check them before importing — once you do, every later upload of this same report starts pre-mapped.');
+    }
+    for (const c of resolved.conflicts || []) {
+      warnings.unshift(`Two readings of the "${c.field.replace(/_/g, ' ')}" column disagree: "${c.detected}" vs "${c.suggested}". Pick the right one below before importing.`);
+    }
+
     res.json({
       headers,
       mapping,
+      format_source: resolved.source,
+      fingerprint: resolved.fingerprint,
+      detected_mapping: resolved.detected,
       sheets: sheets || [],
       sheet: sheet || null,
       is_daily: isDaily,
@@ -669,6 +776,8 @@ router.post('/import/commit', requireAuth('manage_delivery'), async (req, res) =
       ip: req.ip,
     });
 
+    learnFormat('settlement', req.body, platform.display_name || channel);
+
     res.status(201).json({
       success: true, batch_id: batchId, orders_created: created.length,
       skipped_duplicates: skippedDuplicates, gross_total: gross,
@@ -719,7 +828,17 @@ router.post('/products/preview', requireAuth('manage_delivery'), (req, res, next
       return res.status(400).json({ error: `That file has ${rows.length} rows; the limit is ${MAX_PRODUCT_ROWS} per import. Split it by month.` });
     }
 
-    let mapping = detectProductMapping(headers);
+    // A product report is useless without a product name and something to
+    // measure — those are what justify a model call on an unseen layout.
+    const resolved = await resolveMapping({
+      kind: 'products',
+      headers,
+      rows,
+      detect: detectProductMapping,
+      requiredFields: ['item_name', 'gross'],
+    });
+    let mapping = resolved.mapping;
+
     if (req.body?.mapping) {
       try {
         const override = typeof req.body.mapping === 'string' ? JSON.parse(req.body.mapping) : req.body.mapping;
@@ -835,9 +954,21 @@ router.post('/products/preview', requireAuth('manage_delivery'), (req, res, next
     }
     if (sheets && sheets.length > 1) warnings.push(`This workbook has ${sheets.length} sheets; reading "${sheet}". Switch below if that is the wrong one.`);
 
+    if (resolved.source === 'registry') {
+      warnings.unshift('This file layout has been imported before, so the columns below are already mapped.');
+    } else if (resolved.source === 'ai') {
+      warnings.unshift('This file layout is new, so the columns below were worked out automatically. Check them before importing — once you do, every later upload of this same report starts pre-mapped.');
+    }
+    for (const c of resolved.conflicts || []) {
+      warnings.unshift(`Two readings of the "${c.field.replace(/_/g, ' ')}" column disagree: "${c.detected}" vs "${c.suggested}". Pick the right one below before importing.`);
+    }
+
     res.json({
       headers,
       mapping,
+      format_source: resolved.source,
+      fingerprint: resolved.fingerprint,
+      detected_mapping: resolved.detected,
       sheets: sheets || [],
       sheet: sheet || null,
       platform: { id: platform.id, name: platform.name, display_name: platform.display_name },
@@ -1008,6 +1139,8 @@ router.post('/products/commit', requireAuth('manage_delivery'), async (req, res)
       },
       ip: req.ip,
     });
+
+    learnFormat('products', req.body, `${platform.display_name || channel} — productos`);
 
     res.status(201).json({
       success: true, batch_id: batchId, lines: lines.length, units: totalUnits,

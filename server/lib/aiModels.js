@@ -38,6 +38,11 @@ const TASK_TIER = {
   receipt_vision: 'fast',    // expense receipt photo → structured expense (needs vision)
   voice_intent: 'fast',      // WhatsApp voice ops → intent classification
   inventory_attrs: 'fast',   // shelf-life/category inference from an item name
+  // Cold start for an unseen delivery-export layout: reads column NAMES and a
+  // few sample cells, returns which column is which. Once any tenant confirms
+  // a layout it goes in the shared registry (migration 0102) and this never
+  // fires for that format again — so volume is per-format, not per-upload.
+  sales_import_mapping: 'fast',
   sentinel_triage: 'smart',  // incident diagnosis — money-adjacent, low volume
   agent_chat: 'smart',       // owner-facing agent — open-ended, low volume
 };

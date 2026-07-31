@@ -18,7 +18,12 @@ import { createTestTenant, dropTestTenant, asTenant, closePools, type TestTenant
 import {
   parseAmount, parseBusinessDate, detectMapping, splitAmount, parseUpload, normalizeRows,
   detectProductMapping, aggregateProductRows, suggestPlatformPrice, deriveQuantity,
+  fingerprintHeaders,
 } from '../server/lib/salesImport.js';
+// @ts-ignore
+import { coerceMapping } from '../server/lib/aiColumnMap.js';
+// @ts-ignore
+import { lookupFormat, recordFormat, mappingDiffers } from '../server/lib/importFormatRegistry.js';
 // @ts-ignore
 import { matchPlatformItem } from '../server/lib/platformItemMatch.js';
 // @ts-ignore
@@ -611,6 +616,94 @@ describe('matchPlatformItem', () => {
   });
 });
 
+describe('fingerprintHeaders', () => {
+  // The shared format registry (migration 0096) keys on this. It has to be
+  // stable across MERCHANTS — Rappi ships the same columns to everyone — and
+  // unstable across LAYOUTS, or one platform's mapping would answer for another.
+  const RAPPI = ['ID de la orden', 'Fecha de la orden', 'Venta bruta (+)', 'Uso y Alquiler de la Plataforma (-)'];
+
+  it('is identical for the same layout regardless of who exported it', () => {
+    expect(fingerprintHeaders(RAPPI, 'settlement')).toBe(fingerprintHeaders([...RAPPI], 'settlement'));
+  });
+
+  it('ignores column order — a platform reshuffling columns is the same format', () => {
+    const shuffled = [RAPPI[2], RAPPI[0], RAPPI[3], RAPPI[1]];
+    expect(fingerprintHeaders(shuffled, 'settlement')).toBe(fingerprintHeaders(RAPPI, 'settlement'));
+  });
+
+  it('ignores accents and casing, which differ between portal exports', () => {
+    const variant = ['ID DE LA ORDEN', 'Fecha de la órden', 'Venta bruta (+)', 'Uso y Alquiler de la Plataforma (-)'];
+    expect(fingerprintHeaders(variant, 'settlement')).toBe(fingerprintHeaders(RAPPI, 'settlement'));
+  });
+
+  it('separates the two parsers, so a settlement mapping never answers for a product file', () => {
+    expect(fingerprintHeaders(RAPPI, 'settlement')).not.toBe(fingerprintHeaders(RAPPI, 'products'));
+  });
+
+  it('changes when the column set changes', () => {
+    expect(fingerprintHeaders([...RAPPI, 'Propinas'], 'settlement')).not.toBe(fingerprintHeaders(RAPPI, 'settlement'));
+  });
+
+  it('returns null for an empty header set rather than a hash of nothing', () => {
+    expect(fingerprintHeaders([], 'settlement')).toBeNull();
+    expect(fingerprintHeaders(['', '  '], 'settlement')).toBeNull();
+  });
+});
+
+describe('coerceMapping (AI cold-start output)', () => {
+  // The model proposes column NAMES only — never numbers. These guard the
+  // boundary: anything it returns that is not a real header is dropped rather
+  // than carried into the import.
+  const HEADERS = ['Fecha', 'Nombre del artículo', 'Ventas con precios sin descuento', 'Ventas finales'];
+
+  it('accepts a clean answer', () => {
+    const out = coerceMapping(
+      '{"business_date":"Fecha","item_name":"Nombre del artículo","quantity":null,"gross":"Ventas con precios sin descuento"}',
+      'products', HEADERS
+    );
+    expect(out).toEqual({
+      business_date: 'Fecha',
+      item_name: 'Nombre del artículo',
+      quantity: null,
+      gross: 'Ventas con precios sin descuento',
+    });
+  });
+
+  it('drops a hallucinated column instead of importing against it', () => {
+    const out = coerceMapping(
+      '{"business_date":"Fecha","item_name":"Producto","quantity":null,"gross":"Ventas finales"}',
+      'products', HEADERS
+    );
+    expect(out.item_name).toBeNull();      // "Producto" is not in this file
+    expect(out.gross).toBe('Ventas finales');
+  });
+
+  it('never assigns one column to two fields', () => {
+    const out = coerceMapping(
+      '{"business_date":"Fecha","item_name":"Fecha","quantity":"Fecha","gross":"Ventas finales"}',
+      'products', HEADERS
+    );
+    const used = Object.values(out).filter(Boolean);
+    expect(new Set(used).size).toBe(used.length);
+  });
+
+  it('tolerates prose around the JSON', () => {
+    const out = coerceMapping(
+      'Looking at the columns:\n{"business_date":"Fecha","item_name":"Nombre del artículo","quantity":null,"gross":null}\nHope that helps.',
+      'products', HEADERS
+    );
+    expect(out.item_name).toBe('Nombre del artículo');
+  });
+
+  it('returns null on unusable output rather than a mapping of all-nulls', () => {
+    // All-null would look like a successful detection that found nothing,
+    // masking the failure. null lets the caller fall back to the heuristics.
+    expect(coerceMapping('I could not determine the columns.', 'products', HEADERS)).toBeNull();
+    expect(coerceMapping('{"item_name":"Nope","gross":"Also nope"}', 'products', HEADERS)).toBeNull();
+    expect(coerceMapping('{ broken json', 'products', HEADERS)).toBeNull();
+  });
+});
+
 // ==================== 2. Fan-out write path (real tenant, RLS) ====================
 
 let tenant: TestTenant;
@@ -965,6 +1058,77 @@ describe('product-level consumption (inventory + COGS)', () => {
     } finally {
       await dropTestTenant(other.id);
     }
+  });
+});
+
+describe('shared format registry', () => {
+  // These exist because the registry helpers are deliberately fail-open: a
+  // lookup or write that throws is swallowed so it can never block an import.
+  // That is right for resilience and terrible for detection — when this
+  // migration first collided with another agent's (both claimed version 96),
+  // the table was never created and the whole feature silently no-op'd while
+  // 76 tests stayed green. A round-trip against the real table is the only
+  // thing that catches that class of failure.
+  const FP = 'test-fingerprint-' + 'a'.repeat(24);
+
+  it('has the table — a missing one would fail open and hide itself', async () => {
+    await asTenant(tenant.id, async () => {
+      const row = await get(
+        `SELECT to_regclass('public.import_formats') IS NOT NULL AS present`
+      );
+      expect(row.present).toBe(true);
+    });
+  });
+
+  it('round-trips a mapping so a later upload of the same layout is pre-mapped', async () => {
+    await asTenant(tenant.id, async () => {
+      const mapping = { gross: 'Venta Bruta', business_date: 'Fecha', commission: null };
+      await recordFormat(FP, 'settlement', ['Venta Bruta', 'Fecha'], mapping, 'heuristic', 'Test');
+      const hit = await lookupFormat(FP);
+      expect(hit?.mapping).toEqual(mapping);
+      expect(hit?.confirmed_count).toBe(1);
+    });
+  });
+
+  it('lets a human correction overwrite a weaker guess, and counts both', async () => {
+    await asTenant(tenant.id, async () => {
+      const corrected = { gross: 'Ventas totales', business_date: 'Fecha', commission: 'Comisión' };
+      await recordFormat(FP, 'settlement', ['Ventas totales', 'Fecha', 'Comisión'], corrected, 'human');
+      const hit = await lookupFormat(FP);
+      expect(hit?.mapping).toEqual(corrected);
+      expect(hit?.source).toBe('human');
+      expect(hit?.confirmed_count).toBe(2);
+    });
+  });
+
+  it('does not let a weaker guess clobber a confirmed mapping', async () => {
+    await asTenant(tenant.id, async () => {
+      // The exact regression that would silently re-break a format for every
+      // tenant: one bad heuristic run overwriting a human's correction.
+      await recordFormat(FP, 'settlement', ['x'], { gross: 'WRONG', business_date: null }, 'heuristic');
+      const hit = await lookupFormat(FP);
+      expect(hit?.mapping.gross).toBe('Ventas totales');
+      expect(hit?.source).toBe('human');
+      expect(hit?.confirmed_count).toBe(3); // still counted, just not applied
+    });
+  });
+
+  it('is visible across tenants — that is the whole point of the table', async () => {
+    const other = await createTestTenant('manualsales-fmt');
+    try {
+      const seen = await asTenant(other.id, () => lookupFormat(FP));
+      expect(seen?.mapping.gross).toBe('Ventas totales');
+    } finally {
+      await asTenant(tenant.id, () => run('DELETE FROM import_formats WHERE fingerprint = $1', [FP]));
+      await dropTestTenant(other.id);
+    }
+  });
+
+  it('flags a user edit so the commit path records it as human', () => {
+    expect(mappingDiffers({ gross: 'A' }, { gross: 'A' })).toBe(false);
+    expect(mappingDiffers({ gross: 'A' }, { gross: 'B' })).toBe(true);
+    expect(mappingDiffers({ gross: 'A', net: null }, { gross: 'A' })).toBe(false);
+    expect(mappingDiffers({ gross: 'A' }, { gross: 'A', net: 'N' })).toBe(true);
   });
 });
 

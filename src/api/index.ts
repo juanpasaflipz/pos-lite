@@ -4589,9 +4589,26 @@ export interface ManualSalesImportRow {
   net: number | null;
 }
 
+/** Where a column mapping came from. See server/lib/importFormatRegistry.js. */
+export type ImportFormatSource = 'registry' | 'heuristic' | 'ai';
+
+/** Fields a commit sends back so the shared format registry can learn. */
+export interface ImportFormatEcho {
+  fingerprint?: string | null;
+  headers?: string[];
+  mapping?: Record<string, string | null>;
+  detected_mapping?: Record<string, string | null>;
+  format_source?: ImportFormatSource;
+}
+
 export interface ManualSalesImportPreview {
   headers: string[];
   mapping: Record<string, string | null>;
+  /** 'registry' = a layout someone already confirmed; 'ai' = worked out cold. */
+  format_source: ImportFormatSource;
+  fingerprint: string | null;
+  /** What the candidate lists alone found — used to detect a user correction. */
+  detected_mapping: Record<string, string | null>;
   /** Sheet names in the workbook (empty for CSV) and which one was read. */
   sheets: string[];
   sheet: string | null;
@@ -4691,7 +4708,7 @@ export async function commitManualSalesImport(payload: {
   rows: ManualSalesImportRow[];
   source_filename?: string;
   note?: string;
-}): Promise<{
+} & ImportFormatEcho): Promise<{
   success: boolean; batch_id: number | null; orders_created: number;
   skipped_duplicates: number; gross_total?: number; commission_total?: number;
   net_total?: number; date_range?: { from: string; to: string }; message?: string;
@@ -4744,6 +4761,9 @@ export interface ProductImportItem {
 export interface ProductImportPreview {
   headers: string[];
   mapping: Record<string, string | null>;
+  format_source: ImportFormatSource;
+  fingerprint: string | null;
+  detected_mapping: Record<string, string | null>;
   sheets: string[];
   sheet: string | null;
   platform: { id: number; name: string; display_name: string };
@@ -4775,7 +4795,7 @@ export async function commitProductImport(payload: {
   source_filename?: string;
   note?: string;
   deduct_inventory?: boolean;
-}): Promise<{
+} & ImportFormatEcho): Promise<{
   success: boolean; batch_id: number; lines: number; units: number;
   gross_total: number; cogs_total: number;
   skipped_unresolved: number; skipped_already_imported: number;
