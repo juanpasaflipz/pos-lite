@@ -42,16 +42,18 @@ import { JWT_SECRET } from '../server/lib/constants.js';
 let tenant: TestTenant;
 let managerId = 0;
 let otherId = 0;
+let cookId = 0;
 let managerToken = '';
 let otherToken = '';
+let cookToken = '';
 let itemA = 0;
 let itemB = 0;
 
-function appForTenant(tenantId: string) {
+function appForTenant(tenantId: string, plan = 'pro') {
   const app = express();
   app.use(express.json());
   app.use((req: any, res, next) => {
-    req.tenant = { id: tenantId, plan: 'pro' };
+    req.tenant = { id: tenantId, plan };
     // Reproduces tenantMiddleware: an RLS-scoped connection on AsyncLocalStorage.
     // Without it the router's get()/run() fall back to adminSql and the tests
     // would pass while proving nothing about tenant isolation.
@@ -102,12 +104,31 @@ beforeAll(async () => {
   managerToken = tokenFor(managerId, 'manager');
   otherToken = tokenFor(otherId, 'manager');
 
-  // manage_inventory must be granted to `manager` for requireAuth to pass.
-  await adminSql`
-    INSERT INTO role_permissions (tenant_id, role, permission, granted)
-    VALUES (${tenant.id}, 'manager', 'manage_inventory', true)
-    ON CONFLICT DO NOTHING
+  const cook = await adminSql`
+    INSERT INTO employees (tenant_id, name, pin, role, active)
+    VALUES (${tenant.id}, 'Line Cook', '3333', 'kitchen', true) RETURNING id
   `;
+  cookId = Number(cook[0].id);
+  cookToken = tokenFor(cookId, 'kitchen');
+
+  // Explicit DELETE-then-INSERT rather than ON CONFLICT: whether createTenant
+  // seeds these rows (and with what `granted`) is not this test's business, and
+  // the permission split is exactly what's under test — it has to be exact.
+  const grant = async (role: string, permission: string, granted: boolean) => {
+    await adminSql`
+      DELETE FROM role_permissions
+      WHERE tenant_id = ${tenant.id} AND role = ${role} AND permission = ${permission}
+    `;
+    await adminSql`
+      INSERT INTO role_permissions (tenant_id, role, permission, granted)
+      VALUES (${tenant.id}, ${role}, ${permission}, ${granted})
+    `;
+  };
+  await grant('manager', 'manage_inventory', true);
+  await grant('manager', 'pos_access', true);
+  // The cook is the whole point of the split: may count, may not book money.
+  await grant('kitchen', 'pos_access', true);
+  await grant('kitchen', 'manage_inventory', false);
 
   const a = await adminSql`
     INSERT INTO inventory_items (tenant_id, name, quantity, unit, cost_price)
@@ -322,6 +343,128 @@ describe('POST /api/inventory-scan/:id/cancel', () => {
   });
 });
 
+// ==================== 5. Cost & access controls ====================
+
+describe('plan gate', () => {
+  it('refuses a free-plan tenant before spending a vision call', async () => {
+    // Every scan is a paid Claude call. /api/ai/* already refuses free-plan
+    // tenants; this route must not be the one place vision spend leaks through.
+    const res = await request(appForTenant(tenant.id, 'free'))
+      .post('/api/inventory-scan')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .attach('photo', Buffer.from('fake'), { filename: 'x.jpg', contentType: 'image/jpeg' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('PLAN_UPGRADE_REQUIRED');
+    expect(res.body.requiredPlan).toBe('pro');
+  });
+});
+
+describe('permission split', () => {
+  it('lets a line cook commit a shelf count', async () => {
+    // The reason the split exists: the person at the shelf is usually the one
+    // without manage_inventory.
+    const id = await seedDraft({
+      intent: 'count_inventory',
+      items: [{ inventory_item_id: itemB, raw_name: 'Tecate', quantity: 42, unit: 'can' }],
+    }, cookId);
+
+    const res = await request(appForTenant(tenant.id))
+      .post(`/api/inventory-scan/${id}/confirm`)
+      .set('Authorization', `Bearer ${cookToken}`)
+      .send({ items: [] });
+
+    expect(res.status).toBe(200);
+    const row = await asTenant(tenant.id, () =>
+      get('SELECT quantity FROM inventory_items WHERE id = $1', [itemB]));
+    expect(Number(row.quantity)).toBe(42);
+  });
+
+  it('refuses a line cook committing a purchase', async () => {
+    // executePurchase books an expense — that is a money write and stays behind
+    // manage_inventory even though the same photo flow produced the draft.
+    const id = await seedDraft({
+      intent: 'record_purchase',
+      vendor: 'Proveedor',
+      total_amount: 500,
+      items: [{ inventory_item_id: itemA, raw_name: 'Bohemia', quantity: 24, unit: 'btl', line_total: 500 }],
+    }, cookId);
+
+    const res = await request(appForTenant(tenant.id))
+      .post(`/api/inventory-scan/${id}/confirm`)
+      .set('Authorization', `Bearer ${cookToken}`)
+      .send({ items: [] });
+
+    expect(res.status).toBe(403);
+    expect(res.body.permission).toBe('manage_inventory');
+    expect(res.body.intent).toBe('record_purchase');
+
+    // Still pending, not silently consumed — a manager can finish it.
+    const row = await get('SELECT status FROM voice_intents WHERE id = $1', [id]);
+    expect(row.status).toBe('pending_confirm');
+  });
+
+  it('reads the intent from the stored draft, not the request body', async () => {
+    // Otherwise relabelling a purchase as a count in the request would route it
+    // through the cheaper permission.
+    const id = await seedDraft({
+      intent: 'record_purchase',
+      vendor: 'Proveedor',
+      total_amount: 300,
+      items: [{ inventory_item_id: itemA, raw_name: 'Bohemia', quantity: 12, unit: 'btl', line_total: 300 }],
+    }, cookId);
+
+    const res = await request(appForTenant(tenant.id))
+      .post(`/api/inventory-scan/${id}/confirm`)
+      .set('Authorization', `Bearer ${cookToken}`)
+      .send({ intent: 'count_inventory', items: [] });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('still lets a manager commit a purchase', async () => {
+    const id = await seedDraft({
+      intent: 'record_purchase',
+      vendor: 'Proveedor',
+      total_amount: 200,
+      items: [{ inventory_item_id: itemA, raw_name: 'Bohemia', quantity: 10, unit: 'btl', line_total: 200 }],
+    });
+
+    const res = await request(appForTenant(tenant.id))
+      .post(`/api/inventory-scan/${id}/confirm`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ items: [] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.intent).toBe('record_purchase');
+  });
+});
+
+describe('GET /api/inventory-scan/recent', () => {
+  it('reports pos_scan activity for the owner surface', async () => {
+    const res = await request(appForTenant(tenant.id))
+      .get('/api/inventory-scan/recent?limit=5')
+      .set('Authorization', `Bearer ${managerToken}`);
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.scans)).toBe(true);
+    expect(res.body.scans.length).toBeLessThanOrEqual(5);
+    // Earlier blocks confirmed several drafts, so the 30-day count is non-zero.
+    expect(res.body.confirmed_30d).toBeGreaterThan(0);
+    for (const s of res.body.scans) {
+      expect(['count_inventory', 'record_purchase']).toContain(s.intent);
+    }
+  });
+
+  it('is owner-only — a line cook cannot read the tenant-wide feed', async () => {
+    const res = await request(appForTenant(tenant.id))
+      .get('/api/inventory-scan/recent')
+      .set('Authorization', `Bearer ${cookToken}`);
+
+    expect(res.status).toBe(403);
+  });
+});
+
 describe('POST /api/inventory-scan', () => {
   it('rejects a request with no photo before spending a vision call', async () => {
     const res = await request(appForTenant(tenant.id))
@@ -337,5 +480,20 @@ describe('POST /api/inventory-scan', () => {
       .set('Authorization', `Bearer ${managerToken}`)
       .attach('photo', Buffer.from('not an image'), { filename: 'notes.txt', contentType: 'text/plain' });
     expect(res.status).toBe(400);
+  });
+
+  it('is rate limited per employee', async () => {
+    // Asserts the limiter is mounted and its ceiling, rather than firing 31
+    // requests to re-test express-rate-limit itself. The cap matters because
+    // each scan is a paid vision call — an unbounded retry loop is a bill.
+    // No photo: the limiter runs (and sets its headers) before multer, so this
+    // stops at the 400 without reaching the paid vision call.
+    const res = await request(appForTenant(tenant.id))
+      .post('/api/inventory-scan')
+      .set('Authorization', `Bearer ${otherToken}`)
+      .field('caption', 'conteo');
+
+    expect(res.status).toBe(400);
+    expect(res.headers['ratelimit-limit']).toBe('30');
   });
 });

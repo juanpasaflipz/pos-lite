@@ -30,8 +30,10 @@
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { all, get, run, getTenantId } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
+import { getPlanLimits, planUpgradeError } from '../planLimits.js';
 import { audit } from '../lib/auditLog.js';
 import { parseReceiptImage, persistReceiptBuffer } from '../helpers/receiptVision.js';
 import {
@@ -64,6 +66,54 @@ const router = Router();
 // A draft older than this is stale — prices move, shelves get restocked, and
 // committing an hour-old count would overwrite whatever happened since.
 const DRAFT_TTL_MIN = 60;
+
+// Every scan is a paid Claude vision call, so this route is gated the same way
+// /api/ai/* is (routes/ai.js). Without it a free-plan tenant would get vision
+// spend here that the rest of the platform refuses them.
+function requireAiPlan(req, res, next) {
+  const plan = req.tenant?.plan || 'free';
+  if (getPlanLimits(plan).ai.mode === 'none') {
+    // Explicit requiredPlan for the same reason ai.js states: getRequiredPlan()
+    // reads mode:'none' as an unlocked value and would report 'free'.
+    return res.status(403).json(planUpgradeError('ai', plan, { requiredPlan: 'pro' }));
+  }
+  next();
+}
+
+// Ceiling on vision spend per employee. A scan costs roughly $0.014 (Haiku
+// 4.5: ~10k input + ~800 output tokens), so this caps one employee at about
+// $0.42/hour — high enough that no honest count-and-restock session hits it,
+// low enough that a stuck retry loop or a bored employee can't run up a bill.
+// Keyed by employee, not IP: a whole restaurant shares one NAT address.
+const scanLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  keyGenerator: (req) =>
+    `inv-scan:${req.employee?.id || ipKeyGenerator(req.ip)}:${req.tenant?.id || 'unknown'}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'scan_rate_limited' },
+});
+
+/**
+ * Committing a count and committing a purchase are different acts.
+ *
+ * A count writes stock levels — that's the line cook's job, and gating it
+ * behind manage_inventory is what kept this feature away from the people who
+ * actually stand in front of the shelf. A purchase books an expense AND
+ * restocks (executePurchase), so it moves money and stays privileged.
+ *
+ * Mirrors the check inside requireAuth() rather than reusing it, because the
+ * required permission isn't known until the stored draft is read.
+ */
+async function canCommitIntent(employee, intent) {
+  const permission = intent === 'record_purchase' ? 'manage_inventory' : 'pos_access';
+  const perm = await get(
+    'SELECT granted FROM role_permissions WHERE role = $1 AND permission = $2',
+    [employee.role, permission]
+  );
+  return { allowed: Boolean(perm?.granted), permission };
+}
 
 /**
  * Shape a parsed intent for the review screen. The client renders exactly what
@@ -101,9 +151,13 @@ function toDraft(parsed) {
 
 // POST /api/inventory-scan — photo in, draft out. Nothing is written to
 // inventory here; the operator still has to confirm.
+// Drafting writes nothing to inventory, so any employee may shoot a photo —
+// the privilege check happens at commit, where the write actually lands.
 router.post(
   '/',
-  requireAuth('manage_inventory'),
+  requireAuth('pos_access'),
+  requireAiPlan,
+  scanLimiter,
   (req, res, next) => {
     upload.single('photo')(req, res, (err) => {
       if (!err) return next();
@@ -251,7 +305,7 @@ async function loadPendingDraft(id, employeeId) {
 }
 
 // POST /api/inventory-scan/:id/confirm — commit the draft.
-router.post('/:id/confirm', requireAuth('manage_inventory'), async (req, res) => {
+router.post('/:id/confirm', requireAuth('pos_access'), async (req, res) => {
   try {
     const employeeId = req.employee?.id;
     if (!employeeId) return res.status(401).json({ error: 'Employee context required' });
@@ -268,6 +322,17 @@ router.post('/:id/confirm', requireAuth('manage_inventory'), async (req, res) =>
     // JSON string. Parse defensively — same guard the WhatsApp path uses.
     let parsed = row.parsed_json;
     if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+
+    // Read the intent from the STORED draft, never the request — otherwise a
+    // cook could relabel a purchase as a count and book an expense.
+    const { allowed, permission } = await canCommitIntent(req.employee, parsed.intent);
+    if (!allowed) {
+      return res.status(403).json({
+        error: `Permission denied: ${permission} is not granted for role ${req.employee.role}`,
+        permission,
+        intent: parsed.intent,
+      });
+    }
 
     parsed = applyOverrides(parsed, req.body?.items);
 
@@ -317,8 +382,47 @@ router.post('/:id/confirm', requireAuth('manage_inventory'), async (req, res) =>
   }
 });
 
-// POST /api/inventory-scan/:id/cancel — discard the draft.
-router.post('/:id/cancel', requireAuth('manage_inventory'), async (req, res) => {
+// GET /api/inventory-scan/recent — what the photo path has actually produced.
+// Powers the owner-facing section on /admin/inventory: without it the feature
+// is invisible from the desktop, since the capture screen is phone-only.
+router.get('/recent', requireAuth('manage_inventory'), async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(Number(req.query.limit) || 10, 1), 50);
+    const rows = await all(
+      `SELECT vi.id, vi.draft_action AS intent, vi.status, vi.created_at,
+              vi.confirmed_at, vi.media_url, e.name AS employee_name
+       FROM voice_intents vi
+       LEFT JOIN employees e ON e.id = vi.employee_id
+       WHERE vi.source = 'pos_scan'
+       ORDER BY vi.created_at DESC
+       LIMIT $1`,
+      [limit]
+    );
+
+    // Confirmed-in-last-30-days is the number that answers "is anyone using
+    // this?" — a raw total would count abandoned drafts as adoption.
+    const stats = await get(
+      `SELECT
+         COUNT(*) FILTER (WHERE status = 'confirmed'
+                          AND created_at > NOW() - INTERVAL '30 days') AS confirmed_30d,
+         COUNT(*) FILTER (WHERE status = 'pending_confirm') AS pending
+       FROM voice_intents WHERE source = 'pos_scan'`
+    );
+
+    res.json({
+      scans: rows,
+      confirmed_30d: Number(stats?.confirmed_30d || 0),
+      pending: Number(stats?.pending || 0),
+    });
+  } catch (error) {
+    console.error('Error listing inventory scans:', error);
+    res.status(500).json({ error: 'Failed to list scans' });
+  }
+});
+
+// POST /api/inventory-scan/:id/cancel — discard the draft. Own drafts only
+// (loadPendingDraft scopes by employee), so pos_access is sufficient.
+router.post('/:id/cancel', requireAuth('pos_access'), async (req, res) => {
   try {
     const employeeId = req.employee?.id;
     if (!employeeId) return res.status(401).json({ error: 'Employee context required' });

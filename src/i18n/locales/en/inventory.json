@@ -83,7 +83,23 @@
     "lotNumber": "Lot #",
     "costPrice": "Cost Price",
     "expired": "Expired",
-    "expiresSoon": "Expires Soon"
+    "expiresSoon": "Expires Soon",
+    "photoScan": {
+      "title": "Photo to inventory",
+      "body": "Your team can photograph a supplier note or a shelf from their phone and have it land in inventory. AI reads the photo, they review and confirm.",
+      "where": "On the phone: POS → Scanner tab → \"Photo to inventory\". Any employee can count; recording purchases requires inventory permission.",
+      "last30d": "in 30 days",
+      "empty": "Nobody has used this yet.",
+      "intentCount": "Shelf count",
+      "intentPurchase": "Supplier purchase",
+      "status": {
+        "confirmed": "Saved",
+        "pending_confirm": "Unconfirmed",
+        "cancelled": "Discarded",
+        "expired": "Expired",
+        "failed": "Failed"
+      }
+    }
   },
   "cogs": {
     "title": "COGS Summary",

@@ -12,6 +12,7 @@ import {
   ScanLine,
   Trash2,
   AlertOctagon,
+  ImagePlus,
 } from 'lucide-react';
 import {
   getInventory,
@@ -36,8 +37,9 @@ import {
   getDormantStock,
   getUnlinkedExpenses,
   getInventoryTouchedToday,
+  getInventoryScanActivity,
 } from '../api';
-import type { UnlinkedExpense } from '../api';
+import type { UnlinkedExpense, InventoryScanActivity } from '../api';
 import {
   InventoryItem,
   InventoryForecast,
@@ -921,6 +923,8 @@ export default function InventoryScreen() {
           </>
         )}
 
+        {activeTab === 'scan' && <PhotoScanActivity />}
+
         {activeTab === 'scan' && (
           <ScanTab
             scanInput={scanInput}
@@ -1008,6 +1012,89 @@ export default function InventoryScreen() {
           />
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Owner-facing window into the photo → inventory flow.
+ *
+ * The capture screen is phone-only (`/m/scan-photo` renders only when
+ * deviceType === 'phone'), so from this desktop screen the feature is
+ * otherwise invisible — an owner has no way to learn it exists or whether
+ * anyone is using it. This says what it does, where it lives, and shows what
+ * it has actually produced.
+ */
+function PhotoScanActivity() {
+  const { t } = useTranslation('inventory');
+  const [activity, setActivity] = useState<InventoryScanActivity | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getInventoryScanActivity(5)
+      .then((data) => { if (!cancelled) setActivity(data); })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // A dead panel is worse than no panel — if the feed can't load, the
+  // explanation above it is still the useful part, so only that renders.
+  const scans = failed ? [] : activity?.scans ?? [];
+
+  return (
+    <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-6 mb-6">
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-lg bg-brand-600/20 flex items-center justify-center shrink-0">
+          <ImagePlus size={20} className="text-brand-400" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-white font-bold">{t('photoScan.title')}</h3>
+          <p className="text-neutral-400 text-sm mt-1 leading-relaxed">
+            {t('photoScan.body')}
+          </p>
+          <p className="text-neutral-500 text-xs mt-2">{t('photoScan.where')}</p>
+        </div>
+        {activity && (
+          <div className="text-right shrink-0">
+            <p className="text-2xl font-bold text-white">{activity.confirmed_30d}</p>
+            <p className="text-neutral-500 text-xs">{t('photoScan.last30d')}</p>
+          </div>
+        )}
+      </div>
+
+      {scans.length > 0 && (
+        <div className="mt-5 border-t border-neutral-800 pt-4 space-y-2">
+          {scans.map((s) => (
+            <div key={s.id} className="flex items-center justify-between gap-3 text-sm">
+              <span className="text-neutral-300 truncate">
+                {s.intent === 'count_inventory'
+                  ? t('photoScan.intentCount')
+                  : t('photoScan.intentPurchase')}
+                {s.employee_name && <span className="text-neutral-500"> · {s.employee_name}</span>}
+              </span>
+              <span className="flex items-center gap-3 shrink-0">
+                <span className={
+                  s.status === 'confirmed' ? 'text-green-400'
+                    : s.status === 'pending_confirm' ? 'text-amber-400'
+                      : 'text-neutral-500'
+                }>
+                  {t(`photoScan.status.${s.status}`, { defaultValue: s.status })}
+                </span>
+                <span className="text-neutral-600 text-xs">
+                  {new Date(s.created_at).toLocaleDateString()}
+                </span>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {activity && scans.length === 0 && (
+        <p className="text-neutral-500 text-sm mt-5 border-t border-neutral-800 pt-4">
+          {t('photoScan.empty')}
+        </p>
+      )}
     </div>
   );
 }

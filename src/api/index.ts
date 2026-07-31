@@ -4333,6 +4333,27 @@ export async function cancelInventoryScan(id: number): Promise<{ cancelled: bool
   return apiRequest(`/inventory-scan/${id}/cancel`, { method: 'POST' });
 }
 
+export interface InventoryScanRecord {
+  id: number;
+  intent: InventoryScanIntent | null;
+  status: string;
+  created_at: string;
+  confirmed_at: string | null;
+  media_url: string | null;
+  employee_name: string | null;
+}
+
+export interface InventoryScanActivity {
+  scans: InventoryScanRecord[];
+  confirmed_30d: number;
+  pending: number;
+}
+
+/** Owner-facing activity feed — the desktop's only window into a phone-only flow. */
+export async function getInventoryScanActivity(limit = 10): Promise<InventoryScanActivity> {
+  return apiRequest<InventoryScanActivity>(`/inventory-scan/recent?limit=${limit}`);
+}
+
 export async function exportExpenses(params?: { from?: string; to?: string }): Promise<Blob> {
   const qs = new URLSearchParams();
   if (params?.from) qs.set('from', params.from);

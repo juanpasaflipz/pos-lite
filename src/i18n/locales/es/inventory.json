@@ -83,7 +83,23 @@
     "lotNumber": "Lote #",
     "costPrice": "Precio de costo",
     "expired": "Caducado",
-    "expiresSoon": "Caduca pronto"
+    "expiresSoon": "Caduca pronto",
+    "photoScan": {
+      "title": "Foto a inventario",
+      "body": "Tu equipo puede fotografiar una nota del proveedor o un anaquel desde el celular y que entre al inventario. La IA lee la foto, ellos revisan y confirman.",
+      "where": "En el celular: POS → pestaña Escáner → «Foto a inventario». Cualquier empleado puede contar; registrar compras requiere permiso de inventario.",
+      "last30d": "en 30 días",
+      "empty": "Todavía nadie ha usado esta función.",
+      "intentCount": "Conteo de anaquel",
+      "intentPurchase": "Compra de proveedor",
+      "status": {
+        "confirmed": "Guardado",
+        "pending_confirm": "Sin confirmar",
+        "cancelled": "Descartado",
+        "expired": "Expirado",
+        "failed": "Falló"
+      }
+    }
   },
   "cogs": {
     "title": "Resumen de Costos",

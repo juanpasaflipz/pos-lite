@@ -88,12 +88,26 @@ Rules:
 - Skip subtotal/tax/change/discount/loyalty lines from items[].
 - If there is a CAPTION from the owner, use it as a hint (e.g. "conteo" → prefer count_inventory; vendor name → prefer record_purchase).`;
 
-function buildUserContent(inventory, caption) {
+// The inventory list is ~7.5k tokens for a 500-item restaurant and is IDENTICAL
+// between scans, so it belongs in the cacheable prefix rather than the user
+// turn. Caching is a prefix match and render order is system → messages, so the
+// per-scan image must come AFTER this block — with the list in the user turn
+// behind the image (the original shape), the image invalidated it every call
+// and it was re-billed at full rate every time.
+//
+// Cache churn is expected but cheap: the ORDER BY in parseReceiptImage puts
+// in-stock items first, so committing a count that takes an item to zero
+// reorders the list and misses once. Repeat scans in a session still hit.
+function buildInventoryBlock(inventory) {
   const lines = inventory.map(
     (i) => `- id=${i.id} name="${i.name}" unit=${i.unit || ''}`
   );
-  const captionLine = caption ? `\n\nCAPTION FROM OWNER: "${caption}"` : '';
-  return `INVENTORY:\n${lines.join('\n')}${captionLine}\n\nParse the attached photo.`;
+  return `INVENTORY:\n${lines.join('\n')}`;
+}
+
+function buildUserContent(caption) {
+  const captionLine = caption ? `CAPTION FROM OWNER: "${caption}"\n\n` : '';
+  return `${captionLine}Parse the attached photo.`;
 }
 
 export async function parseReceiptImage(imageBuffer, mediaType, caption) {
@@ -122,13 +136,23 @@ export async function parseReceiptImage(imageBuffer, mediaType, caption) {
     body: JSON.stringify({
       model: CLAUDE_MODEL,
       max_tokens: 2048,
-      system: RECEIPT_VISION_PROMPT,
+      // Breakpoint on the last system block caches prompt + inventory together
+      // (~8.8k tokens — above Haiku 4.5's 4096-token minimum). Cache reads bill
+      // at ~0.1x, so a repeat scan costs a fraction of a cold one.
+      system: [
+        { type: 'text', text: RECEIPT_VISION_PROMPT },
+        {
+          type: 'text',
+          text: buildInventoryBlock(inventory),
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
       messages: [
         {
           role: 'user',
           content: [
             { type: 'image', source: { type: 'base64', media_type: mt, data: base64 } },
-            { type: 'text', text: buildUserContent(inventory, caption) },
+            { type: 'text', text: buildUserContent(caption) },
           ],
         },
       ],
@@ -139,6 +163,17 @@ export async function parseReceiptImage(imageBuffer, mediaType, caption) {
     throw new Error(`Claude vision ${res.status}: ${await res.text().catch(() => '')}`);
   }
   const data = await res.json();
+
+  // Cache hits are silent when they fail — a stray byte in the prefix just
+  // means full-rate billing with no error. Log the split so a regression is
+  // visible in Railway logs instead of only in the invoice.
+  const u = data.usage || {};
+  console.log(
+    `[ReceiptVision] tokens in=${u.input_tokens ?? 0} ` +
+    `cache_read=${u.cache_read_input_tokens ?? 0} ` +
+    `cache_write=${u.cache_creation_input_tokens ?? 0} out=${u.output_tokens ?? 0}`
+  );
+
   const text = data.content?.[0]?.text || '';
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) throw new Error('Claude vision returned no JSON');
