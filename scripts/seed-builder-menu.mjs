@@ -45,11 +45,17 @@ const PROTEINS = [
   { slug: 'asada',      name: 'Burrito Carne Asada',  name_en: 'Carne Asada Burrito',      price: 250 },
   { slug: 'pollo',      name: 'Burrito Pollo Asado',  name_en: 'Grilled Chicken Burrito',  price: 219 },
   { slug: 'porkbelly',  name: 'Burrito Porkbelly',    name_en: 'Pork Belly Burrito',       price: 230 },
-  { slug: 'huevo',      name: 'Burrito Huevo',        name_en: 'Egg Burrito',              price: 180 },
+  // huevo is the one override (Juan 2026-07-31). Modifiers are additive, so
+  // huevo+chorizo over fries = 180 + 30 (chorizo) + surcharge. Landing that on
+  // $299 like the other meat fries forces the surcharge to $89, which in turn
+  // prices plain egg-over-fries at $269. That reads as a tier rather than an
+  // anomaly: eggs alone are the cheap breakfast fries, add meat and you're at
+  // the $299 line with Carne Asada / Porkbelly / Chorizo Fries.
+  { slug: 'huevo',      name: 'Burrito Huevo',        name_en: 'Egg Burrito',              price: 180, friesAdj: 89 },
   { slug: 'portobello', name: 'Burrito Portobello',   name_en: 'Portobello Burrito',       price: 170 },
   { slug: 'camaron',    name: 'Burrito Camarón',      name_en: 'Shrimp Burrito',           price: 240 },
   { slug: 'pescado',    name: 'Burrito Pescado',      name_en: 'Baja Fish Burrito',        price: 265 },
-].map((p) => ({ ...p, friesAdj: FRIES_FLAT - p.price, friesConfirmed: true }));
+].map((p) => ({ ...p, friesAdj: p.friesAdj ?? FRIES_FLAT - p.price, friesConfirmed: true }));
 
 const PROTEIN_LABELS = {
   asada:      { es: 'Carne Asada', en: 'Carne Asada' },

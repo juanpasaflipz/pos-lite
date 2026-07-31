@@ -34,20 +34,27 @@ function group(kind: string, slug: string, options: ReturnType<typeof mod>[], ex
  * Note porkbelly's Fries adjustment is $69 where every other protein is $49 —
  * that asymmetry is the whole reason resolveSelection canonicalises the base.
  */
-const P = { asada: 250, pollo: 219, porkbelly: 230, huevo: 180, camaron: 240 };
+const P = { asada: 250, pollo: 219, porkbelly: 230, huevo: 180, portobello: 170, camaron: 240 };
 // Fries surcharge = 299 − price, so every single-protein fries rings at $299
 // (Juan 2026-07-31). Because the surcharge falls as the protein price rises,
-// resolveSelection's "lowest Fries surcharge" base is always the PRICIER
+// resolveSelection's "lowest Fries surcharge" base is normally the PRICIER
 // protein, whose Segunda adjustment is exactly +$90 — which is what makes
-// every two-protein fries land on $389.
-const FRIES = { asada: 49, pollo: 80, porkbelly: 69, huevo: 119, camaron: 59 };
+// two-protein fries land on $389.
+//
+// huevo is the one hand-set exception: $89 instead of $119, so that
+// huevo+chorizo over fries hits $299 like the other meat fries (Juan
+// 2026-07-31). That has two knock-on effects, both asserted below — plain
+// egg-over-fries drops to $269, and huevo now out-ranks portobello for the
+// base slot, so huevo+portobello fries is $359 rather than $389.
+const FRIES = { asada: 49, pollo: 80, porkbelly: 69, huevo: 89, portobello: 129, camaron: 59 };
 // SECOND_MATRIX[base][added] from the seed script.
 const SEGUNDA: Record<string, Record<string, number>> = {
-  asada: { 'Pollo Asado': 90, Porkbelly: 90, Huevo: 90, Camarón: 90 },
-  pollo: { 'Carne Asada': 121, Porkbelly: 101, Huevo: 90, Camarón: 111 },
-  porkbelly: { 'Carne Asada': 110, 'Pollo Asado': 90, Huevo: 90, Camarón: 100 },
-  huevo: { 'Carne Asada': 160, 'Pollo Asado': 129, Porkbelly: 140, Camarón: 150, Chorizo: 30 },
-  camaron: { 'Carne Asada': 100, 'Pollo Asado': 90, Porkbelly: 90, Huevo: 90 },
+  asada: { 'Pollo Asado': 90, Porkbelly: 90, Huevo: 90, Portobello: 90, Camarón: 90 },
+  pollo: { 'Carne Asada': 121, Porkbelly: 101, Huevo: 90, Portobello: 90, Camarón: 111 },
+  porkbelly: { 'Carne Asada': 110, 'Pollo Asado': 90, Huevo: 90, Portobello: 90, Camarón: 100 },
+  huevo: { 'Carne Asada': 160, 'Pollo Asado': 129, Porkbelly: 140, Portobello: 90, Camarón: 150, Chorizo: 30 },
+  portobello: { 'Carne Asada': 170, 'Pollo Asado': 139, Porkbelly: 150, Huevo: 100, Camarón: 160 },
+  camaron: { 'Carne Asada': 100, 'Pollo Asado': 90, Porkbelly: 90, Huevo: 90, Portobello: 90 },
 };
 
 function buildItem(slug: keyof typeof P): BuilderItem {
@@ -79,10 +86,17 @@ describe('kiosk builder pricing', () => {
       expect(stylePrice(['asada'], 'Fries', ITEMS)).toBe(299);
     });
 
-    it('rings every single-protein Fries at the flat $299 menu price', () => {
+    it('rings every single-protein Fries at the flat $299 menu price, except egg', () => {
       for (const slug of Object.keys(P)) {
-        expect(stylePrice([slug], 'Fries', ITEMS)).toBe(299);
+        expect(stylePrice([slug], 'Fries', ITEMS)).toBe(slug === 'huevo' ? 269 : 299);
       }
+    });
+
+    it('rings egg + chorizo over fries at $299, the meat-fries price', () => {
+      // The reason huevo's surcharge is hand-set: 180 + 30 chorizo + 89.
+      expect(stylePrice(['huevo', 'chorizo'], 'Fries', ITEMS)).toBe(299);
+      // …without disturbing Breakfast con chorizo on a tortilla.
+      expect(stylePrice(['huevo', 'chorizo'], 'California', ITEMS)).toBe(210);
     });
   });
 
@@ -107,11 +121,17 @@ describe('kiosk builder pricing', () => {
       // for the original defect: with a naive "first tapped is the base",
       // porkbelly+asada Fries came to $409 one way and $389 the other, so a
       // guest could move the price by changing tap order.
+      //
+      // huevo+portobello is the single exception, at $359: huevo's hand-set
+      // $89 surcharge is lower than portobello's $129, so huevo takes the base
+      // slot and its cheaper surcharge applies. Both are cheap proteins and
+      // the pair is vanishingly rare, so it's accepted rather than special-cased.
       const slugs = Object.keys(P);
       for (const a of slugs) {
         for (const b of slugs) {
           if (a === b) continue;
-          expect(stylePrice([a, b], 'Fries', ITEMS)).toBe(389);
+          const eggAndMushroom = [a, b].sort().join('+') === 'huevo+portobello';
+          expect(stylePrice([a, b], 'Fries', ITEMS)).toBe(eggAndMushroom ? 359 : 389);
         }
       }
     });
