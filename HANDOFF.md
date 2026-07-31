@@ -7,7 +7,33 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
-## 2026-07-31 (Kiosk wizard — parity with prototype v12 DONE) — Claude Code — **NOT PUSHED; needs Juan's deploy + APK**
+## 2026-07-31 (Kiosk wizard — SHIPPED to prod, Samsung on 1.7.0+4bfcd9f) — Claude Code
+
+**Live as of 07:44 UTC.** Railway deploy SUCCESS; Samsung Tab S10 FE reinstalled
+and reporting `1.7.0+4bfcd9f` on heartbeat. Web + iPad got it on deploy.
+
+**Two deliberate departures from the spec, both Juan's call 2026-07-31:**
+- **Favoritos skip Estilo** and land straight on "¿Deseas agregar algo?"
+  (spec D7 had them land on Estilo pre-selected). A favorito already names its
+  protein and style; the favoritos are slated for deprecation anyway. Atrás
+  from add-ons still reaches Estilo with the style selected. `4bfcd9f`
+- **Pricing confirmed** — combos = pricier protein + $90; Fries = flat $299 any
+  single protein (so every two-protein Fries is $389); extras $35/$25/$20.
+
+**One price is neither $299 nor $389: Breakfast con chorizo over Fries = $329**
+(huevo+chorizo is the hand-set $210 anchor, not the +$90 rule, so 210 + 119).
+Reachable via the Breakfast favorito → Atrás → Fries. Juan hasn't ruled on it.
+
+**Fixed a version-stamp trap** (`6f25885`): `android:sync` ran `build:kiosk`,
+which never calls gen-version, and `resolveAppVersion()` prefers an existing
+version.json — so an APK built without a prior `npm run build` bundled whatever
+stale stamp was lying around. The first install tonight was labelled
+1.0.0+8ef4006 on 1.7.0 code, which would have shown the pilot tablet as
+permanently outdated on /admin/devices. `android:sync` now stamps first.
+
+**Original entry follows.**
+
+## 2026-07-31 (Kiosk wizard — parity with prototype v12 DONE) — Claude Code — **superseded by the entry above**
 
 Implements `design/kiosk-builder-parity-spec.md` D1–D10 against prototype v12.
 All 8 acceptance items verified in a browser side-by-side with the prototype.
