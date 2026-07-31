@@ -240,13 +240,20 @@
     "abandonConfirmTitle": "¿Abandonar pago dividido?",
     "abandonConfirmBody": "La orden se quedará sin pagar y podrás retomarla más tarde.",
     "abandonWithPaidWarning": "Ya se cobraron {{count}} pago(s). La orden quedará sin finalizar y los cobros realizados deberán reembolsarse manualmente si decides abandonar.",
+    "terminalLabel": "Terminal",
+    "terminalNotResponding": "¿La terminal no responde?",
+    "sendToOtherTerminal": "Enviar a {{name}}",
+    "chargeFullInstead": "Cancelar división — cobrar completo",
+    "chargeFullHint": "Descarta las divisiones sin cobrar y regresa a la pantalla de cobro normal. No se cancela la orden.",
     "errors": {
       "mpNotConnected": "Mercado Pago no está conectado. Conecta una terminal antes de dividir con tarjeta.",
       "terminalDeclined": "Pago rechazado en la terminal. Intenta de nuevo.",
       "terminalSendFailed": "No se pudo enviar a la terminal. Intenta de nuevo.",
       "cashShort": "Falta {{short}} para completar este pago.",
       "cashRecordFailed": "No se pudo registrar el efectivo.",
-      "finalizeFailed": "No se pudo finalizar la orden. Intenta de nuevo."
+      "finalizeFailed": "No se pudo finalizar la orden. Intenta de nuevo.",
+      "terminalUnpaired": "Esta caja no está vinculada a una terminal. Elige una arriba y vuelve a enviar.",
+      "chargeFullFailed": "No se pudo cancelar la división. Intenta de nuevo."
     }
   },
   "customerLookup": {

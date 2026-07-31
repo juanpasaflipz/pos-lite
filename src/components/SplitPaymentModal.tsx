@@ -9,7 +9,17 @@ import {
   splitRecordCash,
   getSplitStatus,
   splitFinalize,
+  splitAbandon,
+  getMpTerminals,
+  getMpStatus,
 } from '../api';
+import {
+  MpTerminal,
+  terminalDisplayName,
+  readBoundTerminalId,
+  writeBoundTerminalId,
+  pickBoundTerminal,
+} from '../lib/mpTerminal';
 
 interface SplitPaymentModalProps {
   orderTotal: number;
@@ -19,6 +29,8 @@ interface SplitPaymentModalProps {
     splits: Array<{ payment_method: 'card' | 'cash'; amount: number; tip: number }>,
   ) => Promise<{ orderId: number; splits: SplitRow[] }>;
   onComplete: (orderId: number, totalTip: number) => void;
+  /** Escape hatch: split torn down server-side, charge the order in full instead. */
+  onChargeFull?: (orderId: number) => void;
   onClose: () => void;
 }
 
@@ -37,6 +49,7 @@ export default function SplitPaymentModal({
   isMpConnected,
   onStart,
   onComplete,
+  onChargeFull,
   onClose,
 }: SplitPaymentModalProps) {
   const { t } = useTranslation('pos');
@@ -59,6 +72,21 @@ export default function SplitPaymentModal({
   const [terminalSent, setTerminalSent] = useState(false);
   const [terminalError, setTerminalError] = useState('');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Per-workstation MP terminal binding + failover. The server has no tenant
+  // default to fall back on, so a card split with no terminal_id is a hard 400 —
+  // this modal has to carry the same binding the single-payment modal does.
+  const [terminals, setTerminals] = useState<MpTerminal[]>([]);
+  const [boundTerminalId, setBoundTerminalId] = useState<string>(() => readBoundTerminalId());
+  const [activeTerminalId, setActiveTerminalId] = useState<string>('');
+  const [showTerminalPicker, setShowTerminalPicker] = useState(false);
+  const [failoverAvailable, setFailoverAvailable] = useState(false);
+  const [failoverBusy, setFailoverBusy] = useState(false);
+  const failoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Charge-in-full escape hatch ----
+  const [isChargingFull, setIsChargingFull] = useState(false);
+  const [chargeFullError, setChargeFullError] = useState('');
 
   // Cash split state ----
   const [cashReceived, setCashReceived] = useState('');
@@ -188,16 +216,52 @@ export default function SplitPaymentModal({
     }
   };
 
-  useEffect(() => () => stopPolling(), []);
+  const stopFailoverTimer = () => {
+    if (failoverTimerRef.current) clearTimeout(failoverTimerRef.current);
+    failoverTimerRef.current = null;
+  };
+
+  useEffect(() => () => {
+    stopPolling();
+    stopFailoverTimer();
+  }, []);
 
   // Reset per-split state whenever the active split changes
   useEffect(() => {
     stopPolling();
+    stopFailoverTimer();
     setTerminalSent(false);
     setTerminalError('');
+    setFailoverAvailable(false);
+    setActiveTerminalId('');
     setCashReceived('');
     setCashError('');
   }, [activeIndex, phase]);
+
+  // Load the terminal list once MP is in play, so the cashier can re-point this
+  // register at another reader without leaving the split.
+  useEffect(() => {
+    if (!isMpConnected) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [{ terminals: list }, status] = await Promise.all([getMpTerminals(), getMpStatus()]);
+        if (cancelled) return;
+        setTerminals(list);
+        setBoundTerminalId((prev) => pickBoundTerminal(list, prev, status.mp_default_terminal_id));
+      } catch {
+        // Non-fatal: a stored binding still charges fine without the list.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isMpConnected]);
+
+  const selectTerminal = (termId: string) => {
+    setBoundTerminalId(termId);
+    writeBoundTerminalId(termId);
+  };
+
+  const otherTerminal = terminals.find((term) => term.id !== (activeTerminalId || boundTerminalId)) || null;
 
   const startTerminalPolling = (oid: number, splitId: number) => {
     stopPolling();
@@ -209,12 +273,16 @@ export default function SplitPaymentModal({
         setSplitRows(status.splits);
         if (updated.status === 'paid') {
           stopPolling();
+          stopFailoverTimer();
+          setFailoverAvailable(false);
           setTerminalSent(false);
           advanceOrFinalize(status.splits);
         } else if (updated.status === 'failed') {
           stopPolling();
+          stopFailoverTimer();
           setTerminalSent(false);
           setTerminalError(t('splitPayment.errors.terminalDeclined'));
+          setFailoverAvailable(true);
         }
       } catch {
         // Keep polling on network blips
@@ -222,22 +290,43 @@ export default function SplitPaymentModal({
     }, 2000);
   };
 
-  const sendToTerminal = async () => {
+  // 20s of silence from the reader surfaces the one-tap "try the other terminal"
+  // retry, same as the single-payment modal.
+  const startFailoverTimer = () => {
+    stopFailoverTimer();
+    setFailoverAvailable(false);
+    failoverTimerRef.current = setTimeout(() => setFailoverAvailable(true), 20000);
+  };
+
+  const sendToTerminal = async (overrideTerminalId?: string) => {
     if (!activeSplit || !orderId) return;
+    const targetTerminal = overrideTerminalId || boundTerminalId;
     setTerminalError('');
     setTerminalSent(true);
     try {
-      await splitChargeCard(activeSplit.id);
+      await splitChargeCard(activeSplit.id, targetTerminal || undefined);
+      setActiveTerminalId(targetTerminal);
+      setShowTerminalPicker(false);
+      startFailoverTimer();
       startTerminalPolling(orderId, activeSplit.id);
     } catch (err) {
       setTerminalSent(false);
       setTerminalError(err instanceof Error ? err.message : t('splitPayment.errors.terminalSendFailed'));
+      // An unpaired register is fixable right here — raise the picker instead of
+      // dead-ending on an error string that offers nowhere to go.
+      const code = (err as { code?: string })?.code;
+      if (code === 'terminal_unpaired' || !targetTerminal) {
+        setShowTerminalPicker(true);
+        setTerminalError(t('splitPayment.errors.terminalUnpaired'));
+      }
+      if (terminals.length > 1) setFailoverAvailable(true);
     }
   };
 
   const cancelTerminal = async () => {
     if (!activeSplit) return;
     stopPolling();
+    stopFailoverTimer();
     try {
       await splitCancelCard(activeSplit.id);
     } catch {
@@ -245,12 +334,75 @@ export default function SplitPaymentModal({
     }
     setTerminalSent(false);
     setTerminalError('');
+    setFailoverAvailable(false);
+    setActiveTerminalId('');
     // Reload state from server
     if (orderId) {
       try {
         const status = await getSplitStatus(orderId);
         setSplitRows(status.splits);
       } catch {}
+    }
+  };
+
+  // Cancel the intent on the unresponsive reader (never leave two live intents),
+  // then re-send this same split to the other one.
+  const handleFailover = async () => {
+    if (!activeSplit || !otherTerminal || failoverBusy) return;
+    setFailoverBusy(true);
+    try {
+      stopPolling();
+      stopFailoverTimer();
+      if (activeSplit.status === 'pending_terminal' || terminalSent) {
+        // Race guard: if it just went through on the original reader, let the
+        // poller finish rather than cancelling a paid leg.
+        if (orderId) {
+          try {
+            const status = await getSplitStatus(orderId);
+            const updated = status.splits.find((s) => s.id === activeSplit.id);
+            if (updated?.status === 'paid') {
+              setSplitRows(status.splits);
+              setFailoverAvailable(false);
+              advanceOrFinalize(status.splits);
+              return;
+            }
+          } catch {
+            // Status check failed — proceed; cancel is itself guarded.
+          }
+        }
+        try {
+          await splitCancelCard(activeSplit.id);
+        } catch {
+          // Best effort — the split may never have reached a terminal at all.
+        }
+      }
+      selectTerminal(otherTerminal.id);
+      setTerminalError('');
+      setFailoverAvailable(false);
+      await sendToTerminal(otherTerminal.id);
+    } finally {
+      setFailoverBusy(false);
+    }
+  };
+
+  // Escape hatch: drop the uncollected legs server-side and hand the whole
+  // order back to the regular payment modal. Without this the only way out of a
+  // stuck split is voiding the check and ringing it again.
+  const handleChargeFull = async () => {
+    if (!orderId || !onChargeFull || isChargingFull) return;
+    setIsChargingFull(true);
+    setChargeFullError('');
+    try {
+      stopPolling();
+      stopFailoverTimer();
+      await splitAbandon(orderId);
+      onChargeFull(orderId);
+    } catch (err) {
+      setChargeFullError(
+        err instanceof Error ? err.message : t('splitPayment.errors.chargeFullFailed'),
+      );
+    } finally {
+      setIsChargingFull(false);
     }
   };
 
@@ -597,12 +749,33 @@ export default function SplitPaymentModal({
         {isCard && !isPaid && (
           <div className="space-y-3">
             {!terminalSent && !activeSplit.payment_intent_id && (
-              <button
-                onClick={sendToTerminal}
-                className="w-full py-4 bg-[#009ee3] text-white text-lg font-bold rounded-lg hover:bg-[#0089c4] transition-all"
-              >
-                {t('splitPayment.sendToTerminal')}
-              </button>
+              <>
+                {(terminals.length > 1 || showTerminalPicker) && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-neutral-400 text-sm whitespace-nowrap">
+                      {t('splitPayment.terminalLabel')}
+                    </label>
+                    <select
+                      value={boundTerminalId}
+                      onChange={(e) => selectTerminal(e.target.value)}
+                      className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg py-2 px-3 text-sm text-white focus:outline-none focus:border-[#009ee3]"
+                    >
+                      {terminals.length === 0 && <option value="">—</option>}
+                      {terminals.map((term) => (
+                        <option key={term.id} value={term.id}>
+                          {terminalDisplayName(term)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <button
+                  onClick={() => sendToTerminal()}
+                  className="w-full py-4 bg-[#009ee3] text-white text-lg font-bold rounded-lg hover:bg-[#0089c4] transition-all"
+                >
+                  {t('splitPayment.sendToTerminal')}
+                </button>
+              </>
             )}
             {(terminalSent || activeSplit.status === 'pending_terminal') && (
               <div className="bg-[#009ee3]/10 border border-[#009ee3]/30 rounded-lg p-5 text-center space-y-3">
@@ -611,6 +784,20 @@ export default function SplitPaymentModal({
                   <p className="text-white font-bold">{t('splitPayment.terminalWaiting')}</p>
                 </div>
                 <p className="text-sm text-neutral-300">{t('splitPayment.terminalInstructions')}</p>
+                {failoverAvailable && otherTerminal && (
+                  <div className="pt-2 border-t border-[#009ee3]/20 space-y-2">
+                    <p className="text-neutral-400 text-sm">{t('splitPayment.terminalNotResponding')}</p>
+                    <button
+                      onClick={handleFailover}
+                      disabled={failoverBusy}
+                      className="w-full py-3 bg-[#009ee3] text-white font-bold rounded-lg hover:bg-[#0089c4] disabled:bg-neutral-700 disabled:text-neutral-400 transition-all"
+                    >
+                      {failoverBusy
+                        ? t('splitPayment.processing')
+                        : t('splitPayment.sendToOtherTerminal', { name: terminalDisplayName(otherTerminal) })}
+                    </button>
+                  </div>
+                )}
                 <button
                   onClick={cancelTerminal}
                   className="text-sm text-neutral-400 underline"
@@ -620,15 +807,46 @@ export default function SplitPaymentModal({
               </div>
             )}
             {terminalError && (
-              <div className="bg-cockpit-red/30 border border-cockpit-red/40 rounded-lg p-3 text-center">
-                <p className="text-cockpit-out-text font-semibold mb-2">{terminalError}</p>
+              <div className="bg-cockpit-red/30 border border-cockpit-red/40 rounded-lg p-3 text-center space-y-2">
+                <p className="text-cockpit-out-text font-semibold">{terminalError}</p>
                 <button
-                  onClick={sendToTerminal}
+                  onClick={() => sendToTerminal()}
                   className="text-sm text-white font-bold underline"
                 >
                   {t('splitPayment.retry')}
                 </button>
+                {!terminalSent && failoverAvailable && otherTerminal && (
+                  <button
+                    onClick={handleFailover}
+                    disabled={failoverBusy}
+                    className="w-full py-3 bg-[#009ee3] text-white font-bold rounded-lg hover:bg-[#0089c4] disabled:bg-neutral-700 disabled:text-neutral-400 transition-all"
+                  >
+                    {failoverBusy
+                      ? t('splitPayment.processing')
+                      : t('splitPayment.sendToOtherTerminal', { name: terminalDisplayName(otherTerminal) })}
+                  </button>
+                )}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* Escape hatch — only while nothing has been collected, so no money is
+            ever stranded by tearing the split down. */}
+        {onChargeFull && paidSplitsCount === 0 && (
+          <div className="pt-1 space-y-2">
+            <button
+              onClick={handleChargeFull}
+              disabled={isChargingFull || failoverBusy}
+              className="w-full py-3 bg-neutral-800 border border-neutral-700 text-white font-bold rounded-lg hover:bg-neutral-700 disabled:opacity-50 transition-all"
+            >
+              {isChargingFull ? t('splitPayment.processing') : t('splitPayment.chargeFullInstead')}
+            </button>
+            <p className="text-xs text-neutral-500 text-center">
+              {t('splitPayment.chargeFullHint')}
+            </p>
+            {chargeFullError && (
+              <p className="text-cockpit-out-text text-sm font-semibold text-center">{chargeFullError}</p>
             )}
           </div>
         )}

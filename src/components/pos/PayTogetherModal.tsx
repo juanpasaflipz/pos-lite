@@ -2,7 +2,14 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatPrice } from '../../utils/currency';
 import { usePlan } from '../../context/PlanContext';
-import { payTogether, cancelPayTogether, getPaymentGroupStatus, type PayTogetherShare } from '../../api';
+import { payTogether, cancelPayTogether, getPaymentGroupStatus, getMpTerminals, getMpStatus, type PayTogetherShare } from '../../api';
+import {
+  MpTerminal,
+  terminalDisplayName,
+  readBoundTerminalId,
+  writeBoundTerminalId,
+  pickBoundTerminal,
+} from '../../lib/mpTerminal';
 import type { Order } from '../../types';
 
 interface PayTogetherModalProps {
@@ -28,6 +35,33 @@ const PayTogetherModal: React.FC<PayTogetherModalProps> = ({ orders, onCancel, o
   const [paymentGroupId, setPaymentGroupId] = useState<number | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Per-workstation MP terminal binding — the server has no tenant-wide default
+  // to fall back on, so this has to travel with the charge.
+  const [terminals, setTerminals] = useState<MpTerminal[]>([]);
+  const [boundTerminalId, setBoundTerminalId] = useState<string>(() => readBoundTerminalId());
+  const [showTerminalPicker, setShowTerminalPicker] = useState(false);
+
+  useEffect(() => {
+    if (!isMpConnected) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [{ terminals: list }, status] = await Promise.all([getMpTerminals(), getMpStatus()]);
+        if (cancelled) return;
+        setTerminals(list);
+        setBoundTerminalId((prev) => pickBoundTerminal(list, prev, status.mp_default_terminal_id));
+      } catch {
+        // Non-fatal: a stored binding still charges fine without the list.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isMpConnected]);
+
+  const handleTerminalSelect = (termId: string) => {
+    setBoundTerminalId(termId);
+    writeBoundTerminalId(termId);
+  };
 
   const finalTotal = subtotalSum + tip;
   const receivedNum = parseFloat(amountReceived) || 0;
@@ -75,12 +109,18 @@ const PayTogetherModal: React.FC<PayTogetherModalProps> = ({ orders, onCancel, o
         order_ids: orders.map((o) => o.id),
         payment_method: 'mp_terminal',
         tip,
+        mp_terminal_id: boundTerminalId || undefined,
       });
       setPaymentGroupId(resp.payment_group_id);
       setTerminalPending(true);
       startPolling(resp.payment_group_id);
     } catch (err) {
       setTerminalError(err instanceof Error ? err.message : t('payment.terminalSendError'));
+      // Unpaired register is fixable here — raise the picker rather than
+      // dead-ending the cashier on an error string.
+      if ((err as { code?: string })?.code === 'terminal_unpaired' || !boundTerminalId) {
+        setShowTerminalPicker(true);
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -304,13 +344,34 @@ const PayTogetherModal: React.FC<PayTogetherModalProps> = ({ orders, onCancel, o
           {!terminalPending && (
             <div className="space-y-2">
               {isMpConnected && (
-                <button
-                  onClick={handleTerminal}
-                  disabled={isProcessing}
-                  className="w-full py-3 bg-[#009ee3] text-white text-lg font-bold rounded-lg hover:bg-[#0082c0] disabled:bg-neutral-700"
-                >
-                  {t('payment.sendToMPTerminal')}
-                </button>
+                <>
+                  {(terminals.length > 1 || showTerminalPicker) && (
+                    <div className="flex items-center gap-2">
+                      <label className="text-neutral-400 text-sm whitespace-nowrap">
+                        {t('payment.terminalLabel')}
+                      </label>
+                      <select
+                        value={boundTerminalId}
+                        onChange={(e) => handleTerminalSelect(e.target.value)}
+                        className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg py-2 px-3 text-sm text-white focus:outline-none focus:border-[#009ee3]"
+                      >
+                        {terminals.length === 0 && <option value="">—</option>}
+                        {terminals.map((term) => (
+                          <option key={term.id} value={term.id}>
+                            {terminalDisplayName(term)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <button
+                    onClick={handleTerminal}
+                    disabled={isProcessing}
+                    className="w-full py-3 bg-[#009ee3] text-white text-lg font-bold rounded-lg hover:bg-[#0082c0] disabled:bg-neutral-700"
+                  >
+                    {t('payment.sendToMPTerminal')}
+                  </button>
+                </>
               )}
               {showCashInput ? (
                 <button

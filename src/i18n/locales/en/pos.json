@@ -240,13 +240,20 @@
     "abandonConfirmTitle": "Abandon split payment?",
     "abandonConfirmBody": "The order will remain unpaid so you can pick it up later.",
     "abandonWithPaidWarning": "{{count}} payment(s) already collected. The order will be left unfinalized; the collected payments must be refunded manually if you abandon.",
+    "terminalLabel": "Terminal",
+    "terminalNotResponding": "Terminal not responding?",
+    "sendToOtherTerminal": "Send to {{name}} instead",
+    "chargeFullInstead": "Cancel split — charge full amount",
+    "chargeFullHint": "Drops the uncollected splits and returns to the normal payment screen. Nothing is voided.",
     "errors": {
       "mpNotConnected": "Mercado Pago is not connected. Connect a terminal before splitting by card.",
       "terminalDeclined": "Payment declined at the terminal. Try again.",
       "terminalSendFailed": "Could not send to terminal. Try again.",
       "cashShort": "Need {{short}} more for this split.",
       "cashRecordFailed": "Could not record cash.",
-      "finalizeFailed": "Could not finalize the order. Try again."
+      "finalizeFailed": "Could not finalize the order. Try again.",
+      "terminalUnpaired": "This register is not paired to a terminal. Pick one above and send again.",
+      "chargeFullFailed": "Could not cancel the split. Try again."
     }
   },
   "customerLookup": {

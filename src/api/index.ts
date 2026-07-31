@@ -262,8 +262,14 @@ async function apiRequest<T>(
     } catch {
       // Use default error message if response is not JSON
     }
-    const err = new Error(errorMessage) as Error & { status?: number; planUpgradeRequired?: boolean; requiredPlan?: string; feature?: string; conflictWith?: string; approvalRequired?: boolean; permission?: string };
+    const err = new Error(errorMessage) as Error & { status?: number; code?: string; planUpgradeRequired?: boolean; requiredPlan?: string; feature?: string; conflictWith?: string; approvalRequired?: boolean; permission?: string };
     err.status = response.status;
+    // Machine-readable reason, when the route sends one. Callers branch on it to
+    // offer the right recovery (e.g. `terminal_unpaired` raises the terminal
+    // picker instead of dead-ending on an error string).
+    if (typeof errorData.code === 'string') {
+      err.code = errorData.code;
+    }
     // The actor's role lacks the permission, but the route accepts a manager
     // approval — callers use this to raise the PIN pad and retry with a token
     // instead of dead-ending on the error string.
@@ -1758,6 +1764,18 @@ export async function splitFinalize(order_id: number): Promise<{
   invoice_token: string | null;
 }> {
   return apiRequest('/payments/split/finalize', {
+    method: 'POST',
+    body: JSON.stringify({ order_id }),
+  });
+}
+
+/**
+ * Tear a split flow back down to a normal single payment. Only legal while
+ * nothing has been collected — the escape hatch for a terminal that won't take
+ * the first leg, so the cashier never has to void and re-ring the check.
+ */
+export async function splitAbandon(order_id: number): Promise<{ success: boolean }> {
+  return apiRequest('/payments/split/abandon', {
     method: 'POST',
     body: JSON.stringify({ order_id }),
   });

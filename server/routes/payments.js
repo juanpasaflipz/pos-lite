@@ -516,6 +516,66 @@ router.post('/split/cancel-card', requireAuth('pos_access'), requirePro, async (
   }
 });
 
+// POST /api/payments/split/abandon - tear the split back down to a normal payment.
+// The escape hatch for a split that can't be collected (unresponsive terminal,
+// customer changes their mind): drops the uncollected legs and clears the 'split'
+// marker so the order can be charged in full from the regular payment modal.
+// Refuses once any leg is paid — that money has to be reconciled, not discarded.
+router.post('/split/abandon', requireAuth('pos_access'), async (req, res) => {
+  try {
+    const { order_id } = req.body;
+    if (!order_id) return res.status(400).json({ error: 'Missing order_id' });
+
+    const order = await get('SELECT id, payment_status FROM orders WHERE id = $1', [order_id]);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.payment_status === 'paid') {
+      return res.status(400).json({ error: 'Order is already paid' });
+    }
+
+    const splits = await all(
+      `SELECT id, status, payment_intent_id FROM order_payments WHERE order_id = $1`,
+      [order_id]
+    );
+    if (splits.some(s => s.status === 'paid')) {
+      return res.status(400).json({
+        error: 'Some splits are already collected. Finish or refund them before charging in full.',
+        code: 'splits_collected',
+      });
+    }
+
+    // Never leave a live intent on the terminal behind an abandoned split.
+    const live = splits.filter(s => s.status === 'pending_terminal' && s.payment_intent_id);
+    if (live.length > 0) {
+      const tenant = await getTenant(req.tenant.id);
+      if (tenant?.mp_access_token) {
+        try {
+          const accessToken = await ensureFreshToken(tenant, adminSql);
+          for (const s of live) {
+            try {
+              await cancelPointOrder(accessToken, tenant.mp_default_terminal_id, s.payment_intent_id);
+            } catch (cancelErr) {
+              console.warn('Split abandon MP cancel warning:', cancelErr.message);
+            }
+          }
+        } catch (tokenErr) {
+          console.warn('Split abandon token refresh warning:', tokenErr.message);
+        }
+      }
+    }
+
+    await run(`DELETE FROM order_payments WHERE order_id = $1 AND status <> 'paid'`, [order_id]);
+    await run(
+      `UPDATE orders SET payment_method = NULL, payment_status = 'unpaid' WHERE id = $1`,
+      [order_id]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Split abandon error:', error);
+    res.status(500).json({ error: 'Failed to cancel split payment' });
+  }
+});
+
 // POST /api/payments/split/record-cash - record a cash split as collected.
 router.post('/split/record-cash', requireAuth('pos_access'), async (req, res) => {
   try {

@@ -1081,6 +1081,26 @@ const POSScreen: React.FC = () => {
     setChargingOrder(null);
   };
 
+  // Split torn down server-side (terminal wouldn't take it, customer changed
+  // their mind): hand the same order to the regular payment modal instead of
+  // making the cashier void and re-ring. The order already exists on the server
+  // at this point, so the cart it came from is spent.
+  const handleSplitChargeFull = async (orderId: number) => {
+    const order = splitOrderRef.current;
+    const wasExisting = !!chargingOrder;
+    splitOrderRef.current = null;
+    setShowSplitPayment(false);
+    try {
+      const fresh = await getOrder(orderId);
+      setChargingOrder(fresh);
+    } catch {
+      if (order) setChargingOrder(order);
+    }
+    setPreCreatedOrderId(orderId);
+    if (!wasExisting) clearCart();
+    setShowPaymentModal(true);
+  };
+
   const handleLogout = () => {
     logout();
     navigate('/');
@@ -1502,6 +1522,7 @@ const POSScreen: React.FC = () => {
           isMpConnected={isMpConnected}
           onStart={handleSplitStart}
           onComplete={handleSplitComplete}
+          onChargeFull={handleSplitChargeFull}
           onClose={handleSplitClose}
         />
       )}

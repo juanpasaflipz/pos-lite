@@ -3,24 +3,14 @@ import { useTranslation } from 'react-i18next';
 import { formatPrice } from '../../utils/currency';
 import { usePlan } from '../../context/PlanContext';
 import { mpCharge, mpCancelCharge, clipCharge, clipCancelCharge, getPaymentStatus, getMpTerminals, getMpStatus } from '../../api';
+import {
+  MP_TERMINAL_STORAGE_KEY,
+  MpTerminal,
+  terminalDisplayName,
+  pickBoundTerminal,
+} from '../../lib/mpTerminal';
 
 type TerminalProvider = 'mp' | 'clip';
-
-// Per-workstation MP Point terminal binding. Stored in localStorage so each
-// PC/register keeps its own nearest terminal, independent of the tenant default.
-const MP_TERMINAL_STORAGE_KEY = 'dk_mp_terminal_id';
-
-interface MpTerminal {
-  id: string;
-  external_pos_id: string;
-  operating_mode: string;
-}
-
-function terminalDisplayName(term: MpTerminal): string {
-  if (term.external_pos_id) return term.external_pos_id;
-  const parts = term.id.split('__');
-  return parts[parts.length - 1] || term.id;
-}
 
 export interface PaymentModalProps {
   orderTotal: number;
@@ -82,14 +72,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         const [{ terminals: list }, status] = await Promise.all([getMpTerminals(), getMpStatus()]);
         if (cancelled) return;
         setTerminals(list);
-        setBoundTerminalId(prev => {
-          if (prev && list.some(term => term.id === prev)) return prev;
-          const fallback =
-            (status.mp_default_terminal_id && list.some(term => term.id === status.mp_default_terminal_id)
-              ? status.mp_default_terminal_id
-              : list[0]?.id) || '';
-          return fallback;
-        });
+        setBoundTerminalId(prev => pickBoundTerminal(list, prev, status.mp_default_terminal_id));
       } catch {
         // Non-fatal: charge falls back to the tenant default terminal server-side
       }

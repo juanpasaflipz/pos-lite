@@ -7,6 +7,37 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-07-30 (evening) — Claude Code — **card splits were dead in prod since 07-17; fixed, NOT yet pushed**
+
+Juanberto's had to void and re-ring an $856 check tonight (order 7389, 18:50
+CST). Not cashier error: `SplitPaymentModal` called `splitChargeCard(id)` with
+no `terminal_id`, and `a79eb02` (07-17) had removed the server's fallback to
+`tenants.mp_default_terminal_id`. Every card leg 400'd with `terminal_unpaired`
+before MP was ever contacted — all three `order_payments` rows for 7389 have
+`payment_intent_id = NULL`. Last split that completed at that tenant: 07-09.
+Same failure on 07-23 (order 6937). **"Cobrar Juntas" had the identical bug** —
+`PayTogetherModal` never sent `mp_terminal_id` either.
+
+Fixed in the working tree (typecheck + full suite green, 358 tests):
+- new `src/lib/mpTerminal.ts` — the `dk_mp_terminal_id` binding, display name,
+  and `pickBoundTerminal()` now live in one module; PaymentModal imports them
+  instead of redeclaring
+- `SplitPaymentModal` + `PayTogetherModal` send the binding, show a terminal
+  picker, and raise it on `terminal_unpaired`; split also gets the 20s
+  other-terminal failover PaymentModal already had
+- new `POST /api/payments/split/abandon` + "Cancelar división — cobrar completo"
+  button, so a stuck split no longer requires voiding the check. Refuses once
+  any leg is paid
+- `apiRequest` now surfaces `err.code` generally
+- `tests/split-payment-terminal.test.ts` guards the call sites
+
+**Heads up on shared files:** I touched `src/api/index.ts` and both
+`src/i18n/locales/*/pos.json`, which already had your uncommitted work in them
+(photoScan block, restock keys). I only added; nothing of yours was reformatted
+or dropped. Stage hunks, not files, if you commit before I do.
+
+---
+
 ## 2026-07-30 (closed the four open items from the 07-29 entry) — Claude Code — **1.4.2 + 1.4.3 pushed**
 
 All four "still open" items below are now closed. Taking them in order of how
