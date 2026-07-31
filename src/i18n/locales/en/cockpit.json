@@ -160,12 +160,19 @@
       "connectedPlatform": "Connected — Desktop Kitchen number",
       "notConnected": "Not connected",
       "noNumberYet": "No number is connected for your restaurant yet.",
-      "notConnectedBody": "Get in touch to connect your business WhatsApp. The number keeps working normally on the phone: customers still message you and a person still answers them. All this adds is your team being able to send photos and voice notes into inventory.",
+      "notConnectedBody": "This is not a blocker: photographing notes and counting inventory already works from the phone — see the green box just below. Connecting your WhatsApp only adds another way to send the same thing. Write to us when you want it connected — your number keeps working normally on the phone: customers still message you the same way and a person answers them.",
       "platformNote": "You're on the Desktop Kitchen number. It works the same, but connecting your own business WhatsApp is better — your team messages the number they already know.",
       "save": "Save this number on your team's phones.",
       "copy": "Copy",
       "copied": "Copied!",
       "openChat": "Open chat"
+    },
+    "inApp": {
+      "title": "This already works without WhatsApp",
+      "body": "Your team can already photograph a supplier note or a shelf and have it land in inventory — from the POS on a phone, with no WhatsApp and no phone numbers to register.",
+      "where": "On a phone: open the POS → Scanner tab → \"Photo to inventory\".",
+      "roles": "Available to managers and admins.",
+      "andWhatsApp": "Connecting WhatsApp adds a second doorway to the same thing, with the advantage that your team already lives there. It does not replace the phone path."
     },
     "who": {
       "title": "Who can use it",

@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   Loader2,
+  Smartphone,
 } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 import { getWhatsAppStatus, type WhatsAppStatus } from '../api';
@@ -200,6 +201,36 @@ const WhatsAppOpsScreen: React.FC = () => {
               )}
             </>
           )}
+        </section>
+
+        {/* Photo → inventory shipped in the mobile POS (1.5.0) and does NOT
+            need WhatsApp. Without this block the page reads as "the feature is
+            blocked on Meta", which stopped being true — an owner would leave
+            here waiting on an approval queue for something already on their
+            phone. Deliberately placed above "who can use it": the eligibility
+            rules below apply only to the WhatsApp doorway. */}
+        <section className="bg-emerald-500/5 border border-emerald-500/25 rounded-2xl p-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0">
+              <Smartphone size={20} className="text-emerald-400" />
+            </div>
+            <h2 className="text-lg font-bold">{t('whatsappOps.inApp.title')}</h2>
+          </div>
+
+          <p className="text-neutral-300 text-sm mt-4 leading-relaxed">
+            {t('whatsappOps.inApp.body')}
+          </p>
+
+          <p className="text-neutral-200 text-sm mt-3 font-semibold leading-relaxed">
+            {t('whatsappOps.inApp.where')}
+          </p>
+          <p className="text-neutral-500 text-xs mt-1">{t('whatsappOps.inApp.roles')}</p>
+
+          {/* No link: /m/scan-photo only renders on a phone (see TenantRoutes),
+              so a button here would dead-end on the desktop this screen lives on. */}
+          <p className="text-neutral-400 text-sm mt-4 leading-relaxed border-t border-emerald-500/15 pt-4">
+            {t('whatsappOps.inApp.andWhatsApp')}
+          </p>
         </section>
 
         {/* Who can use it — the second question, and the #1 support ticket */}

@@ -160,12 +160,19 @@
       "connectedPlatform": "Conectado — número de Desktop Kitchen",
       "notConnected": "Sin conectar",
       "noNumberYet": "Todavía no hay un número conectado para tu restaurante.",
-      "notConnectedBody": "Escríbenos para conectar el WhatsApp de tu negocio. El número sigue funcionando normal en el teléfono: tus clientes te siguen escribiendo igual y una persona les contesta. Lo único que se agrega es que tu equipo pueda mandar fotos y notas de voz al inventario.",
+      "notConnectedBody": "Esto no te detiene: fotografiar notas y contar inventario ya funciona desde el celular — mira el recuadro verde aquí abajo. Conectar tu WhatsApp solo agrega otra forma de mandar lo mismo. Escríbenos cuando lo quieras conectar — tu número sigue funcionando normal en el teléfono: tus clientes te siguen escribiendo igual y una persona les contesta.",
       "platformNote": "Estás usando el número de Desktop Kitchen. Funciona igual, pero conectar el WhatsApp de tu propio negocio es mejor: tu equipo le escribe al número que ya conoce.",
       "save": "Guarda este número en el teléfono de tu equipo.",
       "copy": "Copiar",
       "copied": "¡Copiado!",
       "openChat": "Abrir chat"
+    },
+    "inApp": {
+      "title": "Esto ya funciona sin WhatsApp",
+      "body": "Tu equipo ya puede fotografiar una nota del proveedor o un anaquel y que entre al inventario — desde el POS en el celular, sin WhatsApp y sin registrar teléfonos.",
+      "where": "En un celular: abre el POS → pestaña Escáner → «Foto a inventario».",
+      "roles": "Disponible para gerentes y administradores.",
+      "andWhatsApp": "Conectar WhatsApp agrega una segunda puerta a lo mismo, con la ventaja de que tu equipo ya vive ahí. No reemplaza lo del celular."
     },
     "who": {
       "title": "Quién puede usarlo",
