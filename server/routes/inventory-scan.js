@@ -31,7 +31,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
-import { all, get, run, getTenantId, tenantContext } from '../db/index.js';
+import { all, get, run, getTenantId, tenantContext, adminSql } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getPlanLimits, planUpgradeError } from '../planLimits.js';
 import { audit } from '../lib/auditLog.js';
@@ -285,12 +285,23 @@ router.post(
  * Apply the operator's edits to a stored draft.
  *
  * ONLY scalars the review screen can legitimately change: quantity, line_total,
- * whether a line is included, and promoting an unmatched count line into a new
- * SKU. Everything identifying — inventory_item_id above all — is read from the
- * stored draft, never from the request. A client that could name an arbitrary
- * inventory_item_id could restock or zero out any row in the tenant by id.
+ * the purchase total, whether a line is included, and promoting an unmatched
+ * count line into a new SKU. Everything identifying — inventory_item_id above
+ * all — is read from the stored draft, never from the request. A client that
+ * could name an arbitrary inventory_item_id could restock or zero out any row
+ * in the tenant by id.
  */
-export function applyOverrides(parsed, overrides) {
+export function applyOverrides(parsed, overrides, totalAmount) {
+  // The total is the field the camera most often loses (shadow, crumpled edge,
+  // cut thermal paper), so the operator has to be able to type it. Validated
+  // exactly as executePurchase validates it, so a stray keystroke can't book a
+  // zero or negative expense; anything unusable leaves the draft's own value in
+  // place for resolvePurchaseTotal() to fall back on.
+  if (totalAmount != null) {
+    const total = Number(totalAmount);
+    if (Number.isFinite(total) && total > 0) parsed.total_amount = total;
+  }
+
   if (!Array.isArray(overrides) || overrides.length === 0) return parsed;
   const items = Array.isArray(parsed.items) ? parsed.items : [];
   const byIndex = new Map();
@@ -349,6 +360,7 @@ router.post('/:id/confirm', requireAuth('scan_inventory'), async (req, res) => {
   try {
     const employeeId = req.employee?.id;
     if (!employeeId) return res.status(401).json({ error: 'Employee context required' });
+    const tid = getTenantId();
 
     const { row, error, status } = await loadPendingDraft(req.params.id, employeeId);
     if (error === 'not_found') return res.status(404).json({ error: 'Draft not found' });
@@ -374,7 +386,7 @@ router.post('/:id/confirm', requireAuth('scan_inventory'), async (req, res) => {
       });
     }
 
-    parsed = applyOverrides(parsed, req.body?.items);
+    parsed = applyOverrides(parsed, req.body?.items, req.body?.total_amount);
 
     if (!Array.isArray(parsed.items) || parsed.items.length === 0) {
       return res.status(400).json({ error: 'No items to save' });
@@ -385,10 +397,30 @@ router.post('/:id/confirm', requireAuth('scan_inventory'), async (req, res) => {
       result = await executeIntent(parsed, employeeId);
     } catch (err) {
       console.error('[InventoryScan] execute failed:', err.message);
-      await run(
-        `UPDATE voice_intents SET status = 'failed', failure_reason = $1 WHERE id = $2`,
-        [err.message?.slice(0, 500) || 'unknown', row.id]
-      );
+      // Two things were wrong with recording this failure on the request
+      // connection with run().
+      //
+      // It never persisted: tenantMiddleware ROLLBACKs whenever the response is
+      // >= 400 (middleware/tenant.js), so the marker died with the 500 that
+      // reported it. Prod showed zero 'failed' rows and a pile of abandoned
+      // 'pending_confirm' drafts instead — which is exactly why a receipt whose
+      // total the camera couldn't read looked like an operator who wandered off
+      // rather than a bug.
+      //
+      // And 'failed' is the wrong status anyway: loadPendingDraft() only accepts
+      // 'pending_confirm', so marking the draft terminal turned the operator's
+      // natural next move — fix the line and hit Save again — into a 409. The
+      // draft stays pending and retryable; failure_reason carries the diagnosis.
+      //
+      // adminSql bypasses RLS, so scope the UPDATE by tenant_id explicitly.
+      try {
+        await adminSql`
+          UPDATE voice_intents
+          SET failure_reason = ${err.message?.slice(0, 500) || 'unknown'}
+          WHERE id = ${row.id} AND tenant_id = ${tid}`;
+      } catch (markErr) {
+        console.error('[InventoryScan] could not record failure_reason:', markErr.message);
+      }
       return res.status(500).json({ error: 'Failed to save', detail: err.message });
     }
 

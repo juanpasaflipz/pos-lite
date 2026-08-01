@@ -38,6 +38,8 @@ import { adminSql, get, getTenantId, tenantContext } from '../server/db/index.js
 // @ts-ignore
 import inventoryScanRouter, { applyOverrides } from '../server/routes/inventory-scan.js';
 // @ts-ignore
+import { resolvePurchaseTotal } from '../server/helpers/voiceIntent.js';
+// @ts-ignore
 import { JWT_SECRET } from '../server/lib/constants.js';
 
 let tenant: TestTenant;
@@ -230,6 +232,83 @@ describe('applyOverrides', () => {
     const out: any = applyOverrides(draft(), []);
     expect(out.items).toHaveLength(2);
     expect(out.items[0].quantity).toBe(12);
+  });
+
+  // The operator-typed total. This is the escape hatch for the receipt whose
+  // printed total the camera lost — before it existed the review screen had no
+  // field for the one value that decided whether the scan could be saved.
+  it('accepts an operator-supplied total, even with no line overrides', () => {
+    const d: any = { intent: 'record_purchase', total_amount: null, items: [] };
+    // Note the empty overrides array: the total must be applied before the
+    // early return that short-circuits on no line edits.
+    expect(applyOverrides(d, [], 1234.5).total_amount).toBe(1234.5);
+  });
+
+  it('refuses a zero, negative, or non-numeric total', () => {
+    // Booking a $0 expense from a stray keystroke is worse than the failure it
+    // replaces — the draft's own value stays in charge instead.
+    for (const bad of [0, -10, 'abc', '']) {
+      const d: any = { intent: 'record_purchase', total_amount: 500, items: [] };
+      expect(applyOverrides(d, [], bad as any).total_amount).toBe(500);
+    }
+  });
+
+  it('leaves the stated total alone when the operator sends none', () => {
+    const d: any = { intent: 'record_purchase', total_amount: 500, items: [] };
+    expect(applyOverrides(d, [], undefined).total_amount).toBe(500);
+    expect(applyOverrides(d, [], null as any).total_amount).toBe(500);
+  });
+});
+
+// ==================== 1b. Missing receipt total ====================
+
+// Every prod failure of this feature on 2026-07-31 was this: the vision call
+// read all four line items off a Central de Abasto ticket correctly but could
+// not see the total through a shadow, and executePurchase threw on
+// `total_amount: null`. The draft sat at 'pending_confirm' forever because the
+// tenant middleware rolled back the 'failed' marker along with the 500.
+describe('resolvePurchaseTotal', () => {
+  it('prefers the stated total even when it disagrees with the lines', () => {
+    // The gap is real and expected — IVA, discounts, and lines the model never
+    // extracted all live in it. The receipt total is what left the till.
+    const parsed: any = {
+      total_amount: 2400,
+      items: [{ line_total: 1113 }, { line_total: 234.26 }],
+    };
+    expect(resolvePurchaseTotal(parsed)).toEqual({ amount: 2400, derived: false });
+  });
+
+  it('derives the total from the line items when the ticket was unreadable', () => {
+    const parsed: any = {
+      total_amount: null,
+      items: [
+        { line_total: 1235.1 },
+        { line_total: 1715 },
+        { line_total: 801.8 },
+        { line_total: 208 },
+      ],
+    };
+    expect(resolvePurchaseTotal(parsed)).toEqual({ amount: 3959.9, derived: true });
+  });
+
+  it('rounds a derived total to cents rather than carrying float noise', () => {
+    const parsed: any = { total_amount: null, items: [{ line_total: 0.1 }, { line_total: 0.2 }] };
+    expect(resolvePurchaseTotal(parsed).amount).toBe(0.3);
+  });
+
+  it('skips unusable line totals instead of poisoning the sum with NaN', () => {
+    const parsed: any = {
+      total_amount: null,
+      items: [{ line_total: 100 }, { line_total: null }, { line_total: 'x' }, { line_total: -5 }],
+    };
+    expect(resolvePurchaseTotal(parsed)).toEqual({ amount: 100, derived: true });
+  });
+
+  it('reports no total when there is nothing to derive one from', () => {
+    // Still a hard failure — but now only when the photo really gave us nothing,
+    // not merely because the printed total was obscured.
+    expect(resolvePurchaseTotal({ total_amount: null, items: [] } as any).amount).toBeNull();
+    expect(resolvePurchaseTotal({} as any).amount).toBeNull();
   });
 });
 
@@ -480,6 +559,110 @@ describe('permission split', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.intent).toBe('record_purchase');
+  });
+
+  // The exact prod shape from 2026-07-31: a Central de Abasto ticket whose line
+  // items all read cleanly but whose printed total was lost to a shadow. This
+  // returned 500 "Failed to save" and left the draft stranded at
+  // 'pending_confirm' with no failure_reason and no way for the operator to fix
+  // it from the review screen.
+  it('commits a purchase whose printed total the camera could not read', async () => {
+    const id = await seedDraft({
+      intent: 'record_purchase',
+      vendor: 'Saavedra Market',
+      total_amount: null,
+      items: [
+        { inventory_item_id: itemA, raw_name: 'Q. Oaxaca', quantity: 4, unit: 'kg', line_total: 460 },
+        { inventory_item_id: itemB, raw_name: 'Q. Cheddar', quantity: 2, unit: 'kg', line_total: 380 },
+      ],
+    });
+
+    const res = await request(appForTenant(tenant.id))
+      .post(`/api/inventory-scan/${id}/confirm`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ items: [] });
+
+    expect(res.status).toBe(200);
+
+    expect(res.body.summary.amount).toBe(840);
+
+    // Booked at the sum of the lines, and the expense says so — an owner
+    // reconciling against the paper ticket must not read this as a printed total.
+    const row = await get(
+      'SELECT status, executed_resource_id FROM voice_intents WHERE id = $1',
+      [id]
+    );
+    expect(row.status).toBe('confirmed');
+
+    const booked = await get('SELECT amount, notes FROM expenses WHERE id = $1', [
+      row.executed_resource_id,
+    ]);
+    expect(Number(booked.amount)).toBe(840);
+    expect(booked.notes).toMatch(/sumando las partidas/);
+  });
+
+  // The operator's escape hatch when the lines don't sum to what was paid.
+  it('books the operator-typed total over the derived one', async () => {
+    const id = await seedDraft({
+      intent: 'record_purchase',
+      vendor: 'Bodega G-65',
+      total_amount: null,
+      items: [
+        { inventory_item_id: itemA, raw_name: 'Q. Oaxaca', quantity: 3, unit: 'kg', line_total: 300 },
+      ],
+    });
+
+    const res = await request(appForTenant(tenant.id))
+      .post(`/api/inventory-scan/${id}/confirm`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ items: [], total_amount: 348 }); // 300 + IVA the lines never showed
+
+    expect(res.status).toBe(200);
+    expect(res.body.summary.amount).toBe(348);
+
+    const row = await get('SELECT executed_resource_id FROM voice_intents WHERE id = $1', [id]);
+    const booked = await get('SELECT amount, notes FROM expenses WHERE id = $1', [
+      row.executed_resource_id,
+    ]);
+    expect(Number(booked.amount)).toBe(348);
+    // Not derived — so it must NOT carry the derived-total disclaimer.
+    expect(booked.notes || '').not.toMatch(/sumando las partidas/);
+  });
+
+  // A failure that survives the response. tenantMiddleware ROLLBACKs on >= 400,
+  // which used to erase the marker written on the request connection — the
+  // reason prod had zero 'failed' rows despite repeated failures.
+  it('records why a commit failed, and leaves the draft retryable', async () => {
+    const id = await seedDraft({
+      intent: 'record_purchase',
+      vendor: 'Sin Total',
+      total_amount: null,
+      // No line totals either, so there is genuinely nothing to derive from.
+      items: [{ inventory_item_id: itemA, raw_name: 'Q. Oaxaca', quantity: 3, unit: 'kg' }],
+    });
+
+    const res = await request(appForTenant(tenant.id))
+      .post(`/api/inventory-scan/${id}/confirm`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ items: [] });
+
+    expect(res.status).toBe(500);
+
+    const row = await get(
+      'SELECT status, failure_reason FROM voice_intents WHERE id = $1',
+      [id]
+    );
+    expect(row.failure_reason).toMatch(/total amount missing/i);
+    // Still pending: the operator's next move is to type the total and retry,
+    // which a terminal 'failed' status would turn into a 409.
+    expect(row.status).toBe('pending_confirm');
+
+    // And the retry works.
+    const retry = await request(appForTenant(tenant.id))
+      .post(`/api/inventory-scan/${id}/confirm`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ items: [], total_amount: 275 });
+    expect(retry.status).toBe(200);
   });
 });
 

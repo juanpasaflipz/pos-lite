@@ -50,6 +50,7 @@ const MobilePhotoScanScreen: React.FC = () => {
   const [draftId, setDraftId] = useState<number | null>(null);
   const [draft, setDraft] = useState<InventoryScanDraft | null>(null);
   const [edits, setEdits] = useState<Record<number, LineEdit>>({});
+  const [totalEdit, setTotalEdit] = useState('');
   const [result, setResult] = useState<InventoryScanResult | null>(null);
 
   const isCount = draft?.intent === 'count_inventory';
@@ -62,6 +63,7 @@ const MobilePhotoScanScreen: React.FC = () => {
     setDraftId(null);
     setDraft(null);
     setEdits({});
+    setTotalEdit('');
     setResult(null);
     if (fileRef.current) fileRef.current.value = '';
   }, [preview]);
@@ -99,6 +101,11 @@ const MobilePhotoScanScreen: React.FC = () => {
           ])
         )
       );
+      // Seed the total from whatever the model read. When it read nothing, the
+      // field opens blank with the line sum as its placeholder — the server will
+      // use that sum if the operator leaves it alone, so the placeholder is a
+      // real preview of what gets booked, not a hint.
+      setTotalEdit(res.draft.total_amount != null ? String(res.draft.total_amount) : '');
       successFeedback();
       setStep('review');
     } catch (err) {
@@ -123,6 +130,18 @@ const MobilePhotoScanScreen: React.FC = () => {
     [edits]
   );
 
+  // Mirrors the server's fallback (resolvePurchaseTotal) so the placeholder
+  // shows the figure that will actually be booked if the operator types nothing.
+  const lineSum = useMemo(
+    () =>
+      Object.values(edits).reduce((acc, e) => {
+        if (!e.include) return acc;
+        const lt = Number(e.lineTotal);
+        return Number.isFinite(lt) && lt > 0 ? acc + lt : acc;
+      }, 0),
+    [edits]
+  );
+
   const handleConfirm = async () => {
     if (!draftId || !draft) return;
     setStep('saving');
@@ -138,7 +157,17 @@ const MobilePhotoScanScreen: React.FC = () => {
         if (e.create) o.create = true;
         return o;
       });
-      const res = await confirmInventoryScan(draftId, overrides);
+      // Only send a total the operator actually typed. Omitting it leaves the
+      // draft's own value in charge, and the server derives one from the lines
+      // when the draft has none.
+      const typedTotal = Number(totalEdit);
+      const res = await confirmInventoryScan(
+        draftId,
+        overrides,
+        !isCount && totalEdit.trim() !== '' && Number.isFinite(typedTotal) && typedTotal > 0
+          ? { total_amount: typedTotal }
+          : undefined
+      );
       successFeedback();
       setResult(res);
       setStep('done');
@@ -260,12 +289,37 @@ const MobilePhotoScanScreen: React.FC = () => {
         )}
 
         {/* Purchase header: vendor + total, the two things worth eyeballing
-            before the line items. */}
-        {!isCount && (draft?.vendor || draft?.total_amount != null) && (
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 flex items-center justify-between">
-            <span className="text-neutral-300 font-medium">{draft?.vendor || t('photoScan.noVendor')}</span>
-            {draft?.total_amount != null && (
-              <span className="text-white font-bold">${fmtMoney(draft.total_amount)}</span>
+            before the line items. The total is editable because it is the field
+            the camera most often loses — a shadow over the bottom of the ticket
+            used to make the whole scan unsaveable with no way to fix it. */}
+        {!isCount && (
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-neutral-300 font-medium">{draft?.vendor || t('photoScan.noVendor')}</span>
+            </div>
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-neutral-400 text-sm shrink-0">{t('photoScan.total')}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-neutral-500 font-bold">$</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  value={totalEdit}
+                  onChange={(e) => setTotalEdit(e.target.value)}
+                  disabled={saving}
+                  placeholder={lineSum > 0 ? fmtMoney(lineSum) : '0.00'}
+                  className="w-32 min-h-[40px] bg-neutral-800 border border-neutral-700 rounded-lg px-3 text-right text-white font-bold disabled:opacity-50 focus:border-brand-500 focus:outline-none"
+                />
+              </div>
+            </label>
+            {draft?.total_amount == null && (
+              <p className="text-amber-300/80 text-xs leading-relaxed">
+                {lineSum > 0
+                  ? t('photoScan.totalUnreadable', { amount: `$${fmtMoney(lineSum)}` })
+                  : t('photoScan.totalRequired')}
+              </p>
             )}
           </div>
         )}

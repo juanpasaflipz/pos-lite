@@ -168,7 +168,15 @@ export function buildConfirmationMessage(parsed) {
       })
       .join('\n');
     const vendor = parsed.vendor ? `\nProveedor: ${parsed.vendor}` : '';
-    const total = parsed.total_amount ? `\nTotal: $${fmtMoney(parsed.total_amount)}` : '';
+    // Show the figure that will actually be booked, including the fallback used
+    // when the ticket's printed total was unreadable (resolvePurchaseTotal).
+    // Labelled, because SI is the only checkpoint on this transport and the
+    // owner must never approve an amount they were not shown — this line used to
+    // silently disappear whenever total_amount was null.
+    const resolvedTotal = resolvePurchaseTotal(parsed);
+    const total = resolvedTotal.amount != null
+      ? `\nTotal: $${fmtMoney(resolvedTotal.amount)}${resolvedTotal.derived ? ' (suma de partidas — el total del ticket no era legible)' : ''}`
+      : '';
 
     // If any line tripped a severe alert, surface a single combined Spanish
     // warning between the lines and the SI prompt. The intent is: don't block,
@@ -477,12 +485,38 @@ async function executeWaste(parsed, employeeId) {
   return { resource_type: 'waste_log', resource_ids: created.map((c) => c.resource_id), summary: created };
 }
 
+/**
+ * The printed total is the single most losable field on a receipt photo — a
+ * shadow across the bottom of the ticket, a crumpled edge, thermal paper cut
+ * short. The line items above it are usually perfectly legible, so refusing the
+ * whole purchase over a missing total threw away work the model had already
+ * done correctly and left the operator with no way forward (the review screen
+ * has no total field to fill in).
+ *
+ * A stated total stays authoritative even when it disagrees with the lines:
+ * IVA, discounts, and items the model did not extract all live in that gap, and
+ * the receipt total is what actually left the till. The line sum is a fallback
+ * for when there is no stated total at all, not a cross-check.
+ */
+export function resolvePurchaseTotal(parsed) {
+  const stated = Number(parsed?.total_amount);
+  if (Number.isFinite(stated) && stated > 0) return { amount: stated, derived: false };
+
+  const sum = (parsed?.items || []).reduce((acc, it) => {
+    const lineTotal = Number(it?.line_total);
+    return Number.isFinite(lineTotal) && lineTotal > 0 ? acc + lineTotal : acc;
+  }, 0);
+  if (sum > 0) return { amount: Math.round(sum * 100) / 100, derived: true };
+
+  return { amount: null, derived: false };
+}
+
 async function executePurchase(parsed, employeeId) {
   const tid = getTenantId();
   const vendorId = await findVendorIdByName(parsed.vendor);
-  const amount = Number(parsed.total_amount);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw new Error('Purchase total amount missing or invalid');
+  const { amount, derived: totalDerived } = resolvePurchaseTotal(parsed);
+  if (amount == null) {
+    throw new Error('Purchase total amount missing and no line totals to derive it from');
   }
   const today = new Date().toISOString().slice(0, 10);
 
@@ -540,6 +574,14 @@ async function executePurchase(parsed, employeeId) {
   );
   const receiptImageUrl = parsed.receipt_image_url || null;
   const noteDefault = receiptImageUrl ? 'Logged via WhatsApp receipt photo' : 'Logged via WhatsApp voice note';
+  // Say so on the expense itself. An owner reconciling against the paper ticket
+  // needs to know this figure is the sum of the lines we read, not the total the
+  // ticket printed — they are allowed to differ by tax, discounts, and any line
+  // the model missed.
+  const baseNote = parsed.note || noteDefault;
+  const notes = totalDerived
+    ? `${baseNote}\n[Total calculado sumando las partidas — el total impreso no era legible.]`
+    : baseNote;
   let expense;
   if (hasVendorId) {
     expense = await get(
@@ -547,7 +589,7 @@ async function executePurchase(parsed, employeeId) {
        VALUES ($1, 'food_cost', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [tid, parsed.vendor || null, vendorId, amount, today, parsed.payment_method || null,
-       parsed.note || noteDefault, JSON.stringify(receiptData), receiptImageUrl, employeeId, parsed.vendor || null]
+       notes, JSON.stringify(receiptData), receiptImageUrl, employeeId, parsed.vendor || null]
     );
   } else {
     expense = await get(
@@ -555,7 +597,7 @@ async function executePurchase(parsed, employeeId) {
        VALUES ($1, 'food_cost', $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [tid, parsed.vendor || null, amount, today, parsed.payment_method || null,
-       parsed.note || noteDefault, JSON.stringify(receiptData), receiptImageUrl, employeeId, parsed.vendor || null]
+       notes, JSON.stringify(receiptData), receiptImageUrl, employeeId, parsed.vendor || null]
     );
   }
 

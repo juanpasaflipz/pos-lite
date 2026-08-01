@@ -4285,6 +4285,16 @@ export interface InventoryScanOverride {
   create?: boolean;
 }
 
+/** Confirm-time edits that apply to the whole purchase rather than one line. */
+export interface InventoryScanConfirmOptions {
+  /**
+   * The receipt total, when the operator typed it. Only needed for the case the
+   * model couldn't read one off the photo — the server keeps the draft's own
+   * total otherwise, and falls back to the sum of the lines if there is none.
+   */
+  total_amount?: number;
+}
+
 export interface InventoryScanResult {
   intent: InventoryScanIntent;
   message: string;
@@ -4321,11 +4331,12 @@ export async function scanInventoryPhoto(file: File, caption?: string): Promise<
 
 export async function confirmInventoryScan(
   id: number,
-  items?: InventoryScanOverride[]
+  items?: InventoryScanOverride[],
+  options?: InventoryScanConfirmOptions
 ): Promise<InventoryScanResult> {
   return apiRequest<InventoryScanResult>(`/inventory-scan/${id}/confirm`, {
     method: 'POST',
-    body: JSON.stringify({ items: items || [] }),
+    body: JSON.stringify({ items: items || [], ...options }),
   });
 }
 
