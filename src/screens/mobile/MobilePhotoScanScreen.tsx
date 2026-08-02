@@ -1,7 +1,7 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Camera, Loader2, Check, X, AlertTriangle, PackagePlus, RotateCcw, CircleCheck,
+  Camera, Loader2, Check, X, AlertTriangle, PackagePlus, RotateCcw, CircleCheck, Search,
 } from 'lucide-react';
 import MobileHeader from '../../components/mobile/MobileHeader';
 import { successFeedback, errorFeedback, tapFeedback } from '../../lib/haptics';
@@ -9,6 +9,8 @@ import {
   scanInventoryPhoto,
   confirmInventoryScan,
   cancelInventoryScan,
+  searchInventory,
+  type InventorySearchResult,
   type InventoryScanDraft,
   type InventoryScanItem,
   type InventoryScanOverride,
@@ -35,6 +37,11 @@ interface LineEdit {
   quantity: string;
   lineTotal: string;
   create: boolean;
+  /** SKU the operator re-pointed this line at, replacing a bad fuzzy match. */
+  boundId: number | null;
+  boundName: string | null;
+  /** A corrected name, only ever sent alongside create. */
+  renameTo: string;
 }
 
 const fmtMoney = (n: number) =>
@@ -97,6 +104,9 @@ const MobilePhotoScanScreen: React.FC = () => {
               quantity: it.quantity != null ? String(it.quantity) : '',
               lineTotal: it.line_total != null ? String(it.line_total) : '',
               create: false,
+              boundId: null,
+              boundName: null,
+              renameTo: '',
             } as LineEdit,
           ])
         )
@@ -155,6 +165,9 @@ const MobilePhotoScanScreen: React.FC = () => {
         const lt = Number(e.lineTotal);
         if (e.lineTotal !== '' && Number.isFinite(lt)) o.line_total = lt;
         if (e.create) o.create = true;
+        if (e.boundId != null) o.bind_inventory_item_id = e.boundId;
+        // The server only honors a name with create, so don't imply otherwise.
+        if (e.create && e.renameTo.trim()) o.name = e.renameTo.trim();
         return o;
       });
       // Only send a total the operator actually typed. Omitting it leaves the
@@ -377,8 +390,13 @@ interface LineRowProps {
 }
 
 const LineRow: React.FC<LineRowProps> = ({ item, edit, isCount, disabled, onChange, t }) => {
+  const [picking, setPicking] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+
   if (!edit) return null;
   const dimmed = !edit.include;
+  const rebound = edit.boundId != null;
+  const effectiveBoundName = edit.boundName ?? item.matched_name;
 
   return (
     <div className={`bg-neutral-900 border rounded-xl p-4 transition-opacity ${dimmed ? 'opacity-40 border-neutral-800' : 'border-neutral-700'}`}>
@@ -396,6 +414,26 @@ const LineRow: React.FC<LineRowProps> = ({ item, edit, isCount, disabled, onChan
 
         <div className="flex-1 min-w-0">
           <p className="text-white font-semibold truncate">{item.raw_name || t('photoScan.unnamed')}</p>
+
+          {/* What this line will actually restock. The model's transcription and
+              the SKU it bound to are different things, and only the second one
+              moves stock — a handwritten "mango" read as "maíz" is invisible
+              until you show it. */}
+          {(edit.create || rebound ||
+            (effectiveBoundName && effectiveBoundName.toLowerCase() !== item.raw_name.trim().toLowerCase())) && (
+            <p className="text-xs mt-0.5 truncate">
+              <span className="text-neutral-500">{t('photoScan.willUpdate')} </span>
+              {edit.create ? (
+                <span className="text-blue-300 font-medium">
+                  {(edit.renameTo.trim() || item.raw_name || t('photoScan.unnamed')) + ' · ' + t('photoScan.tagNew')}
+                </span>
+              ) : (
+                <span className={rebound ? 'text-green-300 font-medium' : 'text-neutral-300 font-medium'}>
+                  {effectiveBoundName}
+                </span>
+              )}
+            </p>
+          )}
 
           <div className="flex flex-wrap gap-1.5 mt-1">
             {item.will_create && (
@@ -452,6 +490,96 @@ const LineRow: React.FC<LineRowProps> = ({ item, edit, isCount, disabled, onChan
             )}
           </div>
 
+          {/* The two ways a misread gets corrected: point the line at the SKU it
+              should have matched, or name a SKU that doesn't exist yet. */}
+          {edit.include && !edit.create && (
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={() => { tapFeedback(); setPicking((v) => !v); setRenaming(false); }}
+                disabled={disabled}
+                className={`flex-1 min-h-[40px] rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 border touch-manipulation ${
+                  picking ? 'bg-brand-600/20 border-brand-700 text-brand-200' : 'bg-neutral-800 border-neutral-700 text-neutral-300'
+                }`}
+              >
+                <Search className="w-3.5 h-3.5" /> {t('photoScan.changeItem')}
+              </button>
+              <button
+                onClick={() => { tapFeedback(); setRenaming((v) => !v); setPicking(false); }}
+                disabled={disabled}
+                className="flex-1 min-h-[40px] rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 border bg-neutral-800 border-neutral-700 text-neutral-300 touch-manipulation"
+              >
+                <PackagePlus className="w-3.5 h-3.5" /> {t('photoScan.renameCreate')}
+              </button>
+            </div>
+          )}
+
+          {picking && edit.include && (
+            <InventoryPicker
+              disabled={disabled}
+              onPick={(hit) => {
+                onChange({ boundId: hit.id, boundName: hit.name, create: false, renameTo: '' });
+                setPicking(false);
+                successFeedback();
+              }}
+              t={t}
+            />
+          )}
+
+          {rebound && !picking && (
+            <button
+              onClick={() => { tapFeedback(); onChange({ boundId: null, boundName: null }); }}
+              disabled={disabled}
+              className="mt-2 text-xs text-neutral-500 hover:text-neutral-300 underline touch-manipulation min-h-[40px]"
+            >
+              {t('photoScan.undoChange')}
+            </button>
+          )}
+
+          {renaming && edit.include && (
+            <div className="mt-2 space-y-2">
+              <input
+                type="text"
+                autoFocus
+                value={edit.renameTo}
+                onChange={(e) => onChange({ renameTo: e.target.value })}
+                placeholder={item.raw_name || t('photoScan.unnamed')}
+                disabled={disabled}
+                className="w-full min-h-[44px] px-3 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-brand-600 disabled:opacity-50"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    tapFeedback();
+                    onChange({ create: true, boundId: null, boundName: null });
+                    setRenaming(false);
+                  }}
+                  disabled={disabled || !edit.renameTo.trim()}
+                  className="flex-1 min-h-[44px] rounded-lg text-sm font-medium bg-blue-600/20 border border-blue-700 text-blue-300 disabled:opacity-40 touch-manipulation"
+                >
+                  {t('photoScan.confirmCreate')}
+                </button>
+                <button
+                  onClick={() => { tapFeedback(); onChange({ renameTo: '' }); setRenaming(false); }}
+                  disabled={disabled}
+                  className="min-h-[44px] px-4 rounded-lg text-sm text-neutral-400 border border-neutral-700 touch-manipulation"
+                >
+                  {t('photoScan.cancel')}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Creating a new SKU is reversible right up to save. */}
+          {edit.create && !item.unmatched && (
+            <button
+              onClick={() => { tapFeedback(); onChange({ create: false, renameTo: '' }); }}
+              disabled={disabled}
+              className="mt-2 text-xs text-neutral-500 hover:text-neutral-300 underline touch-manipulation min-h-[40px]"
+            >
+              {t('photoScan.undoChange')}
+            </button>
+          )}
+
           {/* An unmatched count line does nothing on save unless the operator
               says "yes, create this SKU" — the in-app AGREGAR. */}
           {item.unmatched && edit.include && (
@@ -470,6 +598,80 @@ const LineRow: React.FC<LineRowProps> = ({ item, edit, isCount, disabled, onChan
           )}
         </div>
       </div>
+    </div>
+  );
+};
+
+interface InventoryPickerProps {
+  disabled: boolean;
+  onPick: (hit: InventorySearchResult) => void;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}
+
+/**
+ * Search the tenant's own inventory and re-point a line at the right SKU.
+ *
+ * Deliberately shows current stock and unit next to each hit: with names like
+ * "Queso Oaxaca La Piramide" vs "Queso Oaxaca", the number on hand is often the
+ * only way to tell which row is the one actually in use.
+ */
+const InventoryPicker: React.FC<InventoryPickerProps> = ({ disabled, onPick, t }) => {
+  const [q, setQ] = useState('');
+  const [hits, setHits] = useState<InventorySearchResult[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const term = q.trim();
+    if (term.length < 2) { setHits([]); return; }
+    // Debounced so a thumb typing "mango" fires one request, not five.
+    let cancelled = false;
+    setBusy(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await searchInventory(term);
+        if (!cancelled) setHits(res);
+      } catch {
+        if (!cancelled) setHits([]);
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    }, 250);
+    return () => { cancelled = true; clearTimeout(timer); setBusy(false); };
+  }, [q]);
+
+  return (
+    <div className="mt-2 space-y-2">
+      <div className="relative">
+        <Search className="w-4 h-4 text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2" />
+        <input
+          type="text"
+          autoFocus
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={t('photoScan.searchInventory')}
+          disabled={disabled}
+          className="w-full min-h-[44px] pl-9 pr-3 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-brand-600 disabled:opacity-50"
+        />
+        {busy && <Loader2 className="w-4 h-4 text-neutral-500 animate-spin absolute right-3 top-1/2 -translate-y-1/2" />}
+      </div>
+
+      {hits.map((hit) => (
+        <button
+          key={hit.id}
+          onClick={() => onPick(hit)}
+          disabled={disabled}
+          className="w-full min-h-[44px] px-3 py-2 rounded-lg bg-neutral-800 border border-neutral-700 hover:border-brand-600 flex items-center justify-between gap-3 text-left touch-manipulation"
+        >
+          <span className="text-white text-sm truncate">{hit.name}</span>
+          <span className="text-neutral-500 text-xs shrink-0">
+            {Number(hit.quantity)} {hit.unit}
+          </span>
+        </button>
+      ))}
+
+      {q.trim().length >= 2 && !busy && hits.length === 0 && (
+        <p className="text-neutral-500 text-xs px-1">{t('photoScan.noMatches')}</p>
+      )}
     </div>
   );
 };

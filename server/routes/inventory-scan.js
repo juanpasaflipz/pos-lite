@@ -40,6 +40,7 @@ import {
   enrichItemBindings,
   executeIntent,
   buildSuccessMessage,
+  deriveLineEconomics,
 } from '../helpers/voiceIntent.js';
 
 // Memory storage, not disk: the buffer goes straight to the vision call, and
@@ -146,11 +147,34 @@ async function canCommitIntent(employee, intent) {
 }
 
 /**
+ * Canonical SKU name for every bound line, in one round trip. RLS-scoped, so a
+ * stale id from another tenant simply resolves to nothing.
+ */
+async function matchedNamesFor(parsed) {
+  const ids = [
+    ...new Set(
+      (Array.isArray(parsed?.items) ? parsed.items : [])
+        .map((it) => Number(it?.inventory_item_id))
+        .filter((n) => Number.isInteger(n) && n > 0)
+    ),
+  ];
+  if (!ids.length) return new Map();
+  try {
+    const rows = await all('SELECT id, name FROM inventory_items WHERE id = ANY($1::int[])', [ids]);
+    return new Map(rows.map((r) => [Number(r.id), r.name]));
+  } catch (err) {
+    // Cosmetic data — a failure here must not cost the operator the whole draft.
+    console.warn('[InventoryScan] matched-name lookup failed (non-fatal):', err.message);
+    return new Map();
+  }
+}
+
+/**
  * Shape a parsed intent for the review screen. The client renders exactly what
  * it gets here; it never re-derives item state, so `_will_create` /
  * `_unmatched` are surfaced explicitly rather than left for the UI to infer.
  */
-function toDraft(parsed) {
+function toDraft(parsed, matchedNames = new Map()) {
   const items = Array.isArray(parsed.items) ? parsed.items : [];
   return {
     intent: parsed.intent,
@@ -165,6 +189,10 @@ function toDraft(parsed) {
       index,
       inventory_item_id: it.inventory_item_id ?? null,
       raw_name: it.raw_name || '',
+      // The SKU this line will actually restock. Without it the operator sees
+      // only the model's transcription, so a fuzzy match onto the wrong row
+      // ("maíz" for a handwritten mango) is invisible until after it commits.
+      matched_name: it.inventory_item_id ? matchedNames.get(Number(it.inventory_item_id)) || null : null,
       quantity: it.quantity ?? null,
       unit: it.unit || null,
       pack_size: it.pack_size ?? null,
@@ -273,7 +301,7 @@ router.post(
         ]
       );
 
-      res.status(201).json({ id: row.lastInsertRowid, draft: toDraft(parsed) });
+      res.status(201).json({ id: row.lastInsertRowid, draft: toDraft(parsed, await matchedNamesFor(parsed)) });
     } catch (error) {
       console.error('Error scanning inventory photo:', error);
       res.status(500).json({ error: 'Failed to scan photo' });
@@ -291,7 +319,10 @@ router.post(
  * could name an arbitrary inventory_item_id could restock or zero out any row
  * in the tenant by id.
  */
-export function applyOverrides(parsed, overrides, totalAmount) {
+export function applyOverrides(parsed, overrides, opts = {}) {
+  const { totalAmount, bindings } = opts;
+  const isPurchase = parsed?.intent === 'record_purchase';
+
   // The total is the field the camera most often loses (shadow, crumpled edge,
   // cut thermal paper), so the operator has to be able to type it. Validated
   // exactly as executePurchase validates it, so a stray keystroke can't book a
@@ -325,12 +356,54 @@ export function applyOverrides(parsed, overrides, totalAmount) {
       const amt = Number(o.line_total);
       if (Number.isFinite(amt) && amt >= 0) it.line_total = amt;
     }
+    // Re-point a line at a different SKU. This is the fix for a misread name:
+    // handwritten "mango" comes back as "maíz", enrichItemBindings fuzzy-matches
+    // it to the REAL Maíz row, and committing would restock maíz with mango's
+    // kilos and write mango's price into maíz's cost history. Correcting only
+    // the displayed text would leave that binding intact — it has to move.
+    //
+    // The id is still not taken on trust: the route resolves every requested id
+    // against the tenant's own inventory first (RLS-scoped) and passes the
+    // surviving ones in `bindings`. Anything not in that map never reaches here,
+    // so the "no client-named ids" property holds — the client proposes, the
+    // server confirms the row exists and supplies its canonical name.
+    if (o && o.bind_inventory_item_id != null && bindings) {
+      const bound = bindings.get(Number(o.bind_inventory_item_id));
+      if (bound) {
+        it.inventory_item_id = bound.id;
+        // Adopt the SKU's real name so receipt_data's raw_description and any
+        // "(NUEVO)" label describe what was actually restocked, not the misread.
+        it.raw_name = bound.name;
+        it._rebound = true;
+        delete it._will_create;
+        delete it._unmatched;
+        delete it._fuzzy_matched;
+      }
+    }
+
+    // Rename + create: the item genuinely isn't in inventory yet. Only honored
+    // together with create, so raw_name can never drift away from the SKU that
+    // inventory_item_id points at — a rename alone would relabel the line while
+    // still restocking the old row.
+    if (o && o.create === true && typeof o.name === 'string' && o.name.trim()) {
+      it.raw_name = o.name.trim();
+      it.inventory_item_id = null;
+    }
+
     // Promote an unbound count line to a new SKU — the in-app equivalent of
     // replying AGREGAR on WhatsApp.
     if (o && o.create === true && !it.inventory_item_id) {
       it._will_create = true;
       delete it._unmatched;
     }
+
+    // quantity/line_total edits above are the operator's, but executePurchase
+    // restocks `received_qty_base_unit ?? quantity` and prices from
+    // derived_unit_cost — both computed when the draft was built. Without this
+    // the edits were silently discarded: halving a line to 5 kg still restocked
+    // the original 10, at the original per-kg cost.
+    if (isPurchase) deriveLineEconomics(it);
+
     kept.push(it);
   });
 
@@ -386,7 +459,36 @@ router.post('/:id/confirm', requireAuth('scan_inventory'), async (req, res) => {
       });
     }
 
-    parsed = applyOverrides(parsed, req.body?.items, req.body?.total_amount);
+    // Resolve every SKU the operator re-pointed a line at, in one round trip.
+    // The SELECT runs on the tenant connection, so RLS decides what is visible —
+    // an id from another tenant simply doesn't come back and is reported as
+    // unknown rather than silently ignored. Ignoring it would be the dangerous
+    // outcome: the line would keep its original (wrong) binding and restock the
+    // item the operator was trying to correct away from.
+    const requestedBindIds = [
+      ...new Set(
+        (Array.isArray(req.body?.items) ? req.body.items : [])
+          .map((o) => Number(o?.bind_inventory_item_id))
+          .filter((n) => Number.isInteger(n) && n > 0)
+      ),
+    ];
+    let bindings = new Map();
+    if (requestedBindIds.length) {
+      const rows = await all(
+        'SELECT id, name FROM inventory_items WHERE id = ANY($1::int[])',
+        [requestedBindIds]
+      );
+      bindings = new Map(rows.map((r) => [Number(r.id), { id: Number(r.id), name: r.name }]));
+      const unknown = requestedBindIds.filter((id) => !bindings.has(id));
+      if (unknown.length) {
+        return res.status(400).json({ error: 'unknown_inventory_item', ids: unknown });
+      }
+    }
+
+    parsed = applyOverrides(parsed, req.body?.items, {
+      totalAmount: req.body?.total_amount,
+      bindings,
+    });
 
     if (!Array.isArray(parsed.items) || parsed.items.length === 0) {
       return res.status(400).json({ error: 'No items to save' });

@@ -4245,6 +4245,12 @@ export interface InventoryScanItem {
   index: number;
   inventory_item_id: number | null;
   raw_name: string;
+  /**
+   * Canonical name of the SKU this line will restock. Differs from raw_name
+   * whenever the model misread the label and the fuzzy matcher bound it
+   * elsewhere — the operator has to see this to catch it before committing.
+   */
+  matched_name: string | null;
   quantity: number | null;
   unit: string | null;
   pack_size: number | null;
@@ -4283,6 +4289,18 @@ export interface InventoryScanOverride {
   line_total?: number;
   /** Promote an unmatched count line into a new SKU (the AGREGAR equivalent). */
   create?: boolean;
+  /**
+   * Re-point this line at a different SKU, for when the model misread the label
+   * and it bound to the wrong row. The server re-resolves the id against the
+   * tenant's own inventory and 400s on anything it can't see, so this proposes
+   * a binding rather than dictating one.
+   */
+  bind_inventory_item_id?: number;
+  /**
+   * A corrected item name. Only honored together with `create: true` — renaming
+   * a bound line would relabel it on screen while still restocking the old SKU.
+   */
+  name?: string;
 }
 
 /** Confirm-time edits that apply to the whole purchase rather than one line. */

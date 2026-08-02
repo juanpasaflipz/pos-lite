@@ -241,7 +241,7 @@ describe('applyOverrides', () => {
     const d: any = { intent: 'record_purchase', total_amount: null, items: [] };
     // Note the empty overrides array: the total must be applied before the
     // early return that short-circuits on no line edits.
-    expect(applyOverrides(d, [], 1234.5).total_amount).toBe(1234.5);
+    expect(applyOverrides(d, [], { totalAmount: 1234.5 }).total_amount).toBe(1234.5);
   });
 
   it('refuses a zero, negative, or non-numeric total', () => {
@@ -249,14 +249,98 @@ describe('applyOverrides', () => {
     // replaces — the draft's own value stays in charge instead.
     for (const bad of [0, -10, 'abc', '']) {
       const d: any = { intent: 'record_purchase', total_amount: 500, items: [] };
-      expect(applyOverrides(d, [], bad as any).total_amount).toBe(500);
+      expect(applyOverrides(d, [], { totalAmount: bad as any }).total_amount).toBe(500);
     }
+  });
+
+  // Re-pointing a line at a different SKU. The motivating case: a handwritten
+  // "mango" that the model reads as "maíz", which enrichItemBindings then
+  // fuzzy-matches onto the real Maíz row. Correcting the displayed text alone
+  // would leave that binding intact and restock maíz with mango's kilos.
+  const purchase = () => ({
+    intent: 'record_purchase',
+    items: [
+      {
+        inventory_item_id: 700, raw_name: 'Maiz', quantity: 4, unit: 'kg',
+        pack_size: 1, line_total: 400, received_qty_base_unit: 4,
+        derived_unit_cost: 100, _fuzzy_matched: true,
+      },
+    ],
+  });
+  const bindings = new Map([[701, { id: 701, name: 'Mango' }]]);
+
+  it('re-points a line at a server-resolved SKU and adopts its real name', () => {
+    const out: any = applyOverrides(purchase(), [{ index: 0, bind_inventory_item_id: 701 }], { bindings });
+    expect(out.items[0].inventory_item_id).toBe(701);
+    // The SKU's canonical name, not the misread — receipt_data's
+    // raw_description has to describe what was actually restocked.
+    expect(out.items[0].raw_name).toBe('Mango');
+    expect(out.items[0]._rebound).toBe(true);
+    expect(out.items[0]._fuzzy_matched).toBeUndefined();
+  });
+
+  it('refuses to re-point at an id the server did not resolve', () => {
+    // The security property, restated for the new door: only ids the route
+    // confirmed exist in THIS tenant reach applyOverrides. Anything else must
+    // leave the original binding untouched.
+    const out: any = applyOverrides(purchase(), [{ index: 0, bind_inventory_item_id: 999 }], { bindings });
+    expect(out.items[0].inventory_item_id).toBe(700);
+    expect(out.items[0]._rebound).toBeUndefined();
+  });
+
+  it('ignores a bind id when no bindings map was supplied at all', () => {
+    const out: any = applyOverrides(purchase(), [{ index: 0, bind_inventory_item_id: 701 }]);
+    expect(out.items[0].inventory_item_id).toBe(700);
+  });
+
+  it('renames and unbinds only when creating a new SKU', () => {
+    const out: any = applyOverrides(purchase(), [{ index: 0, create: true, name: '  Mango Ataulfo ' }]);
+    expect(out.items[0].raw_name).toBe('Mango Ataulfo');
+    expect(out.items[0].inventory_item_id).toBeNull();
+    expect(out.items[0]._will_create).toBe(true);
+  });
+
+  it('will not rename a line without create — that would relabel a bound row', () => {
+    // A rename alone would leave inventory_item_id pointing at Maíz while the
+    // line reads "Mango": the restock still lands on the wrong SKU, and now
+    // nothing on screen says so.
+    const out: any = applyOverrides(purchase(), [{ index: 0, name: 'Mango' }]);
+    expect(out.items[0].raw_name).toBe('Maiz');
+    expect(out.items[0].inventory_item_id).toBe(700);
+  });
+
+  // executePurchase restocks `received_qty_base_unit ?? quantity` and prices
+  // from derived_unit_cost, both computed when the draft was built. Leaving them
+  // stale silently discarded every operator quantity edit on a purchase.
+  it('recomputes the restock quantity and unit cost after an edit', () => {
+    const out: any = applyOverrides(purchase(), [{ index: 0, quantity: 2, line_total: 300 }]);
+    expect(out.items[0].received_qty_base_unit).toBe(2);
+    expect(out.items[0].derived_unit_cost).toBe(150);
+  });
+
+  it('recomputes through pack_size rather than restocking packs as units', () => {
+    const d: any = {
+      intent: 'record_purchase',
+      items: [{
+        inventory_item_id: 700, raw_name: 'Sacos', quantity: 1, unit: 'kg',
+        pack_size: 5, line_total: 500, received_qty_base_unit: 5, derived_unit_cost: 100,
+      }],
+    };
+    const out: any = applyOverrides(d, [{ index: 0, quantity: 2 }]);
+    expect(out.items[0].received_qty_base_unit).toBe(10); // 2 sacks × 5 kg
+    expect(out.items[0].derived_unit_cost).toBe(50);      // 500 ÷ 10
+  });
+
+  it('leaves count drafts free of purchase-only economics', () => {
+    const out: any = applyOverrides(draft(), [{ index: 0, quantity: 5 }]);
+    expect(out.items[0].received_qty_base_unit).toBeUndefined();
+    expect(out.items[0].derived_unit_cost).toBeUndefined();
   });
 
   it('leaves the stated total alone when the operator sends none', () => {
     const d: any = { intent: 'record_purchase', total_amount: 500, items: [] };
-    expect(applyOverrides(d, [], undefined).total_amount).toBe(500);
-    expect(applyOverrides(d, [], null as any).total_amount).toBe(500);
+    expect(applyOverrides(d, [], { totalAmount: undefined }).total_amount).toBe(500);
+    expect(applyOverrides(d, [], { totalAmount: null as any }).total_amount).toBe(500);
   });
 });
 
@@ -627,6 +711,96 @@ describe('permission split', () => {
     expect(Number(booked.amount)).toBe(348);
     // Not derived — so it must NOT carry the derived-total disclaimer.
     expect(booked.notes || '').not.toMatch(/sumando las partidas/);
+  });
+
+  // The mango/maíz correction, end to end: the draft is bound to the WRONG SKU
+  // and the operator re-points it. Deltas rather than absolutes because earlier
+  // tests in this file already moved these rows.
+  it('restocks the SKU the operator re-pointed the line at, not the misread one', async () => {
+    const before = await get(
+      'SELECT id, quantity FROM inventory_items WHERE id = ANY($1::int[]) ORDER BY id',
+      [[itemA, itemB]]
+    ).then(() => Promise.all([
+      get('SELECT quantity FROM inventory_items WHERE id = $1', [itemA]),
+      get('SELECT quantity FROM inventory_items WHERE id = $1', [itemB]),
+    ]));
+
+    const id = await seedDraft({
+      intent: 'record_purchase',
+      vendor: 'Frutería',
+      total_amount: 400,
+      // Bound to itemA — the fuzzy matcher's mistake.
+      items: [{
+        inventory_item_id: itemA, raw_name: 'Maiz', quantity: 4, unit: 'kg',
+        pack_size: 1, line_total: 400, received_qty_base_unit: 4,
+        derived_unit_cost: 100, _fuzzy_matched: true,
+      }],
+    });
+
+    const res = await request(appForTenant(tenant.id))
+      .post(`/api/inventory-scan/${id}/confirm`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ items: [{ index: 0, bind_inventory_item_id: itemB }] });
+
+    expect(res.status).toBe(200);
+
+    const afterA = await get('SELECT quantity FROM inventory_items WHERE id = $1', [itemA]);
+    const afterB = await get('SELECT quantity FROM inventory_items WHERE id = $1', [itemB]);
+    // The misread SKU is untouched; the corrected one got all 4.
+    expect(Number(afterA.quantity)).toBe(Number(before[0].quantity));
+    expect(Number(afterB.quantity)).toBe(Number(before[1].quantity) + 4);
+  });
+
+  it('rejects a re-point at an inventory id outside the tenant', async () => {
+    // Silently ignoring it would be the dangerous outcome: the line keeps its
+    // original binding and restocks exactly the item being corrected away from.
+    const id = await seedDraft({
+      intent: 'record_purchase',
+      vendor: 'Frutería',
+      total_amount: 400,
+      items: [{
+        inventory_item_id: itemA, raw_name: 'Maiz', quantity: 4, unit: 'kg',
+        pack_size: 1, line_total: 400, received_qty_base_unit: 4, derived_unit_cost: 100,
+      }],
+    });
+
+    const res = await request(appForTenant(tenant.id))
+      .post(`/api/inventory-scan/${id}/confirm`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ items: [{ index: 0, bind_inventory_item_id: 2147483600 }] });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('unknown_inventory_item');
+
+    // Nothing committed — the operator can fix the pick and retry.
+    const row = await get('SELECT status FROM voice_intents WHERE id = $1', [id]);
+    expect(row.status).toBe('pending_confirm');
+  });
+
+  // An operator-corrected quantity has to reach the restock. Before
+  // deriveLineEconomics ran at override time this silently restocked the
+  // draft's original figure.
+  it('restocks the operator-corrected quantity, not the drafted one', async () => {
+    const before = await get('SELECT quantity FROM inventory_items WHERE id = $1', [itemB]);
+
+    const id = await seedDraft({
+      intent: 'record_purchase',
+      vendor: 'Frutería',
+      total_amount: 300,
+      items: [{
+        inventory_item_id: itemB, raw_name: 'Tecate', quantity: 10, unit: 'can',
+        pack_size: 1, line_total: 1000, received_qty_base_unit: 10, derived_unit_cost: 100,
+      }],
+    });
+
+    const res = await request(appForTenant(tenant.id))
+      .post(`/api/inventory-scan/${id}/confirm`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ items: [{ index: 0, quantity: 3, line_total: 300 }] });
+
+    expect(res.status).toBe(200);
+    const after = await get('SELECT quantity FROM inventory_items WHERE id = $1', [itemB]);
+    expect(Number(after.quantity)).toBe(Number(before.quantity) + 3);
   });
 
   // A failure that survives the response. tenantMiddleware ROLLBACKs on >= 400,

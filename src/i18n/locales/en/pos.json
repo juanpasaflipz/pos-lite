@@ -708,6 +708,14 @@
     "saving": "Saving…",
     "retake": "Discard and retake",
     "scanAnother": "Scan another",
-    "createdSkus": "{{count}} new product(s) created"
+    "createdSkus": "{{count}} new product(s) created",
+    "willUpdate": "Updates:",
+    "changeItem": "Change item",
+    "renameCreate": "Rename / create",
+    "searchInventory": "Search inventory…",
+    "noMatches": "No matches in your inventory.",
+    "undoChange": "Undo change",
+    "confirmCreate": "Create new item",
+    "cancel": "Cancel"
   }
 }

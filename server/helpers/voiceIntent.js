@@ -313,6 +313,32 @@ function modifierConflict(a, b) {
 // buildConfirmationMessage shows "(NUEVO)" and executePurchase inserts a
 // new inventory_items row on SI. For count intents, misses stay unbound —
 // the AGREGAR token converts them on demand.
+/**
+ * Recompute the two numbers executePurchase actually restocks and prices from.
+ *
+ * These are DERIVED, never model-reported: received_qty_base_unit is
+ * quantity × pack_size (a 1-sack line with pack_size 5 restocks 5 kg, not 1),
+ * and derived_unit_cost is line_total ÷ received (so a mis-labelled
+ * "unit_price" can't become the SKU's per-unit cost — the bug that turned
+ * $888.70 for 2.02 kg of picana into $888.70/kg).
+ *
+ * Exported because the review screen can change quantity and line_total after
+ * the draft was built. executePurchase reads `received_qty_base_unit ?? quantity`,
+ * so leaving these stale silently discarded every operator quantity edit on a
+ * purchase — you could halve a line to 5 kg and still restock the original 10.
+ */
+export function deriveLineEconomics(it) {
+  const packSize = Number(it.pack_size) > 0 ? Number(it.pack_size) : 1;
+  const qty = Number(it.quantity);
+  const received = Number.isFinite(qty) && qty > 0 ? qty * packSize : null;
+  it.received_qty_base_unit = received;
+  it.derived_unit_cost =
+    received && received > 0 && Number(it.line_total) > 0
+      ? Number(it.line_total) / received
+      : null;
+  return it;
+}
+
 // Must be called inside withTenant().
 export async function enrichItemBindings(parsed) {
   if (!parsed) return parsed;
@@ -404,16 +430,7 @@ export async function enrichItemBindings(parsed) {
   // picana into $888.70/kg).
   if (allowCreate) {
     for (const it of parsed.items) {
-      const packSize = Number(it.pack_size) > 0 ? Number(it.pack_size) : 1;
-      const qty = Number(it.quantity);
-      const received = Number.isFinite(qty) && qty > 0 ? qty * packSize : null;
-      it.received_qty_base_unit = received;
-
-      if (received && received > 0 && Number(it.line_total) > 0) {
-        it.derived_unit_cost = Number(it.line_total) / received;
-      } else {
-        it.derived_unit_cost = null;
-      }
+      deriveLineEconomics(it);
 
       // Pre-write anomaly check. _cost_alert is consumed by
       // buildConfirmationMessage to render ⚠️ + a Spanish hint before SI.

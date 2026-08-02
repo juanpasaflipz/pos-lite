@@ -708,6 +708,14 @@
     "saving": "Guardando…",
     "retake": "Descartar y tomar otra",
     "scanAnother": "Escanear otra",
-    "createdSkus": "{{count}} producto(s) nuevo(s) creado(s)"
+    "createdSkus": "{{count}} producto(s) nuevo(s) creado(s)",
+    "willUpdate": "Actualiza:",
+    "changeItem": "Cambiar producto",
+    "renameCreate": "Renombrar / crear",
+    "searchInventory": "Buscar en inventario…",
+    "noMatches": "Sin coincidencias en tu inventario.",
+    "undoChange": "Deshacer cambio",
+    "confirmCreate": "Crear producto nuevo",
+    "cancel": "Cancelar"
   }
 }
