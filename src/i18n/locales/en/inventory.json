@@ -430,7 +430,13 @@
     "actions": {
       "confirm": "Confirm",
       "readyForPickup": "Ready for Pickup",
-      "pickedUp": "Picked Up"
+      "pickedUp": "Picked Up",
+      "redispatch": "Retry dispatch",
+      "redispatching": "Dispatching…",
+      "redispatchFailed": "Could not re-book the courier",
+      "dispatchFailedTitle": "No courier assigned",
+      "dispatchFailedDetail": "{{attempts}} attempt(s). Last error: {{reason}}",
+      "redispatchUnknownWarning": "The first attempt could not be confirmed. Check the Uber Direct dashboard before retrying — a courier may already be assigned, and a second one would be charged again."
     },
     "analytics": {
       "posRevenue": "POS Revenue",

@@ -19,6 +19,7 @@ import {
   createVirtualBrand,
   getRecaptureCandidates,
   sendRecaptureSMS,
+  redispatchUberDirect,
 } from '../api';
 import { DeliveryPlatform, DeliveryOrder } from '../types';
 import { formatPrice } from '../utils/currency';
@@ -43,6 +44,8 @@ export default function DeliveryScreen() {
   const [tab, setTab] = useState<Tab>('analytics');
   const [selectedPlatform, setSelectedPlatform] = useState<number | null>(null);
   const [showDeliverySetup, setShowDeliverySetup] = useState(false);
+  const [redispatching, setRedispatching] = useState<number | null>(null);
+  const [redispatchError, setRedispatchError] = useState<Record<number, string>>({});
 
   useEffect(() => {
     fetchData();
@@ -122,6 +125,29 @@ export default function DeliveryScreen() {
       fetchData();
     } catch (err) {
       console.error('Failed to update delivery order:', err);
+    }
+  };
+
+  // Re-book a courier for a delivery whose automatic dispatch failed. The
+  // customer already paid, so a failure here has to be visible on the card —
+  // this screen has no toast host.
+  const handleRedispatch = async (deliveryOrderId: number) => {
+    setRedispatching(deliveryOrderId);
+    setRedispatchError((prev) => {
+      const next = { ...prev };
+      delete next[deliveryOrderId];
+      return next;
+    });
+    try {
+      await redispatchUberDirect(deliveryOrderId);
+      await fetchData();
+    } catch (err) {
+      setRedispatchError((prev) => ({
+        ...prev,
+        [deliveryOrderId]: err instanceof Error ? err.message : t('delivery.actions.redispatchFailed'),
+      }));
+    } finally {
+      setRedispatching(null);
     }
   };
 
@@ -357,6 +383,40 @@ export default function DeliveryScreen() {
                           <p className="text-xs text-neutral-500">{order.platform_status}</p>
                         </div>
                       </div>
+                      {order.platform_status === 'dispatch_failed' && order.pending_dispatch && (
+                        <div className="mb-3 rounded-lg border border-cockpit-red/40 bg-neutral-800/50 p-3">
+                          <p className="text-sm font-bold text-cockpit-red">
+                            {t('delivery.actions.dispatchFailedTitle')}
+                          </p>
+                          <p className="mt-1 text-xs text-neutral-300">
+                            {t('delivery.actions.dispatchFailedDetail', {
+                              attempts: order.pending_dispatch.attempts || 0,
+                              reason: order.pending_dispatch.last_error || '—',
+                            })}
+                          </p>
+                          {/* The auto-retry declined because it can't tell whether the
+                              first attempt actually put a courier on the road. Whoever
+                              clicks this can check, so tell them to. */}
+                          {order.pending_dispatch.retry_safe === false && (
+                            <p className="mt-2 text-xs font-medium text-cockpit-yellow">
+                              {t('delivery.actions.redispatchUnknownWarning')}
+                            </p>
+                          )}
+                          {redispatchError[order.id] && (
+                            <p className="mt-2 text-xs text-cockpit-red">{redispatchError[order.id]}</p>
+                          )}
+                          <button
+                            onClick={() => handleRedispatch(order.id)}
+                            disabled={redispatching === order.id}
+                            className="mt-3 flex min-h-[40px] items-center gap-2 rounded-lg bg-brand-600 px-3 py-2 text-sm font-bold text-white transition-colors hover:bg-brand-500 disabled:opacity-50"
+                          >
+                            <RefreshCw size={16} className={redispatching === order.id ? 'animate-spin' : ''} />
+                            {redispatching === order.id
+                              ? t('delivery.actions.redispatching')
+                              : t('delivery.actions.redispatch')}
+                          </button>
+                        </div>
+                      )}
                       <div className="flex gap-2">
                         {order.platform_status === 'received' && (
                           <button

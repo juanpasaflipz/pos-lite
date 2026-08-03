@@ -175,6 +175,28 @@ describe('dispatchPendingCourier — retry guards', () => {
     expect(row.pending_dispatch.attempts).toBe(1);
   });
 
+  it('force overrides every guard — the manual re-dispatch escape hatch', async () => {
+    // Worst case for the auto path: unknown outcome AND the cap spent AND
+    // inside the cooldown. An operator who checked the Uber dashboard can
+    // still re-book, which is the whole point of the button.
+    const orderId = await seedDeliveryOrder('dispatch_failed', {
+      ...DROPOFF,
+      attempts: 5,
+      retry_safe: false,
+      last_error: 'socket hang up',
+      last_attempt_at: new Date().toISOString(),
+    });
+
+    const blocked = await dispatchPendingCourier(orderId, tenant.id);
+    expect(blocked.delivery_error).toContain('needs manual review');
+    expect((await readDispatch(orderId)).pending_dispatch.attempts).toBe(5);
+
+    await dispatchPendingCourier(orderId, tenant.id, { force: true });
+    const row = await readDispatch(orderId);
+    expect(row.pending_dispatch.attempts).toBe(6); // it actually tried
+    expect(row.pending_dispatch.dropoff_address).toBe(DROPOFF.dropoff_address);
+  });
+
   it('leaves legacy failures (payload already discarded) reporting the old error', async () => {
     const orderId = await seedDeliveryOrder('dispatch_failed', null);
 

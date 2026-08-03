@@ -3,6 +3,7 @@ import { all, get, run, getTenantId } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePlanFeature } from '../planLimits.js';
 import { getServiceCredentials } from '../helpers/tenantCredentials.js';
+import { dispatchPendingCourier } from './kiosk.js';
 import {
   verifyDirectSignature,
   getWebhookSigningKey,
@@ -149,6 +150,45 @@ router.post('/deliveries', requireAuth('manage_delivery'), requirePlanFeature('d
       details: error.data?.metadata,
     });
   }
+});
+
+// ==================== Manual re-dispatch ====================
+
+// POST /api/uber-direct/deliveries/:id/redispatch
+// :id is the internal delivery_orders.id. Re-books a courier for an order whose
+// automatic dispatch failed, using the pending_dispatch payload the failure
+// preserved. This is the human escape hatch: the poll loop gives up after a few
+// attempts, and refuses entirely when the first outcome was unknown, because
+// neither it nor sentinel can check the Uber dashboard for an already-assigned
+// courier. Someone who has looked can.
+router.post('/deliveries/:id/redispatch', requireAuth('manage_delivery'), requirePlanFeature('delivery'), async (req, res) => {
+  const tenantId = req.tenant?.id;
+  if (!tenantId) return res.status(400).json({ error: 'Tenant context required' });
+
+  const row = await get(
+    `SELECT do2.id, do2.order_id, do2.platform_status, do2.pending_dispatch
+     FROM delivery_orders do2
+     JOIN delivery_platforms dp ON do2.platform_id = dp.id
+     WHERE do2.id = $1 AND dp.name = 'uber_direct'`,
+    [Number(req.params.id) || 0]
+  );
+  if (!row) return res.status(404).json({ error: 'Delivery not found' });
+  if (row.platform_status !== 'dispatch_failed' || !row.pending_dispatch) {
+    return res.status(409).json({
+      error: 'Only a failed dispatch that still has its payload can be re-booked',
+      code: 'not_redispatchable',
+      platform_status: row.platform_status,
+    });
+  }
+
+  const result = await dispatchPendingCourier(row.order_id, tenantId, { force: true });
+  if (!result.delivery) {
+    return res.status(502).json({
+      error: result.delivery_error || 'Courier dispatch failed again',
+      code: 'redispatch_failed',
+    });
+  }
+  res.json(result.delivery);
 });
 
 // ==================== Get / Refresh ====================

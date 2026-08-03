@@ -1283,8 +1283,11 @@ function retryBlockReason(payload) {
 // we just return whatever's already there. A failed attempt keeps its
 // pending_dispatch payload so the next poll (or sentinel P5) can re-book;
 // clearing it used to strand a paid order with no way to dispatch at all.
-// Returns { delivery, delivery_error }. Never throws.
-export async function dispatchPendingCourier(orderId, tenantId) {
+// `force` skips the auto-retry guards for an operator who has decided to
+// re-book by hand — the cap and the retry-safety check exist to stop the poll
+// loop from spending money unattended, not to overrule a human looking at the
+// Uber dashboard. Returns { delivery, delivery_error }. Never throws.
+export async function dispatchPendingCourier(orderId, tenantId, { force = false } = {}) {
   try {
     const [row] = await adminSql`
       SELECT id, platform_status, pending_dispatch, external_order_id, tracking_url,
@@ -1319,7 +1322,7 @@ export async function dispatchPendingCourier(orderId, tenantId) {
 
     // A prior attempt failed and the payload survived. Re-book only when it's
     // safe and we haven't burned through the attempt budget.
-    if (isRetry) {
+    if (isRetry && !force) {
       const blocked = retryBlockReason(payload);
       if (blocked) {
         return {

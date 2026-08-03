@@ -1987,6 +1987,17 @@ export interface UberDirectBooking {
   dropoff_eta: string | null;
 }
 
+/**
+ * Re-book a courier for a delivery whose automatic dispatch failed, reusing the
+ * dropoff details the failure preserved server-side. Only valid while
+ * platform_status is 'dispatch_failed' — the route 409s otherwise.
+ */
+export async function redispatchUberDirect(deliveryOrderId: number): Promise<UberDirectBooking> {
+  return apiRequest<UberDirectBooking>(`/uber-direct/deliveries/${deliveryOrderId}/redispatch`, {
+    method: 'POST',
+  });
+}
+
 export async function bookUberDirect(body: {
   order_id: number;
   quote_id?: string;
