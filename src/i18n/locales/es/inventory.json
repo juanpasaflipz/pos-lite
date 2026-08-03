@@ -436,7 +436,9 @@
       "redispatchFailed": "No se pudo reenviar el repartidor",
       "dispatchFailedTitle": "No se asignó repartidor",
       "dispatchFailedDetail": "{{attempts}} intento(s). Último error: {{reason}}",
-      "redispatchUnknownWarning": "El primer intento no se pudo confirmar. Revisa el panel de Uber Direct antes de reintentar — podría ya haber un repartidor asignado y se cobraría un segundo envío."
+      "redispatchUnknownWarning": "El primer intento no se pudo confirmar. Revisa el panel de Uber Direct antes de reintentar — podría ya haber un repartidor asignado y se cobraría un segundo envío.",
+      "dispatchFailedCount_one": "{{count}} pedido pagado sin repartidor",
+      "dispatchFailedCount_other": "{{count}} pedidos pagados sin repartidor"
     },
     "analytics": {
       "posRevenue": "Ingresos POS",

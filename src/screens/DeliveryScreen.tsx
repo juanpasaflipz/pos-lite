@@ -197,9 +197,16 @@ export default function DeliveryScreen() {
     }
   };
 
-  const tabs: { id: Tab; icon: React.ReactNode; label: string }[] = [
+  // Paid orders sitting with no courier. Counted off the same list the tab
+  // renders (server-side LIMIT 50), so the badge can never promise a row the
+  // Orders tab wouldn't actually show.
+  const failedDispatchCount = orders.filter(
+    (o: any) => o.platform_status === 'dispatch_failed' && o.pending_dispatch
+  ).length;
+
+  const tabs: { id: Tab; icon: React.ReactNode; label: string; badge?: number }[] = [
     { id: 'analytics', icon: <BarChart3 size={16} />, label: t('delivery.tabs.analytics') },
-    { id: 'orders', icon: <Truck size={16} />, label: t('delivery.tabs.orders') },
+    { id: 'orders', icon: <Truck size={16} />, label: t('delivery.tabs.orders'), badge: failedDispatchCount },
     { id: 'manual', icon: <ClipboardPlus size={16} />, label: t('delivery.tabs.manual', { defaultValue: 'Manual Sales' }) },
     { id: 'markups', icon: <Tag size={16} />, label: t('delivery.tabs.markups') },
     { id: 'brands', icon: <Store size={16} />, label: t('delivery.tabs.brands') },
@@ -233,15 +240,23 @@ export default function DeliveryScreen() {
       <div className="max-w-6xl mx-auto p-6">
         {/* Tabs */}
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-          {tabs.map(t => (
+          {tabs.map(tabDef => (
             <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
+              key={tabDef.id}
+              onClick={() => setTab(tabDef.id)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
-                tab === t.id ? 'bg-brand-600 text-white' : 'bg-neutral-900 text-neutral-300 border border-neutral-800 hover:bg-neutral-800'
+                tab === tabDef.id ? 'bg-brand-600 text-white' : 'bg-neutral-900 text-neutral-300 border border-neutral-800 hover:bg-neutral-800'
               }`}
             >
-              {t.icon} {t.label}
+              {tabDef.icon} {tabDef.label}
+              {!!tabDef.badge && (
+                <span
+                  title={t('delivery.actions.dispatchFailedCount', { count: tabDef.badge })}
+                  className="ml-1 rounded-full bg-cockpit-red px-2 py-0.5 text-xs font-bold text-white"
+                >
+                  {tabDef.badge}
+                </span>
+              )}
             </button>
           ))}
         </div>

@@ -436,7 +436,9 @@
       "redispatchFailed": "Could not re-book the courier",
       "dispatchFailedTitle": "No courier assigned",
       "dispatchFailedDetail": "{{attempts}} attempt(s). Last error: {{reason}}",
-      "redispatchUnknownWarning": "The first attempt could not be confirmed. Check the Uber Direct dashboard before retrying — a courier may already be assigned, and a second one would be charged again."
+      "redispatchUnknownWarning": "The first attempt could not be confirmed. Check the Uber Direct dashboard before retrying — a courier may already be assigned, and a second one would be charged again.",
+      "dispatchFailedCount_one": "{{count}} paid order with no courier",
+      "dispatchFailedCount_other": "{{count}} paid orders with no courier"
     },
     "analytics": {
       "posRevenue": "POS Revenue",
