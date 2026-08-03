@@ -65,7 +65,7 @@ const KioskMenuScreen: React.FC = () => {
   const { tenantId, kioskToken } = useKioskBinding();
   const { addItem, count, total } = useKioskCart();
   const { session } = useKioskCustomer();
-  const { modifierMap, anonPopular } = useKioskSuggestions();
+  const { modifierMap, anonPopular, refresh: refreshSuggestions } = useKioskSuggestions();
   const [categories, setCategories] = useState<KioskMenuCategory[]>([]);
   const [items, setItems] = useState<KioskMenuItem[]>([]);
   const [activeCategory, setActiveCategory] = useState<number | 'all'>(SUGGEST_TAB);
@@ -79,6 +79,15 @@ const KioskMenuScreen: React.FC = () => {
     () => (tenantId && kioskToken ? { tenantId, kioskToken } : null),
     [tenantId, kioskToken],
   );
+
+  // Menu items are refetched on every visit, so the modifier map has to be
+  // too — otherwise an item added after app boot shows on the grid but taps
+  // straight into the cart with its options modal skipped (Rollbertos bug,
+  // 2026-08-03).
+  useEffect(() => {
+    refreshSuggestions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!auth) return;

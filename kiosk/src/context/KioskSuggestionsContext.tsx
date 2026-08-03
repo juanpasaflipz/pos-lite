@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useKioskBinding } from './KioskBindingContext';
 import {
   fetchModifierMap,
@@ -15,12 +15,16 @@ import {
  *     For known customers, suggestions come from session.suggestions instead;
  *     anonPopular is the fallback the cart upsell strip uses for walk-ins.
  *
- * Fetched once per kiosk binding so each screen doesn't re-request.
+ * Shared across screens; the menu screen calls refresh() on mount so a kiosk
+ * that runs for days picks up modifier groups added after app boot — the menu
+ * itself is refetched per visit, and an item that arrives without its groups
+ * silently skips the options modal.
  */
 interface KioskSuggestionsState {
   modifierMap: KioskModifierMap;
   anonPopular: SuggestionItem[];
   loading: boolean;
+  refresh: () => void;
 }
 
 const Ctx = createContext<KioskSuggestionsState | null>(null);
@@ -30,11 +34,14 @@ export const KioskSuggestionsProvider: React.FC<{ children: React.ReactNode }> =
   const [modifierMap, setModifierMap] = useState<KioskModifierMap>({});
   const [anonPopular, setAnonPopular] = useState<SuggestionItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const auth = useMemo(
     () => (tenantId && kioskToken ? { tenantId, kioskToken } : null),
     [tenantId, kioskToken],
   );
+
+  const refresh = useCallback(() => setReloadKey((k) => k + 1), []);
 
   useEffect(() => {
     if (!auth) {
@@ -44,14 +51,16 @@ export const KioskSuggestionsProvider: React.FC<{ children: React.ReactNode }> =
     }
     let alive = true;
     setLoading(true);
+    // A failed fetch resolves null and keeps the last-known-good data — a
+    // transient blip must not wipe the modifier map mid-shift.
     Promise.all([
-      fetchModifierMap(auth).catch(() => ({}) as KioskModifierMap),
-      fetchPopular(auth).catch(() => [] as SuggestionItem[]),
+      fetchModifierMap(auth).catch(() => null),
+      fetchPopular(auth).catch(() => null),
     ])
       .then(([mods, popular]) => {
         if (!alive) return;
-        setModifierMap(mods);
-        setAnonPopular(popular);
+        if (mods) setModifierMap(mods);
+        if (popular) setAnonPopular(popular);
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -59,11 +68,11 @@ export const KioskSuggestionsProvider: React.FC<{ children: React.ReactNode }> =
     return () => {
       alive = false;
     };
-  }, [auth]);
+  }, [auth, reloadKey]);
 
   const value = useMemo(
-    () => ({ modifierMap, anonPopular, loading }),
-    [modifierMap, anonPopular, loading],
+    () => ({ modifierMap, anonPopular, loading, refresh }),
+    [modifierMap, anonPopular, loading, refresh],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
