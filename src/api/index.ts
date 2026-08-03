@@ -262,8 +262,13 @@ async function apiRequest<T>(
     } catch {
       // Use default error message if response is not JSON
     }
-    const err = new Error(errorMessage) as Error & { status?: number; code?: string; planUpgradeRequired?: boolean; requiredPlan?: string; feature?: string; conflictWith?: string; approvalRequired?: boolean; permission?: string };
+    const err = new Error(errorMessage) as Error & { status?: number; code?: string; planUpgradeRequired?: boolean; requiredPlan?: string; feature?: string; conflictWith?: string; approvalRequired?: boolean; permission?: string; details?: Record<string, string> };
     err.status = response.status;
+    // Field-level rejections from an upstream processor, keyed by field name.
+    // A generic "your parameters were invalid" diagnoses nothing on its own.
+    if (errorData.details && typeof errorData.details === 'object') {
+      err.details = errorData.details as Record<string, string>;
+    }
     // Machine-readable reason, when the route sends one. Callers branch on it to
     // offer the right recovery (e.g. `terminal_unpaired` raises the terminal
     // picker instead of dead-ending on an error string).

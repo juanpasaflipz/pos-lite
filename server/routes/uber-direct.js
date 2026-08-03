@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { all, get, run, getTenantId } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePlanFeature } from '../planLimits.js';
+import { getServiceCredentials } from '../helpers/tenantCredentials.js';
 import {
   verifyDirectSignature,
   getWebhookSigningKey,
@@ -12,6 +13,33 @@ import {
 } from '../services/uber-direct.js';
 
 const router = Router();
+
+// The restaurant end of every Direct call comes from the tenant's stored
+// credentials — callers only know the customer's half. Uber rejects a quote or
+// delivery with no pickup_address outright (`invalid_params`), so filling these
+// in here keeps every caller from having to fetch and forward them. An explicit
+// value in the body still wins, for a future multi-location tenant.
+async function withPickupDetails(tenantId, body) {
+  const creds = await getServiceCredentials(tenantId, 'uber_direct', {
+    pickup_name: '',
+    pickup_address: '',
+    pickup_phone_number: '',
+  });
+  const merged = {
+    ...body,
+    pickup_name: body.pickup_name || creds.pickup_name || undefined,
+    pickup_address: body.pickup_address || creds.pickup_address,
+    pickup_phone_number: body.pickup_phone_number || creds.pickup_phone_number,
+  };
+  if (!merged.pickup_address || !merged.pickup_phone_number) {
+    const err = new Error(
+      'Restaurant pickup address/phone not configured in Uber Direct credentials'
+    );
+    err.status = 400;
+    throw err;
+  }
+  return merged;
+}
 
 async function ensureDirectPlatform() {
   let platform = await get(
@@ -31,20 +59,23 @@ async function ensureDirectPlatform() {
 // ==================== Quote ====================
 
 // POST /api/uber-direct/quote
-// Body: pickup_address, dropoff_address (Uber-shaped objects or strings),
-//       pickup_phone_number, dropoff_phone_number, manifest_total_value?
+// Body: dropoff_address (Uber-shaped object or string), dropoff_phone_number,
+//       manifest_total_value?. Pickup details are filled from tenant creds.
 router.post('/quote', requireAuth('manage_delivery'), requirePlanFeature('delivery'), async (req, res) => {
   const tenantId = req.tenant?.id;
   if (!tenantId) return res.status(400).json({ error: 'Tenant context required' });
 
   try {
-    const quote = await createQuote(tenantId, req.body);
+    const quote = await createQuote(tenantId, await withPickupDetails(tenantId, req.body));
     res.json(quote);
   } catch (error) {
-    console.error('[Uber Direct] Quote failed:', error.message);
+    console.error('[Uber Direct] Quote failed:', error.message, error.data?.metadata || '');
     res.status(error.status || 500).json({
       error: error.data?.message || error.message || 'Failed to create quote',
       code: error.data?.code,
+      // Uber names the offending field(s) here — without it the client can only
+      // show "the parameters of your request were invalid", which diagnoses nothing.
+      details: error.data?.metadata,
     });
   }
 });
@@ -59,17 +90,21 @@ router.post('/deliveries', requireAuth('manage_delivery'), requirePlanFeature('d
 
   const { order_id: internalOrderId, ...uberPayload } = req.body;
 
-  try {
-    const delivery = await createDelivery(tenantId, uberPayload);
-    const platform = await ensureDirectPlatform();
+  // Checked before dispatch, not after: delivery_orders.order_id is NOT NULL,
+  // so booking first would put a real courier on the road with nothing to
+  // attach it to — and no way to bill or cancel it from here.
+  if (!internalOrderId) {
+    return res.status(400).json({
+      error: 'order_id required to attach the dispatched delivery to an internal order',
+    });
+  }
 
-    // Link to an existing internal order if provided; otherwise the row is
-    // created without order_id (NOT NULL FK is enforced, so reject early).
-    if (!internalOrderId) {
-      return res.status(400).json({
-        error: 'order_id required to attach the dispatched delivery to an internal order',
-      });
-    }
+  try {
+    const delivery = await createDelivery(
+      tenantId,
+      await withPickupDetails(tenantId, uberPayload)
+    );
+    const platform = await ensureDirectPlatform();
 
     const tid = getTenantId();
     const insertResult = await run(`
@@ -107,10 +142,11 @@ router.post('/deliveries', requireAuth('manage_delivery'), requirePlanFeature('d
       dropoff_eta: delivery.dropoff_eta,
     });
   } catch (error) {
-    console.error('[Uber Direct] Create delivery failed:', error.message);
+    console.error('[Uber Direct] Create delivery failed:', error.message, error.data?.metadata || '');
     res.status(error.status || 500).json({
       error: error.data?.message || error.message || 'Failed to create delivery',
       code: error.data?.code,
+      details: error.data?.metadata,
     });
   }
 });

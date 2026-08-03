@@ -1252,9 +1252,37 @@ router.post('/orders/send-to-delivery', verifyKioskToken, requireKioskPlan, asyn
   }
 });
 
+// Bounds on retrying a dispatch that failed *after* the customer already paid.
+// The payload survives a failure (see below), so without a cap the status poll
+// would re-hit Uber on every tick.
+const MAX_DISPATCH_ATTEMPTS = 3;
+const DISPATCH_RETRY_COOLDOWN_MS = 60_000;
+
+// Why a failed dispatch may be retried automatically. A 4xx means Uber rejected
+// the booking outright — declined card, bad address — so nothing was created and
+// re-sending is safe. A timeout or 5xx leaves it unknown whether a courier was
+// assigned, and a second one is a second real charge, so those are parked for a
+// human (sentinel S4 raises them) instead of retried.
+function retryBlockReason(payload) {
+  if (payload.retry_safe === false) {
+    return 'dispatch outcome unknown — needs manual review';
+  }
+  const attempts = Number(payload.attempts || 0);
+  if (attempts >= MAX_DISPATCH_ATTEMPTS) {
+    return `${attempts} attempts exhausted`;
+  }
+  const lastAt = payload.last_attempt_at ? Date.parse(payload.last_attempt_at) : 0;
+  if (lastAt && Date.now() - lastAt < DISPATCH_RETRY_COOLDOWN_MS) {
+    return 'cooling down between attempts';
+  }
+  return null;
+}
+
 // Internal helper: book the deferred Uber Direct courier for `orderId` after
-// the customer has paid by card. Idempotent — if the row's platform_status is
-// no longer 'pending_payment' we just return whatever's already there.
+// the customer has paid by card. Idempotent — if the row is already dispatched
+// we just return whatever's already there. A failed attempt keeps its
+// pending_dispatch payload so the next poll (or sentinel P5) can re-book;
+// clearing it used to strand a paid order with no way to dispatch at all.
 // Returns { delivery, delivery_error }. Never throws.
 export async function dispatchPendingCourier(orderId, tenantId) {
   try {
@@ -1266,8 +1294,12 @@ export async function dispatchPendingCourier(orderId, tenantId) {
     `;
     if (!row) return { delivery: null, delivery_error: null };
 
-    // Already dispatched (or never deferred) — return the existing shape.
-    if (row.platform_status !== 'pending_payment') {
+    const payload = row.pending_dispatch || {};
+    const isRetry = row.platform_status === 'dispatch_failed' && !!row.pending_dispatch;
+
+    // Already dispatched, never deferred, or a legacy failure whose payload was
+    // discarded before this path preserved it — return the existing shape.
+    if (row.platform_status !== 'pending_payment' && !isRetry) {
       return {
         delivery: row.external_order_id
           ? {
@@ -1285,7 +1317,20 @@ export async function dispatchPendingCourier(orderId, tenantId) {
       };
     }
 
-    const payload = row.pending_dispatch || {};
+    // A prior attempt failed and the payload survived. Re-book only when it's
+    // safe and we haven't burned through the attempt budget.
+    if (isRetry) {
+      const blocked = retryBlockReason(payload);
+      if (blocked) {
+        return {
+          delivery: null,
+          delivery_error: payload.last_error
+            ? `${payload.last_error} (${blocked})`
+            : `Courier dispatch failed (${blocked})`,
+        };
+      }
+    }
+
     const items = await adminSql`
       SELECT item_name, quantity, unit_price
       FROM order_items
@@ -1302,6 +1347,7 @@ export async function dispatchPendingCourier(orderId, tenantId) {
 
     let delivery = null;
     let deliveryError = null;
+    let retrySafe = false;
     try {
       delivery = await uberDirectCreateDelivery(tenantId, {
         quote_id: payload.quote_id || undefined,
@@ -1318,22 +1364,47 @@ export async function dispatchPendingCourier(orderId, tenantId) {
       });
     } catch (err) {
       deliveryError = err.data?.message || err.message || 'Failed to dispatch courier';
-      console.error('[kiosk/dispatchPendingCourier] dispatch failed:', deliveryError);
+      // Only a definitive rejection proves no courier was created — see
+      // retryBlockReason() for why anything else is parked rather than retried.
+      retrySafe = err.status >= 400 && err.status < 500;
+      console.error(
+        `[kiosk/dispatchPendingCourier] dispatch failed (status=${err.status ?? 'none'}, ` +
+        `retry_safe=${retrySafe}):`, deliveryError
+      );
     }
 
-    await adminSql`
-      UPDATE delivery_orders
-      SET external_order_id = ${delivery?.id || null},
-          platform_status = ${delivery?.status || 'dispatch_failed'},
-          delivery_fee = ${(delivery?.fee || 0) / 100},
-          tracking_url = ${delivery?.tracking_url || null},
-          courier_name = ${delivery?.courier?.name || null},
-          courier_phone = ${delivery?.courier?.phone_number || null},
-          courier_vehicle = ${delivery?.courier?.vehicle_type || null},
-          raw_webhook_data = ${delivery ? JSON.stringify(delivery) : null},
-          pending_dispatch = NULL
-      WHERE tenant_id = ${tenantId} AND id = ${row.id}
-    `;
+    if (delivery) {
+      await adminSql`
+        UPDATE delivery_orders
+        SET external_order_id = ${delivery.id || null},
+            platform_status = ${delivery.status || 'pending'},
+            delivery_fee = ${(delivery.fee || 0) / 100},
+            tracking_url = ${delivery.tracking_url || null},
+            courier_name = ${delivery.courier?.name || null},
+            courier_phone = ${delivery.courier?.phone_number || null},
+            courier_vehicle = ${delivery.courier?.vehicle_type || null},
+            raw_webhook_data = ${JSON.stringify(delivery)},
+            pending_dispatch = NULL
+        WHERE tenant_id = ${tenantId} AND id = ${row.id}
+      `;
+    } else {
+      // Keep the payload — it's the only copy of the dropoff details, and the
+      // customer has already paid. Attempt bookkeeping rides along in the same
+      // JSONB so this needs no extra column.
+      const nextPayload = {
+        ...payload,
+        attempts: Number(payload.attempts || 0) + 1,
+        last_error: deliveryError,
+        last_attempt_at: new Date().toISOString(),
+        retry_safe: retrySafe,
+      };
+      await adminSql`
+        UPDATE delivery_orders
+        SET platform_status = 'dispatch_failed',
+            pending_dispatch = ${nextPayload}
+        WHERE tenant_id = ${tenantId} AND id = ${row.id}
+      `;
+    }
 
     return {
       delivery: delivery
@@ -1733,9 +1804,10 @@ router.get('/orders/:id/status', verifyKioskToken, async (req, res) => {
     }
 
     // Delivery orders defer the Uber Direct courier booking until the card
-    // clears. Run on the tick that flips us to paid AND on any subsequent
-    // poll while the row is still pending_payment (handles transient errors
-    // where the first dispatch attempt failed but the customer is still here).
+    // clears. Run on the tick that flips us to paid AND on subsequent polls
+    // while a retryable failure is on the row — dispatchPendingCourier owns
+    // the attempt cap and cooldown, so calling it every tick is cheap and
+    // a transient rejection re-books while the customer is still standing there.
     let delivery = null;
     let deliveryError = null;
     if (paymentStatus === 'paid') {

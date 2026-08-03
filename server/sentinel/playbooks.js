@@ -197,7 +197,10 @@ export const PLAYBOOKS = {
   /**
    * P5 — retry courier dispatch (auto-safe). dispatchPendingCourier is the
    * same guarded code path the payment-success handler uses: it re-reads
-   * pending_dispatch and clears it on success, so retrying is idempotent.
+   * pending_dispatch and clears it only on success, so retrying is idempotent.
+   * It applies its own attempt cap, cooldown, and retry-safety check, so this
+   * playbook can be handed a row it will decline to re-book — hence `fixed`
+   * reflects whether a courier actually came back, not whether we called it.
    */
   retry_courier_dispatch: {
     auto: true,
@@ -233,7 +236,7 @@ export const PLAYBOOKS = {
         resourceId: String(row.id),
         details: { playbook: 'retry_courier_dispatch', incident_id: incident.id, result },
       });
-      return { fixed: true, result };
+      return { fixed: !!result.delivery, result };
     },
   },
 };

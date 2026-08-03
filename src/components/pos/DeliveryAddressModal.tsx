@@ -65,7 +65,15 @@ export default function DeliveryAddressModal({ isOpen, initial, manifestTotalVal
         : Math.round((result.duration || 0));
       setQuote({ quoteId: result.id, fee: result.fee / 100, etaMin });
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('delivery.quoteFailed'));
+      // Uber's top-level message is always the same generic string; the field
+      // it actually rejected only shows up in `details`.
+      const details = (err as { details?: Record<string, string> })?.details;
+      const fields = details ? Object.keys(details).join(', ') : '';
+      setError(
+        err instanceof Error
+          ? fields ? `${err.message} (${fields})` : err.message
+          : t('delivery.quoteFailed')
+      );
       setQuote(null);
     } finally {
       setQuoting(false);
