@@ -6,6 +6,9 @@ import {
   OrderItem,
   VirtualBrand,
   InventoryItem,
+  InventoryKind,
+  InventoryMode,
+  PrepRun,
   PaymentIntent,
   PaymentStatus,
   SalesReport,
@@ -972,6 +975,36 @@ export async function getInventory(): Promise<InventoryItem[]> {
   return apiRequest<InventoryItem[]>('/inventory');
 }
 
+/* ==================== Producción (prep runs) ==================== */
+
+/**
+ * Recent prep runs. Doubles as the client's inventory-mode discovery: an
+ * 'ingredients' tenant gets `{ mode: 'ingredients', runs: [] }` rather than an
+ * error, so this is safe to call before knowing which model the tenant is on.
+ */
+export async function getPrepRuns(limit = 20): Promise<{ mode: InventoryMode; runs: PrepRun[] }> {
+  return apiRequest<{ mode: InventoryMode; runs: PrepRun[] }>(`/prep-runs?limit=${limit}`);
+}
+
+export async function createPrepRun(payload: {
+  inputs?: { inventory_item_id: number; quantity: number }[];
+  outputs: { inventory_item_id: number; portions: number }[];
+  notes?: string;
+}): Promise<PrepRun & { total_input_cost: number; cost_per_portion: number | null }> {
+  return apiRequest('/prep-runs', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function correctPrepRun(
+  runId: number,
+  entries: { inventory_item_id: number; delta: number; side?: 'input' | 'output' }[],
+  notes?: string
+): Promise<{ prep_run_id: number; corrections: { inventory_item_id: number; delta: number; new_quantity: number | null }[] }> {
+  return apiRequest(`/prep-runs/${runId}/corrections`, {
+    method: 'POST',
+    body: JSON.stringify({ entries, notes }),
+  });
+}
+
 export async function getLowStock(): Promise<InventoryItem[]> {
   return apiRequest<InventoryItem[]>('/inventory/low-stock');
 }
@@ -1035,6 +1068,9 @@ export interface InventorySearchResult {
   cost_price: number;
   category: string;
   pack_size?: number | null;
+  /* Which inventory layer this row is on — only meaningful for two-stage
+     tenants, absent on rows predating migration 0103. */
+  kind?: InventoryKind;
 }
 
 export async function searchInventory(query: string): Promise<InventorySearchResult[]> {
@@ -2845,7 +2881,7 @@ export async function getAccount(): Promise<any> {
   return res.json();
 }
 
-export async function updateAccount(data: { name?: string; email?: string }): Promise<{ name: string; email: string }> {
+export async function updateAccount(data: { name?: string; email?: string; inventory_mode?: InventoryMode }): Promise<{ name: string; email: string; inventory_mode?: InventoryMode }> {
   const base = FALLBACK_URLS.length ? await resolveBaseUrl() : activeBaseUrl;
   const res = await fetch(`${base}/account`, {
     method: 'PUT',

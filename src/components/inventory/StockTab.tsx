@@ -16,7 +16,7 @@ import {
   Clock,
   Moon,
 } from 'lucide-react';
-import { InventoryItem, InventoryForecast, COGSSummary } from '../../types';
+import { InventoryItem, InventoryForecast, COGSSummary, InventoryKind } from '../../types';
 import { PulseBucket } from './InventoryPulseGrid';
 
 type SortField = 'name' | 'quantity' | 'status';
@@ -31,6 +31,8 @@ type InventoryItemForm = {
   barcode: string;
   expiry_date: string;
   lot_number: string;
+  kind: InventoryKind;
+  low_threshold_portions: string;
 };
 
 interface StockTabProps {
@@ -56,6 +58,7 @@ interface StockTabProps {
   staleIds: Set<number>;
   dormantIds: Set<number>;
   activeBucket: PulseBucket | null;
+  isTwoStage: boolean;
   onSearchChange: (value: string) => void;
   onSortChange: (value: SortField) => void;
   onRestock: () => void;
@@ -122,6 +125,7 @@ export default function StockTab({
   staleIds,
   dormantIds,
   activeBucket,
+  isTwoStage,
   onSearchChange,
   onSortChange,
   onRestock,
@@ -143,18 +147,26 @@ export default function StockTab({
 }: StockTabProps) {
   const { t } = useTranslation('inventory');
   const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set());
+  // Raw vs. componentes. Kept local rather than hoisted to InventoryScreen —
+  // it composes with the bucket filter right below and nothing else needs it.
+  const [kindFilter, setKindFilter] = useState<InventoryKind | 'all'>('all');
 
   const updateFormField = (field: keyof InventoryItemForm, value: string) => {
     onItemFormChange({ ...itemForm, [field]: value });
   };
 
-  // Apply bucket filter on top of search-filtered items
+  // Apply layer + bucket filters on top of search-filtered items
   const bucketFilteredItems = useMemo(() => {
-    if (!activeBucket) return filteredItems;
-    return filteredItems.filter(
+    let list = filteredItems;
+    if (isTwoStage && kindFilter !== 'all') {
+      // Rows predating migration 0103 have no kind and are raw by definition.
+      list = list.filter((it) => (it.kind || 'raw') === kindFilter);
+    }
+    if (!activeBucket) return list;
+    return list.filter(
       (it) => classifyItem(it, addedTodayIds, staleIds, dormantIds) === activeBucket
     );
-  }, [filteredItems, activeBucket, addedTodayIds, staleIds, dormantIds]);
+  }, [filteredItems, activeBucket, addedTodayIds, staleIds, dormantIds, isTwoStage, kindFilter]);
 
   // Group items by category, then sort categories by severity (most urgent first)
   const categoryGroups = useMemo(() => {
@@ -468,6 +480,24 @@ export default function StockTab({
             <option value="status">{t('inventory.sortByStatus')}</option>
           </select>
 
+          {isTwoStage && (
+            <div className="flex gap-1">
+              {(['all', 'raw', 'component'] as const).map((k) => (
+                <button
+                  key={k}
+                  onClick={() => setKindFilter(k)}
+                  className={`px-3 min-h-[40px] rounded-lg border text-sm transition-colors ${
+                    kindFilter === k
+                      ? 'bg-brand-600 border-brand-500 text-white'
+                      : 'bg-neutral-800 border-neutral-700 text-neutral-300 hover:bg-neutral-700'
+                  }`}
+                >
+                  {k === 'all' ? t('inventory.kinds.all') : t(`inventory.kinds.${k}`)}
+                </button>
+              ))}
+            </div>
+          )}
+
           {categoryGroups.length > 1 && (
             <button
               onClick={toggleAll}
@@ -555,6 +585,36 @@ export default function StockTab({
                 <span className="block text-sm text-neutral-400 mb-1">{t('inventory.form.name')}</span>
                 <input type="text" value={itemForm.name} onChange={(e) => updateFormField('name', e.target.value)} className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-brand-600" autoFocus />
               </label>
+              {isTwoStage && (
+                <div className="block md:col-span-2">
+                  <span className="block text-sm text-neutral-400 mb-1">{t('inventory.form.kind')}</span>
+                  <div className="flex gap-2">
+                    {(['raw', 'component'] as InventoryKind[]).map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => updateFormField('kind', k)}
+                        className={`flex-1 min-h-[44px] px-3 rounded-lg border text-sm transition-colors ${
+                          itemForm.kind === k
+                            ? 'bg-brand-600 border-brand-500 text-white'
+                            : 'bg-neutral-800 border-neutral-700 text-neutral-300 hover:border-neutral-600'
+                        }`}
+                      >
+                        {t(`inventory.kinds.${k}`)}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-neutral-500 mt-1">
+                    {t(itemForm.kind === 'component' ? 'inventory.form.kindComponentHint' : 'inventory.form.kindRawHint')}
+                  </p>
+                </div>
+              )}
+              {isTwoStage && itemForm.kind === 'component' && (
+                <label className="block md:col-span-2">
+                  <span className="block text-sm text-neutral-400 mb-1">{t('inventory.form.lowThresholdPortions')}</span>
+                  <input type="number" min="0" step="any" value={itemForm.low_threshold_portions} onChange={(e) => updateFormField('low_threshold_portions', e.target.value)} className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-brand-600" />
+                </label>
+              )}
               <label className="block">
                 <span className="block text-sm text-neutral-400 mb-1">{t('inventory.form.category')}</span>
                 <input type="text" value={itemForm.category} onChange={(e) => updateFormField('category', e.target.value)} className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:border-brand-600" />

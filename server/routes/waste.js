@@ -1,6 +1,7 @@
 import { Router } from 'express';
-import { all, get, run, getConn, getTenantId } from '../db/index.js';
+import { all, get, run, getTenantId } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
+import { applyStockDelta } from '../helpers/stockLedger.js';
 
 const router = Router();
 
@@ -32,26 +33,28 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
     const costAtTime = Math.round((item.cost_price || 0) * quantity * 100) / 100;
     const employeeId = req.employee?.id || null;
 
-    // Atomic: insert waste_log + deduct inventory in same connection
-    const conn = getConn();
-    const wasteId = await new Promise(async (resolve, reject) => {
-      try {
-        // Insert waste log
-        const tid = getTenantId();
-        const result = await run(`
-          INSERT INTO waste_log (tenant_id, inventory_item_id, quantity, unit, reason, cost_at_time, notes, logged_by)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-          RETURNING id
-        `, [tid, inventory_item_id, quantity, item.unit, reason, costAtTime, notes || null, employeeId]);
+    // Both writes ride the tenant middleware's transaction, so a throw between
+    // them rolls back the waste_log row too. (The `new Promise` wrapper this
+    // replaced advertised atomicity it never provided — it was two sequential
+    // statements either way.)
+    const tid = getTenantId();
+    const result = await run(`
+      INSERT INTO waste_log (tenant_id, inventory_item_id, quantity, unit, reason, cost_at_time, notes, logged_by)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING id
+    `, [tid, inventory_item_id, quantity, item.unit, reason, costAtTime, notes || null, employeeId]);
+    const wasteId = result.lastInsertRowid;
 
-        // Deduct from inventory (floor at 0)
-        const newQty = Math.max(0, item.quantity - quantity);
-        await run('UPDATE inventory_items SET quantity = $1 WHERE id = $2', [newQty, inventory_item_id]);
-
-        resolve(result.lastInsertRowid);
-      } catch (err) {
-        reject(err);
-      }
+    // Deduct through the ledger so waste reconciles against portion counts
+    // instead of silently vanishing from the cache. Flooring at 0 is
+    // applyStockDelta's job; the ledger keeps the unclamped truth.
+    await applyStockDelta(null, {
+      itemId: Number(inventory_item_id),
+      delta: -Number(quantity),
+      reason: 'waste',
+      refType: 'waste_log',
+      refId: wasteId ? Number(wasteId) : null,
+      employeeId,
     });
 
     res.json({

@@ -21,6 +21,7 @@ export interface PlanLimits {
   loyalty: { locked: boolean; smsEnabled: boolean };
   branding: { canRename: boolean; watermark: boolean };
   prepForecast: { locked: boolean };
+  inventoryTwoStage: { locked: boolean };
   menuBoard: { canRenameBrands: boolean };
   dynamicPricing: { aiSuggestions: boolean; scheduledRules: boolean; priceHistory: boolean; guardrails: boolean; abTesting: boolean; deliveryIntegration: boolean };
   banking: { locked: boolean };
@@ -49,7 +50,7 @@ interface PlanContextType {
   isGetnetEnabled: boolean;
   isClipConfigured: boolean;
   isAtLimit: (resource: 'menuItems' | 'inventoryItems' | 'employees' | 'modifierGroups' | 'combos', currentCount: number) => boolean;
-  isFeatureLocked: (feature: 'printers' | 'delivery' | 'permissions' | 'loyalty' | 'prepForecast' | 'banking' | 'bankReconciliation' | 'dataExport' | 'cfdi' | 'ai' | 'kiosk' | 'qrOrdering') => boolean;
+  isFeatureLocked: (feature: 'printers' | 'delivery' | 'permissions' | 'loyalty' | 'prepForecast' | 'inventoryTwoStage' | 'banking' | 'bankReconciliation' | 'dataExport' | 'cfdi' | 'ai' | 'kiosk' | 'qrOrdering') => boolean;
   refresh: () => Promise<void>;
 }
 
@@ -68,6 +69,7 @@ const DEFAULT_LIMITS: PlanLimits = {
   loyalty: { locked: false, smsEnabled: false },
   branding: { canRename: true, watermark: true },
   prepForecast: { locked: true },
+  inventoryTwoStage: { locked: true },
   menuBoard: { canRenameBrands: true },
   dynamicPricing: { aiSuggestions: false, scheduledRules: false, priceHistory: false, guardrails: false, abTesting: false, deliveryIntegration: false },
   banking: { locked: true },

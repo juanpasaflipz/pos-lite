@@ -43,6 +43,7 @@ export const PLAN_LIMITS = {
     bankReconciliation: { locked: true },
     dataExport: { locked: true },
     cfdi: { locked: true },
+    inventoryTwoStage: { locked: true },
   },
   pro: {
     menuItems: Infinity,
@@ -65,6 +66,7 @@ export const PLAN_LIMITS = {
     bankReconciliation: { locked: false },
     dataExport: { locked: false },
     cfdi: { locked: false },
+    inventoryTwoStage: { locked: false },
   },
 };
 

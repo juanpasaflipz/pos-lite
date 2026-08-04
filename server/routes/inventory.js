@@ -45,7 +45,11 @@ router.get('/', requireAuth(), async (req, res) => {
              ${selectColumn(columns, 'lot_number')},
              ${selectColumn(columns, 'last_restocked_at')},
              ${selectColumn(columns, 'shelf_life_days')},
-             ${selectColumn(columns, 'storage_type')}
+             ${selectColumn(columns, 'storage_type')},
+             ${selectColumn(columns, 'kind')},
+             ${selectColumn(columns, 'low_threshold_portions')},
+             ${selectColumn(columns, 'auto_86')},
+             ${selectColumn(columns, 'sold_out_manual')}
       FROM inventory_items
       ORDER BY category ASC, name ASC
     `);
@@ -68,7 +72,8 @@ router.get('/search', requireAuth(), async (req, res) => {
     const columns = await getInventoryColumns();
     const items = await all(`
       SELECT id, name, quantity, unit, cost_price, category,
-             ${selectColumn(columns, 'pack_size')}
+             ${selectColumn(columns, 'pack_size')},
+             ${selectColumn(columns, 'kind')}
       FROM inventory_items
       WHERE name ILIKE '%' || $1 || '%'
       ORDER BY name ASC
@@ -497,7 +502,7 @@ router.put('/:id', requireAuth('manage_inventory'), async (req, res) => {
   try {
     const columns = await getInventoryColumns();
     const { id } = req.params;
-    const { name, quantity, low_stock_threshold, category, sku, barcode, expiry_date, lot_number, cost_price, unit, pack_size, shelf_life_days, storage_type } = req.body;
+    const { name, quantity, low_stock_threshold, category, sku, barcode, expiry_date, lot_number, cost_price, unit, pack_size, shelf_life_days, storage_type, kind, low_threshold_portions, auto_86, sold_out_manual } = req.body;
 
     const item = await get('SELECT id FROM inventory_items WHERE id = $1', [id]);
     if (!item) {
@@ -566,6 +571,30 @@ router.put('/:id', requireAuth('manage_inventory'), async (req, res) => {
       sets.push(`storage_type = $${paramIdx++}`);
       params.push(STORAGE_TYPES.includes(storage_type) ? storage_type : null);
     }
+    // Two-stage fields (migration 0103). `kind` is validated rather than
+    // coerced — silently writing 'raw' for a typo would move an item between
+    // inventory layers, which changes whether it gates the menu.
+    if (kind !== undefined && columns.has('kind')) {
+      if (!INVENTORY_KINDS.includes(kind)) {
+        return res.status(400).json({ error: `kind must be one of: ${INVENTORY_KINDS.join(', ')}` });
+      }
+      sets.push(`kind = $${paramIdx++}`);
+      params.push(kind);
+    }
+    if (low_threshold_portions !== undefined && columns.has('low_threshold_portions')) {
+      sets.push(`low_threshold_portions = $${paramIdx++}`);
+      params.push(low_threshold_portions === '' || low_threshold_portions === null
+        ? null
+        : Number(low_threshold_portions));
+    }
+    if (auto_86 !== undefined && columns.has('auto_86')) {
+      sets.push(`auto_86 = $${paramIdx++}`);
+      params.push(!!auto_86);
+    }
+    if (sold_out_manual !== undefined && columns.has('sold_out_manual')) {
+      sets.push(`sold_out_manual = $${paramIdx++}`);
+      params.push(!!sold_out_manual);
+    }
 
     if (sets.length === 0) {
       return res.status(400).json({ error: 'No fields to update' });
@@ -585,10 +614,13 @@ router.put('/:id', requireAuth('manage_inventory'), async (req, res) => {
 router.post('/', requireAuth('manage_inventory'), async (req, res) => {
   try {
     const columns = await getInventoryColumns();
-    const { name, quantity, unit, low_stock_threshold, category, cost_price, sku, barcode, expiry_date, lot_number, pack_size, shelf_life_days, storage_type } = req.body;
+    const { name, quantity, unit, low_stock_threshold, category, cost_price, sku, barcode, expiry_date, lot_number, pack_size, shelf_life_days, storage_type, kind, low_threshold_portions, auto_86, sold_out_manual } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'name is required' });
+    }
+    if (kind !== undefined && !INVENTORY_KINDS.includes(kind)) {
+      return res.status(400).json({ error: `kind must be one of: ${INVENTORY_KINDS.join(', ')}` });
     }
 
     // Plan limit check
@@ -633,6 +665,25 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
       insertColumns.push('storage_type');
       insertValues.push(storage_type);
     }
+    // Two-stage fields (migration 0103). Omitting `kind` lets the column
+    // default to 'raw', which is what an item created without an opinion is.
+    if (columns.has('kind') && kind !== undefined) {
+      insertColumns.push('kind');
+      insertValues.push(kind);
+    }
+    if (columns.has('low_threshold_portions') && low_threshold_portions !== undefined
+        && low_threshold_portions !== '' && low_threshold_portions !== null) {
+      insertColumns.push('low_threshold_portions');
+      insertValues.push(Number(low_threshold_portions));
+    }
+    if (columns.has('auto_86') && auto_86 !== undefined) {
+      insertColumns.push('auto_86');
+      insertValues.push(!!auto_86);
+    }
+    if (columns.has('sold_out_manual') && sold_out_manual !== undefined) {
+      insertColumns.push('sold_out_manual');
+      insertValues.push(!!sold_out_manual);
+    }
     // Items born with stock start the stale clock immediately; manually created
     // empty rows (recipe-only) wait until first real restock through the expense flow.
     if (columns.has('last_restocked_at') && (quantity || 0) > 0) {
@@ -663,6 +714,7 @@ router.post('/', requireAuth('manage_inventory'), async (req, res) => {
         ? null
         : Math.max(1, Math.round(Number(shelf_life_days))),
       storage_type: STORAGE_TYPES.includes(storage_type) ? storage_type : null,
+      kind: kind || 'raw',
     });
   } catch (error) {
     console.error('Error creating inventory item:', error);
@@ -822,6 +874,9 @@ router.post('/:id/restock', requireAuth('manage_inventory'), async (req, res) =>
 // ────────────────────────────────────────────────────────────────────────────
 
 const STORAGE_TYPES = ['refrigerated', 'frozen', 'dry', 'ambient'];
+// Which inventory layer a row belongs to (migration 0103): 'raw' is walk-in
+// stock, 'component' is a counted portion on the line.
+const INVENTORY_KINDS = ['raw', 'component'];
 const WASTE_REASONS = ['spoilage', 'prep_error', 'dropped', 'expired', 'other'];
 
 // Coarse fallback when AI is unavailable. Keeps the feature working offline.
@@ -1254,7 +1309,13 @@ router.post('/:id/mark-wasted', requireAuth('manage_inventory'), async (req, res
 });
 
 // POST /api/inventory/deduct - deduct ingredients for an order
-router.post('/deduct', async (req, res) => {
+//
+// Dormant: no client calls this, and the live deduction path is
+// deductInventoryForOrder() in helpers/inventory.js, invoked at payment time.
+// It shipped with no auth middleware at all, so any caller who could reach
+// /api/* could move stock for an arbitrary order id — closed here while the
+// two-stage work was in the file. Left otherwise untouched.
+router.post('/deduct', requireAuth('manage_inventory'), async (req, res) => {
   try {
     const { order_id } = req.body;
 

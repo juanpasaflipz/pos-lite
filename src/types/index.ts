@@ -224,6 +224,45 @@ export interface InventoryItem {
   shelf_life_days?: number | null;
   storage_type?: 'refrigerated' | 'frozen' | 'dry' | 'ambient' | null;
   last_restocked_at?: string | null;
+  /* Two-stage inventory (migration 0103). 'raw' = walk-in stock, 'component' =
+     counted portions on the line. Only meaningful for two_stage tenants. */
+  kind?: InventoryKind;
+  low_threshold_portions?: number | null;
+  auto_86?: boolean;
+  sold_out_manual?: boolean;
+}
+
+export type InventoryKind = 'raw' | 'component';
+export type InventoryMode = 'ingredients' | 'two_stage';
+
+/* Producción — the prep run that turns raw stock into sellable portions. */
+export interface PrepRunLine {
+  inventory_item_id: number;
+  name: string;
+  unit?: string | null;
+  quantity?: number;
+  portions?: number;
+  cost_at_time?: number | null;
+}
+
+export interface PrepRunCorrection {
+  inventory_item_id: number;
+  name: string;
+  delta: number;
+  created_at: string;
+}
+
+export interface PrepRun {
+  id: number;
+  prepped_at: string;
+  employee_id: number | null;
+  employee_name: string | null;
+  notes: string | null;
+  inputs: PrepRunLine[];
+  outputs: PrepRunLine[];
+  corrections: PrepRunCorrection[];
+  total_input_cost: number;
+  cost_per_portion: number | null;
 }
 
 /* Recipe Types */

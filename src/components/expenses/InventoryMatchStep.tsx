@@ -245,12 +245,21 @@ const MatchRow: React.FC<MatchRowProps> = ({
     }
   }, [state.showDropdown, onToggleDropdown]);
 
-  const displayResults =
+  const rawDisplayResults =
     state.searchResults.length > 0
       ? state.searchResults
       : state.searchQuery.trim().length === 0
         ? allInventory.slice(0, 10)
         : [];
+
+  // Both layers stay matchable on purpose: most receipt lines restock the
+  // walk-in, but some things arrive sellable-as-counted (bottled drinks,
+  // supplier-made tamales) and belong straight on the line. Components sort
+  // first because picking one is the less obvious, more deliberate choice.
+  const displayResults = [...rawDisplayResults].sort((a, b) => {
+    const rank = (i: typeof a) => ((i.kind || 'raw') === 'component' ? 0 : 1);
+    return rank(a) - rank(b);
+  });
 
   return (
     <div className="bg-neutral-800/50 rounded-lg p-3 space-y-2">
@@ -343,7 +352,14 @@ const MatchRow: React.FC<MatchRowProps> = ({
                 onClick={() => onSelect(inv)}
                 className="w-full text-left px-3 py-2.5 hover:bg-neutral-700 transition-colors min-h-[44px]"
               >
-                <div className="text-sm text-white">{inv.name}</div>
+                <div className="text-sm text-white flex items-center gap-1.5">
+                  {inv.name}
+                  {inv.kind === 'component' && (
+                    <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-brand-600/20 text-brand-300">
+                      {t('inventory:inventory.kinds.component')}
+                    </span>
+                  )}
+                </div>
                 <div className="text-xs text-neutral-500">
                   {inv.quantity} {inv.unit} {t('expenses.inStock')}
                   {inv.category ? ` · ${inv.category}` : ''}

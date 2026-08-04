@@ -311,7 +311,15 @@
     "revoking": "Revocando...",
     "loadingTerms": "Cargando términos...",
     "consentVersion": "Versión del consentimiento: {{version}}",
-    "trialNote": "Tu prueba Pro gratis termina el {{date}} — después tu POS sigue gratis para siempre."
+    "trialNote": "Tu prueba Pro gratis termina el {{date}} — después tu POS sigue gratis para siempre.",
+    "inventoryMode": {
+      "label": "Modelo de inventario",
+      "ingredients": "Insumos",
+      "two_stage": "Dos etapas",
+      "ingredientsHint": "Lo que compras es lo que vendes. El inventario baja al cobrar.",
+      "two_stageHint": "Bodega y porciones por separado. Registras producción, y el menú se agota solo cuando se acaban las porciones.",
+      "confirmTwoStage": "Cambiar a inventario de dos etapas. Tus artículos actuales quedan como insumos de bodega y podrás crear porciones y registrar producción. ¿Continuar?"
+    }
   },
   "resetPassword": {
     "passwordReset": "Contraseña restablecida",

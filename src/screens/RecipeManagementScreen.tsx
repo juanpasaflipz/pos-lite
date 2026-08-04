@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useInventoryMode } from '../hooks/useInventoryMode';
 import {
   ArrowLeft,
   Calculator,
@@ -35,6 +36,7 @@ const EMPTY_ROW: EditableIngredient = {
 
 export default function RecipeManagementScreen() {
   const { t } = useTranslation('inventory');
+  const { isTwoStage } = useInventoryMode();
   const { addToast } = useToast();
   const [summaryItems, setSummaryItems] = useState<RecipeSummaryItem[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
@@ -137,9 +139,14 @@ export default function RecipeManagementScreen() {
     [inventoryItems]
   );
 
+  // In two-stage mode a recipe consumes PORTIONS, not raw stock — raw is
+  // consumed by prep runs instead, and pointing a recipe at it would
+  // double-count. Ingredients-mode tenants see the full list, as before.
   const sortedInventory = useMemo(
-    () => [...inventoryItems].sort((a, b) => a.name.localeCompare(b.name)),
-    [inventoryItems]
+    () => [...inventoryItems]
+      .filter(item => !isTwoStage || (item.kind || 'raw') === 'component')
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    [inventoryItems, isTwoStage]
   );
 
   const filteredInventory = useMemo(() => {
@@ -322,6 +329,9 @@ export default function RecipeManagementScreen() {
         pack_size: newIngredientForm.pack_size ? Number(newIngredientForm.pack_size) : null,
         shelf_life_days: newIngredientForm.shelf_life_days ? Number(newIngredientForm.shelf_life_days) : undefined,
         storage_type: newIngredientForm.storage_type || undefined,
+        // An ingredient created from the recipe editor is something a recipe
+        // draws on, which in two-stage mode means a portion.
+        ...(isTwoStage ? { kind: 'component' as const } : {}),
       });
       setInventoryItems(current => [...current, created].sort((a, b) => a.name.localeCompare(b.name)));
       if (newIngredientTargetRow !== null) {

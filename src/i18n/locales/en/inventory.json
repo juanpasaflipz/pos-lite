@@ -8,7 +8,8 @@
       "count": "Count",
       "variance": "Variance",
       "alerts": "Alerts",
-      "insights": "AI Insights"
+      "insights": "AI Insights",
+      "produccion": "Production"
     },
     "search": "Search items...",
     "allCategories": "All Categories",
@@ -64,7 +65,11 @@
       "sku": "SKU",
       "barcode": "Barcode",
       "expiryDate": "Expiry date",
-      "lotNumber": "Lot number"
+      "lotNumber": "Lot number",
+      "kind": "What is this item?",
+      "kindRawHint": "Raw stock in the walk-in. Not sold directly — a prep run turns it into portions.",
+      "kindComponentHint": "A ready portion on the line. This is what gets served, and the menu 86s itself when it hits zero.",
+      "lowThresholdPortions": "Low-portion warning"
     },
     "invalidRestockAmount": "Invalid restock amount",
     "invalidThreshold": "Invalid threshold value",
@@ -99,6 +104,11 @@
         "expired": "Expired",
         "failed": "Failed"
       }
+    },
+    "kinds": {
+      "all": "All",
+      "raw": "Storage",
+      "component": "Portions"
     }
   },
   "cogs": {
@@ -919,5 +929,31 @@
     "confirmWipe": "Delete everything",
     "working": "Resetting...",
     "failed": "Failed to reset inventory"
+  },
+  "prep": {
+    "sacamos": "Took out",
+    "sacamosHint": "What came out of storage. Optional, but it's what buys yield % and cost per portion.",
+    "salio": "Made",
+    "salioHint": "How many portions ended up on the line.",
+    "optional": "Optional",
+    "required": "Required",
+    "pickRaw": "Pick raw stock…",
+    "pickComponent": "Pick a portion…",
+    "qty": "Qty",
+    "addInput": "Add raw item",
+    "addOutput": "Add portion",
+    "removeLine": "Remove",
+    "increment": "Add one",
+    "decrement": "Remove one",
+    "notesPlaceholder": "Notes (optional)",
+    "save": "Save production",
+    "saveFailed": "Could not save the prep run",
+    "recentRuns": "Recent production",
+    "noRuns": "No prep runs logged yet.",
+    "from": "from",
+    "perPortion": "per portion",
+    "correctedBy": "Corrected: {{delta}}",
+    "noComponentsTitle": "No portions set up yet",
+    "noComponentsHint": "Create items of type “Portions” in Stock to start logging production."
   }
 }

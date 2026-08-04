@@ -13,6 +13,7 @@ import {
   Trash2,
   AlertOctagon,
   ImagePlus,
+  ChefHat,
 } from 'lucide-react';
 import {
   getInventory,
@@ -42,6 +43,7 @@ import {
 import type { UnlinkedExpense, InventoryScanActivity } from '../api';
 import {
   InventoryItem,
+  InventoryKind,
   InventoryForecast,
   InventoryCount,
   ShrinkageAlert,
@@ -71,8 +73,10 @@ import AIInsightsTab from '../components/inventory/AIInsightsTab';
 import StaleStockPanel from '../components/inventory/StaleStockPanel';
 import ShelfLifeAuditBanner from '../components/inventory/ShelfLifeAuditBanner';
 import InventoryResetModal from '../components/inventory/InventoryResetModal';
+import ProduccionTab from '../components/inventory/ProduccionTab';
+import { useInventoryMode } from '../hooks/useInventoryMode';
 
-type Tab = 'stock' | 'scan' | 'waste' | 'count' | 'variance' | 'alerts' | 'insights';
+type Tab = 'stock' | 'produccion' | 'scan' | 'waste' | 'count' | 'variance' | 'alerts' | 'insights';
 type SortField = 'name' | 'quantity' | 'status';
 type InventoryItemForm = {
   name: string;
@@ -85,6 +89,8 @@ type InventoryItemForm = {
   barcode: string;
   expiry_date: string;
   lot_number: string;
+  kind: InventoryKind;
+  low_threshold_portions: string;
 };
 
 const emptyInventoryForm: InventoryItemForm = {
@@ -98,11 +104,14 @@ const emptyInventoryForm: InventoryItemForm = {
   barcode: '',
   expiry_date: '',
   lot_number: '',
+  kind: 'raw',
+  low_threshold_portions: '',
 };
 
 export default function InventoryScreen() {
   const { t } = useTranslation('inventory');
   const { limits } = usePlan();
+  const { isTwoStage } = useInventoryMode();
   const { currentEmployee } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('stock');
   const [resetModalOpen, setResetModalOpen] = useState(false);
@@ -447,6 +456,10 @@ export default function InventoryScreen() {
       barcode: item.barcode || '',
       expiry_date: item.expiry_date ? item.expiry_date.slice(0, 10) : '',
       lot_number: item.lot_number || '',
+      kind: item.kind === 'component' ? 'component' : 'raw',
+      low_threshold_portions: item.low_threshold_portions == null
+        ? ''
+        : String(item.low_threshold_portions),
     });
     setItemFormOpen(true);
   };
@@ -489,6 +502,14 @@ export default function InventoryScreen() {
       barcode: itemForm.barcode.trim(),
       expiry_date: itemForm.expiry_date,
       lot_number: itemForm.lot_number.trim(),
+      // Only sent for two-stage tenants — an ingredients tenant has no kind
+      // picker, and omitting the field leaves the column at its 'raw' default.
+      ...(isTwoStage ? {
+        kind: itemForm.kind,
+        low_threshold_portions: itemForm.kind === 'component' && itemForm.low_threshold_portions.trim()
+          ? Number(itemForm.low_threshold_portions)
+          : null,
+      } : {}),
     };
 
     try {
@@ -759,6 +780,11 @@ export default function InventoryScreen() {
 
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: 'stock', label: t('inventory.tabs.stock'), icon: <ClipboardList size={18} /> },
+    // Producción only exists for two-stage tenants — there is nothing to log
+    // when raw stock IS the sellable stock.
+    ...(isTwoStage
+      ? [{ key: 'produccion' as Tab, label: t('inventory.tabs.produccion'), icon: <ChefHat size={18} /> }]
+      : []),
     { key: 'scan', label: t('inventory.tabs.scan'), icon: <ScanLine size={18} /> },
     { key: 'waste', label: t('inventory.tabs.waste'), icon: <Trash2 size={18} /> },
     { key: 'count', label: t('inventory.tabs.count'), icon: <Check size={18} /> },
@@ -854,6 +880,7 @@ export default function InventoryScreen() {
             />
             <StockTab
               items={items}
+              isTwoStage={isTwoStage}
               filteredItems={filteredItems}
               loading={loading}
               searchTerm={searchTerm}
@@ -1000,6 +1027,10 @@ export default function InventoryScreen() {
             onAcknowledge={handleAcknowledge}
             onRefresh={loadAlerts}
           />
+        )}
+
+        {activeTab === 'produccion' && (
+          <ProduccionTab items={items} onStockChanged={fetchItems} />
         )}
 
         {activeTab === 'insights' && (

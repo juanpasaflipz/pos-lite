@@ -612,10 +612,15 @@ router.patch('/tenants/:id', async (req, res) => {
     if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
 
     const allowed = ['name', 'subdomain', 'owner_email', 'plan', 'active', 'subscription_status',
-      'stripe_customer_id', 'stripe_subscription_id', 'branding_json', 'trial_ends_at', 'kiosk_mode'];
+      'stripe_customer_id', 'stripe_subscription_id', 'branding_json', 'trial_ends_at', 'kiosk_mode',
+      'inventory_mode'];
 
     if (req.body.kiosk_mode !== undefined && !['grid', 'wizard'].includes(req.body.kiosk_mode)) {
       return res.status(400).json({ error: "kiosk_mode must be 'grid' or 'wizard'" });
+    }
+    if (req.body.inventory_mode !== undefined
+        && !['ingredients', 'two_stage'].includes(req.body.inventory_mode)) {
+      return res.status(400).json({ error: "inventory_mode must be 'ingredients' or 'two_stage'" });
     }
     const updates = {};
     for (const key of allowed) {

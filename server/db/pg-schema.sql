@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS tenants (
   trial_ended_notified_at TIMESTAMPTZ,
   timezone TEXT NOT NULL DEFAULT 'America/Mexico_City',
   kiosk_mode TEXT DEFAULT 'grid',
+  inventory_mode TEXT NOT NULL DEFAULT 'ingredients'
+    CHECK (inventory_mode IN ('ingredients', 'two_stage')),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -195,6 +197,12 @@ CREATE TABLE IF NOT EXISTS order_items (
   original_quantity INTEGER
 );
 
+-- Two layers live in this table, told apart by `kind` (migration 0103):
+--   'raw'       walk-in / dry storage. Stocked by receipts. Never gates the menu.
+--   'component' line inventory, counted in portions. Produced by prep runs;
+--               menu availability derives from it.
+-- quantity stays REAL deliberately — see the header comment in
+-- migrations/0103_two_stage_inventory.js before changing it.
 CREATE TABLE IF NOT EXISTS inventory_items (
   id SERIAL PRIMARY KEY,
   tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
@@ -204,7 +212,11 @@ CREATE TABLE IF NOT EXISTS inventory_items (
   low_stock_threshold REAL,
   category TEXT,
   cost_price NUMERIC(10,2) DEFAULT 0,
-  last_counted_at TIMESTAMPTZ
+  last_counted_at TIMESTAMPTZ,
+  kind TEXT NOT NULL DEFAULT 'raw' CHECK (kind IN ('raw', 'component')),
+  low_threshold_portions NUMERIC(10,2),
+  auto_86 BOOLEAN NOT NULL DEFAULT true,
+  sold_out_manual BOOLEAN NOT NULL DEFAULT false
 );
 
 CREATE TABLE IF NOT EXISTS menu_item_ingredients (
@@ -556,6 +568,57 @@ CREATE TABLE IF NOT EXISTS purchase_order_items (
   unit_cost NUMERIC(10,2) DEFAULT 0,
   quantity_received REAL DEFAULT 0,
   line_total NUMERIC(10,2) DEFAULT 0
+);
+
+-- Two-stage inventory: prep runs + portion ledger (migration 0103).
+-- Prep runs are the event that converts raw stock into sellable portions and,
+-- because inputs snapshot their cost, they yield true cost-per-portion and
+-- yield % without any extra bookkeeping.
+CREATE TABLE IF NOT EXISTS prep_runs (
+  id SERIAL PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
+  prepped_at TIMESTAMPTZ DEFAULT NOW(),
+  employee_id INTEGER REFERENCES employees(id),
+  notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS prep_run_inputs (
+  id SERIAL PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
+  prep_run_id INTEGER NOT NULL REFERENCES prep_runs(id) ON DELETE CASCADE,
+  inventory_item_id INTEGER NOT NULL REFERENCES inventory_items(id),
+  quantity NUMERIC(12,4) NOT NULL CHECK (quantity > 0),
+  cost_at_time NUMERIC(12,4)
+);
+
+CREATE TABLE IF NOT EXISTS prep_run_outputs (
+  id SERIAL PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
+  prep_run_id INTEGER NOT NULL REFERENCES prep_runs(id) ON DELETE CASCADE,
+  inventory_item_id INTEGER NOT NULL REFERENCES inventory_items(id),
+  portions NUMERIC(10,2) NOT NULL CHECK (portions > 0)
+);
+
+-- Append-only. inventory_items.quantity is a cache over this table: the cache
+-- clamps at 0, the ledger keeps the unclamped truth so overselling stays
+-- visible as variance. ref_id carries no FK on purpose — orders are
+-- hard-deletable and the record of what a sale consumed must outlive them.
+-- app_user's UPDATE/TRUNCATE are REVOKEd in migration 0103 (the default ACL
+-- grants them automatically, so a GRANT alone is a no-op). DELETE is retained
+-- for the admin inventory reset.
+CREATE TABLE IF NOT EXISTS portion_ledger (
+  id SERIAL PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
+  inventory_item_id INTEGER NOT NULL REFERENCES inventory_items(id),
+  delta NUMERIC(12,4) NOT NULL,
+  reason TEXT NOT NULL CHECK (reason IN (
+    'purchase', 'prep_consume', 'prep_produce', 'sale',
+    'refund_restore', 'void_restore', 'waste',
+    'count_adjust', 'carryover_discard')),
+  ref_type TEXT,
+  ref_id INTEGER,
+  employee_id INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Financials
@@ -914,6 +977,13 @@ CREATE INDEX IF NOT EXISTS idx_order_templates_tenant ON order_templates(tenant_
 CREATE INDEX IF NOT EXISTS idx_orders_payment_status ON orders(tenant_id, payment_status, paid_at);
 CREATE INDEX IF NOT EXISTS idx_waste_log_tenant ON waste_log(tenant_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_waste_log_item ON waste_log(tenant_id, inventory_item_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_kind ON inventory_items(tenant_id, kind);
+CREATE INDEX IF NOT EXISTS idx_menu_item_ingredients_inventory ON menu_item_ingredients(inventory_item_id);
+CREATE INDEX IF NOT EXISTS idx_prep_runs_tenant ON prep_runs(tenant_id, prepped_at DESC);
+CREATE INDEX IF NOT EXISTS idx_prep_run_inputs_run ON prep_run_inputs(prep_run_id);
+CREATE INDEX IF NOT EXISTS idx_prep_run_outputs_run ON prep_run_outputs(prep_run_id);
+CREATE INDEX IF NOT EXISTS idx_portion_ledger_item ON portion_ledger(tenant_id, inventory_item_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_portion_ledger_ref ON portion_ledger(tenant_id, ref_type, ref_id);
 CREATE INDEX IF NOT EXISTS idx_cfdi_invoices_tenant_date ON cfdi_invoices(tenant_id, issued_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cfdi_invoices_tenant_order ON cfdi_invoices(tenant_id, order_id);
 CREATE INDEX IF NOT EXISTS idx_cfdi_invoice_tokens_token ON cfdi_invoice_tokens(token);
@@ -946,7 +1016,8 @@ BEGIN
       'loyalty_messages', 'loyalty_config', 'wallet_passes', 'wallet_registrations',
       'order_templates',
       'waste_log', 'cfdi_config', 'cfdi_invoices', 'tenant_credentials', 'expenses',
-      'kiosk_devices', 'kiosk_builder_map', 'kiosk_addon_map'
+      'kiosk_devices', 'kiosk_builder_map', 'kiosk_addon_map',
+      'prep_runs', 'prep_run_inputs', 'prep_run_outputs', 'portion_ledger'
     ])
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);
@@ -992,3 +1063,11 @@ CREATE TABLE IF NOT EXISTS stress_test_runs (
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user;
+
+-- portion_ledger is append-only for the request role: the blanket GRANT above
+-- (and this database's default ACL) hand app_user everything, so withholding
+-- requires an explicit REVOKE. UPDATE is the meaningful one — a correction is a
+-- new compensating row, never an edit to what a movement said. DELETE stays
+-- granted because the admin inventory reset clears these rows inside the
+-- request transaction. Migration 0103 repeats this for older databases.
+REVOKE UPDATE, TRUNCATE ON portion_ledger FROM app_user;

@@ -311,7 +311,15 @@
     "revoking": "Revoking...",
     "loadingTerms": "Loading terms...",
     "consentVersion": "Consent version: {{version}}",
-    "trialNote": "Your free Pro trial ends on {{date}} — after that your POS stays free forever."
+    "trialNote": "Your free Pro trial ends on {{date}} — after that your POS stays free forever.",
+    "inventoryMode": {
+      "label": "Inventory model",
+      "ingredients": "Ingredients",
+      "two_stage": "Two-stage",
+      "ingredientsHint": "What you buy is what you sell. Stock comes down at payment.",
+      "two_stageHint": "Storage and portions tracked separately. You log production, and the menu 86s itself when portions run out.",
+      "confirmTwoStage": "Switch to two-stage inventory. Your current items become raw storage, and you'll be able to create portions and log production. Continue?"
+    }
   },
   "resetPassword": {
     "passwordReset": "Password reset",

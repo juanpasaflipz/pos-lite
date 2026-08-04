@@ -7,6 +7,77 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-08-03 — Claude Code — **Two-stage inventory P1 landed in the tree (NOT pushed)**
+
+Implements P1 of `PORTION_INVENTORY_SPEC.md`: raw stock → prep runs → portioned
+components, with `portion_ledger` as append-only truth. **Every existing tenant
+is untouched** — `tenants.inventory_mode` defaults to `'ingredients'` and none
+of the new UI renders in that mode. Nothing pushed; Juan drives the deploy.
+
+**Migration 0103** (already applied to the *test branch* by me; prod applies on
+next boot). Adds `inventory_mode`, `inventory_items.kind` /
+`low_threshold_portions` / `auto_86` / `sold_out_manual`, the
+`prep_runs` / `prep_run_inputs` / `prep_run_outputs` / `portion_ledger` tables,
+plus a `(tenant_id, kind)` index and the
+`menu_item_ingredients(inventory_item_id)` reverse index P2 needs.
+
+**Three things worth knowing before you touch this:**
+
+1. **The spec's premise that recipe deduction is "dormant" is WRONG, and P2
+   depends on knowing that.** `deductInventoryForOrder()` is live at *payment*
+   time from 9 call sites (payments.js ×6, kiosk.js:549 `markKioskOrderPaid`,
+   getnet ×2, manual-sales). `POST /api/inventory/deduct` is the only dead part.
+   P2 is a consolidation + a paid→rung semantic move, not a greenfield wire-up,
+   and the main hazard is double-deduction. (I did close that endpoint's missing
+   `requireAuth` while I was in the file — it was an unauthenticated write.)
+2. **`inventory_items.quantity` stays REAL, deliberately.** The plan called for
+   NUMERIC(12,4) so it couldn't drift against the ledger; I measured the blast
+   radius and backed out. postgres.js has no numeric parser on either pool, so
+   NUMERIC arrives in JS as a *string*, and the out-of-stock classifier uses
+   strict equality in three places (`InventoryScreen.tsx:265`,
+   `StockTab.tsx:85`, `:219`) where `"0" === 0` is false — one missed cast
+   silently disables the exact auto-86 path this feature exists to build. Whole
+   portions are exact in float4 anyway. Reasoning is in the migration header;
+   revisit only if fractional portions ship.
+3. **The REVOKE is what makes `portion_ledger` append-only, not the GRANT** —
+   same default-ACL trap as 0098/0099/0100. **UPDATE and TRUNCATE are revoked;
+   DELETE is deliberately kept.** I initially revoked DELETE too, and
+   `tests/inventory-reset.test.ts`'s completeness invariant caught the
+   consequence: the three new tables reference `inventory_items`, so an
+   inventory *wipe* would have died on a 23503 — and once they were added to
+   `RESET_HISTORY_TABLES`, the reset needs DELETE on the tenant connection to
+   stay inside the request transaction. Revoking it would have forced that flow
+   onto adminSql and given up the atomicity that stops a half-finished reset
+   from committing, while buying nothing: app_user can already delete the
+   `inventory_items` those rows point at. Rewriting history (UPDATE) is the
+   threat worth blocking; wholesale deletion alongside the items themselves is
+   not. That structural test is a good one — it will catch you the same way.
+
+**New/changed surfaces:** `server/helpers/stockLedger.js` (`applyStockDelta` /
+`applyStockDeltas` — takes an explicit `sql` handle because the kiosk routes run
+outside tenantMiddleware and a `getConn()`-based helper would escape their
+transaction); `server/routes/prep-runs.js` (POST / GET / corrections);
+`applyInventoryMatches` and `waste.js` now move quantity through the ledger
+(cost math untouched); `ProduccionTab.tsx`; kind picker + Raw/Componentes filter
+in StockTab; recipe editor scoped to components in two-stage mode; Pro-gated
+mode toggle in AccountScreen.
+
+**Shared files I touched — stage hunks, not files:** `server/db/pg-schema.sql`,
+`src/api/index.ts`, `src/types/index.ts`, and the `es`/`en` locale JSONs.
+
+**Tests:** 43 new across `tests/portion-ledger.test.ts`,
+`tests/prep-runs.test.ts` and `tests/stock-ledger-callers.test.ts`. That last
+file is new coverage for `applyInventoryMatches` and waste, which had **none**
+before — worth knowing if you were relying on the suite to catch expense
+regressions.
+
+**P2/P3 are planned but NOT built.** Sale deduction, derived availability and
+auto-86 rendering are untouched; the sold-out UI in `MenuGrid.tsx` is still fed
+by the `useAISuggestions` stub and still inert.
+
+---
+
+
 ## 2026-07-31 (Kiosk wizard — SHIPPED to prod, Samsung on 1.7.0+4bfcd9f) — Claude Code
 
 **Live as of 07:44 UTC.** Railway deploy SUCCESS; Samsung Tab S10 FE reinstalled

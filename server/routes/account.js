@@ -33,6 +33,7 @@ router.get('/', requireOwner, async (req, res) => {
       mp_user_id: tenant.mp_user_id || null,
       mp_default_terminal_id: tenant.mp_default_terminal_id || null,
       mp_default_kiosk_terminal_id: tenant.mp_default_kiosk_terminal_id || null,
+      inventory_mode: tenant.inventory_mode || 'ingredients',
       usage: {
         employees: { current: Number(usage.employee_count), limit: limits.employees },
         menu_items: { current: Number(usage.menu_item_count), limit: limits.menuItems },
@@ -44,10 +45,12 @@ router.get('/', requireOwner, async (req, res) => {
   }
 });
 
-// PUT /api/account — Update name/email
+const INVENTORY_MODES = ['ingredients', 'two_stage'];
+
+// PUT /api/account — Update name/email/inventory_mode
 router.put('/', requireOwner, async (req, res) => {
   try {
-    const { name, email } = req.body;
+    const { name, email, inventory_mode } = req.body;
     const updates = {};
 
     if (name && typeof name === 'string' && name.trim()) {
@@ -60,6 +63,26 @@ router.put('/', requireOwner, async (req, res) => {
       }
       updates.owner_email = email.trim();
     }
+    if (inventory_mode !== undefined) {
+      if (!INVENTORY_MODES.includes(inventory_mode)) {
+        return res.status(400).json({ error: `inventory_mode must be one of: ${INVENTORY_MODES.join(', ')}` });
+      }
+      // Two-stage is a Pro feature. Gate the WRITE, not just the UI — a free
+      // tenant that PUTs this directly would otherwise get prep runs and
+      // auto-86 for free. Turning it back OFF is always allowed, so a lapsed
+      // subscription never traps a tenant in a mode they can no longer manage.
+      if (inventory_mode === 'two_stage') {
+        const tenant = await getTenant(req.owner.tenantId);
+        if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+        if (effectivePlan(tenant) !== 'pro') {
+          return res.status(403).json({
+            error: 'Two-stage inventory requires the Pro plan',
+            code: 'PLAN_UPGRADE_REQUIRED',
+          });
+        }
+      }
+      updates.inventory_mode = inventory_mode;
+    }
 
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: 'No valid fields to update' });
@@ -68,7 +91,11 @@ router.put('/', requireOwner, async (req, res) => {
     await updateTenant(req.owner.tenantId, updates);
     const tenant = await getTenant(req.owner.tenantId);
 
-    res.json({ name: tenant.name, email: tenant.owner_email });
+    res.json({
+      name: tenant.name,
+      email: tenant.owner_email,
+      inventory_mode: tenant.inventory_mode || 'ingredients',
+    });
   } catch (error) {
     console.error('Account update error:', error);
     res.status(500).json({ error: 'Failed to update account' });

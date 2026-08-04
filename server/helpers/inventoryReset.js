@@ -13,6 +13,13 @@
 import { all, get, run } from '../db/index.js';
 
 // Movement history — cleared in BOTH modes.
+//
+// The two-stage tables (migration 0103) belong here rather than in the wipe-only
+// list: a prep run and a ledger row are records of stock MOVING, which is
+// exactly what 'zero' exists to erase. Leaving ledger rows behind while zeroing
+// quantities would also strand the cache/ledger invariant permanently out of
+// agreement. Children before parents — prep_run_inputs/outputs cascade from
+// prep_runs, but deleting them explicitly keeps the order independent of that.
 export const RESET_HISTORY_TABLES = [
   'inventory_counts',
   'shrinkage_alerts',
@@ -20,6 +27,10 @@ export const RESET_HISTORY_TABLES = [
   'inventory_cost_history',
   'ai_inventory_velocity',
   'ai_restock_log',
+  'portion_ledger',
+  'prep_run_inputs',
+  'prep_run_outputs',
+  'prep_runs',
 ];
 
 // Everything that must be cleared before inventory_items can be deleted, in FK

@@ -8,7 +8,8 @@
       "count": "Conteo",
       "variance": "Varianza",
       "alerts": "Alertas",
-      "insights": "IA Insights"
+      "insights": "IA Insights",
+      "produccion": "Producción"
     },
     "search": "Buscar productos...",
     "allCategories": "Todas las Categorías",
@@ -64,7 +65,11 @@
       "sku": "SKU",
       "barcode": "Código de barras",
       "expiryDate": "Fecha de caducidad",
-      "lotNumber": "Número de lote"
+      "lotNumber": "Número de lote",
+      "kind": "¿Qué es este artículo?",
+      "kindRawHint": "Insumo crudo en la bodega. No se vende directo — se convierte en porciones con una producción.",
+      "kindComponentHint": "Porción lista en la línea. De aquí se sirve, y el menú se agota solo cuando llega a cero.",
+      "lowThresholdPortions": "Aviso de porciones bajas"
     },
     "invalidRestockAmount": "Cantidad de reabasto inválida",
     "invalidThreshold": "Valor de mínimo inválido",
@@ -99,6 +104,11 @@
         "expired": "Expirado",
         "failed": "Falló"
       }
+    },
+    "kinds": {
+      "all": "Todo",
+      "raw": "Bodega",
+      "component": "Porciones"
     }
   },
   "cogs": {
@@ -919,5 +929,31 @@
     "confirmWipe": "Borrar todo",
     "working": "Restableciendo...",
     "failed": "Error al restablecer el inventario"
+  },
+  "prep": {
+    "sacamos": "Sacamos",
+    "sacamosHint": "Qué salió de la bodega. Opcional, pero es lo que da el rendimiento y el costo por porción.",
+    "salio": "Salió",
+    "salioHint": "Cuántas porciones quedaron listas.",
+    "optional": "Opcional",
+    "required": "Obligatorio",
+    "pickRaw": "Elegir insumo…",
+    "pickComponent": "Elegir porción…",
+    "qty": "Cant.",
+    "addInput": "Agregar insumo",
+    "addOutput": "Agregar porción",
+    "removeLine": "Quitar",
+    "increment": "Sumar uno",
+    "decrement": "Restar uno",
+    "notesPlaceholder": "Notas (opcional)",
+    "save": "Guardar producción",
+    "saveFailed": "No se pudo guardar la producción",
+    "recentRuns": "Producciones recientes",
+    "noRuns": "Todavía no hay producciones.",
+    "from": "de",
+    "perPortion": "por porción",
+    "correctedBy": "Corregido: {{delta}}",
+    "noComponentsTitle": "Aún no hay porciones configuradas",
+    "noComponentsHint": "Crea artículos de tipo «Porciones» en Stock para poder registrar producción."
   }
 }

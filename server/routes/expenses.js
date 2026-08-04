@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import { all, get, run, getTenantId } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { detectOverpay } from '../helpers/inventory.js';
+import { applyStockDelta } from '../helpers/stockLedger.js';
 import { matchAndCheckVariance } from './recurring-expenses.js';
 import { modelFor } from '../lib/aiModels.js';
 // AI modules removed in pos-lite
@@ -83,32 +84,44 @@ async function applyInventoryMatches({ tenantId, expenseId, expenseDate, vendorI
       }
 
       const restockTimestamp = expenseDate ? `${expenseDate}T00:00:00Z` : new Date().toISOString();
+
+      // Quantity moves through the ledger — a purchase is a stock movement and
+      // needs the same audit trail as a prep run or a sale. Note this is now a
+      // DELTA, not the read-modify-write absolute the cost math above still
+      // needs `newQuantity` for.
+      await applyStockDelta(null, {
+        itemId: Number(match.inventory_item_id),
+        delta: addedQty,
+        reason: 'purchase',
+        refType: 'expense',
+        refId: expenseId ?? null,
+      });
+
+      // cost_price and last_restocked_at stay a separate write: applyStockDelta
+      // owns quantity and nothing else, and the weighted-average cost logic is
+      // unchanged from before the ledger existed. The catch is the pre-0044
+      // fallback for databases without last_restocked_at.
       try {
         if (newCostPrice != null && newCostPrice !== prevCostPrice) {
           await run(
             `UPDATE inventory_items
-             SET quantity = $1,
-                 cost_price = $2,
-                 last_restocked_at = GREATEST(COALESCE(last_restocked_at, '1970-01-01'::timestamptz), $3::timestamptz)
-             WHERE id = $4`,
-            [newQuantity, newCostPrice, restockTimestamp, match.inventory_item_id]
+             SET cost_price = $1,
+                 last_restocked_at = GREATEST(COALESCE(last_restocked_at, '1970-01-01'::timestamptz), $2::timestamptz)
+             WHERE id = $3`,
+            [newCostPrice, restockTimestamp, match.inventory_item_id]
           );
         } else {
           await run(
             `UPDATE inventory_items
-             SET quantity = $1,
-                 last_restocked_at = GREATEST(COALESCE(last_restocked_at, '1970-01-01'::timestamptz), $2::timestamptz)
-             WHERE id = $3`,
-            [newQuantity, restockTimestamp, match.inventory_item_id]
+             SET last_restocked_at = GREATEST(COALESCE(last_restocked_at, '1970-01-01'::timestamptz), $1::timestamptz)
+             WHERE id = $2`,
+            [restockTimestamp, match.inventory_item_id]
           );
         }
       } catch (colErr) {
         if (newCostPrice != null && newCostPrice !== prevCostPrice) {
-          await run('UPDATE inventory_items SET quantity = $1, cost_price = $2 WHERE id = $3',
-            [newQuantity, newCostPrice, match.inventory_item_id]);
-        } else {
-          await run('UPDATE inventory_items SET quantity = $1 WHERE id = $2',
-            [newQuantity, match.inventory_item_id]);
+          await run('UPDATE inventory_items SET cost_price = $1 WHERE id = $2',
+            [newCostPrice, match.inventory_item_id]);
         }
       }
 

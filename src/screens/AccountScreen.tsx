@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { getAccount, updateAccount, changePassword, createCheckoutSession, createPortalSession, getMpConnectUrl, getMpTerminals, setMpDefaultTerminal as apiSetMpDefaultTerminal, getMpDevices, setMpDeviceOperatingMode, validatePromoCode, getBankConnections, getBankAccounts, syncBankConnection, deleteBankConnection, getFinancingConsent, deleteFinancingConsent, exportFinancingData, getFinancingConsentTerms, type BankConnection, type BankAccount } from '../api';
 import { usePlan } from '../context/PlanContext';
+import FeatureGate from '../components/FeatureGate';
+import { resetInventoryModeCache } from '../hooks/useInventoryMode';
 import BankConnectionCard from '../components/banking/BankConnectionCard';
 import ConnectBankButton from '../components/banking/ConnectBankButton';
 import SecurityInfoModal from '../components/banking/SecurityInfoModal';
@@ -22,6 +24,7 @@ interface AccountData {
   trial_ends_at?: string | null;
   subscription_status: string | null;
   created_at: string;
+  inventory_mode?: 'ingredients' | 'two_stage';
   usage: {
     employees: { current: number; limit: number };
     menu_items: { current: number; limit: number };
@@ -81,6 +84,8 @@ export default function AccountScreen() {
   const [editEmail, setEditEmail] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
+  const [modeSaving, setModeSaving] = useState(false);
+  const [modeError, setModeError] = useState<string | null>(null);
 
   // Password form
   const [currentPw, setCurrentPw] = useState('');
@@ -282,6 +287,25 @@ export default function AccountScreen() {
       setSaveMsg(err.message || t('account.failedSave'));
     }
     setSaving(false);
+  };
+
+  const handleInventoryModeChange = async (mode: 'ingredients' | 'two_stage') => {
+    // Switching to two-stage changes what the Inventory screen means (raw vs.
+    // portions) and turns on the Producción tab, so confirm before flipping.
+    if (mode === 'two_stage' && !window.confirm(t('account.inventoryMode.confirmTwoStage'))) return;
+
+    setModeSaving(true);
+    setModeError(null);
+    try {
+      const result = await updateAccount({ inventory_mode: mode });
+      setAccount(prev => prev ? { ...prev, inventory_mode: result.inventory_mode || mode } : prev);
+      // The mode is cached module-wide for the employee-facing screens; drop it
+      // so Inventory picks the new one up without a full reload.
+      resetInventoryModeCache();
+    } catch (err: any) {
+      setModeError(err.message || t('account.failedSave'));
+    }
+    setModeSaving(false);
   };
 
   const handlePasswordChange = async (e: React.FormEvent) => {
@@ -586,6 +610,38 @@ export default function AccountScreen() {
                     className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-brand-500"
                   />
                 </div>
+                {/* Inventory model. Pro-gated: two-stage is what makes prep
+                    runs, portion counts and auto-86 possible. */}
+                <FeatureGate feature="inventoryTwoStage" featureLabel={t('account.inventoryMode.label')}>
+                  <div className="border-t border-neutral-800 pt-4">
+                    <label className="block text-neutral-400 text-sm mb-1">{t('account.inventoryMode.label')}</label>
+                    <div className="flex gap-2">
+                      {(['ingredients', 'two_stage'] as const).map(mode => {
+                        const current = account.inventory_mode || 'ingredients';
+                        return (
+                          <button
+                            key={mode}
+                            type="button"
+                            disabled={modeSaving || current === mode}
+                            onClick={() => handleInventoryModeChange(mode)}
+                            className={`flex-1 min-h-[44px] px-3 rounded-lg border text-sm transition-colors disabled:opacity-100 ${
+                              current === mode
+                                ? 'bg-brand-600 border-brand-500 text-white'
+                                : 'bg-neutral-800 border-neutral-700 text-neutral-300 hover:border-neutral-600'
+                            }`}
+                          >
+                            {t(`account.inventoryMode.${mode}`)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-neutral-500 mt-1">
+                      {t(`account.inventoryMode.${account.inventory_mode || 'ingredients'}Hint`)}
+                    </p>
+                    {modeError && <p className="text-xs text-red-400 mt-1">{modeError}</p>}
+                  </div>
+                </FeatureGate>
+
                 <div className="flex items-center gap-3">
                   <button
                     onClick={handleSave}
