@@ -37,7 +37,8 @@
     "productCount_one": "{{count}} item",
     "productCount_other": "{{count}} items",
     "stampProgress": "{{earned}}/{{required}} stamps",
-    "prize": "You've earned a reward!"
+    "prize": "You've earned a reward!",
+    "soldOut": "Sold out"
   },
   "cart": {
     "title": "Your order",

@@ -37,6 +37,12 @@ export interface MenuItem {
   active: boolean;
   prep_time_minutes?: number;
   is_example?: boolean;
+  /* Derived availability — present only for two-stage tenants (the absence of
+     these fields is how the client knows the tenant is on the old model).
+     sellable_count null = no component recipe = unlimited, never sold out. */
+  sellable_count?: number | null;
+  sold_out?: boolean;
+  low_stock?: boolean;
 }
 
 /* Virtual Brand Types */

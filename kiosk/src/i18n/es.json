@@ -37,7 +37,8 @@
     "productCount_one": "{{count}} producto",
     "productCount_other": "{{count}} productos",
     "stampProgress": "{{earned}}/{{required}} sellos",
-    "prize": "¡Tienes un premio!"
+    "prize": "¡Tienes un premio!",
+    "soldOut": "Agotado"
   },
   "cart": {
     "title": "Tu orden",

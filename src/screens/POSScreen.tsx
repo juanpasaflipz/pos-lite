@@ -98,6 +98,9 @@ const POSScreen: React.FC = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  // Set when a manager waved through a sold-out item; sent with the order so
+  // the server skips its own availability guard for this cart.
+  const [soldOutOverride, setSoldOutOverride] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<number | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -176,8 +179,6 @@ const POSScreen: React.FC = () => {
     cartSuggestions,
     pushItemIds,
     avoidItemIds,
-    soldOutItemIds,
-    lowStockItemIds,
     acceptSuggestion,
     dismissSuggestion,
   } = useAISuggestions({
@@ -185,6 +186,27 @@ const POSScreen: React.FC = () => {
     employeeId: currentEmployee?.id,
     enabled: true,
   });
+
+  // Sold-out / low-stock come from the menu payload itself. Two-stage tenants
+  // get sellable_count on every item (derived from prepped portions); everyone
+  // else gets no such field, so these stay empty and the grid behaves as it
+  // always has. This replaces the useAISuggestions stub, which returned empty
+  // sets and left the whole Agotado treatment inert.
+  const soldOutItemIds = useMemo(
+    () => new Set(menuItems.filter((i) => i.sold_out).map((i) => i.id)),
+    [menuItems]
+  );
+  const lowStockItemIds = useMemo(
+    () => new Set(menuItems.filter((i) => i.low_stock).map((i) => i.id)),
+    [menuItems]
+  );
+  const sellableCounts = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const i of menuItems) {
+      if (typeof i.sellable_count === 'number') m.set(i.id, i.sellable_count);
+    }
+    return m;
+  }, [menuItems]);
 
   // Delivery alerts
   const { alerts: deliveryAlerts, dismiss: dismissDeliveryAlert } = useDeliveryAlerts();
@@ -558,7 +580,14 @@ const POSScreen: React.FC = () => {
   };
 
   const handleItemTap = (item: MenuItem) => {
-    if (soldOutItemIds.has(item.id)) return;
+    // Sold out is derived from prepped portions, not gospel: staff can see the
+    // kitchen, and the count goes stale the moment someone preps more. So this
+    // asks rather than refuses, and the order carries an override flag the
+    // server honours for an authenticated employee.
+    if (soldOutItemIds.has(item.id)) {
+      if (!window.confirm(t('cart.soldOutOverride', { name: item.name }))) return;
+      setSoldOutOverride(true);
+    }
     if (itemModifierCache[item.id]) {
       setModifierItem(item);
     } else {
@@ -697,6 +726,7 @@ const POSScreen: React.FC = () => {
       order_fulfillment_type: cartFulfillment,
       customer_call_name: callName,
       offline_temp_id: cartSubmitIdRef.current,
+      ...(soldOutOverride ? { sold_out_override: true } : {}),
     });
     await dispatchCourierIfDelivery(order.id);
     return order;
@@ -1273,6 +1303,7 @@ const POSScreen: React.FC = () => {
           pushItemIds={pushItemIds}
           avoidItemIds={avoidItemIds}
           lowStockItemIds={lowStockItemIds}
+                sellableCounts={sellableCounts}
           onItemTap={handleItemTap}
           onAddToast={addToast}
         />

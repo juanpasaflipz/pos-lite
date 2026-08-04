@@ -7,7 +7,11 @@ import { all, get, run, adminSql, getTenantId } from '../db/index.js';
 import { createPaymentIntent, createRefund, getPaymentIntent } from '../stripe.js';
 import { requireAuth } from '../middleware/auth.js';
 import { audit } from '../lib/auditLog.js';
-import { deductInventoryForOrder, restoreInventoryForItems } from '../helpers/inventory.js';
+import {
+  deductInventoryForOrder,
+  restoreInventoryForItems,
+  restoreComponentsForOrderLines,
+} from '../helpers/inventory.js';
 import { generateInvoiceToken } from '../helpers/facturapi.js';
 import { enqueueCustomerTicket } from '../lib/printQueue.js';
 import { getTenant } from '../tenants.js';
@@ -890,8 +894,31 @@ router.post('/refund', refundLimiter, requireAuth('process_refunds', { allowAppr
       WHERE id = $3
     `, [newRefundTotal, fullyRefunded ? 'refunded' : order.payment_status, order_id]);
 
-    // Restore inventory for refunded items
-    if (refundItems.length > 0) {
+    // Restore inventory for refunded items.
+    //
+    // Two-stage tenants give back the refunded lines' ledger NET, so a line
+    // refunded twice hands back only what it still owed. They also restore on a
+    // FULL refund, which the ingredients path never did — with deduction at
+    // ring-up, a fully refunded order that returned nothing would walk the
+    // portion count down permanently. Amount-only refunds name no lines, so
+    // neither mode can restore anything for them.
+    if ((req.tenant?.inventory_mode || 'ingredients') === 'two_stage') {
+      let restoreIds = refundItems.map((it) => Number(it.order_item_id));
+      if (refundType === 'full') {
+        const live = await all(
+          'SELECT id FROM order_items WHERE order_id = $1 AND voided_at IS NULL',
+          [order_id]
+        );
+        restoreIds = live.map((it) => Number(it.id));
+      }
+      if (restoreIds.length > 0) {
+        await restoreComponentsForOrderLines(null, {
+          orderItemIds: restoreIds,
+          employeeId,
+          reason: 'refund_restore',
+        });
+      }
+    } else if (refundItems.length > 0) {
       await restoreInventoryForItems(refundItems);
     }
 

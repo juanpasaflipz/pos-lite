@@ -32,7 +32,8 @@
     "forHere": "For here",
     "toGo": "To go",
     "delivery": "Delivery",
-    "fulfillmentLabel": "Where will they eat?"
+    "fulfillmentLabel": "Where will they eat?",
+    "soldOutOverride": "“{{name}}” is out according to prepped portions. Sell it anyway?"
   },
   "delivery": {
     "modalTitle": "Delivery setup",

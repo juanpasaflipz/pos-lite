@@ -288,16 +288,31 @@ const KioskMenuScreen: React.FC = () => {
               {visibleItems.map((item) => {
                 const hasModifiers = !!(modifierMap[item.id] && modifierMap[item.id].length);
                 const isFlashing = flashItemId === item.id;
+                // A guest sees only that it's gone — never a count. A number
+                // here would go stale the moment the kitchen preps more, and
+                // "quedan 2" pressures people over something we can't promise.
+                const isSoldOut = !!item.sold_out;
                 return (
                 <button
                   key={item.id}
-                  onClick={() => handleItemTap(item)}
-                  className={`rounded-lg border text-left touch-manipulation flex flex-col overflow-hidden transition-transform duration-100 active:scale-[0.97] ${
-                    isFlashing
-                      ? 'bg-brand-900/30 border-brand-400 ring-2 ring-brand-400'
-                      : 'bg-neutral-900 border-neutral-800 active:border-brand-500'
+                  onClick={() => { if (!isSoldOut) handleItemTap(item); }}
+                  disabled={isSoldOut}
+                  aria-disabled={isSoldOut}
+                  className={`relative rounded-lg border text-left touch-manipulation flex flex-col overflow-hidden transition-transform duration-100 ${
+                    isSoldOut
+                      ? 'bg-neutral-900/40 border-neutral-800 grayscale opacity-60 cursor-not-allowed'
+                      : isFlashing
+                        ? 'bg-brand-900/30 border-brand-400 ring-2 ring-brand-400 active:scale-[0.97]'
+                        : 'bg-neutral-900 border-neutral-800 active:border-brand-500 active:scale-[0.97]'
                   }`}
                 >
+                  {isSoldOut && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/50">
+                      <span className="px-3 py-1 rounded-full bg-neutral-900/90 border border-neutral-700 text-white text-sm font-semibold uppercase tracking-wide">
+                        {t('menu.soldOut')}
+                      </span>
+                    </div>
+                  )}
                   <div className="aspect-[4/3] w-full bg-gradient-to-br from-neutral-800 to-neutral-900 flex items-center justify-center overflow-hidden">
                     {item.image_url ? (
                       <img

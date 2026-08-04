@@ -11,8 +11,41 @@ import { sendReceiptMessage, sendReceiptLoyaltyMessage, sendOrderReadyMessage } 
 import { findOrCreateCustomer, addStampsForOrder, getConfigValue } from '../helpers/loyalty.js';
 import { tzDate } from '../lib/tz.js';
 import { ensureCounterTable } from '../lib/orderCounter.js';
+import {
+  deductComponentsForOrderLines,
+  restoreComponentsForOrderLines,
+  adjustComponentsForOrderLine,
+  sellableCountsFor,
+} from '../helpers/inventory.js';
 
 const router = Router();
+
+/**
+ * Whether this tenant derives availability from prepped portions.
+ *
+ * `req.tenant` is loaded by tenantMiddleware with SELECT *, so the column is
+ * already in hand — no extra round-trip on the order hot path.
+ */
+function isTwoStage(req) {
+  return (req.tenant?.inventory_mode || 'ingredients') === 'two_stage';
+}
+
+/**
+ * Which of these lines name a menu item that cannot be built at all right now.
+ * Returns menu_item_ids, deduped. Items with no component recipe are never
+ * unavailable — "we don't track it" is not "we're out of it".
+ */
+async function assertItemsAvailable(orderItems) {
+  const menuItemIds = [...new Set(
+    (orderItems || []).map((it) => it.menu_item_id).filter(Boolean).map(Number)
+  )];
+  if (!menuItemIds.length) return [];
+  const counts = await sellableCountsFor(null, menuItemIds);
+  return menuItemIds.filter((id) => {
+    const entry = counts.get(id);
+    return entry && entry.sellable <= 0;
+  });
+}
 
 // Rate limiting: 30 order creation attempts per IP per 15 minutes
 const orderCreateLimiter = rateLimit({
@@ -846,6 +879,26 @@ async function buildOrderFromRequest(req) {
     });
   }
 
+  // Sold-out guard. Rejects only what was ALREADY unsellable before this order
+  // — never a race loser. Two cashiers ringing the last portion at the same
+  // moment both succeed and drive the count to 0; the kitchen sorts that out in
+  // thirty seconds, whereas failing a customer standing at the counter over an
+  // off-by-one is a worse trade. See PORTION_INVENTORY_SPEC.md §4.3.
+  //
+  // A manager can override from the POS after an approval prompt, which is why
+  // this is skippable — staff can see the kitchen, and the count is a
+  // derivation, not the truth.
+  if (isTwoStage(req) && req.body?.sold_out_override !== true) {
+    const soldOut = await assertItemsAvailable(orderItems);
+    if (soldOut.length) {
+      const err = new Error('items_sold_out');
+      err.status = 409;
+      err.code = 'ITEMS_SOLD_OUT';
+      err.payload = { sold_out_menu_item_ids: soldOut };
+      throw err;
+    }
+  }
+
   // Prices already include IVA — extract tax from the total
   const tax = Math.round((total - total / (1 + TAX_RATE)) * 100) / 100;
   const subtotal = Math.round((total - tax) * 100) / 100;
@@ -917,6 +970,22 @@ async function buildOrderFromRequest(req) {
   // Correlate by index — Postgres preserves VALUES order in RETURNING
   for (let i = 0; i < orderItems.length; i++) {
     orderItems[i]._orderItemId = insertedItems[i].id;
+  }
+
+  // Two-stage tenants consume portions when the order is RUNG, not when it is
+  // paid: the kitchen starts building as soon as the ticket prints, so that is
+  // when the line actually loses the food. Rides the tenant middleware's
+  // transaction, so a later throw rolls the deduction back with the order.
+  // Ingredients-mode tenants deduct at payment as they always have.
+  if (isTwoStage(req)) {
+    await deductComponentsForOrderLines(null, {
+      lines: orderItems.map((it) => ({
+        order_item_id: it._orderItemId,
+        menu_item_id: it.menu_item_id,
+        quantity: it.quantity,
+      })),
+      employeeId: req.employee?.id || null,
+    });
   }
 
   // Point each consumed approval at what it ended up authorizing. The consume
@@ -1012,6 +1081,8 @@ function handleOrderError(error, res) {
       // `approval_required` is the client's only trigger for the PIN pad, so a
       // discount that needs a manager must surface it here too.
       ...(error.code ? { code: error.code, permission: error.permission } : {}),
+      // Extra context some errors carry (e.g. which items were sold out).
+      ...(error.payload || {}),
     });
   }
   console.error('Error creating order:', error);
@@ -1692,6 +1763,20 @@ router.post('/:id/items', requireAuth('pos_access'), async (req, res) => {
       }
     }
 
+    // Lines appended to a live tab consume portions the moment they're sent,
+    // same as the original ring-up. New order_item ids, so the per-line
+    // idempotency check naturally lets these through.
+    if (isTwoStage(req)) {
+      await deductComponentsForOrderLines(null, {
+        lines: resolved.map((r, i) => ({
+          order_item_id: insertedIds[i],
+          menu_item_id: r.menu_item_id,
+          quantity: r.quantity,
+        })),
+        employeeId: req.employee?.id || null,
+      });
+    }
+
     const totals = await recomputeOrderTotals(conn, id);
 
     audit({
@@ -1739,7 +1824,7 @@ router.patch('/:id/items/:itemId', requireAuth('pos_access'), async (req, res) =
     }
 
     const item = await get(
-      'SELECT id, quantity, original_quantity, voided_at FROM order_items WHERE id = $1 AND order_id = $2',
+      'SELECT id, quantity, original_quantity, voided_at, menu_item_id FROM order_items WHERE id = $1 AND order_id = $2',
       [itemId, id]
     );
     if (!item) return res.status(404).json({ error: 'Item not found on order' });
@@ -1761,6 +1846,18 @@ router.patch('/:id/items/:itemId', requireAuth('pos_access'), async (req, res) =
           original_quantity = ${preserveOriginal ? '$3' : 'original_quantity'}
       WHERE id = $2
     `, preserveOriginal ? [quantity, itemId, item.quantity] : [quantity, itemId]);
+
+    // Raising the count eats more portions, lowering it hands some back. The
+    // delta is derived from the row's current quantity, so a replayed request
+    // computes zero and moves nothing.
+    if (isTwoStage(req)) {
+      await adjustComponentsForOrderLine(null, {
+        orderItemId: Number(itemId),
+        menuItemId: item.menu_item_id,
+        quantityDelta: Number(quantity) - Number(item.quantity),
+        employeeId: req.employee?.id || null,
+      });
+    }
 
     const totals = await recomputeOrderTotals(conn, id);
 
@@ -1839,6 +1936,17 @@ router.delete('/:id/items/:itemId', requireAuth('pos_access'), async (req, res) 
       // Roll back the void so the order keeps at least one live line.
       await conn.unsafe(`UPDATE order_items SET voided_at = NULL, voided_by = NULL, void_reason = NULL WHERE id = $1`, [itemId]);
       return res.status(400).json({ error: 'Cannot void the last item on an order. Cancel the order instead.' });
+    }
+
+    // The void stuck, so the portions this line consumed go back on the line.
+    // Restoring the line's ledger NET (not a fresh recipe calculation) means a
+    // line that was already partly refunded hands back only what it still owes.
+    if (isTwoStage(req)) {
+      await restoreComponentsForOrderLines(null, {
+        orderItemIds: [Number(itemId)],
+        employeeId: req.employee?.id || null,
+        reason: 'void_restore',
+      });
     }
 
     const totals = await recomputeOrderTotals(conn, id);
@@ -2011,6 +2119,17 @@ router.delete('/:id', requireAuth('void_orders', { allowApproval: true }), async
     const snapshotItems = await conn.unsafe(`SELECT * FROM order_items WHERE order_id = $1`, [id]);
     const snapshotPayments = await conn.unsafe(`SELECT * FROM order_payments WHERE order_id = $1`, [id]);
 
+    // Hand back whatever these lines are still holding, BEFORE the cascade
+    // takes the rows the ledger refers to. Once deduction happens at ring-up,
+    // deleting an order without this quietly walks the line count down forever.
+    if (isTwoStage(req)) {
+      await restoreComponentsForOrderLines(null, {
+        orderItemIds: snapshotItems.map((it) => Number(it.id)),
+        employeeId: req.employee?.id || null,
+        reason: 'void_restore',
+      });
+    }
+
     await conn.unsafe(
       `DELETE FROM order_item_modifiers WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = $1)`,
       [id]
@@ -2065,6 +2184,20 @@ router.post('/purge-unpaid', requireAuth('void_orders'), async (req, res) => {
 
     if (ids.length === 0) {
       return res.json({ success: true, deleted_count: 0 });
+    }
+
+    // Same leak as DELETE /:id, in bulk: these orders were rung (so they took
+    // portions) but never paid, and the rows are about to disappear.
+    if (isTwoStage(req)) {
+      const doomed = await conn.unsafe(
+        `SELECT id FROM order_items WHERE order_id = ANY($1::int[])`,
+        [ids]
+      );
+      await restoreComponentsForOrderLines(null, {
+        orderItemIds: doomed.map((it) => Number(it.id)),
+        employeeId: req.employee?.id || null,
+        reason: 'void_restore',
+      });
     }
 
     await conn.unsafe(

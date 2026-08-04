@@ -648,6 +648,8 @@ interface CreateOrderData {
   discount?: DiscountPayload | null;
   order_fulfillment_type?: 'for_here' | 'to_go' | 'delivery';
   customer_call_name?: string;
+  /** Manager waved a sold-out item through; skips the server availability guard. */
+  sold_out_override?: boolean;
   // Idempotency key. Server dedupes via the unique index on
   // (tenant_id, offline_temp_id) — a retry of the same submit returns
   // the existing order instead of creating a duplicate. Required on POS
@@ -1026,6 +1028,10 @@ export async function updateInventory(
     | 'pack_size'
     | 'shelf_life_days'
     | 'storage_type'
+    | 'kind'
+    | 'low_threshold_portions'
+    | 'auto_86'
+    | 'sold_out_manual'
   >>
 ): Promise<any> {
   return apiRequest(`/inventory/${id}`, {

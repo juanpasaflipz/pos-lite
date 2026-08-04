@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { attachSellable } from '../helpers/inventory.js';
 import multer from 'multer';
 import Papa from 'papaparse';
 import { all, get, run, getTenantId, adminSql } from '../db/index.js';
@@ -282,7 +283,9 @@ router.get('/items', async (req, res) => {
     query += ' ORDER BY sort_order ASC NULLS LAST, id ASC';
 
     const items = await all(query, params);
-    res.json(items);
+    // Two-stage tenants get derived availability alongside each item; for
+    // everyone else the payload is untouched.
+    res.json(await attachSellable(items, { mode: req.tenant?.inventory_mode }));
   } catch (error) {
     console.error('Error fetching items:', error);
     res.status(500).json({ error: 'Failed to fetch items' });

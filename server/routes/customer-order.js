@@ -8,6 +8,7 @@ import { audit } from '../lib/auditLog.js';
 import { cleanBoardSettings } from '../lib/boardSettings.js';
 import { getPlanLimits, planUpgradeError } from '../planLimits.js';
 import { createPaymentIntent, getPaymentIntent } from '../stripe.js';
+import { deductComponentsForOrderLines, sellableCountsFor, attachSellable } from '../helpers/inventory.js';
 
 const router = Router();
 
@@ -159,11 +160,13 @@ router.get('/menu', async (req, res) => {
       ORDER BY category_id ASC, sort_order ASC NULLS LAST, id ASC
     `);
 
+    const decorated = await attachSellable(items, { mode: req.tenant?.inventory_mode });
+
     const catMap = new Map();
     for (const cat of categories) {
       catMap.set(cat.id, { id: cat.id, name: cat.name, items: [] });
     }
-    for (const item of items) {
+    for (const item of decorated) {
       const cat = catMap.get(item.category_id);
       if (cat) {
         cat.items.push({
@@ -172,6 +175,13 @@ router.get('/menu', async (req, res) => {
           price: item.price,
           description: item.description,
           image_url: item.image_url,
+          // Only present for two-stage tenants — the QR page greys the card
+          // and blocks add-to-cart on these.
+          ...(item.sellable_count !== undefined ? {
+            sellable_count: item.sellable_count,
+            sold_out: item.sold_out,
+            low_stock: item.low_stock,
+          } : {}),
         });
       }
     }
@@ -324,6 +334,20 @@ router.post('/', customerOrderLimiter, async (req, res) => {
     // Correlate by index
     for (let i = 0; i < orderItems.length; i++) {
       orderItems[i]._orderItemId = insertedItems[i].id;
+    }
+
+    // QR orders consume portions on submit — the kitchen sees the ticket
+    // immediately, so this is the moment the food leaves the line. (This path
+    // never deducted anything before, in either mode; ingredients-mode QR
+    // orders are still a known gap, deliberately left alone here.)
+    if ((req.tenant?.inventory_mode || 'ingredients') === 'two_stage') {
+      await deductComponentsForOrderLines(null, {
+        lines: orderItems.map((it) => ({
+          order_item_id: it._orderItemId,
+          menu_item_id: it.menu_item_id,
+          quantity: it.quantity,
+        })),
+      });
     }
 
     // Batch insert modifiers

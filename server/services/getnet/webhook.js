@@ -1,5 +1,6 @@
 import { adminSql } from '../../db/index.js';
 import { recordPlatformFee } from './platformFee.js';
+import { deductInventoryForOrder } from '../../helpers/inventory.js';
 
 /**
  * Process a Getnet webhook notification.
@@ -67,30 +68,15 @@ export async function processGetnetWebhook(event) {
     const plan = tenantRows[0]?.plan || 'free';
     await recordPlatformFee(txn.tenant_id, txn.order_id, 'getnet', amount, plan);
 
-    // Deduct inventory (fire-and-forget)
+    // Deduct inventory (fire-and-forget).
+    //
+    // This used to be its own inline per-item UPDATE — a second implementation
+    // of the deduction the rest of the codebase does through
+    // deductInventoryForOrder(). That copy never learned about voided lines and
+    // would not have learned about two-stage tenants either, so it was the one
+    // path that could still double-deduct a component after P2. Consolidated.
     try {
-      const items = await adminSql`
-        SELECT oi.menu_item_id, oi.quantity
-        FROM order_items oi
-        WHERE oi.order_id = ${txn.order_id} AND oi.tenant_id = ${txn.tenant_id}
-      `;
-      for (const item of items) {
-        await adminSql`
-          UPDATE inventory_items ii
-          SET quantity = ii.quantity - (
-            SELECT COALESCE(SUM(mii.quantity_used * ${item.quantity}), 0)
-            FROM menu_item_ingredients mii
-            WHERE mii.menu_item_id = ${item.menu_item_id}
-              AND mii.inventory_item_id = ii.id
-          )
-          WHERE ii.tenant_id = ${txn.tenant_id}
-            AND ii.id IN (
-              SELECT mii.inventory_item_id
-              FROM menu_item_ingredients mii
-              WHERE mii.menu_item_id = ${item.menu_item_id}
-            )
-        `;
-      }
+      await deductInventoryForOrder(txn.order_id);
     } catch (invErr) {
       console.error('Getnet webhook: inventory deduction error:', invErr.message);
     }

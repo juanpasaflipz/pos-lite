@@ -109,7 +109,9 @@
       "all": "All",
       "raw": "Storage",
       "component": "Portions"
-    }
+    },
+    "mark86": "Mark sold out (86)",
+    "un86": "Clear sold out"
   },
   "cogs": {
     "title": "COGS Summary",

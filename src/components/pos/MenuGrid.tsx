@@ -13,6 +13,8 @@ interface MenuGridProps {
   pushItemIds: Set<number>;
   avoidItemIds: Set<number>;
   lowStockItemIds: Set<number>;
+  /** Portions still buildable, per menu item. Two-stage tenants only. */
+  sellableCounts?: Map<number, number>;
   onItemTap: (item: MenuItem) => void;
   onAddToast: (message: string, type: 'success' | 'error' | 'info') => void;
 }
@@ -25,6 +27,7 @@ export default function MenuGrid({
   pushItemIds,
   avoidItemIds,
   lowStockItemIds,
+  sellableCounts,
   onItemTap,
   onAddToast,
 }: MenuGridProps) {
@@ -38,6 +41,7 @@ export default function MenuGrid({
           const isAvoid = avoidItemIds.has(item.id);
           const isSoldOut = soldOutItemIds.has(item.id);
           const isLowStock = lowStockItemIds.has(item.id);
+          const sellableCount = sellableCounts?.get(item.id);
           const hasModifiers = !!itemModifierCache[item.id];
           return (
             <button
@@ -48,7 +52,6 @@ export default function MenuGrid({
                   onAddToast(t('cart.lowStockWarning', { name: item.name }), 'info');
                 }
               }}
-              disabled={isSoldOut}
               className={`rounded-xl hover:shadow-lg active:scale-[0.97] transition-all touch-manipulation flex flex-col overflow-hidden relative ${
                 isSoldOut
                   ? 'bg-neutral-900/40 border border-neutral-700 grayscale cursor-not-allowed'
@@ -85,6 +88,18 @@ export default function MenuGrid({
                 <div className="flex items-start justify-between">
                   <p className="font-semibold text-white text-sm lg:text-base leading-snug line-clamp-2 flex-1 text-left">{brandItemMap?.get(item.id)?.custom_name || item.name}</p>
                   <div className="flex items-center gap-1.5 ml-2 flex-shrink-0 mt-0.5">
+                    {/* Portions still buildable. Staff-facing only — the kiosk
+                        and QR menus show Agotado without a number, so a guest
+                        never sees a count that a prep run is about to change. */}
+                    {sellableCount != null && !isSoldOut && (
+                      <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded ${
+                        isLowStock
+                          ? 'bg-cockpit-yellow/20 text-cockpit-yellow'
+                          : 'bg-cockpit-green/15 text-cockpit-in-text'
+                      }`}>
+                        {sellableCount}
+                      </span>
+                    )}
                     {hasModifiers && <SlidersHorizontal className="w-3.5 h-3.5 text-neutral-500" />}
                     {isPush && <span className="w-2.5 h-2.5 bg-cockpit-green rounded-full" />}
                   </div>

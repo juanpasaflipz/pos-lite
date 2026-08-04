@@ -7,6 +7,75 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-08-04 — Claude Code — **Two-stage inventory P2: sales consume portions, menu auto-86s**
+
+Builds on P1 (shipped 1.11.0). Still dark for everyone: all of this is behind
+`tenants.inventory_mode = 'two_stage'`, and no tenant is on it.
+
+**The headline change is a semantic move, not new plumbing.** Deduction used to
+happen at PAYMENT time from nine call sites. For two-stage tenants it now
+happens when the order is RUNG — the kitchen starts building when the ticket
+prints, so that is when the line actually loses the food. Double-deduction was
+the whole risk, and it's guarded twice:
+
+1. `deductInventoryForOrder()` (the payment-time path every processor calls)
+   now resolves the tenant's mode itself and **returns early for two-stage**.
+   The guard lives in the helper, not at the call sites, so a tenth call site
+   added later inherits it instead of reintroducing the bug.
+2. Sale ledger rows are per `order_item` (`ref_type='order_item'`), and the
+   deduct helper skips lines that already have one. Kiosk payment polling and
+   draft promotion can both reach the same order, so this is structural rather
+   than a matter of every caller being careful.
+
+**The Getnet webhook's inline copy is gone** — it was a second, divergent
+implementation that would have bypassed both guards. It now calls the shared
+helper. Also fixed while in there: `deductInventoryForOrder` never excluded
+`voided_at` lines, so a line voided before payment still walked stock down.
+That's a correctness fix for ingredients-mode tenants too.
+
+**Kiosk specifics worth knowing.** Drafts (`hold`, `send-to-kitchen`,
+`send-to-delivery`) deduct at PROMOTION, not creation — hold-supersede,
+claim-discard and resume all delete draft rows, so deducting early would leak
+portions with no restore hook. Only `POST /orders` (born `pending`) deducts at
+creation. `markKioskOrderPaid` is now wrapped in `adminSql.begin` (it was
+autocommit) so promotion and deduction land together.
+
+**Reversals are symmetric and ledger-net-based**, never recomputed from the
+recipe: quantity edits move the difference, line voids/order deletes/purge-unpaid
+give back what the line still owes, and refunds restore per line — including
+FULL refunds, which the ingredients path never restored at all.
+
+**Availability is derived, never stored.** `sellableCountsFor` takes the floor
+of the limiting component; `sold_out_manual` beats it; `auto_86=false`
+components don't gate; items with no component recipe are unlimited, NOT zero.
+All four menu payloads (POS/kiosk grid, QR, menu board, builder) carry
+`sellable_count` / `sold_out` / `low_stock` **only** for two-stage tenants —
+the field's absence is how the client knows the mode, so no mode flag has to
+reach the browser and ingredients payloads stay byte-identical.
+
+**UI:** the POS sold-out treatment in `MenuGrid.tsx` is finally live (it shipped
+long ago fed by the inert `useAISuggestions` stub) and now carries a portion
+count badge. Tapping a sold-out item asks rather than refuses — client-gated per
+Juan, sending `sold_out_override` the server honours for an authenticated
+employee. Kiosk/QR/board get Agotado with **no count** (Juan's call: a number
+goes stale the moment someone preps more). Components get an 86 toggle in Stock.
+
+**Guard semantics, deliberate:** the submit-time check rejects only what was
+ALREADY at zero, never a race loser. Two cashiers ringing the last portion both
+succeed and the count floors at 0 — the ledger keeps the oversell visible as
+variance. Failing a customer at the counter over an off-by-one is the worse
+trade (spec §4.3).
+
+**Tests:** 21 new in `tests/portion-availability.test.ts`, covering exactly-once,
+the ingredients regression, edit/refund symmetry, availability derivation and
+guard semantics.
+
+**Not built:** P3 (EOD component counts, portion-variance report, plate cost on
+the menu screen, yield trends).
+
+---
+
+
 ## 2026-08-03 — Claude Code — **Two-stage inventory P1 landed in the tree (NOT pushed)**
 
 Implements P1 of `PORTION_INVENTORY_SPEC.md`: raw stock → prep runs → portioned

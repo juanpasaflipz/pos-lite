@@ -129,6 +129,9 @@ export interface MenuBoardDataResponse {
       price: number;
       description?: string;
       sort_order?: number;
+      /* Two-stage tenants only — struck through on the board rather than
+         hidden, so the queue can see what ran out. */
+      sold_out?: boolean;
     }>;
   }>;
   atmosphere: {

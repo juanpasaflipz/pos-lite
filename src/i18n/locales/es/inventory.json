@@ -109,7 +109,9 @@
       "all": "Todo",
       "raw": "Bodega",
       "component": "Porciones"
-    }
+    },
+    "mark86": "Marcar agotado (86)",
+    "un86": "Quitar agotado"
   },
   "cogs": {
     "title": "Resumen de Costos",

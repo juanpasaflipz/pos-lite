@@ -4,7 +4,8 @@
     "empty": "No menu items available",
     "loadError": "Failed to load menu",
     "tryAgain": "Try again",
-    "viewOnlyNotice": "Digital menu — order and pay at the counter"
+    "viewOnlyNotice": "Digital menu — order and pay at the counter",
+    "soldOut": "Sold out"
   },
   "cart": {
     "openLabel": "Cart",

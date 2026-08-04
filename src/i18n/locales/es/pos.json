@@ -32,7 +32,8 @@
     "forHere": "Para aquí",
     "toGo": "Para llevar",
     "delivery": "Domicilio",
-    "fulfillmentLabel": "¿Dónde se come?"
+    "fulfillmentLabel": "¿Dónde se come?",
+    "soldOutOverride": "«{{name}}» está agotado según las porciones preparadas. ¿Venderlo de todos modos?"
   },
   "delivery": {
     "modalTitle": "Envío a domicilio",

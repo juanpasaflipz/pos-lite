@@ -180,6 +180,10 @@ export async function tenantMiddleware(req, res, next) {
       mp_default_terminal_id: tenant.mp_default_terminal_id || null,
       mp_default_kiosk_terminal_id: tenant.mp_default_kiosk_terminal_id || null,
       timezone: tenant.timezone || 'UTC',
+      // Which inventory model this tenant runs on. Routes branch on it to
+      // decide whether a sale consumes prepped portions at ring-up or raw
+      // ingredients at payment (migration 0103).
+      inventory_mode: tenant.inventory_mode || 'ingredients',
     };
 
     tenantContext.run({ conn, tenantId }, () => {

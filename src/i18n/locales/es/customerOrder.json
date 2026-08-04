@@ -4,7 +4,8 @@
     "empty": "No hay productos disponibles",
     "loadError": "No se pudo cargar el menú",
     "tryAgain": "Reintentar",
-    "viewOnlyNotice": "Menú digital — ordena y paga en el mostrador"
+    "viewOnlyNotice": "Menú digital — ordena y paga en el mostrador",
+    "soldOut": "Agotado"
   },
   "cart": {
     "openLabel": "Carrito",

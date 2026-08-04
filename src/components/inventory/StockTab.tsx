@@ -59,6 +59,7 @@ interface StockTabProps {
   dormantIds: Set<number>;
   activeBucket: PulseBucket | null;
   isTwoStage: boolean;
+  onToggleSoldOut: (item: InventoryItem) => void;
   onSearchChange: (value: string) => void;
   onSortChange: (value: SortField) => void;
   onRestock: () => void;
@@ -126,6 +127,7 @@ export default function StockTab({
   dormantIds,
   activeBucket,
   isTwoStage,
+  onToggleSoldOut,
   onSearchChange,
   onSortChange,
   onRestock,
@@ -410,6 +412,22 @@ export default function StockTab({
             >
               <Edit2 size={14} />
             </button>
+            {/* Manual 86 — the plancha died and every dish using this component
+                has to come off the menu at once, whatever the shelf count says.
+                Always beats the derived count until it's cleared. */}
+            {isTwoStage && (item.kind || 'raw') === 'component' && (
+              <button
+                onClick={() => onToggleSoldOut(item)}
+                title={t(item.sold_out_manual ? 'inventory.un86' : 'inventory.mark86')}
+                className={`p-2 rounded text-xs font-bold min-w-[36px] ${
+                  item.sold_out_manual
+                    ? 'bg-red-600 text-white hover:bg-red-500'
+                    : 'text-neutral-300 bg-neutral-800 hover:bg-neutral-700'
+                }`}
+              >
+                86
+              </button>
+            )}
             <button
               onClick={() => onDeleteItem(item)}
               disabled={actionLoading}

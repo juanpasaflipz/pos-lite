@@ -19,6 +19,9 @@ interface MenuItemData {
   price: number;
   description?: string;
   image_url?: string | null;
+  /* Two-stage tenants only — the kitchen ran out of a component this needs. */
+  sold_out?: boolean;
+  low_stock?: boolean;
 }
 
 interface CategoryData {
@@ -653,14 +656,20 @@ export default function CustomerOrderScreen() {
               {cat.items.map(item => (
                 <button
                   key={item.id}
-                  onClick={() => openItem(item)}
-                  className="w-full bg-neutral-900 border border-neutral-800 rounded-xl p-4 flex gap-4 text-left hover:border-neutral-700 transition-colors active:scale-[0.98]"
+                  onClick={() => { if (!item.sold_out) openItem(item); }}
+                  disabled={!!item.sold_out}
+                  aria-disabled={!!item.sold_out}
+                  className={`w-full border rounded-xl p-4 flex gap-4 text-left transition-colors ${
+                    item.sold_out
+                      ? 'bg-neutral-900/40 border-neutral-800 opacity-60 cursor-not-allowed'
+                      : 'bg-neutral-900 border-neutral-800 hover:border-neutral-700 active:scale-[0.98]'
+                  }`}
                 >
                   {item.image_url && (
                     <img
                       src={item.image_url}
                       alt={item.name}
-                      className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
+                      className={`w-20 h-20 rounded-lg object-cover flex-shrink-0 ${item.sold_out ? 'grayscale' : ''}`}
                     />
                   )}
                   <div className="flex-1 min-w-0">
@@ -668,12 +677,20 @@ export default function CustomerOrderScreen() {
                     {item.description && (
                       <p className="text-neutral-500 text-sm line-clamp-2 mt-0.5">{item.description}</p>
                     )}
-                    <p className="text-brand-400 font-bold mt-1.5">{fmt(item.price)}</p>
+                    <p className={`font-bold mt-1.5 ${item.sold_out ? 'text-neutral-600' : 'text-brand-400'}`}>
+                      {fmt(item.price)}
+                    </p>
                   </div>
                   <div className="flex items-center">
-                    <div className="w-8 h-8 rounded-full bg-brand-600/20 text-brand-400 flex items-center justify-center">
-                      <Plus size={18} />
-                    </div>
+                    {item.sold_out ? (
+                      <span className="text-xs font-semibold uppercase tracking-wide text-neutral-400 px-2 py-1 rounded-full border border-neutral-700">
+                        {t('menu.soldOut')}
+                      </span>
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-brand-600/20 text-brand-400 flex items-center justify-center">
+                        <Plus size={18} />
+                      </div>
+                    )}
                   </div>
                 </button>
               ))}

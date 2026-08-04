@@ -31,7 +31,7 @@ function MenuSection({
   compact = false,
 }: {
   title: string;
-  items: Array<{ id: number; name: string; price: number; description?: string }>;
+  items: Array<{ id: number; name: string; price: number; description?: string; sold_out?: boolean }>;
   showPrices: boolean;
   compact?: boolean;
 }) {
@@ -50,7 +50,9 @@ function MenuSection({
         {items.map((item) => (
           <div key={item.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
             <div className="min-w-0">
-              <div className="truncate text-[1.08rem] font-medium text-stone-900">
+              <div className={`truncate text-[1.08rem] font-medium ${
+                item.sold_out ? 'text-stone-400 line-through' : 'text-stone-900'
+              }`}>
                 {item.name}
               </div>
               {item.description ? (
@@ -60,7 +62,9 @@ function MenuSection({
               ) : null}
             </div>
             {showPrices ? (
-              <div className="whitespace-nowrap text-[1rem] font-semibold tabular-nums text-stone-800">
+              <div className={`whitespace-nowrap text-[1rem] font-semibold tabular-nums ${
+                item.sold_out ? 'text-stone-400 line-through' : 'text-stone-800'
+              }`}>
                 {formatPrice(item.price)}
               </div>
             ) : null}

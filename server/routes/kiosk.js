@@ -7,7 +7,12 @@ import { JWT_SECRET } from '../lib/constants.js';
 import { getTenant } from '../tenants.js';
 import { getPlanLimits, planUpgradeError, effectivePlan } from '../planLimits.js';
 import { tzDate } from '../lib/tz.js';
-import { deductInventoryForOrder } from '../helpers/inventory.js';
+import {
+  deductInventoryForOrder,
+  deductComponentsForOrderLines,
+  sellableCountsFor,
+  inventoryModeForTenant,
+} from '../helpers/inventory.js';
 import { generateInvoiceToken } from '../helpers/facturapi.js';
 import {
   normalizePhone,
@@ -537,16 +542,45 @@ async function insertKioskOrderItems(sql, tenantId, orderId, orderItems) {
 }
 
 async function markKioskOrderPaid(orderId, tenantId) {
-  await adminSql`
-    UPDATE orders
-    SET payment_status = 'paid',
-        status = 'active',
-        payment_method = 'card',
-        paid_at = NOW()
-    WHERE id = ${orderId} AND tenant_id = ${tenantId}
-  `;
+  const mode = await inventoryModeForTenant(tenantId);
 
-  await deductInventoryForOrder(orderId);
+  // Wrapped in a transaction: promoting the draft and taking its portions have
+  // to land together, and this used to run autocommit. A crash between the two
+  // would otherwise leave a paid, kitchen-bound order that consumed nothing.
+  await adminSql.begin(async (sql) => {
+    await sql`
+      UPDATE orders
+      SET payment_status = 'paid',
+          status = 'active',
+          payment_method = 'card',
+          paid_at = NOW()
+      WHERE id = ${orderId} AND tenant_id = ${tenantId}
+    `;
+
+    if (mode === 'two_stage') {
+      // Covers the held-draft promotion, which never deducted at creation.
+      // Orders born 'pending' already have their 'sale' rows, so the per-line
+      // idempotency check makes this a no-op for them — which matters because
+      // the MP status poll can reach here more than once for the same order.
+      const lines = await sql`
+        SELECT id AS order_item_id, menu_item_id, quantity
+        FROM order_items
+        WHERE order_id = ${orderId} AND tenant_id = ${tenantId} AND voided_at IS NULL
+      `;
+      await deductComponentsForOrderLines(sql, {
+        tenantId,
+        lines: lines.map((l) => ({
+          order_item_id: Number(l.order_item_id),
+          menu_item_id: Number(l.menu_item_id),
+          quantity: Number(l.quantity),
+        })),
+      });
+    }
+  });
+
+  // No-ops for two-stage tenants (they just deducted above); this is the
+  // ingredients-mode payment-time path.
+  await deductInventoryForOrder(orderId, { mode });
 
   let invoiceToken = null;
   try {
@@ -704,6 +738,8 @@ router.post('/orders', verifyKioskToken, requireKioskPlan, async (req, res) => {
       return res.status(400).json({ error: 'No active employee available for kiosk orders' });
     }
 
+    const inventoryMode = await inventoryModeForTenant(tenantId);
+
     let orderItems, total;
     try {
       ({ orderItems, total } = await buildKioskOrderItems(tenantId, items));
@@ -731,7 +767,23 @@ router.post('/orders', verifyKioskToken, requireKioskPlan, async (req, res) => {
         )
         RETURNING id, order_number, subtotal, tax, total, payment_status, status, order_fulfillment_type
       `;
-      await insertKioskOrderItems(sql, tenantId, row.id, orderItems);
+      const lines = await insertKioskOrderItems(sql, tenantId, row.id, orderItems);
+
+      // Born 'pending' — a real order the kitchen will see, so it takes its
+      // portions now. Passing the transaction's `sql` explicitly is
+      // load-bearing: these routes run outside tenantMiddleware, and a helper
+      // reaching for getConn() here would escape this transaction and
+      // autocommit the deduction even if the order insert rolled back.
+      if (inventoryMode === 'two_stage') {
+        await deductComponentsForOrderLines(sql, {
+          tenantId,
+          lines: lines.map((l) => ({
+            order_item_id: l.order_item_id,
+            menu_item_id: l.menu_item_id,
+            quantity: l.quantity,
+          })),
+        });
+      }
       return row;
     });
 
@@ -944,6 +996,22 @@ router.post('/orders/:id/append-items', verifyKioskToken, requireKioskPlan, asyn
           VALUES (${tenantId}, ${row.id}, ${mod.id}, ${mod.name}, ${mod.price_adjustment})
         `;
       }
+    }
+
+    // Appending to an order that already took its portions (a live tab) has to
+    // take the new lines' portions too. Appending to a draft does NOT — a draft
+    // has deducted nothing yet, and its promotion will sweep up every line at
+    // once. Getting this backwards would double-count the additions.
+    if (order.status !== 'draft_kiosk'
+        && await inventoryModeForTenant(tenantId) === 'two_stage') {
+      await deductComponentsForOrderLines(adminSql, {
+        tenantId,
+        lines: orderItems.map((it, i) => ({
+          order_item_id: insertedIds[i],
+          menu_item_id: it.menu_item_id,
+          quantity: it.quantity,
+        })),
+      });
     }
 
     // Recompute order totals from live (non-voided) items, mirroring the

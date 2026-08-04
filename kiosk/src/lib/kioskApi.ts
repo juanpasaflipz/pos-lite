@@ -144,6 +144,10 @@ export interface KioskMenuItem {
   image_url: string | null;
   category_id: number;
   active: boolean;
+  /* Derived availability — sent only by two-stage tenants. Absent means the
+     tenant tracks ingredients, not portions, and nothing ever 86s itself. */
+  sold_out?: boolean;
+  low_stock?: boolean;
 }
 
 /**

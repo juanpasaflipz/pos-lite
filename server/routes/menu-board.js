@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { attachSellable } from '../helpers/inventory.js';
 import { all } from '../db/index.js';
 import { getDisplayMenuSettings, isCalloutActive } from '../lib/displayMenu.js';
 
@@ -48,7 +49,9 @@ router.get('/data', async (req, res) => {
       });
     }
 
-    for (const item of items) {
+    const decoratedItems = await attachSellable(items, { mode: req.tenant?.inventory_mode });
+
+    for (const item of decoratedItems) {
       const category = categoryMap.get(item.category_id);
       if (!category) continue;
       category.items.push({
@@ -57,6 +60,9 @@ router.get('/data', async (req, res) => {
         price: Number(item.price) || 0,
         description: item.description || undefined,
         sort_order: item.sort_order ?? 0,
+        // Two-stage only: the board strikes these through rather than hiding
+        // them, so the queue can see what ran out.
+        ...(item.sold_out !== undefined ? { sold_out: item.sold_out } : {}),
       });
     }
 

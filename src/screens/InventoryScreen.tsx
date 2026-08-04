@@ -435,6 +435,22 @@ export default function InventoryScreen() {
     }
   };
 
+  // Flip a component's manual 86. Availability is derived, so this is the one
+  // switch that overrides the derivation — used when the equipment, not the
+  // stock, is what ran out.
+  const handleToggleSoldOut = async (item: InventoryItem) => {
+    try {
+      setActionLoading(true);
+      setError(null);
+      await updateInventory(item.id, { sold_out_manual: !item.sold_out_manual });
+      await fetchItems();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('inventory.failedSaveItem'));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const openCreateItemForm = () => {
     setItemFormMode('create');
     setEditingItemId(null);
@@ -881,6 +897,7 @@ export default function InventoryScreen() {
             <StockTab
               items={items}
               isTwoStage={isTwoStage}
+              onToggleSoldOut={handleToggleSoldOut}
               filteredItems={filteredItems}
               loading={loading}
               searchTerm={searchTerm}
