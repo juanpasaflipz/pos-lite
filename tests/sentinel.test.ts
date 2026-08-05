@@ -257,6 +257,55 @@ describe('P5 guards: retry_courier_dispatch', () => {
   });
 });
 
+describe('S5: webhook_rejections', () => {
+  // Own tenant: the RLS test asserts tenant B holds no incidents, and this
+  // sensor's whole job is to create some.
+  let tenantW: TestTenant;
+
+  beforeAll(async () => {
+    tenantW = await createTestTenant('sentinel-webhook');
+  });
+
+  afterAll(async () => {
+    await dropTestTenant(tenantW.id);
+  });
+
+  async function seedRejections(tenantId: string, count: number, resource = 'uber_direct_webhook') {
+    for (let i = 0; i < count; i++) {
+      await adminSql`
+        INSERT INTO audit_log (tenant_id, actor_type, action, resource, details)
+        VALUES (${tenantId}, 'system', 'reject', ${resource},
+                ${adminSql.json({ reason: 'signature_mismatch' })})
+      `;
+    }
+  }
+
+  it('stays quiet below the threshold, fires at it, and names the reason', async () => {
+    await seedRejections(tenantW.id, 2);
+    await sweepOnce({ triage: false });
+    expect(await incidentsFor(tenantW.id, 'webhook_rejections')).toHaveLength(0);
+
+    // A provider retries the same event, so one bad secret crosses this fast.
+    await seedRejections(tenantW.id, 1);
+    await sweepOnce({ triage: false });
+
+    const incidents = await incidentsFor(tenantW.id, 'webhook_rejections');
+    expect(incidents).toHaveLength(1);
+    expect(incidents[0].severity).toBe('high');
+    expect(incidents[0].subject_table).toBe('tenant_credentials');
+    expect(incidents[0].evidence.resource).toBe('uber_direct_webhook');
+    expect(incidents[0].evidence.rejections).toBeGreaterThanOrEqual(3);
+    expect(incidents[0].evidence.reason).toBe('signature_mismatch');
+  });
+
+  it('dedups per integration, not per rejected webhook', async () => {
+    await seedRejections(tenantW.id, 4);
+    await sweepOnce({ triage: false });
+    // Same dedup_key as the run above — one bad secret, one incident to fix.
+    expect(await incidentsFor(tenantW.id, 'webhook_rejections')).toHaveLength(1);
+  });
+});
+
 describe('triage budget cap', () => {
   it('allows exactly SENTINEL_TRIAGE_DAILY_CAP runs per tenant per day', () => {
     _resetTriageBudget();

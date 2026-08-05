@@ -3,6 +3,7 @@ import { all, get, run, getTenantId } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePlanFeature } from '../planLimits.js';
 import { getServiceCredentials } from '../helpers/tenantCredentials.js';
+import { audit } from '../lib/auditLog.js';
 import { dispatchPendingCourier } from './kiosk.js';
 import {
   verifyDirectSignature,
@@ -40,6 +41,21 @@ async function withPickupDetails(tenantId, body) {
     throw err;
   }
   return merged;
+}
+
+// A rejected webhook is silent by construction: we answer Uber, nobody sees the
+// 403, and the delivery record just stops moving. Leaving a row behind gives the
+// sentinel's webhook_rejections sensor something to find, and gives whoever gets
+// paged the reason without a log tail.
+function recordWebhookRejection(tenantId, reason) {
+  if (!tenantId) return;
+  audit({
+    tenantId,
+    actorType: 'system',
+    action: 'reject',
+    resource: 'uber_direct_webhook',
+    details: { reason },
+  });
 }
 
 async function ensureDirectPlatform() {
@@ -301,10 +317,12 @@ router.post('/webhook', async (req, res) => {
           req.headers['x-uber-signature'];
         if (!signature) {
           console.warn('[Uber Direct] Webhook missing signature header');
+          recordWebhookRejection(tenantId, 'missing_signature');
           return res.status(403).json({ error: 'Missing webhook signature' });
         }
         if (!verifyDirectSignature(req.rawBody, signature, signingKey)) {
           console.warn('[Uber Direct] Webhook signature verification failed');
+          recordWebhookRejection(tenantId, 'signature_mismatch');
           return res.status(403).json({ error: 'Invalid webhook signature' });
         }
       }

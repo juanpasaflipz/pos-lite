@@ -35,6 +35,12 @@ const KDS_BLIND_MINUTES = Number(process.env.SENTINEL_KDS_BLIND_MINUTES) || 3;
 // S4: paid delivery order whose courier dispatch never fired.
 const STUCK_DISPATCH_MINUTES = Number(process.env.SENTINEL_STUCK_DISPATCH_MINUTES) || 5;
 
+// S5: inbound webhooks we keep rejecting. Threshold is low on purpose — a
+// provider retries the same event several times, so 3 can be one delivery's
+// worth of retries, and one delivery is already enough to want to know.
+const WEBHOOK_REJECT_MINUTES = Number(process.env.SENTINEL_WEBHOOK_REJECT_MINUTES) || 60;
+const WEBHOOK_REJECT_THRESHOLD = Number(process.env.SENTINEL_WEBHOOK_REJECT_THRESHOLD) || 3;
+
 export const SENSORS = [
   {
     id: 'stuck_terminal_payment',
@@ -191,6 +197,46 @@ export const SENSORS = [
           platform_status: r.platform_status,
           total: Number(r.total),
           paid_at: r.paid_at,
+        },
+      }));
+    },
+  },
+
+  {
+    id: 'webhook_rejections',
+    description:
+      `${WEBHOOK_REJECT_THRESHOLD}+ inbound webhooks rejected in the last ` +
+      `${WEBHOOK_REJECT_MINUTES}min. Almost always a stale or mistyped signing secret: the ` +
+      `courier or payment still moves at the provider, our record just stops updating. ` +
+      `No safe auto-fix — the credential is the fix.`,
+    async run() {
+      const rows = await adminSql`
+        SELECT a.tenant_id, a.resource, COUNT(*)::int AS rejections,
+               MAX(a.created_at) AS last_at,
+               MIN(a.created_at) AS first_at,
+               (ARRAY_AGG(a.details->>'reason' ORDER BY a.created_at DESC))[1] AS reason
+        FROM audit_log a
+        JOIN tenants t ON t.id = a.tenant_id AND t.active = true
+        WHERE a.action = 'reject'
+          AND a.resource LIKE '%_webhook'
+          AND a.created_at > NOW() - ${WEBHOOK_REJECT_MINUTES} * INTERVAL '1 minute'
+        GROUP BY a.tenant_id, a.resource
+        HAVING COUNT(*) >= ${WEBHOOK_REJECT_THRESHOLD}
+      `;
+      return rows.map((r) => ({
+        tenantId: r.tenant_id,
+        // Per integration, not per webhook — one bad secret rejects every
+        // delivery of the day and they all share the single fix.
+        dedupKey: `webhook:${r.resource}`,
+        severity: 'high',
+        subjectTable: 'tenant_credentials',
+        subjectId: r.resource,
+        evidence: {
+          resource: r.resource,
+          rejections: r.rejections,
+          reason: r.reason,
+          first_at: r.first_at,
+          last_at: r.last_at,
         },
       }));
     },
