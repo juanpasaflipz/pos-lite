@@ -788,7 +788,12 @@ interface ItemDisplayProps {
 
 function ItemDisplay({ item, isTvMode = false }: ItemDisplayProps) {
   const hasNotes = item.notes && item.notes.trim().length > 0;
-  const hasModifiers = item.modifiers && item.modifiers.length > 0;
+  // A builder burrito's Estilo (CALIFORNIA / MISSION / FRIES) is what the
+  // kitchen makes, not a garnish tweak — pull it out of the modifier list and
+  // shout it next to the item name. Everything else stays a "+ ..." line.
+  const styleMods = (item.modifiers || []).filter((m) => m.modifier_group?.startsWith('Estilo'));
+  const otherMods = (item.modifiers || []).filter((m) => !m.modifier_group?.startsWith('Estilo'));
+  const hasModifiers = otherMods.length > 0;
   const qty = item.quantity > 1 ? `${item.quantity}× ` : '';
 
   // Edit-state derivations (migration 0063). `added_at` is null on the original
@@ -808,6 +813,14 @@ function ItemDisplay({ item, isTvMode = false }: ItemDisplayProps) {
           <span className={`text-2xl font-black tracking-tight ${isVoided ? 'line-through text-cockpit-red' : 'text-white'}`}>
             <span className="text-cockpit-yellow">{qty}</span>{item.item_name}
           </span>
+          {styleMods.map((mod, i) => (
+            <span
+              key={i}
+              className={`text-lg font-black uppercase tracking-wider px-2 py-0.5 rounded ${isVoided ? 'line-through bg-neutral-700 text-neutral-400' : 'bg-brand-500 text-white'}`}
+            >
+              {mod.modifier_name}
+            </span>
+          ))}
           {isAdded && (
             <span className="text-xs font-black uppercase tracking-wider bg-cockpit-yellow text-neutral-900 px-1.5 py-0.5 rounded">
               NUEVO
@@ -826,7 +839,7 @@ function ItemDisplay({ item, isTvMode = false }: ItemDisplayProps) {
         </div>
         {hasModifiers && (
           <div className="mt-0.5 pl-1">
-            {item.modifiers!.map((mod, i) => (
+            {otherMods.map((mod, i) => (
               <div key={i} className={`font-semibold text-base ${isVoided ? 'line-through text-brand-300/60' : 'text-brand-300'}`}>
                 + {mod.modifier_name}
               </div>
@@ -867,6 +880,14 @@ function ItemDisplay({ item, isTvMode = false }: ItemDisplayProps) {
           <span className={`text-lg font-semibold ${isVoided ? 'line-through text-neutral-400' : 'text-white'}`}>
             {item.item_name}
           </span>
+          {styleMods.map((mod, i) => (
+            <span
+              key={i}
+              className={`text-sm font-black uppercase tracking-wider px-2 py-0.5 rounded ${isVoided ? 'line-through bg-neutral-700 text-neutral-400' : 'bg-brand-500 text-white'}`}
+            >
+              {mod.modifier_name}
+            </span>
+          ))}
           {isAdded && (
             <span className="text-[10px] font-black uppercase tracking-wider bg-cockpit-yellow text-neutral-900 px-1.5 py-0.5 rounded">
               NUEVO
@@ -895,7 +916,7 @@ function ItemDisplay({ item, isTvMode = false }: ItemDisplayProps) {
 
       {hasModifiers && (
         <div className="mt-1 space-y-0.5">
-          {item.modifiers!.map((mod, i) => (
+          {otherMods.map((mod, i) => (
             <p key={i} className={`font-semibold text-sm bg-brand-900/20 px-2 py-0.5 rounded ${isVoided ? 'line-through text-brand-400/60' : 'text-brand-400'}`}>
               + {mod.modifier_name}
             </p>

@@ -209,15 +209,23 @@ const MobileKitchenScreen: React.FC = () => {
                 <div className="px-4 pb-3 space-y-1.5">
                   {order.items.map((item, i) => (
                     <div key={i} className="bg-neutral-800/50 rounded-lg p-2.5 border border-neutral-700">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-semibold text-white">{item.item_name}</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold text-white flex items-center gap-1.5 flex-wrap min-w-0">
+                          {item.item_name}
+                          {/* Estilo is the burrito's identity, not a garnish — shout it. */}
+                          {item.modifiers?.filter((m) => m.modifier_group?.startsWith('Estilo')).map((mod, j) => (
+                            <span key={j} className="text-[11px] font-black uppercase tracking-wider bg-brand-500 text-white px-1.5 py-0.5 rounded">
+                              {mod.modifier_name}
+                            </span>
+                          ))}
+                        </span>
                         <span className="bg-neutral-700 text-neutral-200 px-2 py-0.5 rounded-full font-bold text-xs">
                           x{item.quantity}
                         </span>
                       </div>
-                      {item.modifiers && item.modifiers.length > 0 && (
+                      {item.modifiers && item.modifiers.some((m) => !m.modifier_group?.startsWith('Estilo')) && (
                         <div className="mt-1">
-                          {item.modifiers.map((mod, j) => (
+                          {item.modifiers.filter((m) => !m.modifier_group?.startsWith('Estilo')).map((mod, j) => (
                             <p key={j} className="text-xs text-brand-400">+ {mod.modifier_name}</p>
                           ))}
                         </div>

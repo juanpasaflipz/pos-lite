@@ -1278,7 +1278,7 @@ router.get('/kitchen/active', requireAuth(), async (req, res) => {
              oi.virtual_brand_id, vb.name AS brand_name, vb.primary_color AS brand_color,
              oi.added_at, oi.voided_at, oi.void_reason, oi.qty_changed_at, oi.original_quantity,
              mi_kds.category_id AS item_category_id,
-             oim.modifier_name, oim.price_adjustment
+             oim.modifier_name, oim.price_adjustment, mg_kds.name AS modifier_group
       FROM orders o
       JOIN employees e ON o.employee_id = e.id
       LEFT JOIN loyalty_customers lc ON lc.id = o.loyalty_customer_id
@@ -1293,6 +1293,11 @@ router.get('/kitchen/active', requireAuth(), async (req, res) => {
       LEFT JOIN menu_items mi_kds ON mi_kds.id = oi.menu_item_id
       LEFT JOIN virtual_brands vb ON oi.virtual_brand_id = vb.id
       LEFT JOIN order_item_modifiers oim ON oim.order_item_id = oi.id
+      -- The group tells the KDS which modifiers are identity, not garnish:
+      -- a builder burrito's Estilo (California/Mission/Fries) changes what the
+      -- kitchen makes, so the display promotes it out of the "+ ..." list.
+      LEFT JOIN modifiers m_kds ON m_kds.id = oim.modifier_id
+      LEFT JOIN modifier_groups mg_kds ON mg_kds.id = m_kds.group_id
       WHERE o.status = ANY($1::text[])
       ORDER BY o.created_at ASC, oi.id ASC
     `, [statuses]);
@@ -1348,6 +1353,7 @@ router.get('/kitchen/active', requireAuth(), async (req, res) => {
         order.items.get(row.item_id).modifiers.push({
           modifier_name: row.modifier_name,
           price_adjustment: row.price_adjustment,
+          modifier_group: row.modifier_group,
         });
       }
     }

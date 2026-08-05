@@ -884,6 +884,10 @@ export interface OrderItemModifier {
   modifier_id: number;
   modifier_name: string;
   price_adjustment: number;
+  /** Group the modifier belongs to (kitchen/active only). Groups named
+   *  `Estilo*` are the builder burrito's style — the KDS renders those as part
+   *  of the item's identity, not in the "+ ..." garnish list. */
+  modifier_group?: string | null;
 }
 
 /* Combo Types */
