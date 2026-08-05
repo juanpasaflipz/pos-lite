@@ -246,14 +246,20 @@ const AttractScreen: React.FC = () => {
   // while the menu is still loading — the grid shouldn't reflow on arrival.
   const favoritos = FAVORITOS.filter((f) => f.kind !== 'drink' || !menu || drinkFor(f));
 
+  // The terracotta 'S is the brand mark. A tenant whose name already ends in
+  // apostrophe-s (Juanberto's) supplies its own — recolor it instead of
+  // appending a second one.
+  const title = tenantName || 'JUANBERTO';
+  const ownS = title.match(/^(.*)(['’][sS])$/);
+
   return (
     <div
       className="relative h-full w-full text-neutral-50 flex flex-col items-center gap-5 text-center px-6 py-6 pt-safe pb-safe overflow-y-auto bg-[radial-gradient(ellipse_at_50%_120%,rgb(var(--brand-900))_0%,rgb(var(--n-950))_60%)] [@media(min-height:900px)]:justify-evenly [@media(min-height:900px)]:gap-0 [@media(min-height:900px)]:py-7"
     >
       <div>
         <div className="text-[clamp(30px,6vw,60px)] [@media(min-height:900px)]:text-[clamp(44px,9vw,84px)] font-black leading-none tracking-[-0.02em]">
-          {tenantName || 'JUANBERTO'}
-          <em className="not-italic text-brand-300">&apos;S</em>
+          {ownS ? ownS[1] : title}
+          <em className="not-italic text-brand-300">{ownS ? ownS[2] : "'S"}</em>
         </div>
         <p className="text-[clamp(14px,2.6vw,19px)] [@media(min-height:900px)]:text-[clamp(17px,3vw,24px)] font-bold text-neutral-300 mt-1">
           {t('wizardAttract.tagline')}
