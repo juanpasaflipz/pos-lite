@@ -13,6 +13,7 @@ import {
   sendInvoiceEmail,
   mapPaymentToFormaPago,
   generateInvoiceToken,
+  FacturapiRequestError,
 } from '../helpers/facturapi.js';
 import { buildGenericInvoicePayload, verifyStampedTotal, extractCfdiTotals } from '../helpers/cfdiConcept.js';
 import { validateReceptor, normalizeEmail } from '../helpers/cfdiValidation.js';
@@ -481,6 +482,15 @@ router.post('/invoices', requireAuth('manage_invoicing', { allowApproval: true }
     res.json(saved);
   } catch (err) {
     console.error('[CFDI] Error issuing invoice:', err.message);
+    // A rejected stamp is not a system failure: nothing was stamped, and the
+    // reason (bad razón social, RFC not in the SAT registry, régimen fiscal
+    // mismatch...) is almost always a typo the cashier can fix and retry.
+    // Pass the provider's exact wording through — staff hold manage_invoicing
+    // on their own fiscal config, and burying it in the logs turned a typo
+    // into an unexplained error nobody could self-serve.
+    if (err instanceof FacturapiRequestError && err.isProviderRejection) {
+      return res.status(422).json({ error: err.providerMessage, provider_rejection: true });
+    }
     res.status(500).json({ error: 'Failed to issue invoice' });
   }
 });

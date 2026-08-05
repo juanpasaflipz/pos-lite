@@ -33,6 +33,8 @@ import { adminSql, get, run } from '../server/db/index.js';
 import { buildGenericInvoicePayload } from '../server/helpers/cfdiConcept.js';
 // @ts-ignore
 import { fromCents, toCents } from '../server/helpers/money.js';
+// @ts-ignore
+import { FacturapiRequestError } from '../server/helpers/facturapi.js';
 
 let tenant: TestTenant;
 let employeeId: number;
@@ -273,5 +275,78 @@ describe('CSD expiry surface (drives owner warnings + banner)', () => {
     );
     expect(daysRemaining).toBeGreaterThanOrEqual(19);
     expect(daysRemaining).toBeLessThanOrEqual(20);
+  });
+});
+
+describe('FacturapiRequestError classification (drives what the issuing routes surface)', () => {
+  // The SDK throws away the HTTP status, so this text classification is the
+  // only thing standing between "your razón social doesn't match the RFC"
+  // (fixable, shown) and a provider outage (generic 500). Both routes branch
+  // on these flags, so a regression here silently re-buries the reason —
+  // which is exactly the failure that motivated the classification.
+
+  it('a SAT receptor rejection is surfaced to staff and to the customer', () => {
+    // Verbatim from a real rejected stamp: cashier typed a name that isn't
+    // the one registered to that RFC.
+    const err = new FacturapiRequestError(
+      'El campo Nombre del receptor, debe pertenecer al nombre asociado al RFC registrado en el campo Rfc del Receptor.',
+    );
+    expect(err.isProviderRejection).toBe(true);
+    expect(err.isReceptorRejection).toBe(true);
+    expect(err.providerMessage).toContain('Nombre del receptor');
+  });
+
+  it('other SAT receptor-field rejections classify the same way', () => {
+    for (const message of [
+      'El campo RegimenFiscalReceptor no corresponde con el régimen del RFC.',
+      'El campo DomicilioFiscalReceptor debe ser igual al código postal registrado ante el SAT.',
+      'El RFC del receptor no se encuentra en la lista de RFC inscritos no cancelados del SAT.',
+      "The customer's tax_id is invalid",
+    ]) {
+      const err = new FacturapiRequestError(message);
+      expect(err.isReceptorRejection, message).toBe(true);
+    }
+  });
+
+  it("merchant config problems reach staff but not the customer's self-invoice page", () => {
+    // Real reasons, but the customer typed none of this and can fix none of
+    // it — the public route must fall back to its generic message.
+    for (const message of [
+      'El certificado de sello digital ha expirado.',
+      'You have reached the invoice limit for your plan',
+    ]) {
+      const err = new FacturapiRequestError(message);
+      expect(err.isProviderRejection, message).toBe(true);
+      expect(err.isReceptorRejection, message).toBe(false);
+    }
+  });
+
+  it('bare HTTP status / transport failures stay a generic 500', () => {
+    // No JSON body came back, so there is no explanation to pass along —
+    // echoing "Unauthorized" at a cashier mid-shift diagnoses nothing.
+    for (const message of [
+      'Unauthorized',
+      'Internal Server Error',
+      'Bad Gateway',
+      'Service Unavailable',
+      'Network request failed',
+      'fetch failed',
+      '',
+    ]) {
+      const err = new FacturapiRequestError(message);
+      expect(err.isProviderRejection, message || '(empty)').toBe(false);
+      expect(err.isReceptorRejection, message || '(empty)').toBe(false);
+    }
+  });
+
+  it('keeps the underlying SDK error as cause for log forensics', () => {
+    const sdkErr = new Error('El campo Rfc del Receptor es requerido.');
+    const err = new FacturapiRequestError(sdkErr.message, {
+      operation: 'createInvoice',
+      cause: sdkErr,
+    });
+    expect(err).toBeInstanceOf(Error);
+    expect(err.operation).toBe('createInvoice');
+    expect(err.cause).toBe(sdkErr);
   });
 });

@@ -6,6 +6,7 @@ import {
   cancelInvoice,
   getInvoiceXml,
   mapPaymentToFormaPago,
+  FacturapiRequestError,
 } from '../helpers/facturapi.js';
 import { buildGenericInvoicePayload, verifyStampedTotal, extractCfdiTotals } from '../helpers/cfdiConcept.js';
 import { validateReceptor } from '../helpers/cfdiValidation.js';
@@ -382,6 +383,15 @@ router.post('/:token/issue', async (req, res) => {
     });
   } catch (err) {
     console.error('[CFDI-Public] Error issuing invoice:', err.message);
+    // Only receptor-data rejections are echoed here. The customer typed those
+    // fields and can correct them, and no staff member is watching the logs on
+    // their behalf — "try again or contact the restaurant" is a dead end for a
+    // mistyped razón social. Everything else (certificate expired, plan limit,
+    // bad API key) is the merchant's own fiscal config: not the customer's to
+    // fix, and not theirs to see.
+    if (err instanceof FacturapiRequestError && err.isReceptorRejection) {
+      return res.status(422).json({ error: err.providerMessage, provider_rejection: true });
+    }
     res.status(500).json({ error: 'Failed to issue invoice. Please try again or contact the restaurant.' });
   }
 });

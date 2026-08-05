@@ -174,6 +174,54 @@ export async function testStamp(orgId) {
   }
 }
 
+// ==================== Provider Errors ====================
+
+// The Facturapi SDK collapses every HTTP failure into `new Error(body.message
+// || statusText)` — the status code and the error key are discarded before we
+// ever see it. So a stamp rejected by the SAT for bad receptor data and a
+// Facturapi outage arrive as the same shape, and the only signal left is the
+// message text. These two patterns do that classification once, at the throw
+// site, so routes never have to string-match provider errors themselves.
+
+// Bare HTTP statusText or a transport failure — i.e. the SDK had no JSON body
+// to read a message out of. Nothing here is actionable by a merchant or a
+// customer, so these stay a generic 500 and live only in the logs.
+const TRANSPORT_OR_BARE_STATUS_RE =
+  /^(network request (failed|timed out)|failed to fetch|fetch failed|request timed out|aborted|bad request|unauthorized|payment required|forbidden|not found|conflict|too many requests|internal server error|bad gateway|service unavailable|gateway timeout)$/i;
+
+// The rejection is about the *recipient's* tax data — the name, RFC, régimen
+// fiscal, postal code or uso CFDI they typed. This is the only class of error
+// a customer on the public self-invoice page can act on; everything else is
+// the merchant's own fiscal configuration and must not leak to them.
+const RECEPTOR_REJECTION_RE =
+  /receptor|customer|legal_name|tax_id|tax_system|\brfc\b|r[ée]gimen\s*fiscal|regimenfiscal|domiciliofiscal|c[óo]digo\s*postal|postal\s*code|uso\s*_?cfdi/i;
+
+/**
+ * A rejection that came back from FacturAPI/the SAT rather than from our own
+ * code. Carries the verbatim provider text plus the classification callers
+ * need to decide how much of it to surface.
+ *
+ * - `providerMessage` — the exact provider/SAT wording. Safe to show staff:
+ *   it concerns their own fiscal config and their own customer's data, and it
+ *   is the only place the actual reason for the failure exists.
+ * - `isProviderRejection` — false when the SDK gave us nothing but an HTTP
+ *   status, so there is no real explanation to pass along.
+ * - `isReceptorRejection` — true when the complaint is about the recipient's
+ *   tax data. Gates what the customer-facing flow is allowed to render.
+ */
+export class FacturapiRequestError extends Error {
+  constructor(message, { operation, cause } = {}) {
+    super(message, cause ? { cause } : undefined);
+    this.name = 'FacturapiRequestError';
+    this.operation = operation;
+    this.providerMessage = message;
+
+    const text = String(message || '').trim();
+    this.isProviderRejection = !!text && !TRANSPORT_OR_BARE_STATUS_RE.test(text);
+    this.isReceptorRejection = this.isProviderRejection && RECEPTOR_REJECTION_RE.test(text);
+  }
+}
+
 // ==================== Invoice Operations ====================
 
 /**
@@ -222,7 +270,12 @@ export async function createInvoice(orgId, { receptor, items, forma_pago, metodo
     return invoice;
   } catch (err) {
     console.error(`[FacturAPI] Failed to create invoice for org ${orgId}:`, err.message);
-    throw err;
+    // Rethrow classified so the issuing routes can tell "the customer typed
+    // their razón social wrong" (fixable, worth showing) from "the provider
+    // is down" (generic 500). Only the stamp call is wrapped: the other
+    // provider calls either already treat failure as non-fatal (XML fetch) or
+    // have no user-fixable failure mode.
+    throw new FacturapiRequestError(err.message, { operation: 'createInvoice', cause: err });
   }
 }
 
