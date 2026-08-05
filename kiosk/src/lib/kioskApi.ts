@@ -245,6 +245,8 @@ export interface BuilderModifier {
   id: number;
   name: string;
   price_adjustment: number;
+  /** Photo for big-card options (the Estilo styles); null → icon fallback. */
+  image_url?: string | null;
 }
 
 export interface BuilderGroup {
@@ -267,6 +269,7 @@ export interface BuilderItem {
   description: string | null;
   description_en: string | null;
   price: number;
+  image_url?: string | null;
   groups: BuilderGroup[];
 }
 

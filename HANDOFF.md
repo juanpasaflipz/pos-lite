@@ -7,6 +7,28 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-08-05 — Claude Code — **Kiosk wizard: photos instead of icons (1.16.0)**
+
+Owner request: sell with real food photography like the POS. One photo-card
+language on the four big decision surfaces — attract favoritos, protein grid,
+estilo cards, agregar sides/drinks — `aspect-[4/3]` band on top, text zone
+below, existing selected states. Extras/quitar/summary/fulfillment keep icons
+on purpose (restraint is the design).
+
+- `kiosk/src/components/BuilderPhoto.tsx` (new): photo w/ lazy load →
+  onError/missing → seeded warm gradient + the card's BuilderIcon glyph, so an
+  unphotographed item degrades to ~the old look, never an empty box.
+- Migration **0105** adds `modifiers.image_url` (estilo styles are modifier
+  rows). `builder-menu` now emits `image_url` on items AND group options.
+- Prod photo seed done by SQL copy from legacy items (asada←California,
+  pollo←Pollos Hermanos, porkbelly←Porkbelly, huevo←Breakfast,
+  portobello←Portobello, camarón←Shrimp, pescado←Ensenada, cochinita←Yucatán,
+  rollbertos←9007; estilo California←8869, Fries←8421). **Still on fallback:
+  Birria item + Mission style** — owner to provide photos. No admin UI for
+  modifier images yet (follow-up if the owner wants to manage them).
+- Heads-up: some legacy image URLs are external hotlinks (one gstatic thumb on
+  Cerveza) — they render, but flagging as fragile content infrastructure.
+
 ## 2026-08-05 — Claude Code — **Kiosk wizard v15 parity SHIPPED (1.14.0)**
 
 The v15 pass over the wizard, per the rewritten `design/kiosk-builder-parity-spec.md`

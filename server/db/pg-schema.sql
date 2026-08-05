@@ -250,7 +250,8 @@ CREATE TABLE IF NOT EXISTS modifiers (
   name TEXT NOT NULL,
   price_adjustment NUMERIC(10,2) DEFAULT 0,
   sort_order INTEGER DEFAULT 0,
-  active BOOLEAN DEFAULT true
+  active BOOLEAN DEFAULT true,
+  image_url TEXT
 );
 
 CREATE TABLE IF NOT EXISTS menu_item_modifier_groups (

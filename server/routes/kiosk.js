@@ -2261,7 +2261,7 @@ router.get('/builder-menu', verifyKioskToken, requireKioskPlan, async (req, res)
     const slugByItemId = new Map(slugMap.map((r) => [Number(r.menu_item_id), r.slug]));
 
     const items = await adminSql`
-      SELECT id, name, name_en, price, description, description_en, sort_order
+      SELECT id, name, name_en, price, description, description_en, sort_order, image_url
       FROM menu_items
       WHERE tenant_id = ${tenantId} AND id = ANY(${itemIds})
       ORDER BY sort_order, id
@@ -2283,7 +2283,8 @@ router.get('/builder-menu', verifyKioskToken, requireKioskPlan, async (req, res)
         m.id AS modifier_id,
         m.name AS modifier_name,
         m.price_adjustment,
-        m.sort_order AS modifier_sort
+        m.sort_order AS modifier_sort,
+        m.image_url AS modifier_image
       FROM menu_item_modifier_groups mimg
       JOIN modifier_groups mg ON mg.id = mimg.modifier_group_id AND mg.tenant_id = ${tenantId}
       JOIN modifiers m ON m.group_id = mg.id AND m.tenant_id = ${tenantId} AND m.active = true
@@ -2326,6 +2327,7 @@ router.get('/builder-menu', verifyKioskToken, requireKioskPlan, async (req, res)
         id: Number(row.modifier_id),
         name: row.modifier_name,
         price_adjustment: Number(row.price_adjustment),
+        image_url: row.modifier_image || null,
       });
     }
 
@@ -2337,6 +2339,7 @@ router.get('/builder-menu', verifyKioskToken, requireKioskPlan, async (req, res)
       description: it.description || null,
       description_en: it.description_en || null,
       price: Number(it.price),
+      image_url: it.image_url || null,
       groups: groupsByItem.get(Number(it.id)) || [],
     }));
 

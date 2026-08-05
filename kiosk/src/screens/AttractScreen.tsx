@@ -7,6 +7,7 @@ import { useKioskCustomer } from '../context/KioskCustomerContext';
 import { useKioskCart } from '../context/KioskCartContext';
 import { resetKioskLanguage } from '../i18n';
 import LanguageToggle from '../components/LanguageToggle';
+import BuilderPhoto from '../components/BuilderPhoto';
 import { fetchBuilderMenu, type BuilderMenu } from '../lib/kioskApi';
 import { BuilderIcon, type BuilderIconName } from '../lib/builderIcons';
 import { PRESET_ICON, proteinLabel } from '../lib/builderMeta';
@@ -230,6 +231,15 @@ const AttractScreen: React.FC = () => {
     return `${f.proteins.map((s) => proteinLabel(s, en)).join(' + ')} · ${f.estilo}`;
   };
 
+  /** The card's food photo: builder/fixed favoritos wear their base item's
+   *  menu photo, the drink favorito wears its addon's. Null → BuilderPhoto's
+   *  gradient+glyph fallback, which is the pre-photo look of this screen. */
+  const favImage = (f: Favorito): string | null => {
+    if (f.kind === 'drink') return drinkFor(f)?.image_url || null;
+    const slug = f.kind === 'fixed' ? f.slug : f.proteins[0];
+    return itemBySlug.get(slug)?.image_url || null;
+  };
+
   const onFavorito = (f: Favorito) => {
     if (f.kind === 'drink') { addDrink(f); return; }
     if (f.kind === 'fixed') {
@@ -275,15 +285,20 @@ const AttractScreen: React.FC = () => {
           <button
             key={f.id}
             onClick={() => onFavorito(f)}
-            className="bg-neutral-900 border-2 border-neutral-800 active:scale-95 active:border-brand-400 rounded-[18px] [@media(min-height:900px)]:rounded-[22px] px-3.5 pt-5 pb-4 [@media(min-height:900px)]:px-4 [@media(min-height:900px)]:pt-[30px] [@media(min-height:900px)]:pb-6 flex flex-col items-center gap-1.5 [@media(min-height:900px)]:gap-2.5 touch-manipulation transition-transform shadow-[0_4px_18px_rgba(0,0,0,0.35)]"
+            className="bg-neutral-900 border-2 border-neutral-800 active:scale-95 active:border-brand-400 rounded-[18px] [@media(min-height:900px)]:rounded-[22px] overflow-hidden flex flex-col items-stretch touch-manipulation transition-transform shadow-[0_4px_18px_rgba(0,0,0,0.35)]"
           >
-            <BuilderIcon
-              name={PRESET_ICON[f.id] || 'burrito'}
-              className="h-[46px] w-[46px] [@media(min-height:900px)]:h-16 [@media(min-height:900px)]:w-16 text-brand-300"
+            <BuilderPhoto
+              src={favImage(f)}
+              alt={t(`wizardAttract.presets.${f.id}`)}
+              fallbackIcon={PRESET_ICON[f.id] || 'burrito'}
+              className="aspect-[4/3] w-full"
+              iconClassName="h-[46px] w-[46px] [@media(min-height:900px)]:h-16 [@media(min-height:900px)]:w-16"
             />
+            <span className="flex flex-col items-center gap-1 [@media(min-height:900px)]:gap-1.5 px-3 pt-2.5 pb-3 [@media(min-height:900px)]:px-4 [@media(min-height:900px)]:pt-3.5 [@media(min-height:900px)]:pb-4">
             <span className="text-[18px] [@media(min-height:900px)]:text-[23px] font-black leading-[1.1]">{t(`wizardAttract.presets.${f.id}`)}</span>
             <span className="text-[12px] [@media(min-height:900px)]:text-[14px] font-bold text-neutral-400">{favSub(f)}</span>
             <span className="text-[17px] [@media(min-height:900px)]:text-[21px] font-black text-brand-300">{favPrice(f) ?? ' '}</span>
+            </span>
           </button>
         ))}
       </div>

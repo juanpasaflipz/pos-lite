@@ -28,8 +28,9 @@ import { useKioskBinding } from '../context/KioskBindingContext';
 import { useKioskCart } from '../context/KioskCartContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
 import LanguageToggle from '../components/LanguageToggle';
+import BuilderPhoto from '../components/BuilderPhoto';
 import { fetchBuilderMenu, type BuilderAddon, type BuilderMenu, type BuilderModifier } from '../lib/kioskApi';
-import { BuilderIcon } from '../lib/builderIcons';
+import { BuilderIcon, type BuilderIconName } from '../lib/builderIcons';
 import {
   PROTEIN_ICON, STYLE_INFO, EXTRA_ICON, addonIcon, quitarIcon, proteinLabel,
 } from '../lib/builderMeta';
@@ -377,22 +378,26 @@ const BuilderWizardScreen: React.FC = () => {
                   <button
                     key={item.id}
                     onClick={() => toggleProtein(item.slug!)}
-                    className={`relative min-h-[132px] rounded-2xl border-2 p-[18px_14px] flex flex-col items-center justify-center gap-2 text-center active:scale-[0.96] transition-transform ${on ? 'border-brand-400 bg-brand-900' : 'border-neutral-800 bg-neutral-900'}`}
+                    className={`relative rounded-2xl border-2 overflow-hidden flex flex-col items-stretch text-center active:scale-[0.96] transition-transform ${on ? 'border-brand-400 bg-brand-900' : 'border-neutral-800 bg-neutral-900'}`}
                   >
                     {on && (
-                      <span className="absolute -top-2 -right-2 min-w-[28px] h-7 px-2 rounded-[14px] bg-brand-600 text-[15px] font-black flex items-center justify-center shadow-lg">
+                      <span className="absolute top-1.5 right-1.5 z-10 min-w-[28px] h-7 px-2 rounded-[14px] bg-brand-600 text-[15px] font-black flex items-center justify-center shadow-lg">
                         ✓
                       </span>
                     )}
-                    <BuilderIcon
-                      name={PROTEIN_ICON[item.slug!] || 'burrito'}
-                      className="h-[clamp(34px,6vw,48px)] w-[clamp(34px,6vw,48px)] text-brand-300"
+                    <BuilderPhoto
+                      src={item.image_url}
+                      alt={proteinLabel(item.slug!, en)}
+                      fallbackIcon={PROTEIN_ICON[item.slug!] || 'burrito'}
+                      className="aspect-[4/3] w-full"
                     />
-                    <span className="text-[clamp(15px,2.6vw,19px)] font-black leading-[1.15]">
-                      {proteinLabel(item.slug!, en)}
-                    </span>
-                    <span className="text-[clamp(14px,2.4vw,17px)] font-extrabold text-brand-300">
-                      {pesos(item.price)}
+                    <span className="flex flex-col items-center gap-1 px-3 py-2.5">
+                      <span className="text-[clamp(15px,2.6vw,19px)] font-black leading-[1.15]">
+                        {proteinLabel(item.slug!, en)}
+                      </span>
+                      <span className="text-[clamp(14px,2.4vw,17px)] font-extrabold text-brand-300">
+                        {pesos(item.price)}
+                      </span>
                     </span>
                   </button>
                 );
@@ -411,8 +416,15 @@ const BuilderWizardScreen: React.FC = () => {
                 <button
                   key={opt.id}
                   onClick={() => pickStyle(opt)}
-                  className={`w-full text-left rounded-[20px] border-[3px] p-[24px_20px] active:scale-[0.97] transition-transform ${on ? 'border-brand-400 bg-brand-900 shadow-[0_8px_30px_rgba(168,84,42,0.25)]' : 'border-neutral-800 bg-neutral-900'}`}
+                  className={`w-full text-left rounded-[20px] border-[3px] overflow-hidden active:scale-[0.97] transition-transform ${on ? 'border-brand-400 bg-brand-900 shadow-[0_8px_30px_rgba(168,84,42,0.25)]' : 'border-neutral-800 bg-neutral-900'}`}
                 >
+                  <BuilderPhoto
+                    src={opt.image_url}
+                    alt={info ? (en ? info.en : info.es) : opt.name}
+                    fallbackIcon={info?.icon || 'burrito'}
+                    className="aspect-[16/9] w-full"
+                  />
+                  <div className="p-[18px_20px_24px]">
                   {info && (
                     <span
                       className={`inline-flex items-center gap-1.5 px-3 py-[5px] rounded-full mb-2.5 text-[11px] font-black tracking-[0.12em] uppercase ${info.isBurrito ? 'bg-brand-600 text-white' : 'bg-neutral-800 text-neutral-100 border border-neutral-600'}`}
@@ -444,6 +456,7 @@ const BuilderWizardScreen: React.FC = () => {
                       </ul>
                     </>
                   )}
+                  </div>
                 </button>
               );
             })}
@@ -502,7 +515,9 @@ const BuilderWizardScreen: React.FC = () => {
               {(menu?.addons.sides || []).map((a) => (
                 <AddCard
                   key={a.id}
-                  icon={<BuilderIcon name={addonIcon(a.name)} className="h-[clamp(34px,6vw,48px)] w-[clamp(34px,6vw,48px)] text-brand-300" />}
+                  icon={null}
+                  imageUrl={a.image_url}
+                  fallbackIcon={addonIcon(a.name)}
                   name={en && a.name_en ? a.name_en : a.name}
                   price={`+${pesos(a.price)}`}
                   qty={lines.filter((l) => l.menu_item_id === a.id).reduce((s, l) => s + l.quantity, 0)}
@@ -515,7 +530,9 @@ const BuilderWizardScreen: React.FC = () => {
               {(menu?.addons.drinks || []).map((a) => (
                 <AddCard
                   key={a.id}
-                  icon={<BuilderIcon name={addonIcon(a.name)} className="h-[clamp(34px,6vw,48px)] w-[clamp(34px,6vw,48px)] text-brand-300" />}
+                  icon={null}
+                  imageUrl={a.image_url}
+                  fallbackIcon={addonIcon(a.name)}
                   name={en && a.name_en ? a.name_en : a.name}
                   price={`+${pesos(a.price)}`}
                   qty={lines.filter((l) => l.menu_item_id === a.id).reduce((s, l) => s + l.quantity, 0)}
@@ -601,7 +618,28 @@ const AddCard: React.FC<{
   price: string;
   qty: number;
   onClick: () => void;
-}> = ({ icon, name, price, qty, onClick }) => (
+  /** Real menu items (sides/drinks) pass their photo; extras stay icon-only.
+   *  When set, the card wears a photo band and `icon` becomes the fallback. */
+  imageUrl?: string | null;
+  fallbackIcon?: BuilderIconName;
+}> = ({ icon, name, price, qty, onClick, imageUrl, fallbackIcon }) =>
+  imageUrl !== undefined ? (
+    <button
+      onClick={onClick}
+      className={`relative rounded-2xl border-2 overflow-hidden flex flex-col items-stretch text-center active:scale-[0.96] transition-transform ${qty ? 'border-brand-400 bg-brand-900' : 'border-neutral-800 bg-neutral-900'}`}
+    >
+      {qty > 0 && (
+        <span className="absolute top-1.5 right-1.5 z-10 min-w-[28px] h-7 px-2 rounded-[14px] bg-brand-600 text-[15px] font-black flex items-center justify-center shadow-lg">
+          ×{qty}
+        </span>
+      )}
+      <BuilderPhoto src={imageUrl} alt={name} fallbackIcon={fallbackIcon || 'burrito'} className="aspect-[4/3] w-full" />
+      <span className="flex flex-col items-center gap-1 px-3 py-2.5">
+        <span className="text-[clamp(15px,2.6vw,19px)] font-black leading-[1.15]">{name}</span>
+        <span className="text-[clamp(14px,2.4vw,17px)] font-extrabold text-brand-300">{price}</span>
+      </span>
+    </button>
+  ) : (
   <button
     onClick={onClick}
     className={`relative min-h-[132px] rounded-2xl border-2 p-[18px_14px] flex flex-col items-center justify-center gap-2 text-center active:scale-[0.96] transition-transform ${qty ? 'border-brand-400 bg-brand-900' : 'border-neutral-800 bg-neutral-900'}`}
