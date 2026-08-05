@@ -295,6 +295,20 @@ input {
     max-width: 100% !important;
   }
 
+  /* QR codes on paper. The loyalty URL's JWT forces a dense symbol; printed
+     small with anti-aliased module edges the driver dithers it into grey mush
+     no phone can read. Fix: print it large (46mm ≈ 5 printer dots per module)
+     and force hard pixel edges so every module rasterizes solid black. */
+  .receipt-print .receipt-qr {
+    width: 46mm !important;
+    height: 46mm !important;
+  }
+
+  .receipt-print .receipt-qr,
+  .receipt-print .receipt-qr * {
+    shape-rendering: crispEdges !important;
+  }
+
   .receipt {
     width: 80mm;
     font-size: 12px;

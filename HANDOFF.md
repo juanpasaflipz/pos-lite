@@ -41,9 +41,10 @@ the 'S suffix should drop when the name ends in "'s".
 Still open (unchanged from the 07-31 entry): builder items 8982–8991 have no
 `menu_item_ingredients` rows (no inventory deduction, $0 food cost); wizard
 orders skip loyalty stamp accrual during the pilot (post-payment QR is the
-touchpoint). Held for a follow-up release, still uncommitted in the tree: CFDI
-error taxonomy, credential guards, webhook-rejection sentinel + uber-direct
-audit rows, thermal receipt QR print fix (ReceiptModal + print CSS).
+touchpoint). The four held strands (CFDI error taxonomy, credential URL guard,
+webhook-rejection sentinel, thermal receipt QR fix) shipped as 1.15.0 the same
+day. The title double-'S fix shipped as 1.14.1. Only CLAUDE.md's tagging-doc
+edit remains uncommitted in the tree.
 
 ---
 

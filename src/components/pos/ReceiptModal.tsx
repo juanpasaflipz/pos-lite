@@ -263,7 +263,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
             {/* Invoice QR Code */}
             {invoiceUrl && !invoiceIssued && (
               <div className="text-center py-3 border-t pt-3">
-                <QRCodeSVG value={invoiceUrl} size={120} className="mx-auto" />
+                <QRCodeSVG value={invoiceUrl} size={160} level="L" marginSize={2} className="mx-auto receipt-qr" />
                 <p className="text-xs text-gray-500 mt-2">{t('receipt.scanForInvoice')}</p>
               </div>
             )}
@@ -279,10 +279,15 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
               <p className="text-gray-600 text-xs mt-2">{t('receipt.comeAgain')}</p>
             </div>
 
-            {/* Loyalty Sign-up QR — printed at the bottom of every ticket */}
+            {/* Loyalty Sign-up QR — printed at the bottom of every ticket.
+                level="L": the join URL carries a ~250-char JWT, and at level M
+                the symbol gets so dense that thermal printing smears the
+                modules; L cuts the module count so each square prints fat
+                enough to scan. marginSize keeps the quiet zone the spec
+                requires. .receipt-qr is sized up in the print stylesheet. */}
             {loyaltyJoinUrl && (
               <div className="text-center py-3 border-t pt-3">
-                <QRCodeSVG value={loyaltyJoinUrl} size={120} className="mx-auto" />
+                <QRCodeSVG value={loyaltyJoinUrl} size={160} level="L" marginSize={2} className="mx-auto receipt-qr" />
                 <p className="text-xs text-gray-500 mt-2">{t('receipt.scanForLoyalty')}</p>
               </div>
             )}
