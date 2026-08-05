@@ -205,6 +205,52 @@ export function draftModifiers(draft: DraftLine, items: BuilderItem[]): BuilderM
   return out;
 }
 
+/**
+ * Rebuild a draft from a committed cart line — the summary screen's "Editar"
+ * (prototype rSummary, which re-opens the wizard on the protein step with the
+ * line's choices intact).
+ *
+ * A cart line only carries the base menu item id and a flat modifier id list,
+ * so every field is recovered by looking those ids up against the base item's
+ * own groups. Anything unrecognised is dropped rather than guessed: a stale id
+ * (Juan deleted the option since the line was added) must not resurrect as a
+ * phantom removal or a priced extra.
+ */
+export function decodeDraft(
+  menuItemId: number,
+  modifierIds: number[],
+  items: BuilderItem[],
+): DraftLine | null {
+  const base = items.find((i) => i.id === menuItemId);
+  if (!base || !base.slug) return null;
+
+  const draft = emptyDraft();
+  draft.proteins = [base.slug];
+
+  const ids = new Set(modifierIds);
+
+  const estilo = estiloOptions(base).find((o) => ids.has(o.id));
+  if (estilo) draft.estiloName = estilo.name;
+
+  const segunda = (groupOf(base, 'Segunda proteína')?.options || []).find((o) => ids.has(o.id));
+  const secondSlug = segunda ? SEGUNDA_LABEL_TO_SLUG[segunda.name] : null;
+  if (secondSlug) draft.proteins.push(secondSlug);
+
+  for (const opt of quitarOptions(base)) {
+    if (ids.has(opt.id)) draft.removed.push(opt.id);
+  }
+
+  // Extras are repeated in the flat list once per unit, so count occurrences
+  // rather than testing membership — "Queso extra ×2" must come back as ×2.
+  const exOpts = extrasOptions(base);
+  for (const id of modifierIds) {
+    if (!exOpts.some((o) => o.id === id)) continue;
+    draft.extras[id] = (draft.extras[id] || 0) + 1;
+  }
+
+  return draft;
+}
+
 /** How many selections the Extras group currently holds (its own max applies). */
 export function extrasCount(draft: DraftLine): number {
   return Object.values(draft.extras).reduce((s, q) => s + q, 0);

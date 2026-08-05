@@ -185,16 +185,15 @@
     "withCochinita": "Con cochinita",
     "presets": {
       "california": "El California",
-      "pollos": "Pollos Hermanos",
       "breakfast": "Breakfast",
-      "surfnturf": "Surf-N-Turf",
       "birria": "Birria",
       "birriaSub": "Burrito de birria",
       "cochinita": "Cochinita",
       "cochinitaSub": "Burrito de cochinita pibil",
       "rollbertos": "Rollbertos",
       "rollbertosSub": "Taquitos dorados de queso",
-      "asadafries": "Carne Asada Fries"
+      "cervezafria": "Cerveza Fría",
+      "cervezafriaSub": "Cerveza mexicana bien fría"
     }
   },
   "wizard": {
@@ -230,6 +229,28 @@
     "added": "¡Agregado!",
     "badgeBurrito": "Burrito",
     "badgeNotBurrito": "Solo papas · NO es burrito",
-    "viewCart": "Ver carrito"
+    "viewCart": "Ver carrito",
+    "yourOrder": "Tu orden",
+    "orderK": "Resumen",
+    "anotherBurrito": "+ Agregar otro burrito",
+    "addMore": "+ Bebidas y complementos",
+    "pay": "Pagar",
+    "edit": "Editar",
+    "remove": "Quitar",
+    "emptyCart": "Tu orden está vacía",
+    "fulfillK": "Tu orden",
+    "fulfillQ": "¿Para aquí o para llevar?",
+    "forHere": "Para aquí",
+    "toGo": "Para llevar",
+    "nameK": "Último paso",
+    "namePrompt": "¿A qué nombre llamamos tu orden?",
+    "nameHint": "Con este nombre te llamaremos cuando esté lista",
+    "space": "ESPACIO",
+    "payN": "Confirmar y pagar",
+    "processing": "Procesando pago…",
+    "doneTitle": "¡Listo, {{n}}!",
+    "doneBody": "Escucha tu nombre — te llamamos cuando tu orden esté lista.",
+    "loyaltyTitle": "Suma puntos con esta orden",
+    "loyaltyBody": "Escanea el QR y únete a la lealtad de Juanberto’s: sellos con cada compra y tu burrito de regalo."
   }
 }

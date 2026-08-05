@@ -22,11 +22,10 @@ const KioskIdentifyScreen: React.FC = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
     setCallName(trimmed);
-    // Honor the wizard-mode post-identify destination if the attract screen
-    // set one. Default remains /menu so grid mode is unchanged.
-    const next = sessionStorage.getItem('kiosk-post-identify-path') || '/menu';
-    sessionStorage.removeItem('kiosk-post-identify-path');
-    navigate(next);
+    // Grid mode only. The wizard's post-identify-path hand-off is gone with
+    // D11 — wizard devices never reach this screen, they capture the call-out
+    // name at the end of the flow on /name.
+    navigate('/menu');
   };
 
   return (

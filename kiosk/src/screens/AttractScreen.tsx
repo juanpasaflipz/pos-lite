@@ -14,13 +14,17 @@ import { choiceGroup, proteinPrice, stylePrice, pesos } from '../lib/builderPric
 import type { WizardPreset } from './BuilderWizardScreen';
 
 /**
- * House favoritos, mirroring the prototype's PRESETS[] (v12) including order.
+ * House favoritos, mirroring the prototype's PRESETS[] (v15) including order.
  *
- * `builder` presets pre-fill the wizard and land on the ESTILO screen with
- * everything selected — one tap from "Así está bien" (D7). `fixed` presets are
- * whole menu items: they go straight into the order and land on the add-ons
- * step as the upsell. Birria / Cochinita / Rollbertos exist ONLY here — they
- * are not proteins on the builder grid (D2).
+ * v15 trimmed the roster to six: Pollos Hermanos, Surf-N-Turf and Carne Asada
+ * Fries are gone, and Cerveza Fría is the new drink favorite. Six cards is what
+ * fills the 3×2 grid on the portrait tablet.
+ *
+ * `builder` presets pre-fill the wizard. `fixed` presets are whole menu items:
+ * they go straight into the order and land on the add-ons step as the upsell.
+ * Birria / Cochinita / Rollbertos exist ONLY here — they are not proteins on
+ * the builder grid (D2). `drink` is Cerveza Fría: it adds a live drinks addon,
+ * so its qty merges with a beer added later from the Bebidas section.
  *
  * No prices live in this table. Every number is computed from the fetched
  * builder data so a price edit in Menu Management can't leave the attract
@@ -28,18 +32,20 @@ import type { WizardPreset } from './BuilderWizardScreen';
  */
 type Favorito =
   | { id: string; kind: 'builder'; proteins: string[]; estilo: string; ask?: { protein: string } }
-  | { id: string; kind: 'fixed'; slug: string; hasChoice?: boolean };
+  | { id: string; kind: 'fixed'; slug: string; hasChoice?: boolean }
+  | { id: string; kind: 'drink'; match: RegExp };
 
 const FAVORITOS: Favorito[] = [
   { id: 'california', kind: 'builder', proteins: ['asada'], estilo: 'California' },
-  { id: 'pollos', kind: 'builder', proteins: ['pollo'], estilo: 'Mission' },
   { id: 'breakfast', kind: 'builder', proteins: ['huevo'], estilo: 'California', ask: { protein: 'chorizo' } },
-  { id: 'surfnturf', kind: 'builder', proteins: ['asada', 'camaron'], estilo: 'Mission' },
   { id: 'birria', kind: 'fixed', slug: 'birria' },
   { id: 'cochinita', kind: 'fixed', slug: 'cochinita' },
   { id: 'rollbertos', kind: 'fixed', slug: 'rollbertos', hasChoice: true },
-  { id: 'asadafries', kind: 'builder', proteins: ['asada'], estilo: 'Fries' },
+  { id: 'cervezafria', kind: 'drink', match: /^cerveza$/i },
 ];
+
+/** Loose fallback when the curated drinks list has no plain "Cerveza" row. */
+const BEER_FALLBACK = /cerveza|beer|chela/i;
 
 const CHOICE_ICON: Record<string, BuilderIconName> = {
   'Con birria': 'soup',
@@ -59,6 +65,9 @@ const AttractScreen: React.FC = () => {
     clearSession();
     clearCart();
     resetKioskLanguage();
+    // Wizard hand-off keys are per-order, never per-session.
+    sessionStorage.removeItem('kiosk-wizard-preset');
+    sessionStorage.removeItem('kiosk-wizard-edit');
   }, [clearSession, clearCart]);
 
   // Hidden admin gesture: 5 taps in the top-right corner within 3 seconds opens
@@ -132,27 +141,31 @@ const AttractScreen: React.FC = () => {
   }
 
   // ── Wizard mode ───────────────────────────────────────────────────────────
-  // Every route out of here goes through /fulfillment then /identify first (the
-  // accepted deviation from the prototype) and hands the destination over in
-  // sessionStorage, so those two screens don't have to forward router state.
+  // D11: NOTHING is interposed before the order. Tapping a favorito or "Arma tu
+  // burrito" goes straight into the wizard — the para aquí / para llevar
+  // question and the name capture both moved to the END of the flow, after the
+  // cart. /identify is out of the wizard path entirely; the post-payment
+  // loyalty QR is the loyalty touchpoint. Grid mode's routing is untouched.
   const en = i18n.language.startsWith('en');
   const items = menu?.items || [];
   const itemBySlug = new Map(items.map((i) => [i.slug || '', i]));
 
-  const goVia = (path: string) => {
-    sessionStorage.setItem('kiosk-post-identify-path', path);
-    navigate('/fulfillment');
+  /** The live drinks addon a `drink` favorito stands for, or null if unseeded. */
+  const drinkFor = (f: Favorito) => {
+    if (f.kind !== 'drink') return null;
+    const drinks = menu?.addons.drinks || [];
+    return drinks.find((d) => f.match.test(d.name)) || drinks.find((d) => BEER_FALLBACK.test(d.name)) || null;
   };
 
   const startBuilder = (proteins: string[], estilo: string) => {
     const preset: WizardPreset = { proteins, estiloName: estilo };
     sessionStorage.setItem('kiosk-wizard-preset', JSON.stringify(preset));
-    goVia('/wizard');
+    navigate('/wizard');
   };
 
   const startFromScratch = () => {
     sessionStorage.removeItem('kiosk-wizard-preset');
-    goVia('/wizard');
+    navigate('/wizard');
   };
 
   /** Fixed favorito → straight into the order, then the add-ons upsell. */
@@ -175,11 +188,35 @@ const AttractScreen: React.FC = () => {
       modifierIds,
     );
     sessionStorage.removeItem('kiosk-wizard-preset');
-    goVia('/wizard?mode=addons');
+    navigate('/wizard?mode=addons');
+  };
+
+  /** Cerveza Fría → the beer joins the cart as a normal drink line, then the
+   *  same "¿Deseas agregar algo?" upsell every fixed favorito lands on. */
+  const addDrink = (f: Favorito) => {
+    const drink = drinkFor(f);
+    if (!drink) return;
+    addItem({
+      id: drink.id,
+      name: en && drink.name_en ? drink.name_en : drink.name,
+      name_en: null,
+      price: drink.price,
+      description: null,
+      description_en: null,
+      image_url: drink.image_url,
+      category_id: 0,
+      active: true,
+    });
+    sessionStorage.removeItem('kiosk-wizard-preset');
+    navigate('/wizard?mode=addons');
   };
 
   const favPrice = (f: Favorito): string | null => {
     if (!menu) return null;
+    if (f.kind === 'drink') {
+      const drink = drinkFor(f);
+      return drink ? pesos(drink.price) : null;
+    }
     if (f.kind === 'fixed') {
       const item = itemBySlug.get(f.slug);
       return item ? pesos(item.price) : null;
@@ -188,12 +225,13 @@ const AttractScreen: React.FC = () => {
   };
 
   const favSub = (f: Favorito): string => {
-    if (f.kind === 'fixed') return t(`wizardAttract.presets.${f.id}Sub`);
+    if (f.kind !== 'builder') return t(`wizardAttract.presets.${f.id}Sub`);
     // "Carne Asada · California" / "Carne Asada + Camarón · Mission"
     return `${f.proteins.map((s) => proteinLabel(s, en)).join(' + ')} · ${f.estilo}`;
   };
 
   const onFavorito = (f: Favorito) => {
+    if (f.kind === 'drink') { addDrink(f); return; }
     if (f.kind === 'fixed') {
       if (f.hasChoice) { setOverlay(f); return; }
       addFixed(f.slug);
@@ -203,40 +241,48 @@ const AttractScreen: React.FC = () => {
     startBuilder(f.proteins, f.estilo);
   };
 
+  // A drink favorito with nothing behind it would be a dead card, so it drops
+  // out once we know the tenant's curated drinks don't include a beer. It stays
+  // while the menu is still loading — the grid shouldn't reflow on arrival.
+  const favoritos = FAVORITOS.filter((f) => f.kind !== 'drink' || !menu || drinkFor(f));
+
   return (
     <div
-      className="relative h-full w-full text-neutral-50 flex flex-col items-center gap-5 text-center px-6 py-6 pt-safe pb-safe overflow-y-auto bg-[radial-gradient(ellipse_at_50%_120%,rgb(var(--brand-900))_0%,rgb(var(--n-950))_60%)]"
+      className="relative h-full w-full text-neutral-50 flex flex-col items-center gap-5 text-center px-6 py-6 pt-safe pb-safe overflow-y-auto bg-[radial-gradient(ellipse_at_50%_120%,rgb(var(--brand-900))_0%,rgb(var(--n-950))_60%)] [@media(min-height:900px)]:justify-evenly [@media(min-height:900px)]:gap-0 [@media(min-height:900px)]:py-7"
     >
       <div>
-        <div className="text-[clamp(30px,6vw,60px)] font-black leading-none tracking-[-0.02em]">
+        <div className="text-[clamp(30px,6vw,60px)] [@media(min-height:900px)]:text-[clamp(44px,9vw,84px)] font-black leading-none tracking-[-0.02em]">
           {tenantName || 'JUANBERTO'}
           <em className="not-italic text-brand-300">&apos;S</em>
         </div>
-        <p className="text-[clamp(14px,2.6vw,19px)] font-bold text-neutral-300 mt-1">
+        <p className="text-[clamp(14px,2.6vw,19px)] [@media(min-height:900px)]:text-[clamp(17px,3vw,24px)] font-bold text-neutral-300 mt-1">
           {t('wizardAttract.tagline')}
         </p>
       </div>
 
-      <p className="text-xs font-black uppercase tracking-[0.14em] text-brand-300">
+      <p className="text-[15px] [@media(min-height:900px)]:text-[18px] font-black uppercase tracking-[0.16em] text-brand-300">
         {t('wizardAttract.favorites')}
       </p>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 w-full max-w-[640px] auto-rows-min">
-        {FAVORITOS.map((f) => (
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 [@media(min-height:900px)]:gap-[18px] w-full max-w-[720px] [@media(min-height:900px)]:max-w-[860px] auto-rows-min">
+        {favoritos.map((f) => (
           <button
             key={f.id}
             onClick={() => onFavorito(f)}
-            className="bg-neutral-900 border-2 border-neutral-800 active:scale-95 active:border-brand-400 rounded-[14px] px-2.5 py-3 flex flex-col items-center gap-1 touch-manipulation transition-transform"
+            className="bg-neutral-900 border-2 border-neutral-800 active:scale-95 active:border-brand-400 rounded-[18px] [@media(min-height:900px)]:rounded-[22px] px-3.5 pt-5 pb-4 [@media(min-height:900px)]:px-4 [@media(min-height:900px)]:pt-[30px] [@media(min-height:900px)]:pb-6 flex flex-col items-center gap-1.5 [@media(min-height:900px)]:gap-2.5 touch-manipulation transition-transform shadow-[0_4px_18px_rgba(0,0,0,0.35)]"
           >
-            <BuilderIcon name={PRESET_ICON[f.id] || 'burrito'} className="h-[30px] w-[30px] text-brand-300" />
-            <span className="text-[15px] font-black leading-[1.1]">{t(`wizardAttract.presets.${f.id}`)}</span>
-            <span className="text-[11px] font-bold text-neutral-400">{favSub(f)}</span>
-            <span className="text-sm font-extrabold text-brand-300">{favPrice(f) ?? ' '}</span>
+            <BuilderIcon
+              name={PRESET_ICON[f.id] || 'burrito'}
+              className="h-[46px] w-[46px] [@media(min-height:900px)]:h-16 [@media(min-height:900px)]:w-16 text-brand-300"
+            />
+            <span className="text-[18px] [@media(min-height:900px)]:text-[23px] font-black leading-[1.1]">{t(`wizardAttract.presets.${f.id}`)}</span>
+            <span className="text-[12px] [@media(min-height:900px)]:text-[14px] font-bold text-neutral-400">{favSub(f)}</span>
+            <span className="text-[17px] [@media(min-height:900px)]:text-[21px] font-black text-brand-300">{favPrice(f) ?? ' '}</span>
           </button>
         ))}
       </div>
 
-      <div className="flex items-center gap-3 w-full max-w-[640px] text-neutral-500 text-xs font-black tracking-[0.12em] uppercase">
+      <div className="flex items-center gap-3 w-full max-w-[640px] [@media(min-height:900px)]:max-w-[860px] text-neutral-500 text-xs [@media(min-height:900px)]:text-sm font-black tracking-[0.12em] uppercase">
         <span className="flex-1 h-px bg-neutral-800" />
         {t('wizardAttract.or')}
         <span className="flex-1 h-px bg-neutral-800" />
@@ -244,7 +290,7 @@ const AttractScreen: React.FC = () => {
 
       <button
         onClick={startFromScratch}
-        className="w-full max-w-[640px] min-h-[80px] rounded-[14px] bg-brand-600 active:bg-brand-700 text-[clamp(19px,3.6vw,28px)] font-black flex flex-col items-center justify-center gap-1 touch-manipulation shadow-[0_12px_40px_rgba(168,84,42,0.35)] flex-shrink-0 px-5 py-3"
+        className="w-full max-w-[640px] [@media(min-height:900px)]:max-w-[860px] min-h-[80px] [@media(min-height:900px)]:min-h-[112px] rounded-[14px] bg-brand-600 active:bg-brand-700 text-[clamp(19px,3.6vw,28px)] [@media(min-height:900px)]:text-[clamp(24px,4vw,34px)] font-black flex flex-col items-center justify-center gap-1 touch-manipulation shadow-[0_12px_40px_rgba(168,84,42,0.35)] flex-shrink-0 px-5 py-3"
       >
         <span className="flex items-center gap-2.5">
           <BuilderIcon name="burrito" className="h-[1.05em] w-[1.05em]" />
@@ -254,8 +300,8 @@ const AttractScreen: React.FC = () => {
       </button>
 
       <button
-        onClick={() => { sessionStorage.removeItem('kiosk-wizard-preset'); goVia('/wizard?mode=addons'); }}
-        className="w-full max-w-[640px] min-h-[60px] rounded-[14px] bg-transparent border-2 border-neutral-700 text-neutral-100 text-[17px] font-black flex items-center justify-center gap-2.5 touch-manipulation flex-shrink-0 px-5 py-3"
+        onClick={() => { sessionStorage.removeItem('kiosk-wizard-preset'); navigate('/wizard?mode=addons'); }}
+        className="w-full max-w-[640px] [@media(min-height:900px)]:max-w-[860px] min-h-[60px] [@media(min-height:900px)]:min-h-[80px] rounded-[14px] bg-transparent border-2 border-neutral-700 text-neutral-100 text-[17px] [@media(min-height:900px)]:text-[21px] font-black flex items-center justify-center gap-2.5 touch-manipulation flex-shrink-0 px-5 py-3"
       >
         <BuilderIcon name="cupsoda" className="h-[1.05em] w-[1.05em]" />
         {t('wizardAttract.drinksJump')}

@@ -1,5 +1,5 @@
 // Burrito-builder wizard — parity build against design/kiosk-builder-prototype.html
-// (v12). Renders only when the effective kiosk mode is 'wizard', which today is
+// (v15). Renders only when the effective kiosk mode is 'wizard', which today is
 // one device on one tenant; grid mode never mounts this file.
 //
 // Flow, matching the prototype exactly:
@@ -8,11 +8,14 @@
 //                └─ "¿Deseas modificar algo?" → quitar → agregar
 //   agregar (Para tu burrito / Complementos / Bebidas) → cart
 //
-// Two accepted deviations from the prototype, per the parity spec:
-//   1. /fulfillment + /identify interpose ahead of this screen (the prototype
-//      doesn't model them; the kitchen ticket and loyalty do need them).
-//   2. The cart, name capture and payment stay on the existing pipes — the
-//      prototype's summary/name/done screens are stubs of those.
+// D11: nothing is interposed BEFORE the order — the attract screen comes
+// straight here. The commitment questions live at the end, after the cart:
+// ¿para aquí o para llevar? → call-out name → pay → thanks + loyalty QR.
+//
+// One accepted deviation from the prototype, per the parity spec: payment
+// itself continues through the existing pipes (hold, MP terminal), where the
+// prototype has a 900ms stub. The sequence and copy around it are the
+// prototype's.
 //
 // Everything else — copy, branching, icons, step count, price arithmetic — is
 // the prototype's. Prices are derived from live modifier data (see
@@ -32,7 +35,7 @@ import {
 } from '../lib/builderMeta';
 import {
   MAX_PROTEINS, PROTEIN_SLUGS, HIDDEN_PROTEIN_SLUGS,
-  emptyDraft, draftPrice, draftModifiers, extrasCount, extrasMax,
+  emptyDraft, draftPrice, draftModifiers, decodeDraft, extrasCount, extrasMax,
   estiloOptions, extrasOptions, quitarOptions, resolveSelection,
   proteinPrice, stylePrice, pesos,
   type DraftLine,
@@ -46,13 +49,21 @@ export interface WizardPreset {
   estiloName: string;
 }
 
+/** Stashed by the summary screen's "Editar" so a committed line can be reopened. */
+export interface WizardEdit {
+  lineKey: string;
+  menuItemId: number;
+  modifierIds: number[];
+}
+
 const PRESET_KEY = 'kiosk-wizard-preset';
+const EDIT_KEY = 'kiosk-wizard-edit';
 
 const BuilderWizardScreen: React.FC = () => {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const { tenantId, kioskToken } = useKioskBinding();
-  const { addItem, lines } = useKioskCart();
+  const { addItem, decrementLine, lines } = useKioskCart();
   const [params] = useSearchParams();
   const en = i18n.language.startsWith('en');
 
@@ -97,6 +108,18 @@ const BuilderWizardScreen: React.FC = () => {
     }
   }, []);
 
+  // Same read-only contract as the preset: the summary screen owns this key's
+  // lifecycle (it writes it on "Editar" and clears it on every other route into
+  // the wizard), so a StrictMode double-mount can't consume it.
+  const editing = useMemo<WizardEdit | null>(() => {
+    try {
+      const raw = sessionStorage.getItem(EDIT_KEY);
+      return raw ? (JSON.parse(raw) as WizardEdit) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
   useEffect(() => {
     if (!tenantId || !kioskToken) return;
     let cancelled = false;
@@ -115,21 +138,26 @@ const BuilderWizardScreen: React.FC = () => {
     return () => { cancelled = true; };
   }, [tenantId, kioskToken]);
 
-  // A favorito is a one-tap path: protein(s) and style come pre-chosen and the
-  // guest lands straight on "¿Deseas agregar algo?", skipping Estilo entirely.
-  //
-  // This is a deliberate departure from the parity spec's D7, which had
-  // favoritos land on Estilo pre-selected. Juan's call on 2026-07-31 — a
-  // favorito is meant to be the fast lane, and the favoritos are slated for
-  // deprecation anyway, so making the guest confirm a style they already chose
-  // by name is friction for no decision. Estilo stays reachable: Atrás from
-  // here goes to it with the preset's style selected, so a guest who wants to
-  // change it still can.
+  // D7 — a builder-backed favorito lands on the Estilo step with its protein(s)
+  // and style already selected: one tap from "Así está bien ✓", and everything
+  // is still changeable (Atrás reaches the protein grid with the selections
+  // intact). The prototype's `startPreset` does exactly this — `go('style')`.
   useEffect(() => {
     if (loading || !preset || !menu || addonsOnly) return;
     setDraft({ ...emptyDraft(), proteins: [...preset.proteins], estiloName: preset.estiloName });
-    setStep('agregar');
+    setStep('estilo');
   }, [loading, preset, menu, addonsOnly]);
+
+  // Reopening a committed line ("Editar" on the summary): every choice comes
+  // back decoded from the line's modifier ids and the guest lands on the
+  // protein step, exactly as the prototype's rSummary edit does.
+  useEffect(() => {
+    if (loading || !editing || !menu || addonsOnly) return;
+    const decoded = decodeDraft(editing.menuItemId, editing.modifierIds, menu.items);
+    if (!decoded) return;
+    setDraft(decoded);
+    setStep('protein');
+  }, [loading, editing, menu, addonsOnly]);
 
   const items = menu?.items || [];
   const selection = useMemo(() => resolveSelection(draft.proteins, items), [draft.proteins, items]);
@@ -212,6 +240,15 @@ const BuilderWizardScreen: React.FC = () => {
   };
 
   const finish = () => {
+    // Editing replaces one unit of the original line rather than removing it
+    // outright, so a "×2 Burrito Carne Asada" line keeps its second burrito.
+    // Done here (not on the Editar tap) so abandoning the edit — idle timeout,
+    // Empezar de nuevo — leaves the cart exactly as the guest left it.
+    // Gated on there being a replacement: if the decode failed (an option was
+    // deleted in Menu Management since the line was added) the guest is on a
+    // blank protein grid, and decrementing here would silently delete the
+    // burrito they were trying to edit.
+    if (editing && base && selection) decrementLine(editing.lineKey);
     if (base && selection) {
       addItem(
         {
@@ -231,12 +268,17 @@ const BuilderWizardScreen: React.FC = () => {
     navigate('/cart');
   };
 
+  // Back from the first step returns to wherever the guest came from: the
+  // summary when there is already an order in progress ("+ Agregar otro
+  // burrito", "Editar"), otherwise the attract screen.
+  const exit = () => navigate(lines.length ? '/cart' : '/');
+
   const goBack = () => {
-    if (addonsOnly) { navigate('/'); return; }
+    if (addonsOnly) { exit(); return; }
     if (step === 'agregar') setStep(draft.removed.length ? 'quitar' : 'estilo');
     else if (step === 'quitar') setStep('estilo');
     else if (step === 'estilo') setStep('protein');
-    else navigate('/');
+    else exit();
   };
 
   if (loading) {
@@ -277,7 +319,12 @@ const BuilderWizardScreen: React.FC = () => {
     agregar: t('wizard.stepAdd'),
   };
 
-  const showBack = addonsOnly || step !== 'protein';
+  // The prototype's protein step has no back chip because the only way in is
+  // from the attract screen. Here it is also reachable from the summary
+  // ("+ Agregar otro burrito", "Editar"), and the ghost button on that step is
+  // "Empezar de nuevo" — which discards the order. Without a back chip a guest
+  // adding a second burrito has no non-destructive way out.
+  const showBack = addonsOnly || step !== 'protein' || lines.length > 0;
 
   return (
     <div className="h-full w-full bg-neutral-950 text-neutral-50 flex flex-col">

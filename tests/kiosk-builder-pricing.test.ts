@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import type { BuilderItem } from '../kiosk/src/lib/kioskApi';
 import {
   resolveSelection, proteinPrice, stylePrice, draftPrice, draftModifiers,
-  emptyDraft, extrasCount,
+  emptyDraft, extrasCount, decodeDraft,
 } from '../kiosk/src/lib/builderPricing';
 
 let nextId = 1000;
@@ -203,5 +203,60 @@ describe('kiosk builder pricing', () => {
       expect(draftPrice(emptyDraft(), ITEMS)).toBe(0);
       expect(draftModifiers(emptyDraft(), ITEMS)).toEqual([]);
     });
+  });
+});
+
+/**
+ * "Editar" on the wizard summary reopens a committed cart line. A cart line
+ * only carries the base menu item id and a flat list of modifier ids, so the
+ * whole feature rests on decodeDraft reversing draftModifiers exactly. A drift
+ * here doesn't throw — it silently reopens the burrito with the wrong
+ * ingredients, which the guest then pays for.
+ */
+describe('kiosk builder draft decoding (summary → Editar)', () => {
+  const base = ITEMS[0]; // asada
+  const optOf = (kind: string, name: string) =>
+    base.groups.find((g) => g.kind === kind)!.options.find((o) => o.name === name)!;
+
+  it('round-trips a fully-loaded draft through the modifier list', () => {
+    const draft = {
+      proteins: ['asada', 'camaron'],
+      estiloName: 'Fries',
+      removed: [optOf('Quitar', 'Sin crema').id],
+      extras: { [optOf('Extras', 'Queso extra').id]: 2 },
+    };
+    const sel = resolveSelection(draft.proteins, ITEMS)!;
+    const ids = draftModifiers(draft, ITEMS).map((m) => m.id);
+
+    const decoded = decodeDraft(sel.base.id, ids, ITEMS)!;
+    expect(decoded.proteins).toEqual(['asada', 'camaron']);
+    expect(decoded.estiloName).toBe('Fries');
+    expect(decoded.removed).toEqual(draft.removed);
+    expect(decoded.extras).toEqual(draft.extras);
+    // The decoded draft must also price identically, or Editar would change
+    // the total without the guest touching anything.
+    expect(draftPrice(decoded, ITEMS)).toBe(draftPrice(draft, ITEMS));
+  });
+
+  it('round-trips a plain single-protein burrito', () => {
+    const draft = { proteins: ['asada'], estiloName: 'California', removed: [], extras: {} };
+    const ids = draftModifiers(draft, ITEMS).map((m) => m.id);
+    const decoded = decodeDraft(base.id, ids, ITEMS)!;
+    expect(decoded).toEqual(draft);
+  });
+
+  it('drops modifier ids the base item no longer offers', () => {
+    // Juan deletes an option in Menu Management while a line is in the cart.
+    const decoded = decodeDraft(base.id, [999999], ITEMS)!;
+    expect(decoded.proteins).toEqual(['asada']);
+    expect(decoded.estiloName).toBeNull();
+    expect(decoded.removed).toEqual([]);
+    expect(decoded.extras).toEqual({});
+  });
+
+  it('returns null for a line whose item is not a builder item', () => {
+    // Fixed favoritos (Birria, Rollbertos) and drinks render as plain lines
+    // with no Editar button — decode must refuse them rather than invent one.
+    expect(decodeDraft(424242, [], ITEMS)).toBeNull();
   });
 });

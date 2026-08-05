@@ -48,9 +48,12 @@ const PATHS = {
   beans: "<path d=\"M9.5 5.5a3 3 0 1 1-3.2 4\"/><path d=\"M17.5 8.5a3 3 0 1 1-3.2 4\"/><path d=\"M11.5 14.5a3 3 0 1 1-3.2 4\"/>",
   taquitos: "<rect x=\"3\" y=\"6\" width=\"15\" height=\"4\" rx=\"2\"/><rect x=\"6\" y=\"13\" width=\"15\" height=\"4\" rx=\"2\"/><path d=\"M6 8h.01\"/><path d=\"M18 15h.01\"/>",
   onion: "<path d=\"M12 8.5c-3.3 0-5.5 2.3-5.5 5.3S9 19.5 12 19.5s5.5-2.7 5.5-5.7S15.3 8.5 12 8.5z\"/><path d=\"M12 8.5c-1.4-1-1.9-2.4-1.4-4\"/><path d=\"M12 8.5c1.4-1 1.9-2.4 1.4-4\"/><path d=\"M9.8 13c0 2.4.8 4.4 2.2 5.6\"/>",
+  // v15 — the two fulfillment glyphs on "¿Para aquí o para llevar?".
+  utensils: "<path d=\"M7 3v6a2 2 0 0 0 2 2 2 2 0 0 0 2-2V3\"/><path d=\"M9 11v10\"/><path d=\"M17 3c-1.5 3.5-1.5 6.5 0 8v10\"/>",
+  bag: "<path d=\"M6 9h12l-1.3 11.2a1 1 0 0 1-1 .8H8.3a1 1 0 0 1-1-.8z\"/><path d=\"M9 9V7a3 3 0 0 1 6 0v2\"/>",
 } as const;
 
-export type BuilderIconName = 'beef' | 'drumstick' | 'ham' | 'eggfried' | 'mushroom' | 'shrimp' | 'fish' | 'sausage' | 'pig' | 'cheese' | 'avocado' | 'pepper' | 'milk' | 'soup' | 'sun' | 'landmark' | 'cupsoda' | 'coffee' | 'beer' | 'cocktail' | 'bottle' | 'cookie' | 'megaphone' | 'star' | 'burrito' | 'fries' | 'rice' | 'beans' | 'taquitos' | 'onion';
+export type BuilderIconName = 'beef' | 'drumstick' | 'ham' | 'eggfried' | 'mushroom' | 'shrimp' | 'fish' | 'sausage' | 'pig' | 'cheese' | 'avocado' | 'pepper' | 'milk' | 'soup' | 'sun' | 'landmark' | 'cupsoda' | 'coffee' | 'beer' | 'cocktail' | 'bottle' | 'cookie' | 'megaphone' | 'star' | 'burrito' | 'fries' | 'rice' | 'beans' | 'taquitos' | 'onion' | 'utensils' | 'bag';
 
 export const BUILDER_ICON_NAMES = Object.keys(PATHS) as BuilderIconName[];
 

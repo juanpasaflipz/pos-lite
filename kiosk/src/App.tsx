@@ -14,10 +14,23 @@ import KioskDeliveryAddressScreen from './screens/KioskDeliveryAddressScreen';
 import KioskMenuScreen from './screens/KioskMenuScreen';
 import BuilderWizardScreen from './screens/BuilderWizardScreen';
 import KioskCartScreen from './screens/KioskCartScreen';
+import KioskWizardSummaryScreen from './screens/KioskWizardSummaryScreen';
+import KioskCallNameScreen from './screens/KioskCallNameScreen';
 import KioskPayExistingScreen from './screens/KioskPayExistingScreen';
 import KioskHoldConfirmationScreen from './screens/KioskHoldConfirmationScreen';
 import KioskTerminalSettingsScreen from './screens/KioskTerminalSettingsScreen';
 import KioskUnavailableScreen from './screens/KioskUnavailableScreen';
+
+/**
+ * /cart is two different screens. Wizard mode gets the prototype's summary
+ * (Editar / Quitar / + otro burrito / Pagar); every other device keeps the grid
+ * cart exactly as it was. Branching at the route rather than inside the screen
+ * keeps each one's hook list stable when the binding resolves mid-render.
+ */
+const CartRoute: React.FC = () => {
+  const { kioskMode } = useKioskBinding();
+  return kioskMode === 'wizard' ? <KioskWizardSummaryScreen /> : <KioskCartScreen />;
+};
 
 const Routed: React.FC = () => {
   const { tenantId, kioskToken, planLocked } = useKioskBinding();
@@ -55,7 +68,8 @@ const Routed: React.FC = () => {
       <Route path="/identify" element={<KioskIdentifyScreen />} />
       <Route path="/menu" element={<KioskMenuScreen />} />
       <Route path="/wizard" element={<BuilderWizardScreen />} />
-      <Route path="/cart" element={<KioskCartScreen />} />
+      <Route path="/cart" element={<CartRoute />} />
+      <Route path="/name" element={<KioskCallNameScreen />} />
       <Route path="/pay-existing" element={<KioskPayExistingScreen />} />
       <Route path="/hold-confirmed" element={<KioskHoldConfirmationScreen />} />
       <Route path="/terminal-settings" element={<KioskTerminalSettingsScreen />} />

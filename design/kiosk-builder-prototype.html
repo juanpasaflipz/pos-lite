@@ -84,30 +84,50 @@
   }
   .attract .side { max-width: 640px; min-height: 60px; font-size: 17px; flex-shrink: 0; }
   .fav-label {
-    font-size: 12px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase;
-    color: var(--brand-300); margin: 4px 0 0;
+    font-size: 15px; font-weight: 900; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--brand-300); margin: 6px 0 0;
   }
   .fav-grid {
-    display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
-    width: 100%; max-width: 640px;
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
+    width: 100%; max-width: 720px;
   }
   @media (min-width: 640px) { .fav-grid { grid-template-columns: repeat(3, 1fr); } }
   .preset {
-    background: var(--n-900); border: 2px solid var(--n-800); border-radius: 14px;
-    padding: 12px 10px; cursor: pointer; color: var(--n-50); font-family: inherit;
-    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    background: var(--n-900); border: 2px solid var(--n-800); border-radius: 18px;
+    padding: 20px 14px 16px; cursor: pointer; color: var(--n-50); font-family: inherit;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
     transition: transform .08s, border-color .15s;
+    box-shadow: 0 4px 18px rgba(0,0,0,.35);
   }
   .preset:active { transform: scale(.95); border-color: var(--brand-400); }
-  .preset .ico { font-size: 30px; line-height: 1; }
-  .preset .nm { font-size: 15px; font-weight: 900; line-height: 1.1; }
-  .preset .sb { font-size: 11px; font-weight: 700; color: var(--n-400); }
-  .preset .pr { font-size: 14px; font-weight: 800; color: var(--brand-300); }
+  .preset .ico { font-size: 46px; line-height: 1; color: var(--brand-300); }
+  .preset .nm { font-size: 18px; font-weight: 900; line-height: 1.1; }
+  .preset .sb { font-size: 12px; font-weight: 700; color: var(--n-400); }
+  .preset .pr { font-size: 17px; font-weight: 900; color: var(--brand-300); }
   .or-div {
     display: flex; align-items: center; gap: 12px; width: 100%; max-width: 640px;
     color: var(--n-500); font-size: 12px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase;
   }
   .or-div::before, .or-div::after { content: ''; flex: 1; height: 1px; background: var(--n-800); }
+
+  /* Portrait kiosk (tablet vertical in counter stand): the attract screen must
+     use the ENTIRE height — content distributes evenly and scales up instead
+     of hugging the top with a dead lower half. (v14) */
+  @media (min-height: 900px) {
+    .attract { justify-content: space-evenly; gap: 0; padding: 28px 24px; }
+    .attract .logo { font-size: clamp(44px, 9vw, 84px); }
+    .attract .tag { font-size: clamp(17px, 3vw, 24px); }
+    .fav-label { font-size: 18px; }
+    .fav-grid { max-width: 860px; gap: 18px; }
+    .preset { padding: 30px 16px 24px; border-radius: 22px; gap: 10px; }
+    .preset .ico { font-size: 64px; }
+    .preset .nm { font-size: 23px; }
+    .preset .sb { font-size: 14px; }
+    .preset .pr { font-size: 21px; }
+    .or-div { max-width: 860px; font-size: 14px; }
+    .attract .big { max-width: 860px; min-height: 112px; font-size: clamp(24px, 4vw, 34px); }
+    .attract .side { max-width: 860px; min-height: 80px; font-size: 21px; }
+  }
 
   /* ─── Preset quick-question overlay (e.g. Breakfast: ¿Con chorizo?) ─── */
   .ask-overlay {
@@ -122,6 +142,15 @@
   .ask-box .big-ico { font-size: 52px; line-height: 1; }
   .ask-box h2 { margin: 0; font-size: 28px; font-weight: 900; }
   .ask-box .sub2 { margin: -8px 0 0; font-size: 14px; font-weight: 700; color: var(--n-400); }
+
+  /* ─── Fulfillment (para aquí / para llevar) ─── */
+  .fulfill-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+    max-width: 700px; margin: 6vh auto 0;
+  }
+  .fulfill-card { min-height: 230px; }
+  .fulfill-card .ico { font-size: 72px; color: var(--brand-300); }
+  .fulfill-card .nm { font-size: clamp(20px, 3.5vw, 28px); }
 
   /* ─── Name entry (call-out name) ─── */
   .name-wrap { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
@@ -143,18 +172,18 @@
   .key.wide { max-width: none; flex: 3; font-size: 14px; letter-spacing: .1em; }
 
   /* ─── Done / loyalty screen ─── */
-  .done {
+  .thanks {
     height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 18px; text-align: center; padding: 24px; overflow-y: auto;
     background: radial-gradient(ellipse at 50% -20%, var(--brand-900) 0%, var(--n-950) 55%);
   }
-  .done .check {
+  .thanks .check {
     width: 84px; height: 84px; border-radius: 50%; background: var(--brand-600);
     display: flex; align-items: center; justify-content: center; font-size: 44px;
     box-shadow: 0 12px 40px rgba(168,84,42,.4); flex-shrink: 0;
   }
-  .done h1 { margin: 0; font-size: clamp(28px, 6vw, 48px); font-weight: 900; }
-  .done .call { margin: 0; font-size: clamp(15px, 3vw, 20px); font-weight: 700; color: var(--n-300); max-width: 520px; }
+  .thanks h1 { margin: 0; font-size: clamp(28px, 6vw, 48px); font-weight: 900; }
+  .thanks .call { margin: 0; font-size: clamp(15px, 3vw, 20px); font-weight: 700; color: var(--n-300); max-width: 520px; }
   .loyalty-card {
     background: var(--n-900); border: 1px solid var(--n-800); border-radius: 20px;
     padding: 20px; display: flex; align-items: center; gap: 18px; max-width: 520px; width: 100%;
@@ -251,6 +280,19 @@
   .total-line { display: flex; justify-content: space-between; font-size: 22px; font-weight: 900; padding: 4px 6px; }
   .total-line span:last-child { color: var(--brand-300); }
 
+  /* Outline icon set (Lucide/Tabler MIT + hand-drawn) replaces emojis (v12) */
+  .ico svg, .big-ico svg { width: 1em; height: 1em; display: block; }
+  .card .ico, .preset .ico, .row-t .ico { color: var(--brand-300); }
+  .big-ico { display: inline-flex; gap: 6px; justify-content: center; color: var(--brand-300); }
+  .oic { display: inline-flex; width: 1.05em; height: 1.05em; vertical-align: -0.14em; }
+  .oic svg { width: 100%; height: 100%; }
+  .style-card li { display: inline-flex; align-items: center; gap: 6px; }
+  .style-card li svg { width: 1.15em; height: 1.15em; flex-shrink: 0; }
+  .ask-box .btn svg { width: 1.2em; height: 1.2em; flex-shrink: 0; }
+  .sum-item b > svg { width: 1.1em; height: 1.1em; vertical-align: -0.15em; }
+  .ico { display: inline-flex; }
+  .row-t .ico { font-size: 26px; }
+
   .fade { animation: fade .22s ease; }
   @keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
@@ -270,7 +312,7 @@
 </style>
 </head>
 <body>
-<div class="proto-tag">Prototipo · v11</div>
+<div class="proto-tag">Prototipo · v15</div>
 <div id="app"></div>
 <div class="note" id="note"></div>
 
@@ -280,18 +322,53 @@
    Prices pulled from the live juanbertos.com menu where they exist;
    chorizo & bacon burritos are NEW items → placeholder prices, adjust!
    ═══════════════════════════════════════════════════════════════════ */
+const I = {
+  beef: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.4 13.7A6.5 6.5 0 1 0 6.28 6.6c-1.1 3.13-.78 3.9-3.18 6.08A3 3 0 0 0 5 18c4 0 8.4-1.8 11.4-4.3" /> <path d="m18.5 6 2.19 4.5a6.48 6.48 0 0 1-2.29 7.2C15.4 20.2 11 22 7 22a3 3 0 0 1-2.68-1.66L2.4 16.5" /> <circle cx="12.5" cy="8.5" r="2.5" /></svg>',
+  drumstick: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.4 15.63a7.875 6 135 1 1 6.23-6.23 4.5 3.43 135 0 0-6.23 6.23" /> <path d="m8.29 12.71-2.6 2.6a2.5 2.5 0 1 0-1.65 4.65A2.5 2.5 0 1 0 8.7 18.3l2.59-2.59" /></svg>',
+  ham: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.144 21.144A7.274 10.445 45 1 0 2.856 10.856" /> <path d="M13.144 21.144A7.274 4.365 45 0 0 2.856 10.856a7.274 4.365 45 0 0 10.288 10.288" /> <path d="M16.565 10.435 18.6 8.4a2.501 2.501 0 1 0 1.65-4.65 2.5 2.5 0 1 0-4.66 1.66l-2.024 2.025" /> <path d="m8.5 16.5-1-1" /></svg>',
+  eggfried: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11.5" cy="12.5" r="3.5" /> <path d="M3 8c0-3.5 2.5-6 6.5-6 5 0 4.83 3 7.5 5s5 2 5 6c0 4.5-2.5 6.5-7 6.5-2.5 0-2.5 2.5-6 2.5s-7-2-7-5.5c0-3 1.5-3 1.5-5C3.5 10 3 9 3 8Z" /></svg>',
+  mushroom: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.1c0 -4.474 -3.582 -8.1 -8 -8.1s-8 3.626 -8 8.1a.9 .9 0 0 0 .9 .9h14.2a.9 .9 0 0 0 .9 -.9" /> <path d="M10 12v7a2 2 0 1 0 4 0v-7" /></svg>',
+  shrimp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 12h.01" /> <path d="M13 22c.5-.5 1.12-1 2.5-1-1.38 0-2-.5-2.5-1" /> <path d="M14 2a3.28 3.28 0 0 1-3.227 1.798l-6.17-.561A2.387 2.387 0 1 0 4.387 8H15.5a1 1 0 0 1 0 13 1 1 0 0 0 0-5H12a7 7 0 0 1-7-7V8" /> <path d="M14 8a8.5 8.5 0 0 1 0 8" /> <path d="M16 16c2 0 4.5-4 4-6" /></svg>',
+  fish: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 12c.94-3.46 4.94-6 8.5-6 3.56 0 6.06 2.54 7 6-.94 3.47-3.44 6-7 6s-7.56-2.53-8.5-6Z" /> <path d="M18 12v.5" /> <path d="M16 17.93a9.77 9.77 0 0 1 0-11.86" /> <path d="M7 10.67C7 8 5.58 5.97 2.73 5.5c-1 1.5-1 5 .23 6.5-1.24 1.5-1.24 5-.23 6.5C5.58 18.03 7 16 7 13.33" /> <path d="M10.46 7.26C10.2 5.88 9.17 4.24 8 3h5.8a2 2 0 0 1 1.98 1.67l.23 1.4" /> <path d="m16.01 17.93-.23 1.4A2 2 0 0 1 13.8 21H9.5a5.96 5.96 0 0 0 1.49-3.98" /></svg>',
+  sausage: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 5.5a2.5 2.5 0 0 0 -2.5 2.5c0 7.18 5.82 13 13 13a2.5 2.5 0 1 0 0 -5a8 8 0 0 1 -8 -8a2.5 2.5 0 0 0 -2.5 -2.5" /> <path d="M5.195 5.519l-1.243 -1.989a1 1 0 0 1 .848 -1.53h1.392a1 1 0 0 1 .848 1.53l-1.245 1.99" /> <path d="M18.482 18.225l1.989 -1.243a1 1 0 0 1 1.53 .848v1.392a1 1 0 0 1 -1.53 .848l-1.991 -1.245" /></svg>',
+  pig: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 11v.01" /> <path d="M16 3l0 3.803a6.019 6.019 0 0 1 2.658 3.197h1.341a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-1.342a6.008 6.008 0 0 1 -1.658 2.473v2.027a1.5 1.5 0 0 1 -3 0v-.583a6.04 6.04 0 0 1 -1 .083h-4a6.04 6.04 0 0 1 -1 -.083v.583a1.5 1.5 0 0 1 -3 0v-2l0 -.027a6 6 0 0 1 4 -10.473h2.5l4.5 -3" /></svg>',
+  cheese: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.519 20.008l16.481 -.008v-3.5a2 2 0 1 1 0 -4v-3.5h-16.722" /> <path d="M21 9l-9.385 -4.992c-2.512 .12 -4.758 1.42 -6.327 3.425c-1.423 1.82 -2.288 4.221 -2.288 6.854c0 2.117 .56 4.085 1.519 5.721" /> <path d="M15 13v.01" /> <path d="M8 13v.01" /> <path d="M11 16v.01" /></svg>',
+  avocado: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 14.04a3.905 3.905 0 0 1 1.337 -2.075c1.195 -.985 1.816 -2.285 1.863 -3.902c-.047 -1.43 -.54 -2.626 -1.477 -3.586c-.96 -.938 -2.156 -1.43 -3.585 -1.477c-1.618 .047 -2.918 .668 -3.903 1.863c-.562 .68 -1.254 1.125 -2.074 1.336c-.938 .188 -1.828 .48 -2.672 .88c-.844 .398 -1.559 .878 -2.144 1.44c-1.43 1.501 -2.145 3.224 -2.145 5.169c0 1.946 .715 3.668 2.145 5.168c1.5 1.429 3.222 2.144 5.168 2.144c1.945 0 3.667 -.715 5.167 -2.145c.563 -.585 1.055 -1.3 1.477 -2.144c.398 -.844 .68 -1.723 .844 -2.637v-.035l-.001 .001" /> <path d="M10.87 10.036c-.942 .112 -1.794 .538 -2.556 1.278c-.74 .762 -1.166 1.614 -1.278 2.556c-.135 .92 .112 1.704 .74 2.354c.65 .628 1.435 .875 2.354 .74c.942 -.112 1.794 -.538 2.556 -1.278c.74 -.762 1.166 -1.614 1.278 -2.556c.135 -.92 -.112 -1.704 -.74 -2.354c-.65 -.628 -1.435 -.875 -2.354 -.74" /></svg>',
+  pepper: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 11c0 2.21 -2.239 4 -5 4s-5 -1.79 -5 -4a8 8 0 1 0 16 0a3 3 0 0 0 -6 0" /> <path d="M16 8c0 -2 2 -4 4 -4" /></svg>',
+  milk: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2h8" /> <path d="M9 2v2.789a4 4 0 0 1-.672 2.219l-.656.984A4 4 0 0 0 7 10.212V20a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-9.789a4 4 0 0 0-.672-2.219l-.656-.984A4 4 0 0 1 15 4.788V2" /> <path d="M7 15a6.472 6.472 0 0 1 5 0 6.47 6.47 0 0 0 5 0" /></svg>',
+  soup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a9 9 0 0 0 9-9H3a9 9 0 0 0 9 9Z" /> <path d="M7 21h10" /> <path d="M19.5 12 22 6" /> <path d="M16.25 3c.27.1.8.53.75 1.36-.06.83-.93 1.2-1 2.02-.05.78.34 1.24.73 1.62" /> <path d="M11.25 3c.27.1.8.53.74 1.36-.05.83-.93 1.2-.98 2.02-.06.78.33 1.24.72 1.62" /> <path d="M6.25 3c.27.1.8.53.75 1.36-.06.83-.93 1.2-1 2.02-.05.78.34 1.24.74 1.62" /></svg>',
+  sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4" /> <path d="M12 2v2" /> <path d="M12 20v2" /> <path d="m4.93 4.93 1.41 1.41" /> <path d="m17.66 17.66 1.41 1.41" /> <path d="M2 12h2" /> <path d="M20 12h2" /> <path d="m6.34 17.66-1.41 1.41" /> <path d="m19.07 4.93-1.41 1.41" /></svg>',
+  landmark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 18v-7" /> <path d="M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z" /> <path d="M14 18v-7" /> <path d="M18 18v-7" /> <path d="M3 22h18" /> <path d="M6 18v-7" /></svg>',
+  cupsoda: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 8 1.75 12.28a2 2 0 0 0 2 1.72h4.54a2 2 0 0 0 2-1.72L18 8" /> <path d="M5 8h14" /> <path d="M7 15a6.47 6.47 0 0 1 5 0 6.47 6.47 0 0 0 5 0" /> <path d="m12 8 1-6h2" /></svg>',
+  coffee: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v2" /> <path d="M14 2v2" /> <path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1" /> <path d="M6 2v2" /></svg>',
+  beer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 11h1a3 3 0 0 1 0 6h-1" /> <path d="M9 12v6" /> <path d="M13 12v6" /> <path d="M14 7.5c-1 0-1.44.5-3 .5s-2-.5-3-.5-1.72.5-2.5.5a2.5 2.5 0 0 1 0-5c.78 0 1.57.5 2.5.5S9.44 2 11 2s2 1.5 3 1.5 1.72-.5 2.5-.5a2.5 2.5 0 0 1 0 5c-.78 0-1.5-.5-2.5-.5Z" /> <path d="M5 8v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8" /></svg>',
+  cocktail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8" /> <path d="M12 15v6" /> <path d="M5 5a7 2 0 1 0 14 0a7 2 0 1 0 -14 0" /> <path d="M5 5v.388c0 .432 .126 .853 .362 1.206l5 7.509c.633 .951 1.88 1.183 2.785 .517c.191 -.141 .358 -.316 .491 -.517l5 -7.509c.236 -.353 .362 -.774 .362 -1.206v-.388" /></svg>',
+  bottle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5h4v-2a1 1 0 0 0 -1 -1h-2a1 1 0 0 0 -1 1v2" /> <path d="M14 3.5c0 1.626 .507 3.212 1.45 4.537l.05 .07a8.093 8.093 0 0 1 1.5 4.694v6.199a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2v-6.2c0 -1.682 .524 -3.322 1.5 -4.693l.05 -.07a7.823 7.823 0 0 0 1.45 -4.537" /> <path d="M7 14.803a2.4 2.4 0 0 0 1 -.803a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 1 -.805" /></svg>',
+  cookie: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5" /> <path d="M8.5 8.5v.01" /> <path d="M16 15.5v.01" /> <path d="M12 12v.01" /> <path d="M11 17v.01" /> <path d="M7 14v.01" /></svg>',
+  megaphone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" /> <path d="M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14" /> <path d="M8 6v8" /></svg>',
+  star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></svg>',
+  burrito: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 6.5c-2.8 0-5 2.5-5 5.5s2.2 5.5 5 5.5h10c2.8 0 5-2.5 5-5.5s-2.2-5.5-5-5.5z"/><path d="M7 6.5c1.8 1.2 3 3.2 3 5.5s-1.2 4.3-3 5.5"/><path d="M13.5 6.5 12 9"/><path d="M17.5 6.5 16 9"/></svg>',
+  fries: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 10.5 5 20h14l-1.5-9.5"/><path d="M5.5 10.5h13"/><path d="M9 10.5V5"/><path d="M12 10.5V4"/><path d="M15 10.5V5"/></svg>',
+  rice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16"/><path d="M4 12a8 8 0 0 0 16 0"/><path d="m9 8 .8.8"/><path d="m13 6 .8.8"/><path d="m11.5 9.5.8.8"/><path d="m15.5 8.5.8.8"/></svg>',
+  beans: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 5.5a3 3 0 1 1-3.2 4"/><path d="M17.5 8.5a3 3 0 1 1-3.2 4"/><path d="M11.5 14.5a3 3 0 1 1-3.2 4"/></svg>',
+  taquitos: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="15" height="4" rx="2"/><rect x="6" y="13" width="15" height="4" rx="2"/><path d="M6 8h.01"/><path d="M18 15h.01"/></svg>',
+  onion: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8.5c-3.3 0-5.5 2.3-5.5 5.3S9 19.5 12 19.5s5.5-2.7 5.5-5.7S15.3 8.5 12 8.5z"/><path d="M12 8.5c-1.4-1-1.9-2.4-1.4-4"/><path d="M12 8.5c1.4-1 1.9-2.4 1.4-4"/><path d="M9.8 13c0 2.4.8 4.4 2.2 5.6"/></svg>',
+  utensils: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v6a2 2 0 0 0 2 2 2 2 0 0 0 2-2V3"/><path d="M9 11v10"/><path d="M17 3c-1.5 3.5-1.5 6.5 0 8v10"/></svg>',
+  bag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12l-1.3 11.2a1 1 0 0 1-1 .8H8.3a1 1 0 0 1-1-.8z"/><path d="M9 9V7a3 3 0 0 1 6 0v2"/></svg>' 
+};
+
 const PROTEINS = [
-  { id:'asada',      ico:'🐮', price:250, es:'Carne Asada',  en:'Carne Asada' },
-  { id:'pollo',      ico:'🐔', price:219, es:'Pollo Asado',  en:'Grilled Chicken' },
-  { id:'porkbelly',  ico:'🐷', price:230, es:'Porkbelly',    en:'Pork Belly' },
-  { id:'huevo',      ico:'🍳', price:180, es:'Huevo',        en:'Eggs' },
+  { id:'asada',      ico:I.beef, price:250, es:'Carne Asada',  en:'Carne Asada' },
+  { id:'pollo',      ico:I.drumstick, price:219, es:'Pollo Asado',  en:'Grilled Chicken' },
+  { id:'porkbelly',  ico:I.ham, price:230, es:'Porkbelly',    en:'Pork Belly' },
+  { id:'huevo',      ico:I.eggfried, price:180, es:'Huevo',        en:'Eggs' },
   /* chorizo is hidden from the builder grid (v8) — it exists only as the
      Breakfast "¿Con chorizo?" add-on, but stays here so pricing/names resolve.
      If a guest backs into the protein screen with it selected, it shows. */
-  { id:'chorizo',    ico:'🌶️', price:195, es:'Chorizo',      en:'Chorizo', hidden:true },  // placeholder price
-  { id:'portobello', ico:'🍄', price:170, es:'Portobello',   en:'Portobello' },
-  { id:'camaron',    ico:'🦐', price:240, es:'Camarón',      en:'Shrimp' },
-  { id:'pescado',    ico:'🐟', price:265, es:'Pescado',      en:'Baja Fish' },
+  { id:'chorizo',    ico:I.sausage, price:195, es:'Chorizo',      en:'Chorizo', hidden:true },  // placeholder price
+  { id:'portobello', ico:I.mushroom, price:170, es:'Portobello',   en:'Portobello' },
+  { id:'camaron',    ico:I.shrimp, price:240, es:'Camarón',      en:'Shrimp' },
+  { id:'pescado',    ico:I.fish, price:265, es:'Pescado',      en:'Baja Fish' },
 ];
 /* birria & cochinita are NOT builder proteins — they live only as the fixed
    $99 house favorites El Tijuana / Yucatán on the start screen (v6). */
@@ -322,34 +399,34 @@ const STYLES = {
     es:'California Style', en:'California Style',
     subEs:'El clásico de San Diego', subEn:'The San Diego classic',
     ing: [
-      { id:'papas', ico:'🍟', es:'Papas a la francesa', en:'French fries' },
-      { id:'queso', ico:'🧀', es:'Queso',               en:'Cheese' },
-      { id:'guac',  ico:'🥑', es:'Guacamole',           en:'Guacamole' },
-      { id:'pico',  ico:'🍅', es:'Pico de gallo',       en:'Pico de gallo' },
-      { id:'crema', ico:'🥛', es:'Crema',               en:'Sour cream' },
+      { id:'papas', ico:I.fries, es:'Papas a la francesa', en:'French fries' },
+      { id:'queso', ico:I.cheese, es:'Queso',               en:'Cheese' },
+      { id:'guac',  ico:I.avocado, es:'Guacamole',           en:'Guacamole' },
+      { id:'pico',  ico:I.pepper, es:'Pico de gallo',       en:'Pico de gallo' },
+      { id:'crema', ico:I.milk, es:'Crema',               en:'Sour cream' },
     ],
   },
   mission: {
     es:'Mission Style', en:'Mission Style',
     subEs:'Al estilo San Francisco', subEn:'San Francisco style',
     ing: [
-      { id:'arroz',    ico:'🍚', es:'Arroz',         en:'Rice' },
-      { id:'frijoles', ico:'🫘', es:'Frijoles',      en:'Beans' },
-      { id:'queso',    ico:'🧀', es:'Queso',         en:'Cheese' },
-      { id:'guac',     ico:'🥑', es:'Guacamole',     en:'Guacamole' },
-      { id:'pico',     ico:'🍅', es:'Pico de gallo', en:'Pico de gallo' },
-      { id:'crema',    ico:'🥛', es:'Crema',         en:'Sour cream' },
+      { id:'arroz',    ico:I.rice, es:'Arroz',         en:'Rice' },
+      { id:'frijoles', ico:I.beans, es:'Frijoles',      en:'Beans' },
+      { id:'queso',    ico:I.cheese, es:'Queso',         en:'Cheese' },
+      { id:'guac',     ico:I.avocado, es:'Guacamole',     en:'Guacamole' },
+      { id:'pico',     ico:I.pepper, es:'Pico de gallo', en:'Pico de gallo' },
+      { id:'crema',    ico:I.milk, es:'Crema',         en:'Sour cream' },
     ],
   },
   fries: {
     es:'Fries', en:'Fries',
     subEs:'Tu proteína sobre papas — sin tortilla', subEn:'Your protein over fries — no tortilla',
     ing: [
-      { id:'papas',    ico:'🍟', es:'Papas a la francesa',  en:'French fries' },
-      { id:'guac',     ico:'🥑', es:'Guacamole',            en:'Guacamole' },
-      { id:'pico',     ico:'🍅', es:'Pico de gallo',        en:'Pico de gallo' },
-      { id:'crema',    ico:'🥛', es:'Crema',                en:'Sour cream' },
-      { id:'frijoles', ico:'🫘', es:'Frijoles (opcional)',  en:'Beans (optional)' },
+      { id:'papas',    ico:I.fries, es:'Papas a la francesa',  en:'French fries' },
+      { id:'guac',     ico:I.avocado, es:'Guacamole',            en:'Guacamole' },
+      { id:'pico',     ico:I.pepper, es:'Pico de gallo',        en:'Pico de gallo' },
+      { id:'crema',    ico:I.milk, es:'Crema',                en:'Sour cream' },
+      { id:'frijoles', ico:I.beans, es:'Frijoles (opcional)',  en:'Beans (optional)' },
     ],
   },
 };
@@ -376,42 +453,41 @@ function stylePrice(ids, styleKey){
    confirms "Así está bien" or modifies. Price always comes from the same
    protein/combo pricing engine — no separate preset prices to maintain. */
 const PRESETS = [
-  { id:'california',  ico:'🌊', proteins:['asada'],            style:'california', es:'El California',   en:'The California' },
-  { id:'pollos',      ico:'🐔', proteins:['pollo'],            style:'mission',    es:'Pollos Hermanos', en:'Pollos Hermanos' },
+  { id:'california',  ico:I.sun, proteins:['asada'],            style:'california', es:'El California',   en:'The California' },
   /* `ask` = one-tap question after tapping the card: offer a second protein
      (most Breakfast customers add chorizo). Both answers land on style/confirm. */
-  { id:'breakfast',   ico:'🍳', proteins:['huevo'],            style:'california', es:'Breakfast',       en:'Breakfast', ask:{ protein:'chorizo' } },
-  { id:'surfnturf',   ico:'🦐', proteins:['asada','camaron'],  style:'mission',    es:'Surf-N-Turf',     en:'Surf-N-Turf' },
+  { id:'breakfast',   ico:I.eggfried, proteins:['huevo'],            style:'california', es:'Breakfast',       en:'Breakfast', ask:{ protein:'chorizo' } },
   /* Fixed-price house items (not builder-backed): tapping adds straight to the
      order at this price, then flows into "¿Deseas agregar algo?".
      A fixed item with `choice` first asks ONE required either/or question
      (same price either way) — e.g. Rollbertos: birria or cochinita on top. */
-  { id:'tijuana',     ico:'🐂', fixed:true, price:99, es:'Birria',    en:'Birria',    subEs:'Burrito de birria', subEn:'Birria burrito' },
-  { id:'yucatan',     ico:'🐖', fixed:true, price:99, es:'Cochinita', en:'Cochinita', subEs:'Burrito de cochinita pibil', subEn:'Cochinita pibil burrito' },
-  { id:'rollbertos',  ico:'🫔', fixed:true, price:139, es:'Rollbertos', en:'Rollbertos', subEs:'Taquitos dorados de queso', subEn:'Rolled cheese taquitos',
+  { id:'tijuana',     ico:I.soup, fixed:true, price:99, es:'Birria',    en:'Birria',    subEs:'Burrito de birria', subEn:'Birria burrito' },
+  { id:'yucatan',     ico:I.pig, fixed:true, price:99, es:'Cochinita', en:'Cochinita', subEs:'Burrito de cochinita pibil', subEn:'Cochinita pibil burrito' },
+  { id:'rollbertos',  ico:I.taquitos, fixed:true, price:139, es:'Rollbertos', en:'Rollbertos', subEs:'Taquitos dorados de queso', subEn:'Rolled cheese taquitos',
     choice:{ qEs:'¿Con birria o cochinita?', qEn:'Birria or cochinita on top?',
-      options:[ { id:'birria', ico:'🐂', es:'Con birria', en:'With birria' },
-                { id:'cochinita', ico:'🐖', es:'Con cochinita', en:'With cochinita' } ] } },
-  /* Builder-backed like the top four — lands on style/confirm with Fries
-     preselected at the real FRIES_PRICES number ($299). */
-  { id:'asadafries',  ico:'🍟', proteins:['asada'], style:'fries', es:'Carne Asada Fries', en:'Carne Asada Fries' },
+      options:[ { id:'birria', ico:I.soup, es:'Con birria', en:'With birria' },
+                { id:'cochinita', ico:I.pig, es:'Con cochinita', en:'With cochinita' } ] } },
+  /* Drink favorite: adds the beer from DRINKS straight to the order (qty
+     merges with drinks added later), then the add-something upsell. */
+  { id:'cervezafria', ico:I.beer, fixed:true, drinkId:'cerveza', es:'Cerveza Fría', en:'Cold Beer', subEs:'Cerveza mexicana bien fría', subEn:'Ice-cold Mexican beer' },
 ];
 
 const EXTRAS = [
-  { id:'guacx',   ico:'🥑', price:35, es:'Guacamole extra',  en:'Extra guacamole' },  // placeholder price
-  { id:'quesox',  ico:'🧀', price:25, es:'Queso extra',      en:'Extra cheese' },     // placeholder price
-  { id:'cebolla', ico:'🧅', price:20, es:'Cebollita asada',  en:'Grilled onions' },   // placeholder price
+  { id:'guacx',   ico:I.avocado, price:35, es:'Guacamole extra',  en:'Extra guacamole' },  // placeholder price
+  { id:'quesox',  ico:I.cheese, price:25, es:'Queso extra',      en:'Extra cheese' },     // placeholder price
+  { id:'cebolla', ico:I.onion, price:20, es:'Cebollita asada',  en:'Grilled onions' },   // placeholder price
+  { id:'chorizoex', ico:I.sausage, price:35, es:'Chorizo extra',   en:'Extra chorizo' },
 ];
 const SIDES = [
-  { id:'papas',   ico:'🍟', price:96,  es:'Orden de Papas',    en:'Fries' },
-  { id:'brownie', ico:'🍫', price:53,  es:'Brownie con crema', en:'Brownie & cream' },
+  { id:'papas',   ico:I.fries, price:96,  es:'Orden de Papas',    en:'Fries' },
+  { id:'brownie', ico:I.cookie, price:53,  es:'Brownie con crema', en:'Brownie & cream' },
 ];
 const DRINKS = [
-  { id:'agua',      ico:'🧊', price:60, es:'Agua Fresca',        en:'Agua Fresca' },
-  { id:'refresco',  ico:'🥤', price:44, es:'Refresco',           en:'Soda' },
-  { id:'cafe',      ico:'☕', price:39, es:'Café',               en:'Coffee' },
-  { id:'cerveza',   ico:'🍺', price:57, es:'Cerveza',            en:'Beer' },
-  { id:'michelada', ico:'🍻', price:87, es:'Michelada',          en:'Michelada' },
+  { id:'agua',      ico:I.bottle, price:60, es:'Agua Fresca',        en:'Agua Fresca' },
+  { id:'refresco',  ico:I.cupsoda, price:44, es:'Refresco',           en:'Soda' },
+  { id:'cafe',      ico:I.coffee, price:39, es:'Café',               en:'Coffee' },
+  { id:'cerveza',   ico:I.beer, price:57, es:'Cerveza',            en:'Beer' },
+  { id:'michelada', ico:I.cocktail, price:87, es:'Michelada',          en:'Michelada' },
 ];
 
 /* Loyalty join QR (placeholder URL — prod mints a loyalty_join JWT per order) */
@@ -441,6 +517,8 @@ const T = {
     burrito:'Burrito', added:'¡Agregado!',
     emptyCart:'Tu orden está vacía',
     payStub:'Aquí seguiría el flujo de pago existente (tarjeta / efectivo)',
+    fulfillK:'Tu orden', fulfillQ:'¿Para aquí o para llevar?',
+    forHere:'Para aquí', toGo:'Para llevar',
     nameK:'Último paso', namePrompt:'¿A qué nombre llamamos tu orden?',
     nameHint:'Con este nombre te llamaremos cuando esté lista',
     space:'ESPACIO', payN:'Confirmar y pagar', processing:'Procesando pago…',
@@ -472,6 +550,8 @@ const T = {
     burrito:'Burrito', added:'Added!',
     emptyCart:'Your order is empty',
     payStub:'The existing payment flow (card / cash) would continue here',
+    fulfillK:'Your order', fulfillQ:'For here or to go?',
+    forHere:'For here', toGo:'To go',
     nameK:'Last step', namePrompt:'What name should we call out?',
     nameHint:'We’ll call this name when your order is ready',
     space:'SPACE', payN:'Confirm & pay', processing:'Processing payment…',
@@ -490,6 +570,7 @@ let draft = null;                  // { proteins, style, removed:Set, extras:{} 
 let cart = [];                     // committed burritos + loose items
 let editIndex = null;              // when editing an existing cart line
 let customerName = '';             // call-out name, captured before payment
+let fulfillment = null;            // 'here' | 'togo' — asked at the END, right before name/pay
 
 const $ = (s) => document.querySelector(s);
 const t = (k) => T[lang][k];
@@ -527,7 +608,7 @@ function looseAdd(item, kind){
 function render(){
   const app = $('#app');
   app.innerHTML = '';
-  const fn = { attract:rAttract, protein:rProtein, style:rStyle, modify:rModify, addons:rAddons, summary:rSummary, name:rName, done:rDone }[screen];
+  const fn = { attract:rAttract, protein:rProtein, style:rStyle, modify:rModify, addons:rAddons, summary:rSummary, fulfill:rFulfill, name:rName, done:rDone }[screen];
   fn(app);
 }
 
@@ -584,12 +665,12 @@ function rAttract(app){
           <span class="sb">${p.fixed
             ? (lang === 'es' ? p.subEs : p.subEn)
             : p.proteins.map(id => name(PROTEINS.find(x => x.id === id))).join(' + ') + ' · ' + styleName(p.style).replace(' Style','')}</span>
-          <span class="pr">${mxn(p.fixed ? p.price : stylePrice(p.proteins, p.style))}</span>
+          <span class="pr">${mxn(p.drinkId ? DRINKS.find(x => x.id === p.drinkId).price : p.fixed ? p.price : stylePrice(p.proteins, p.style))}</span>
         </button>`).join('')}
     </div>
     <div class="or-div">${lang === 'es' ? 'o' : 'or'}</div>
-    <button class="btn primary big" id="go">🌯 ${t('start')}<br><small>${t('startSub')}</small></button>
-    <button class="btn outline side" id="dr">🥤 ${t('drinksJump')}</button>
+    <button class="btn primary big" id="go"><span class="oic">${I.burrito}</span> ${t('start')}<br><small>${t('startSub')}</small></button>
+    <button class="btn outline side" id="dr"><span class="oic">${I.cupsoda}</span> ${t('drinksJump')}</button>
     <button class="chip" id="lg">${lang === 'es' ? 'English' : 'Español'}</button>`;
   app.appendChild(d);
   d.querySelectorAll('.preset').forEach(el => {
@@ -597,6 +678,12 @@ function rAttract(app){
       const p = PRESETS.find(x => x.id === el.dataset.p);
       if (p.fixed){
         if (p.choice){ showFixedChoice(d, p); return; }
+        if (p.drinkId){
+          looseAdd(DRINKS.find(x => x.id === p.drinkId), 'drink');
+          draft = null; editIndex = null;
+          go('addons_only');
+          return;
+        }
         // Fixed house item: straight to the order, then the add-something upsell.
         looseAdd(p, 'preset');
         draft = null; editIndex = null;
@@ -717,14 +804,14 @@ function rProtein(app){
 function rStyle(app){
   const main = chrome(app, { kicker:t('stepStyleK'), title:t('stepStyle'), step:2, backTo:'protein' });
   const wrap = document.createElement('div'); wrap.className = 'style-wrap';
-  const icons = { california:'🌊', mission:'🌉', fries:'🍟' };
+  const icons = { california:`<span class="oic">${I.sun}</span>`, mission:`<span class="oic">${I.landmark}</span>`, fries:`<span class="oic">${I.fries}</span>` };
   for (const key of Object.keys(STYLES)){
     const s = STYLES[key];
     const price = stylePrice(draft.proteins, key);
     const isBurrito = key !== 'fries';
     const badge = isBurrito
-      ? `<span class="style-badge burrito">🌯 Burrito</span>`
-      : `<span class="style-badge nob">${lang === 'es' ? '🍟 Solo papas · NO es burrito' : '🍟 Just fries · NOT a burrito'}</span>`;
+      ? `<span class="style-badge burrito"><span class="oic">${I.burrito}</span> Burrito</span>`
+      : `<span class="style-badge nob">${lang === 'es' ? `<span class="oic">${I.fries}</span> Solo papas · NO es burrito` : `<span class="oic">${I.fries}</span> Just fries · NOT a burrito`}</span>`;
     const c = document.createElement('button');
     c.className = 'style-card' + (draft.style === key ? ' on' : '');
     c.innerHTML = `
@@ -836,7 +923,7 @@ function rSummary(app){
         const e = EXTRAS.find(x => x.id === id); return e ? `+ ${name(e)}${q > 1 ? ' ×' + q : ''}` : '';
       }).filter(Boolean);
       d.innerHTML = `
-        <div class="top"><b>${line.style === 'fries' ? '🍟 ' + protNames + ' Fries' : '🌯 ' + t('burrito') + ' ' + protNames + ' · ' + name(st)}</b><span>${mxn(draftPrice(line))}</span></div>
+        <div class="top"><b>${line.style === 'fries' ? '<span class="oic">' + I.fries + '</span> ' + protNames + ' Fries' : '<span class="oic">' + I.burrito + '</span> ' + t('burrito') + ' ' + protNames + ' · ' + name(st)}</b><span>${mxn(draftPrice(line))}</span></div>
         ${removed.length || extras.length ? `<p class="mods">${[...removed, ...extras].join(' · ')}</p>` : ''}
         <div class="rowbtns">
           <button class="mini" data-e="${i}">${t('edit')}</button>
@@ -873,11 +960,30 @@ function rSummary(app){
     { html:t('anotherBurrito'), cls:'ghost', on:() => { newDraft(); editIndex = null; go('protein'); } },
     { html:t('addMore'), cls:'ghost', on:() => { draft = null; go('addons'); } },
     { html:`<span>${t('pay')}</span><small>${mxn(cartTotal())}</small>`, cls:'primary', split:true, disabled:!cart.length,
-      on:() => go('name') },
+      on:() => go('fulfill') },
   ]);
 }
 
-/* 6 · Name (before payment — the call-out name) */
+/* 6 · Fulfillment (end of flow, per Juan: commitment questions come LAST) */
+function rFulfill(app){
+  const main = chrome(app, { kicker:t('fulfillK'), title:t('fulfillQ'), step:0, backTo:'summary' });
+  const wrap = document.createElement('div');
+  wrap.className = 'fulfill-grid';
+  const opts = [
+    { key:'here', ico:I.utensils, label:t('forHere') },
+    { key:'togo', ico:I.bag,      label:t('toGo') },
+  ];
+  for (const o of opts){
+    const c = document.createElement('button');
+    c.className = 'card fulfill-card' + (fulfillment === o.key ? ' on' : '');
+    c.innerHTML = `<span class="ico">${o.ico}</span><span class="nm">${o.label}</span>`;
+    c.onclick = () => { fulfillment = o.key; go('name'); };
+    wrap.appendChild(c);
+  }
+  main.appendChild(wrap);
+}
+
+/* 7 · Name (before payment — the call-out name) */
 function rName(app){
   const main = chrome(app, { kicker:t('nameK'), title:t('namePrompt'), step:0, backTo:'summary' });
   const wrap = document.createElement('div'); wrap.className = 'name-wrap';
@@ -911,24 +1017,24 @@ function rName(app){
   }]);
 }
 
-/* 7 · Done (after payment — call-out + loyalty QR) */
+/* 8 · Done (after payment — call-out + loyalty QR) */
 function rDone(app){
-  const d = document.createElement('div'); d.className = 'done fade';
+  const d = document.createElement('div'); d.className = 'thanks fade';
   d.innerHTML = `
     <div class="check">✓</div>
     <h1>${t('doneTitle').replace('{n}', customerName.trim())}</h1>
-    <p class="call">📣 ${t('doneBody')}</p>
+    <p class="call"><span class="oic">${I.megaphone}</span> ${t('doneBody')}</p>
     <div class="loyalty-card">
       <div class="qr">${QR_SVG}</div>
       <div>
-        <h3>⭐ ${t('loyaltyTitle')}</h3>
+        <h3><span class="oic">${I.star}</span> ${t('loyaltyTitle')}</h3>
         <p>${t('loyaltyBody')}</p>
       </div>
     </div>
     <button class="btn ghost" id="newOrder" style="max-width:520px">${t('newOrder')}</button>`;
   app.appendChild(d);
   $('#newOrder').onclick = () => {
-    cart = []; draft = null; customerName = ''; editIndex = null;
+    cart = []; draft = null; customerName = ''; fulfillment = null; editIndex = null;
     go('attract');
   };
 }

@@ -45,16 +45,19 @@ export function proteinLabel(slug: string, en: boolean): string {
   return l ? (en ? l.en : l.es) : slug;
 }
 
-/** Attract-screen favoritos → glyph. Mirrors prototype PRESETS[].ico. */
+/**
+ * Attract-screen favoritos → glyph. Mirrors prototype PRESETS[].ico (v15).
+ *
+ * v15 dropped Pollos Hermanos, Surf-N-Turf and Carne Asada Fries from the
+ * roster and added Cerveza Fría, so the grid is exactly six cards.
+ */
 export const PRESET_ICON: Record<string, BuilderIconName> = {
   california: 'sun',
-  pollos: 'drumstick',
   breakfast: 'eggfried',
-  surfnturf: 'shrimp',
   birria: 'soup',
   cochinita: 'pig',
   rollbertos: 'taquitos',
-  asadafries: 'fries',
+  cervezafria: 'beer',
 };
 
 /**

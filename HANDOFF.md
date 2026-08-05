@@ -7,6 +7,46 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-08-05 — Claude Code — **Kiosk wizard v15 parity SHIPPED (1.14.0)**
+
+The v15 pass over the wizard, per the rewritten `design/kiosk-builder-parity-spec.md`
+(prototype v15 is normative). What changed on top of the shipped v12:
+
+- **D11 — nothing before the order.** Attract → straight into the wizard. The
+  commitment questions moved to the END: cart → ¿para aquí/para llevar?
+  (`KioskFulfillmentScreen` wizard variant) → call-out name (`KioskCallNameScreen`,
+  new, full-screen keyboard — this is where the order is actually created) →
+  pay → thanks+QR. `/identify` is out of the wizard path entirely; grid mode
+  untouched.
+- **Wizard summary** (`KioskWizardSummaryScreen`, new) replaces the grid cart at
+  `/cart` for wizard devices only (`CartRoute` branch in `App.tsx`). "Editar"
+  decodes a committed line back into a draft (`decodeDraft` in `builderPricing.ts`,
+  round-trip tested) and replaces one unit on finish — abandoning the edit leaves
+  the cart intact.
+- **D7 reverted to prototype**: builder favoritos land on Estilo pre-selected
+  again (v12's skip-to-agregar deviation is gone, per "the prototype wins").
+- **Favoritos roster v15**: Pollos Hermanos, Surf-N-Turf, Carne Asada Fries out;
+  Cerveza Fría in (kind:'drink', resolves against curated drinks, card drops out
+  if no beer is seeded). Six cards, 3×2.
+- **Portrait media block** (`min-height:900px` arbitrary variants) so the attract
+  fills the Samsung's full height.
+
+Browser acceptance vs prototype v15 ran clean (spec items 1–6, 8b flow order,
+modificar path, Editar round-trip; grid-mode invariance verified by diff — every
+new branch gates on `kioskMode === 'wizard'`). Item 8 (portrait fill) verified on
+the Samsung at APK install. Known cosmetic pre-existing issue: attract title
+renders "Juanberto's'S" because tenant_name already ends in 's — decide whether
+the 'S suffix should drop when the name ends in "'s".
+
+Still open (unchanged from the 07-31 entry): builder items 8982–8991 have no
+`menu_item_ingredients` rows (no inventory deduction, $0 food cost); wizard
+orders skip loyalty stamp accrual during the pilot (post-payment QR is the
+touchpoint). Held for a follow-up release, still uncommitted in the tree: CFDI
+error taxonomy, credential guards, webhook-rejection sentinel + uber-direct
+audit rows, thermal receipt QR print fix (ReceiptModal + print CSS).
+
+---
+
 ## 2026-08-05 — Claude Code — **Two-stage inventory P3: end-of-day counts, portion variance, plate cost. Spec complete.**
 
 Last phase of `PORTION_INVENTORY_SPEC.md`. Still dark — everything is behind
@@ -57,7 +97,6 @@ log one prep run → confirm cost/portion looks sane → repoint a couple of
 recipes → then let it gate the menu.
 
 ---
-
 
 ## 2026-08-04 — Claude Code — **Two-stage inventory P2: sales consume portions, menu auto-86s**
 
@@ -126,7 +165,6 @@ guard semantics.
 the menu screen, yield trends).
 
 ---
-
 
 ## 2026-08-03 — Claude Code — **Two-stage inventory P1 landed in the tree (NOT pushed)**
 
@@ -198,6 +236,56 @@ by the `useAISuggestions` stub and still inert.
 
 ---
 
+## 2026-08-03 — Claude Code — Kiosk stale modifier-map fix (committed)
+
+Store kiosk showed the new Rollbertos items (9006/9007) but skipped their
+options modal: the menu refetches on every menu-screen mount, but the modifier
+map was fetched once per app boot, so items added after boot had no map entry
+and tapped straight into the cart. Fixed in `kiosk/src/context/
+KioskSuggestionsContext.tsx` (adds `refresh()`, keeps last-known-good map on
+fetch failure) + `kiosk/src/screens/KioskMenuScreen.tsx` (calls refresh on
+mount). Samsung APK needs `npm run android:install` after this deploys.
+
+Resolved: duplicate item 8981 "Rollberto's" (category "otros", zero modifier
+groups) deactivated in prod at Juan's request.
+
+## 2026-07-31 (night) — Claude Code — **TRAP: multer drops tenant AsyncLocalStorage → silent RLS bypass**
+
+Read this before adding any upload route that writes to the DB.
+
+multer consumes the request *stream*, and stream events fire in the connection's
+async context — created when the socket was accepted, long before
+tenantMiddleware's `tenantContext.run()`. ALS is empty once `upload.single()`
+calls back. Two consequences:
+
+- `getTenantId()` → null → NOT NULL violation on any tenant-scoped INSERT.
+- `getConn()` falls back to **adminSql**, so every later query runs with **RLS
+  bypassed**. In `/api/inventory-scan` this sent another tenant's inventory item
+  names into a Claude prompt (71 items across 2 tenants instead of 56). Shipped
+  in 1.6.0, fixed in 1.8.1 (`dcd103d`).
+
+**Fix pattern** (see `captureTenantContext` / `restoreTenantContext` in
+`server/routes/inventory-scan.js`): snapshot `tenantContext.getStore()` before
+multer, `tenantContext.run(store, next)` after. Re-enter the SAME store — the
+connection and its BEGIN belong to tenantMiddleware; do not nest a transaction.
+Add a `getTenantId()` guard before any expensive work so a lost context fails
+loudly instead of reading cross-tenant.
+
+**`expenses.js` is safe only by accident** — its multer routes don't touch the DB
+after upload. Any new write there inherits the bug.
+
+**Testing gotcha:** payload size is the variable. A few bytes are consumed in one
+synchronous pass and ALS survives by luck, so a small-buffer test passes even
+with the fix reverted (mine did). Use ~3MB, and verify by reverting the fix and
+watching the test fail.
+
+Open item: the vision path itself is still unproven on real MX paperwork — Juan
+is testing scans today. If parses come back poor, the lever is moving
+`receipt_vision` off the `fast` tier in `server/lib/aiModels.js` (Haiku 4.5 caps
+images at 1568px; a high-res model reads small labels and handwriting far
+better, ~3x cost).
+
+---
 
 ## 2026-07-31 (Kiosk wizard — SHIPPED to prod, Samsung on 1.7.0+4bfcd9f) — Claude Code
 

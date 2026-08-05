@@ -185,16 +185,15 @@
     "withCochinita": "With cochinita",
     "presets": {
       "california": "The California",
-      "pollos": "Pollos Hermanos",
       "breakfast": "Breakfast",
-      "surfnturf": "Surf-N-Turf",
       "birria": "Birria",
       "birriaSub": "Birria burrito",
       "cochinita": "Cochinita",
       "cochinitaSub": "Cochinita pibil burrito",
       "rollbertos": "Rollbertos",
       "rollbertosSub": "Rolled cheese taquitos",
-      "asadafries": "Carne Asada Fries"
+      "cervezafria": "Cold Beer",
+      "cervezafriaSub": "Ice-cold Mexican beer"
     }
   },
   "wizard": {
@@ -230,6 +229,28 @@
     "added": "Added!",
     "badgeBurrito": "Burrito",
     "badgeNotBurrito": "Just fries · NOT a burrito",
-    "viewCart": "View cart"
+    "viewCart": "View cart",
+    "yourOrder": "Your order",
+    "orderK": "Summary",
+    "anotherBurrito": "+ Add another burrito",
+    "addMore": "+ Drinks & sides",
+    "pay": "Pay",
+    "edit": "Edit",
+    "remove": "Remove",
+    "emptyCart": "Your order is empty",
+    "fulfillK": "Your order",
+    "fulfillQ": "For here or to go?",
+    "forHere": "For here",
+    "toGo": "To go",
+    "nameK": "Last step",
+    "namePrompt": "What name should we call out?",
+    "nameHint": "We’ll call this name when your order is ready",
+    "space": "SPACE",
+    "payN": "Confirm & pay",
+    "processing": "Processing payment…",
+    "doneTitle": "All set, {{n}}!",
+    "doneBody": "Listen for your name — we’ll call you when your order is ready.",
+    "loyaltyTitle": "Earn points with this order",
+    "loyaltyBody": "Scan the QR to join Juanberto’s loyalty: stamps with every purchase and a free burrito."
   }
 }
