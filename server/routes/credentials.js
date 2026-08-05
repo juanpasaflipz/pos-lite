@@ -129,6 +129,28 @@ for (const [service, cfg] of Object.entries(SERVICE_SCHEMA)) {
 }
 
 /**
+ * Return the first secret-typed key in `body` whose value is a URL, or null.
+ *
+ * A URL in a secret field is always a paste error, and a silent one: the
+ * credential stores fine and only fails later, off-request, as an upstream
+ * rejection nobody is watching. Juanberto's Uber Direct signing key held the
+ * webhook URL — every inbound webhook 403'd on an HMAC computed over
+ * "https://…/webhook" and the delivery record froze at 'pending' while the
+ * courier delivered normally. No secret in SERVICE_SCHEMA is a URL, so
+ * refusing one costs nothing.
+ */
+export function findUrlInSecretField(service, body) {
+  const secretKeys = SECRET_KEYS[service];
+  if (!secretKeys) return null;
+  for (const [key, value] of Object.entries(body || {})) {
+    if (secretKeys.has(key) && /^https?:\/\//i.test(String(value).trim())) {
+      return key;
+    }
+  }
+  return null;
+}
+
+/**
  * Mask a secret value, showing only the last 4 characters.
  */
 function maskValue(value) {
@@ -193,6 +215,15 @@ router.put('/:service', requireOwner, async (req, res) => {
       if (!validKeys.has(key)) {
         return res.status(400).json({ error: `Invalid key "${key}" for service "${service}"` });
       }
+    }
+
+    const urlInSecret = findUrlInSecretField(service, body);
+    if (urlInSecret) {
+      return res.status(400).json({
+        error: `"${urlInSecret}" looks like a URL, not a secret. Paste the signing/secret value from the provider, not the endpoint address.`,
+        code: 'url_in_secret_field',
+        field: urlInSecret,
+      });
     }
 
     // Process each key
