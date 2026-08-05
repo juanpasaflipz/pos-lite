@@ -216,7 +216,10 @@ CREATE TABLE IF NOT EXISTS inventory_items (
   kind TEXT NOT NULL DEFAULT 'raw' CHECK (kind IN ('raw', 'component')),
   low_threshold_portions NUMERIC(10,2),
   auto_86 BOOLEAN NOT NULL DEFAULT true,
-  sold_out_manual BOOLEAN NOT NULL DEFAULT false
+  sold_out_manual BOOLEAN NOT NULL DEFAULT false,
+  -- Perishable: the end-of-day count offers a one-tap discard instead of
+  -- carrying it over (migration 0104).
+  discard_on_close BOOLEAN NOT NULL DEFAULT false
 );
 
 CREATE TABLE IF NOT EXISTS menu_item_ingredients (

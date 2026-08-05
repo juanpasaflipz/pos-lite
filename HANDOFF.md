@@ -7,6 +7,58 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-08-05 — Claude Code — **Two-stage inventory P3: end-of-day counts, portion variance, plate cost. Spec complete.**
+
+Last phase of `PORTION_INVENTORY_SPEC.md`. Still dark — everything is behind
+`tenants.inventory_mode = 'two_stage'` and no tenant is on it.
+
+**The change that matters: a component count no longer OVERWRITES the number.**
+`POST /inventory/:id/count` used to set `quantity = counted` and throw the
+difference away, which is precisely why the old variance report never told
+anyone anything — the count silently absorbed whatever went missing. For
+components on a two-stage tenant it now posts the difference as a
+`count_adjust` ledger row, and **that row is the shrinkage** the new
+portion-variance report reads. Raw items and ingredients-mode tenants keep the
+old overwrite behavior byte-for-byte; there's a test for each.
+
+**New endpoints**
+- `GET /inventory/eod-summary` — per component: carryover, produced, sold,
+  waste, expected vs current, for the tenant's business day. Carryover is
+  derived by unwinding today's ledger from the current quantity, so there's no
+  opening-balance table to keep in sync.
+- `POST /inventory/:id/discard-close` — bins what's left of a perishable under
+  reason `carryover_discard`. Deliberately NOT `waste`: a planned nightly
+  discard and a dropped tray are different stories and the variance report has
+  to tell them apart.
+- `GET /inventory/portion-variance` — per component per day, `count_adjust` as
+  the variance with the accounted movement beside it.
+- `GET /prep-runs/yield-trends?component_id=` — portions per unit of raw, run
+  over run. Runs with mixed-unit inputs report cost/portion but **no** yield:
+  "42 portions from 10 kg + 2 pieces" is not a ratio anyone can read.
+
+**Migration 0104** adds `inventory_items.discard_on_close` (default false).
+Applied to the test branch; prod applies at next boot.
+
+**UI:** new Cierre tab (two-stage only) showing the arithmetic behind each
+expected number, a count input that posts the delta, and one-tap Tirar for
+perishables, with recent shortfalls listed underneath. Plate cost + margin now
+render on the menu-management item cards from `/menu/recipes/summary` — no
+server change needed, because a component's `cost_price` already means "cost
+per portion" thanks to P1's prep-run costing.
+
+**One trap worth knowing:** `applyStockDelta` returns a single object while
+`applyStockDeltas` returns an array. I array-destructured the singular form and
+got a 500 that only the test caught. Check which one you're calling.
+
+**Spec status: P1/P2/P3 all built.** What's left is not code — it's flipping a
+tenant to `two_stage`, creating components, wiring recipes to point at them,
+and watching a real service. Suggested first pilot order: create components →
+log one prep run → confirm cost/portion looks sane → repoint a couple of
+recipes → then let it gate the menu.
+
+---
+
+
 ## 2026-08-04 — Claude Code — **Two-stage inventory P2: sales consume portions, menu auto-86s**
 
 Builds on P1 (shipped 1.11.0). Still dark for everyone: all of this is behind

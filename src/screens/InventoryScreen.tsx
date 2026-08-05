@@ -14,6 +14,7 @@ import {
   AlertOctagon,
   ImagePlus,
   ChefHat,
+  Moon,
 } from 'lucide-react';
 import {
   getInventory,
@@ -74,9 +75,10 @@ import StaleStockPanel from '../components/inventory/StaleStockPanel';
 import ShelfLifeAuditBanner from '../components/inventory/ShelfLifeAuditBanner';
 import InventoryResetModal from '../components/inventory/InventoryResetModal';
 import ProduccionTab from '../components/inventory/ProduccionTab';
+import CierreTab from '../components/inventory/CierreTab';
 import { useInventoryMode } from '../hooks/useInventoryMode';
 
-type Tab = 'stock' | 'produccion' | 'scan' | 'waste' | 'count' | 'variance' | 'alerts' | 'insights';
+type Tab = 'stock' | 'produccion' | 'cierre' | 'scan' | 'waste' | 'count' | 'variance' | 'alerts' | 'insights';
 type SortField = 'name' | 'quantity' | 'status';
 type InventoryItemForm = {
   name: string;
@@ -799,7 +801,10 @@ export default function InventoryScreen() {
     // Producción only exists for two-stage tenants — there is nothing to log
     // when raw stock IS the sellable stock.
     ...(isTwoStage
-      ? [{ key: 'produccion' as Tab, label: t('inventory.tabs.produccion'), icon: <ChefHat size={18} /> }]
+      ? [
+          { key: 'produccion' as Tab, label: t('inventory.tabs.produccion'), icon: <ChefHat size={18} /> },
+          { key: 'cierre' as Tab, label: t('inventory.tabs.cierre'), icon: <Moon size={18} /> },
+        ]
       : []),
     { key: 'scan', label: t('inventory.tabs.scan'), icon: <ScanLine size={18} /> },
     { key: 'waste', label: t('inventory.tabs.waste'), icon: <Trash2 size={18} /> },
@@ -1049,6 +1054,8 @@ export default function InventoryScreen() {
         {activeTab === 'produccion' && (
           <ProduccionTab items={items} onStockChanged={fetchItems} />
         )}
+
+        {activeTab === 'cierre' && <CierreTab onStockChanged={fetchItems} />}
 
         {activeTab === 'insights' && (
           <AIInsightsTab

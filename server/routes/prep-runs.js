@@ -347,6 +347,74 @@ router.get('/', requireAuth(), async (req, res) => {
   }
 });
 
+// GET /api/prep-runs/yield-trends?component_id=&limit=
+//
+// How much a component actually yields per unit of raw, run over run. This is
+// the number that catches a supplier quietly sending fattier arrachera, or a
+// new cook over-trimming: "la del martes rindió 38, hoy 42".
+//
+// Yield is only comparable when the inputs share a unit — 42 portions from
+// "10 kg + 2 pieces" is not a ratio anyone can read — so runs with mixed input
+// units report their cost per portion but no yield figure.
+router.get('/yield-trends', requireAuth(), requireTwoStage(), async (req, res) => {
+  try {
+    const componentId = Number(req.query.component_id);
+    if (!Number.isInteger(componentId) || componentId <= 0) {
+      return res.status(400).json({ error: 'component_id is required' });
+    }
+    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
+
+    const runs = await all(
+      `SELECT pr.id,
+              pr.prepped_at,
+              pro.portions::float8 AS portions,
+              COUNT(DISTINCT ii.unit) AS input_units,
+              MIN(ii.unit) AS input_unit,
+              COALESCE(SUM(pri.quantity), 0)::float8 AS input_quantity,
+              COALESCE(SUM(pri.quantity * COALESCE(pri.cost_at_time, 0)), 0)::float8 AS input_cost
+         FROM prep_run_outputs pro
+         JOIN prep_runs pr ON pr.id = pro.prep_run_id
+         LEFT JOIN prep_run_inputs pri ON pri.prep_run_id = pr.id
+         LEFT JOIN inventory_items ii ON ii.id = pri.inventory_item_id
+        WHERE pro.inventory_item_id = $1
+        GROUP BY pr.id, pr.prepped_at, pro.portions
+        ORDER BY pr.prepped_at DESC, pr.id DESC
+        LIMIT $2`,
+      [componentId, limit]
+    );
+
+    const points = runs.map((r) => {
+      const portions = Number(r.portions) || 0;
+      const inputQty = Number(r.input_quantity) || 0;
+      const inputCost = Number(r.input_cost) || 0;
+      const comparable = Number(r.input_units) === 1 && inputQty > 0;
+      return {
+        prep_run_id: Number(r.id),
+        prepped_at: r.prepped_at,
+        portions,
+        input_quantity: inputQty,
+        input_unit: comparable ? r.input_unit : null,
+        yield_per_unit: comparable ? Math.round((portions / inputQty) * 100) / 100 : null,
+        cost_per_portion: portions > 0 && inputCost > 0
+          ? Math.round((inputCost / portions) * 10000) / 10000
+          : null,
+      };
+    });
+
+    const yields = points.map((p) => p.yield_per_unit).filter((y) => y != null);
+    res.json({
+      inventory_item_id: componentId,
+      points, // newest first
+      average_yield: yields.length
+        ? Math.round((yields.reduce((a, b) => a + b, 0) / yields.length) * 100) / 100
+        : null,
+    });
+  } catch (error) {
+    console.error('[PrepRuns] yield trends failed:', error.message);
+    res.status(500).json({ error: 'Failed to build yield trends' });
+  }
+});
+
 // POST /api/prep-runs/:id/corrections — adjust a run after the fact.
 //
 // History is never mutated: the original prep_run_inputs/outputs rows stand and

@@ -241,6 +241,48 @@ export interface InventoryItem {
 export type InventoryKind = 'raw' | 'component';
 export type InventoryMode = 'ingredients' | 'two_stage';
 
+/* End-of-day: what the line should have vs. what the kitchen counts. */
+export interface EodComponent {
+  inventory_item_id: number;
+  name: string;
+  unit: string | null;
+  carryover: number;
+  produced: number;
+  sold: number;
+  waste: number;
+  returned: number;
+  adjusted: number;
+  discarded: number;
+  expected: number;
+  current: number;
+  discard_on_close: boolean;
+  sold_out_manual: boolean;
+}
+
+export interface PortionVarianceRow {
+  business_date: string;
+  inventory_item_id: number;
+  name: string;
+  unit: string | null;
+  produced: number;
+  sold: number;
+  waste: number;
+  discarded: number;
+  /** The count_adjust total — negative means portions went missing. */
+  variance: number;
+}
+
+export interface YieldPoint {
+  prep_run_id: number;
+  prepped_at: string;
+  portions: number;
+  input_quantity: number;
+  input_unit: string | null;
+  /** Portions per unit of raw. Null when inputs are absent or mixed-unit. */
+  yield_per_unit: number | null;
+  cost_per_portion: number | null;
+}
+
 /* Producción — the prep run that turns raw stock into sellable portions. */
 export interface PrepRunLine {
   inventory_item_id: number;

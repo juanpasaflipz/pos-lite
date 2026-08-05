@@ -9,7 +9,8 @@
       "variance": "Variance",
       "alerts": "Alerts",
       "insights": "AI Insights",
-      "produccion": "Production"
+      "produccion": "Production",
+      "cierre": "Close"
     },
     "search": "Search items...",
     "allCategories": "All Categories",
@@ -957,5 +958,23 @@
     "correctedBy": "Corrected: {{delta}}",
     "noComponentsTitle": "No portions set up yet",
     "noComponentsHint": "Create items of type “Portions” in Stock to start logging production."
+  },
+  "cierre": {
+    "loadFailed": "Could not load the close sheet",
+    "countFailed": "Could not save the count",
+    "discardFailed": "Could not discard",
+    "noComponents": "Nothing to count",
+    "noComponentsHint": "Create portions in Stock and log production to use the close sheet.",
+    "expected": "Should be left",
+    "actual": "Actual",
+    "save": "Save",
+    "discard": "Bin it",
+    "breakdown": "{{carryover}} at open · +{{produced}} made · −{{sold}} sold · −{{waste}} waste",
+    "confirmDiscard": "Bin the {{n}} portions left of {{name}}?",
+    "recentVariance": "Recent shortfalls",
+    "missing": "{{n}} missing"
+  },
+  "items": {
+    "plateCost": "Costs {{cost}} · {{margin}}% margin"
   }
 }

@@ -9,7 +9,8 @@
       "variance": "Varianza",
       "alerts": "Alertas",
       "insights": "IA Insights",
-      "produccion": "Producción"
+      "produccion": "Producción",
+      "cierre": "Cierre"
     },
     "search": "Buscar productos...",
     "allCategories": "Todas las Categorías",
@@ -957,5 +958,23 @@
     "correctedBy": "Corregido: {{delta}}",
     "noComponentsTitle": "Aún no hay porciones configuradas",
     "noComponentsHint": "Crea artículos de tipo «Porciones» en Stock para poder registrar producción."
+  },
+  "cierre": {
+    "loadFailed": "No se pudo cargar el cierre",
+    "countFailed": "No se pudo guardar el conteo",
+    "discardFailed": "No se pudo descartar",
+    "noComponents": "Nada que contar",
+    "noComponentsHint": "Crea porciones en Stock y registra producción para usar el cierre.",
+    "expected": "Deberían quedar",
+    "actual": "Real",
+    "save": "Guardar",
+    "discard": "Tirar",
+    "breakdown": "{{carryover}} al abrir · +{{produced}} producidas · −{{sold}} vendidas · −{{waste}} merma",
+    "confirmDiscard": "¿Tirar las {{n}} porciones que quedan de {{name}}?",
+    "recentVariance": "Faltantes recientes",
+    "missing": "faltan {{n}}"
+  },
+  "items": {
+    "plateCost": "Cuesta {{cost}} · margen {{margin}}%"
   }
 }

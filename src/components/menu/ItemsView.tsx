@@ -19,6 +19,8 @@ interface ItemsViewProps {
   onToggleItem: (id: number) => void;
   onSwitchToCategories: () => void;
   getCategoryName: (id: number | null) => string;
+  /** menu_item_id → plate cost from its recipe. Absent = no recipe wired. */
+  plateCosts?: Map<number, number>;
 }
 
 export default function ItemsView({
@@ -34,6 +36,7 @@ export default function ItemsView({
   onToggleItem,
   onSwitchToCategories,
   getCategoryName,
+  plateCosts,
 }: ItemsViewProps) {
   const { t } = useTranslation('inventory');
   const displayedItems = itemSubTab === 'live' ? liveItems : preMenuItems;
@@ -146,6 +149,23 @@ export default function ItemsView({
                   <p className="text-2xl font-bold text-brand-500">
                     {formatPrice(item.price)}
                   </p>
+                  {/* What the plate costs to build, from its recipe. Margin is
+                      the number owners actually price against, and it was
+                      already being computed in the recipe editor — this just
+                      puts it where the menu is edited. */}
+                  {(() => {
+                    const cost = plateCosts?.get(item.id);
+                    if (cost == null || cost <= 0 || !item.price) return null;
+                    const marginPct = Math.round(((item.price - cost) / item.price) * 100);
+                    return (
+                      <p className="text-xs text-neutral-400 mt-0.5">
+                        {t('items.plateCost', {
+                          cost: formatPrice(cost),
+                          margin: marginPct,
+                        })}
+                      </p>
+                    );
+                  })()}
                   {item.description && (
                     <p className="text-sm text-neutral-400 mt-1">
                       {item.description}

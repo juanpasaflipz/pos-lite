@@ -9,6 +9,8 @@ import {
   InventoryStillReferencedError,
 } from '../helpers/inventoryReset.js';
 import { modelFor } from '../lib/aiModels.js';
+import { applyStockDelta } from '../helpers/stockLedger.js';
+import { tzDate } from '../lib/tz.js';
 // AI data pipeline removed in pos-lite
 const logRestockEvent = () => {};
 
@@ -49,7 +51,8 @@ router.get('/', requireAuth(), async (req, res) => {
              ${selectColumn(columns, 'kind')},
              ${selectColumn(columns, 'low_threshold_portions')},
              ${selectColumn(columns, 'auto_86')},
-             ${selectColumn(columns, 'sold_out_manual')}
+             ${selectColumn(columns, 'sold_out_manual')},
+             ${selectColumn(columns, 'discard_on_close')}
       FROM inventory_items
       ORDER BY category ASC, name ASC
     `);
@@ -450,7 +453,11 @@ router.post('/:id/count', requireAuth('manage_inventory'), async (req, res) => {
       return res.status(400).json({ error: 'Invalid counted quantity' });
     }
 
-    const item = await get('SELECT id, name, quantity FROM inventory_items WHERE id = $1', [id]);
+    const columns = await getInventoryColumns();
+    const item = await get(
+      `SELECT id, name, quantity${columns.has('kind') ? ', kind' : ''} FROM inventory_items WHERE id = $1`,
+      [id]
+    );
     if (!item) return res.status(404).json({ error: 'Inventory item not found' });
 
     const systemQty = item.quantity;
@@ -465,9 +472,31 @@ router.post('/:id/count', requireAuth('manage_inventory'), async (req, res) => {
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     `, [tid, id, counted_quantity, systemQty, variance, variancePercent, employeeId, notes || null]);
 
-    // Update the system quantity to match the count
-    await run('UPDATE inventory_items SET quantity = $1, last_counted_at = NOW() WHERE id = $2',
-      [counted_quantity, id]);
+    // Update the system quantity to match the count.
+    //
+    // For components on a two-stage tenant the difference is posted as a
+    // ledger movement instead of overwriting the number. Overwriting is what
+    // made the old variance report fight the operation: the count silently
+    // absorbed whatever went missing, so the ledger and the shelf drifted
+    // apart with nothing recording why. count_adjust IS the shrinkage, and
+    // it's what the portion-variance report reads.
+    const isComponentCount = item.kind === 'component'
+      && (req.tenant?.inventory_mode || 'ingredients') === 'two_stage';
+
+    if (isComponentCount && variance !== 0) {
+      await applyStockDelta(null, {
+        itemId: Number(id),
+        delta: variance,
+        reason: 'count_adjust',
+        refType: 'inventory_count',
+        refId: result.lastInsertRowid ? Number(result.lastInsertRowid) : null,
+        employeeId,
+      });
+      await run('UPDATE inventory_items SET last_counted_at = NOW() WHERE id = $1', [id]);
+    } else {
+      await run('UPDATE inventory_items SET quantity = $1, last_counted_at = NOW() WHERE id = $2',
+        [counted_quantity, id]);
+    }
 
     // Create shrinkage alert if variance > 10%
     if (Math.abs(variancePercent) > 10) {
@@ -502,7 +531,7 @@ router.put('/:id', requireAuth('manage_inventory'), async (req, res) => {
   try {
     const columns = await getInventoryColumns();
     const { id } = req.params;
-    const { name, quantity, low_stock_threshold, category, sku, barcode, expiry_date, lot_number, cost_price, unit, pack_size, shelf_life_days, storage_type, kind, low_threshold_portions, auto_86, sold_out_manual } = req.body;
+    const { name, quantity, low_stock_threshold, category, sku, barcode, expiry_date, lot_number, cost_price, unit, pack_size, shelf_life_days, storage_type, kind, low_threshold_portions, auto_86, sold_out_manual, discard_on_close } = req.body;
 
     const item = await get('SELECT id FROM inventory_items WHERE id = $1', [id]);
     if (!item) {
@@ -594,6 +623,10 @@ router.put('/:id', requireAuth('manage_inventory'), async (req, res) => {
     if (sold_out_manual !== undefined && columns.has('sold_out_manual')) {
       sets.push(`sold_out_manual = $${paramIdx++}`);
       params.push(!!sold_out_manual);
+    }
+    if (discard_on_close !== undefined && columns.has('discard_on_close')) {
+      sets.push(`discard_on_close = $${paramIdx++}`);
+      params.push(!!discard_on_close);
     }
 
     if (sets.length === 0) {
@@ -1105,6 +1138,174 @@ router.post('/backfill-attrs', requireAuth('manage_inventory'), async (req, res)
 
 // GET /api/inventory/stale — items past their shelf life with quantity remaining.
 // Joins recent count history to suppress items the user already confirmed today.
+// GET /api/inventory/eod-summary — the end-of-day count sheet.
+//
+// For each component: what was on the line at open, what the kitchen produced,
+// what sold, what was thrown away — and therefore what SHOULD be there now.
+// The kitchen counts the real number; the difference is the variance, and it
+// gets posted through the count endpoint as a `count_adjust` ledger row.
+//
+// Everything is derived from portion_ledger, so "carryover" is just the
+// current quantity minus everything that happened today — no separate
+// opening-balance table to keep in sync.
+router.get('/eod-summary', requireAuth('manage_inventory'), async (req, res) => {
+  try {
+    if ((req.tenant?.inventory_mode || 'ingredients') !== 'two_stage') {
+      return res.json({ mode: 'ingredients', business_date: null, components: [] });
+    }
+    const tz = req.tenant?.timezone || 'America/Mexico_City';
+    const businessDate = typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)
+      ? req.query.date
+      : tzDate(new Date(), tz);
+
+    const rows = await all(`
+      SELECT ii.id,
+             ii.name,
+             ii.unit,
+             ii.quantity::float8 AS current_quantity,
+             ii.discard_on_close,
+             ii.sold_out_manual,
+             COALESCE(SUM(pl.delta) FILTER (WHERE pl.reason = 'prep_produce'), 0)::float8 AS produced,
+             COALESCE(-SUM(pl.delta) FILTER (WHERE pl.reason = 'sale'), 0)::float8 AS sold,
+             COALESCE(-SUM(pl.delta) FILTER (WHERE pl.reason = 'waste'), 0)::float8 AS waste,
+             COALESCE(SUM(pl.delta) FILTER (WHERE pl.reason IN ('refund_restore','void_restore')), 0)::float8 AS returned,
+             COALESCE(SUM(pl.delta) FILTER (WHERE pl.reason = 'count_adjust'), 0)::float8 AS adjusted,
+             COALESCE(-SUM(pl.delta) FILTER (WHERE pl.reason = 'carryover_discard'), 0)::float8 AS discarded,
+             COALESCE(SUM(pl.delta), 0)::float8 AS net_today
+      FROM inventory_items ii
+      LEFT JOIN portion_ledger pl
+        ON pl.inventory_item_id = ii.id
+       AND (pl.created_at AT TIME ZONE $1)::date = $2::date
+      WHERE ii.kind = 'component'
+      GROUP BY ii.id, ii.name, ii.unit, ii.quantity, ii.discard_on_close, ii.sold_out_manual
+      ORDER BY ii.name ASC
+    `, [tz, businessDate]);
+
+    res.json({
+      mode: 'two_stage',
+      business_date: businessDate,
+      components: rows.map((r) => {
+        const current = Number(r.current_quantity) || 0;
+        // What the line started the day with. The cache already reflects every
+        // movement, so unwinding today's net gets us back to open.
+        const carryover = current - (Number(r.net_today) || 0);
+        return {
+          inventory_item_id: Number(r.id),
+          name: r.name,
+          unit: r.unit,
+          carryover: Math.round(carryover * 100) / 100,
+          produced: Number(r.produced) || 0,
+          sold: Number(r.sold) || 0,
+          waste: Number(r.waste) || 0,
+          returned: Number(r.returned) || 0,
+          adjusted: Number(r.adjusted) || 0,
+          discarded: Number(r.discarded) || 0,
+          // Expected == current by construction; both are surfaced so the
+          // screen can show the arithmetic the kitchen is being asked to check.
+          expected: Math.round(current * 100) / 100,
+          current: Math.round(current * 100) / 100,
+          discard_on_close: !!r.discard_on_close,
+          sold_out_manual: !!r.sold_out_manual,
+        };
+      }),
+    });
+  } catch (error) {
+    console.error('[Inventory] eod summary failed:', error.message);
+    res.status(500).json({ error: 'Failed to build end-of-day summary' });
+  }
+});
+
+// POST /api/inventory/:id/discard-close — bin what is left of a perishable.
+// Books the loss as its own ledger reason so it never hides inside variance.
+router.post('/:id/discard-close', requireAuth('manage_inventory'), async (req, res) => {
+  try {
+    if ((req.tenant?.inventory_mode || 'ingredients') !== 'two_stage') {
+      return res.status(403).json({ error: 'Requires two-stage inventory', code: 'INVENTORY_MODE_REQUIRED' });
+    }
+    const { id } = req.params;
+    const item = await get('SELECT id, name, quantity, kind FROM inventory_items WHERE id = $1', [id]);
+    if (!item) return res.status(404).json({ error: 'Inventory item not found' });
+    if (item.kind !== 'component') {
+      return res.status(400).json({ error: 'Only components are discarded at close' });
+    }
+
+    const onHand = Number(item.quantity) || 0;
+    if (onHand <= 0) {
+      return res.json({ inventory_item_id: Number(id), discarded: 0, quantity: 0 });
+    }
+
+    const moved = await applyStockDelta(null, {
+      itemId: Number(id),
+      delta: -onHand,
+      reason: 'carryover_discard',
+      refType: 'inventory_item',
+      refId: Number(id),
+      employeeId: req.employee?.id || null,
+    });
+
+    res.json({ inventory_item_id: Number(id), discarded: onHand, quantity: moved?.quantity ?? 0 });
+  } catch (error) {
+    console.error('[Inventory] discard-close failed:', error.message);
+    res.status(500).json({ error: 'Failed to discard' });
+  }
+});
+
+// GET /api/inventory/portion-variance — where portions actually go, per day.
+//
+// The existing /variance-report answers the raw-side question (did the walk-in
+// count match?). This one answers the line-side question in units the kitchen
+// speaks: "faltan 3 porciones de asada el martes". count_adjust is the
+// variance — everything else is accounted movement.
+router.get('/portion-variance', requireAuth('manage_inventory'), async (req, res) => {
+  try {
+    if ((req.tenant?.inventory_mode || 'ingredients') !== 'two_stage') {
+      return res.json({ mode: 'ingredients', days: [] });
+    }
+    const tz = req.tenant?.timezone || 'America/Mexico_City';
+    const days = Math.min(Math.max(Number(req.query.days) || 14, 1), 90);
+
+    const rows = await all(`
+      SELECT (pl.created_at AT TIME ZONE $1)::date AS business_date,
+             ii.id AS inventory_item_id,
+             ii.name,
+             ii.unit,
+             COALESCE(SUM(pl.delta) FILTER (WHERE pl.reason = 'prep_produce'), 0)::float8 AS produced,
+             COALESCE(-SUM(pl.delta) FILTER (WHERE pl.reason = 'sale'), 0)::float8 AS sold,
+             COALESCE(-SUM(pl.delta) FILTER (WHERE pl.reason = 'waste'), 0)::float8 AS waste,
+             COALESCE(-SUM(pl.delta) FILTER (WHERE pl.reason = 'carryover_discard'), 0)::float8 AS discarded,
+             COALESCE(SUM(pl.delta) FILTER (WHERE pl.reason = 'count_adjust'), 0)::float8 AS variance
+      FROM portion_ledger pl
+      JOIN inventory_items ii ON ii.id = pl.inventory_item_id AND ii.kind = 'component'
+      WHERE pl.created_at >= NOW() - ($2 || ' days')::interval
+      GROUP BY 1, ii.id, ii.name, ii.unit
+      HAVING COALESCE(SUM(pl.delta) FILTER (WHERE pl.reason IN
+             ('prep_produce','sale','waste','carryover_discard','count_adjust')), 0) <> 0
+      ORDER BY 1 DESC, ABS(COALESCE(SUM(pl.delta) FILTER (WHERE pl.reason = 'count_adjust'), 0)) DESC
+    `, [tz, String(days)]);
+
+    res.json({
+      mode: 'two_stage',
+      days,
+      rows: rows.map((r) => ({
+        business_date: r.business_date instanceof Date
+          ? r.business_date.toISOString().slice(0, 10)
+          : String(r.business_date).slice(0, 10),
+        inventory_item_id: Number(r.inventory_item_id),
+        name: r.name,
+        unit: r.unit,
+        produced: Number(r.produced) || 0,
+        sold: Number(r.sold) || 0,
+        waste: Number(r.waste) || 0,
+        discarded: Number(r.discarded) || 0,
+        variance: Number(r.variance) || 0,
+      })),
+    });
+  } catch (error) {
+    console.error('[Inventory] portion variance failed:', error.message);
+    res.status(500).json({ error: 'Failed to build portion variance report' });
+  }
+});
+
 router.get('/stale', requireAuth(), async (req, res) => {
   try {
     const columns = await getInventoryColumns();

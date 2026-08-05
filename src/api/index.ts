@@ -9,6 +9,9 @@ import {
   InventoryKind,
   InventoryMode,
   PrepRun,
+  EodComponent,
+  PortionVarianceRow,
+  YieldPoint,
   PaymentIntent,
   PaymentStatus,
   SalesReport,
@@ -994,6 +997,35 @@ export async function createPrepRun(payload: {
   notes?: string;
 }): Promise<PrepRun & { total_input_cost: number; cost_per_portion: number | null }> {
   return apiRequest('/prep-runs', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function getEodSummary(date?: string): Promise<{
+  mode: InventoryMode;
+  business_date: string | null;
+  components: EodComponent[];
+}> {
+  return apiRequest(`/inventory/eod-summary${date ? `?date=${date}` : ''}`);
+}
+
+export async function discardOnClose(itemId: number): Promise<{
+  inventory_item_id: number; discarded: number; quantity: number;
+}> {
+  return apiRequest(`/inventory/${itemId}/discard-close`, { method: 'POST' });
+}
+
+export async function getPortionVariance(days = 14): Promise<{
+  mode: InventoryMode;
+  rows?: PortionVarianceRow[];
+}> {
+  return apiRequest(`/inventory/portion-variance?days=${days}`);
+}
+
+export async function getYieldTrends(componentId: number, limit = 20): Promise<{
+  inventory_item_id: number;
+  points: YieldPoint[];
+  average_yield: number | null;
+}> {
+  return apiRequest(`/prep-runs/yield-trends?component_id=${componentId}&limit=${limit}`);
 }
 
 export async function correctPrepRun(

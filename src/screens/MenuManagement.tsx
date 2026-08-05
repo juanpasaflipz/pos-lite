@@ -17,6 +17,7 @@ import {
   getModifierGroupsForItem,
   assignModifierGroupToItem,
   removeModifierGroupFromItem,
+  getRecipeSummary,
 } from '../api';
 import { MenuCategory, MenuItem, ModifierGroup } from '../types';
 import { invalidateMenuCache } from '../lib/menuCache';
@@ -82,7 +83,25 @@ export default function MenuManagement() {
   const [showCSVImport, setShowCSVImport] = useState(false);
   const [showAIBuilder, setShowAIBuilder] = useState(false);
 
+  // Plate cost per item, from the recipe rollup. In two-stage mode the
+  // component cost_price already means "cost per portion" (maintained by prep
+  // runs), so the same endpoint answers for both models.
+  const [plateCosts, setPlateCosts] = useState<Map<number, number>>(new Map());
+
   useEffect(() => { fetchCategories(); }, []);
+  useEffect(() => {
+    let alive = true;
+    getRecipeSummary()
+      .then((rows) => {
+        if (!alive) return;
+        setPlateCosts(new Map(
+          rows.filter((r) => r.ingredient_count > 0 && r.cost_per_unit > 0)
+              .map((r) => [r.id, Number(r.cost_per_unit)])
+        ));
+      })
+      .catch(() => { /* costing is a nicety here; the menu still edits fine */ });
+    return () => { alive = false; };
+  }, []);
   useEffect(() => { if (selectedCategory && view === 'items') fetchMenuItems(selectedCategory); }, [selectedCategory, view]);
 
   const fetchCategories = async () => {
@@ -492,6 +511,7 @@ export default function MenuManagement() {
             onToggleItem={handleToggleItem}
             onSwitchToCategories={() => setView('categories')}
             getCategoryName={getCategoryName}
+            plateCosts={plateCosts}
           />
         )}
       </div>
