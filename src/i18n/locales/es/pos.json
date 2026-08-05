@@ -384,7 +384,8 @@
     "saved": "Plantilla guardada: {{name}}",
     "saveCurrentCart": "Guardar Orden Actual como Plantilla",
     "enterName": "Nombre de la plantilla...",
-    "itemCount": "{{count}} producto(s)"
+    "itemCount": "{{count}} producto(s)",
+    "skippedRequired": "Agrega {{names}} desde el menú — requiere elegir estilo"
   },
   "parkedCarts": {
     "title": "Órdenes en Espera",

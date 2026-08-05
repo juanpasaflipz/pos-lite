@@ -115,6 +115,7 @@ const POSScreen: React.FC = () => {
   const [showComboBuilder, setShowComboBuilder] = useState(false);
   const [showSplitPayment, setShowSplitPayment] = useState(false);
   const [itemModifierCache, setItemModifierCache] = useState<Record<number, boolean>>({});
+  const [requiredModifierCache, setRequiredModifierCache] = useState<Record<number, boolean>>({});
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [refundOrderId, setRefundOrderId] = useState<number | null>(null);
   const [linkedCustomer, setLinkedCustomer] = useState<LoyaltyCustomer | null>(null);
@@ -214,8 +215,14 @@ const POSScreen: React.FC = () => {
   const handleAcceptSuggestion = (suggestion: AISuggestion) => {
     const item = menuItems.find((mi) => mi.id === suggestion.data.suggested_item_id);
     if (item) {
-      addItemToCartDirect(item);
-      addToast(t('toast.itemAdded', { name: item.name }), 'success');
+      // An item with a required modifier group (builder burrito's Estilo) can't
+      // be added bare — route through the modal like a grid tap would.
+      if (requiredModifierCache[item.id]) {
+        setModifierItem(item);
+      } else {
+        addItemToCartDirect(item);
+        addToast(t('toast.itemAdded', { name: item.name }), 'success');
+      }
     }
     acceptSuggestion(suggestion);
   };
@@ -314,7 +321,7 @@ const POSScreen: React.FC = () => {
         const [categoriesData, itemsData, modifierItemsData, categoryOrderData, combosData, templatesData, brandsData] = await Promise.all([
           getCachedCategories(),
           getCachedMenuItems(),
-          getCachedItemsWithModifiers().catch(() => ({ itemIds: [] })),
+          getCachedItemsWithModifiers().catch(() => ({ itemIds: [] as number[], requiredItemIds: [] as number[] })),
           getCachedCategorySuggestedOrder().catch(() => []),
           getCachedCombos().catch(() => []),
           getCachedOrderTemplates().catch(() => []),
@@ -327,6 +334,11 @@ const POSScreen: React.FC = () => {
           cache[id] = true;
         }
         setItemModifierCache(cache);
+        const requiredCache: Record<number, boolean> = {};
+        for (const id of modifierItemsData.requiredItemIds || []) {
+          requiredCache[id] = true;
+        }
+        setRequiredModifierCache(requiredCache);
         setCategorySuggestedOrder(categoryOrderData);
         setComboDefinitions(combosData);
         setTemplates(templatesData);
@@ -795,9 +807,17 @@ const POSScreen: React.FC = () => {
   }, [comboSuggestion]);
 
   const applyTemplate = useCallback((template: OrderTemplate) => {
+    // Items with a required modifier group can't be template-added bare — the
+    // template has no modifier selections to give them. Skip and say so, so
+    // the cashier adds them from the grid where the modal collects the choice.
+    const skipped: string[] = [];
     for (const item of template.items) {
       const menuItem = menuItems.find(mi => mi.id === item.menu_item_id);
       if (menuItem) {
+        if (requiredModifierCache[menuItem.id]) {
+          skipped.push(menuItem.name);
+          continue;
+        }
         for (let i = 0; i < (item.quantity || 1); i++) {
           addItemToCartDirect(menuItem);
         }
@@ -805,7 +825,10 @@ const POSScreen: React.FC = () => {
     }
     setShowTemplates(false);
     addToast(t('quickOrders.applied', { name: template.name }), 'success');
-  }, [menuItems]);
+    if (skipped.length > 0) {
+      addToast(t('quickOrders.skippedRequired', { names: skipped.join(', ') }), 'info');
+    }
+  }, [menuItems, requiredModifierCache]);
 
   const saveCartAsTemplate = useCallback(async () => {
     if (!templateName.trim() || cart.length === 0) return;

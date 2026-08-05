@@ -384,7 +384,8 @@
     "saved": "Saved template: {{name}}",
     "saveCurrentCart": "Save Current Cart as Template",
     "enterName": "Enter template name...",
-    "itemCount": "{{count}} item(s)"
+    "itemCount": "{{count}} item(s)",
+    "skippedRequired": "Add {{names}} from the menu — a style must be chosen"
   },
   "parkedCarts": {
     "title": "Held Orders",
