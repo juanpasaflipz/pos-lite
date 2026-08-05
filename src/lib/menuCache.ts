@@ -85,7 +85,7 @@ export function getCachedMenuItems(): Promise<MenuItem[]> {
   return withCache('menuItems', () => getMenuItems());
 }
 
-export function getCachedItemsWithModifiers(): Promise<{ itemIds: number[] }> {
+export function getCachedItemsWithModifiers(): Promise<{ itemIds: number[]; requiredItemIds?: number[] }> {
   return withCache('itemsWithModifiers', () => getItemsWithModifiers());
 }
 

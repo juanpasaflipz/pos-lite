@@ -1674,8 +1674,8 @@ export async function removeModifierGroupFromItem(menuItemId: number, groupId: n
   });
 }
 
-export async function getItemsWithModifiers(): Promise<{ itemIds: number[] }> {
-  return apiRequest<{ itemIds: number[] }>('/modifiers/items-with-modifiers');
+export async function getItemsWithModifiers(): Promise<{ itemIds: number[]; requiredItemIds?: number[] }> {
+  return apiRequest<{ itemIds: number[]; requiredItemIds?: number[] }>('/modifiers/items-with-modifiers');
 }
 
 /* ==================== Recipe Endpoints ==================== */

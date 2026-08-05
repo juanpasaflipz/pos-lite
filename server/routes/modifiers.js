@@ -12,7 +12,19 @@ router.get('/items-with-modifiers', async (req, res) => {
       SELECT DISTINCT menu_item_id
       FROM menu_item_modifier_groups
     `);
-    res.json({ itemIds: rows.map(r => r.menu_item_id) });
+    // Items with at least one REQUIRED group. Quick-add paths may skip the
+    // modifier prompt for optional garnish, but never for these: a builder
+    // burrito without its Estilo is an order the kitchen can't make.
+    const requiredRows = await all(`
+      SELECT DISTINCT mimg.menu_item_id
+      FROM menu_item_modifier_groups mimg
+      JOIN modifier_groups mg ON mg.id = mimg.modifier_group_id
+      WHERE mg.required = true AND mg.active = true
+    `);
+    res.json({
+      itemIds: rows.map(r => r.menu_item_id),
+      requiredItemIds: requiredRows.map(r => r.menu_item_id),
+    });
   } catch (error) {
     console.error('Error fetching items with modifiers:', error);
     res.status(500).json({ error: 'Failed to fetch items with modifiers' });

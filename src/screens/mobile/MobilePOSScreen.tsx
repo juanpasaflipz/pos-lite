@@ -30,6 +30,7 @@ const MobilePOSScreen: React.FC = () => {
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [itemModifierCache, setItemModifierCache] = useState<Record<number, boolean>>({});
+  const [requiredModifierCache, setRequiredModifierCache] = useState<Record<number, boolean>>({});
   const [selectedCategory, setSelectedCategory] = useState<number | 'all'>('all');
   const [loading, setLoading] = useState(true);
   const [detailItem, setDetailItem] = useState<MenuItem | null>(null);
@@ -42,13 +43,16 @@ const MobilePOSScreen: React.FC = () => {
         const [cats, items, modItems] = await Promise.all([
           getCachedCategories(),
           getCachedMenuItems(),
-          getCachedItemsWithModifiers().catch(() => ({ itemIds: [] })),
+          getCachedItemsWithModifiers().catch(() => ({ itemIds: [] as number[], requiredItemIds: [] as number[] })),
         ]);
         setCategories(cats);
         setMenuItems(items);
         const cache: Record<number, boolean> = {};
         for (const id of modItems.itemIds) cache[id] = true;
         setItemModifierCache(cache);
+        const requiredCache: Record<number, boolean> = {};
+        for (const id of modItems.requiredItemIds || []) requiredCache[id] = true;
+        setRequiredModifierCache(requiredCache);
       } catch {
         // will show empty state
       } finally {
@@ -81,17 +85,23 @@ const MobilePOSScreen: React.FC = () => {
     return cartSubmitIdRef.current;
   };
 
-  // Tap logic: quickMode on → always addItem; quickMode off + has modifiers → detail
+  // Tap logic: quickMode on → addItem, EXCEPT items with a required modifier
+  // group — those always open the detail sheet. Quick mode exists to skip the
+  // optional-garnish prompt, not the choice that defines the dish: a builder
+  // burrito rung without its Estilo reaches the kitchen as a ticket they
+  // can't make (that's exactly how order 20260805006 happened).
   const handleItemTap = useCallback((item: MenuItem) => {
     tapFeedback();
-    if (cart.quickMode) {
+    if (requiredModifierCache[item.id]) {
+      setDetailItem(item);
+    } else if (cart.quickMode) {
       cart.addItem(item);
     } else if (itemModifierCache[item.id]) {
       setDetailItem(item);
     } else {
       cart.addItem(item);
     }
-  }, [cart, itemModifierCache]);
+  }, [cart, itemModifierCache, requiredModifierCache]);
 
   // Long press always opens detail
   const handleItemLongPress = useCallback((item: MenuItem) => {
