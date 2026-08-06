@@ -33,6 +33,9 @@ interface BuilderPhotoProps {
   /** Applied to the band wrapper; defaults to the shared 4:3 card band. */
   className?: string;
   iconClassName?: string;
+  /** 'cover' = full-bleed photo (default). 'icon' = illustrated icon centered
+   *  on a soft brand glow — used by the icon-preview mode. */
+  fit?: 'cover' | 'icon';
 }
 
 const BuilderPhoto: React.FC<BuilderPhotoProps> = ({
@@ -41,6 +44,7 @@ const BuilderPhoto: React.FC<BuilderPhotoProps> = ({
   fallbackIcon,
   className = 'aspect-[4/3] w-full',
   iconClassName = 'h-[clamp(34px,6vw,48px)] w-[clamp(34px,6vw,48px)]',
+  fit = 'cover',
 }) => {
   const [failed, setFailed] = useState(false);
 
@@ -53,6 +57,22 @@ const BuilderPhoto: React.FC<BuilderPhotoProps> = ({
         className={`${className} bg-gradient-to-br ${gradient} flex items-center justify-center overflow-hidden flex-shrink-0`}
       >
         <BuilderIcon name={fallbackIcon} className={`${iconClassName} text-brand-300`} />
+      </div>
+    );
+  }
+
+  if (fit === 'icon') {
+    return (
+      <div
+        className={`${className} overflow-hidden flex-shrink-0 flex items-center justify-center bg-[radial-gradient(ellipse_at_50%_120%,rgba(168,84,42,0.28),rgba(23,23,23,0)_70%)]`}
+      >
+        <img
+          src={src}
+          alt={alt}
+          loading="lazy"
+          className="h-[58%] w-[58%] object-contain"
+          onError={() => setFailed(true)}
+        />
       </div>
     );
   }

@@ -8,6 +8,7 @@ import { useKioskCart } from '../context/KioskCartContext';
 import { resetKioskLanguage } from '../i18n';
 import LanguageToggle from '../components/LanguageToggle';
 import BuilderPhoto from '../components/BuilderPhoto';
+import { iconPreviewOn, previewFavoritoIcon } from '../lib/builderPreview';
 import { fetchBuilderMenu, type BuilderMenu } from '../lib/kioskApi';
 import { BuilderIcon, type BuilderIconName } from '../lib/builderIcons';
 import { PRESET_ICON, proteinLabel } from '../lib/builderMeta';
@@ -233,8 +234,12 @@ const AttractScreen: React.FC = () => {
 
   /** The card's food photo: builder/fixed favoritos wear their base item's
    *  menu photo, the drink favorito wears its addon's. Null → BuilderPhoto's
-   *  gradient+glyph fallback, which is the pre-photo look of this screen. */
+   *  gradient+glyph fallback, which is the pre-photo look of this screen.
+   *  Icon preview (device-local, set from terminal settings) swaps every card
+   *  to its bundled illustrated icon so the owner can evaluate the look. */
+  const preview = iconPreviewOn();
   const favImage = (f: Favorito): string | null => {
+    if (preview) return previewFavoritoIcon(f.id);
     if (f.kind === 'drink') return drinkFor(f)?.image_url || null;
     const slug = f.kind === 'fixed' ? f.slug : f.proteins[0];
     return itemBySlug.get(slug)?.image_url || null;
@@ -293,6 +298,7 @@ const AttractScreen: React.FC = () => {
               fallbackIcon={PRESET_ICON[f.id] || 'burrito'}
               className="aspect-[4/3] w-full"
               iconClassName="h-[46px] w-[46px] [@media(min-height:900px)]:h-16 [@media(min-height:900px)]:w-16"
+              fit={preview ? 'icon' : 'cover'}
             />
             <span className="flex flex-col items-center gap-1 [@media(min-height:900px)]:gap-1.5 px-3 pt-2.5 pb-3 [@media(min-height:900px)]:px-4 [@media(min-height:900px)]:pt-3.5 [@media(min-height:900px)]:pb-4">
             <span className="text-[18px] [@media(min-height:900px)]:text-[23px] font-black leading-[1.1]">{t(`wizardAttract.presets.${f.id}`)}</span>

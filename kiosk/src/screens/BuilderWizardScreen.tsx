@@ -29,6 +29,7 @@ import { useKioskCart } from '../context/KioskCartContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
 import LanguageToggle from '../components/LanguageToggle';
 import BuilderPhoto from '../components/BuilderPhoto';
+import { iconPreviewOn, previewProteinIcon, previewEstiloIcon, previewAddonIcon } from '../lib/builderPreview';
 import { fetchBuilderMenu, type BuilderAddon, type BuilderMenu, type BuilderModifier } from '../lib/kioskApi';
 import { BuilderIcon, type BuilderIconName } from '../lib/builderIcons';
 import {
@@ -67,6 +68,8 @@ const BuilderWizardScreen: React.FC = () => {
   const { addItem, decrementLine, lines } = useKioskCart();
   const [params] = useSearchParams();
   const en = i18n.language.startsWith('en');
+  // Device-local illustrated-icon preview (set from terminal settings).
+  const preview = iconPreviewOn();
 
   // "Solo bebidas y complementos" door — the agregar step with no burrito in
   // hand, so no extras section and no step dots.
@@ -386,10 +389,11 @@ const BuilderWizardScreen: React.FC = () => {
                       </span>
                     )}
                     <BuilderPhoto
-                      src={item.image_url}
+                      src={preview ? previewProteinIcon(item.slug!) : item.image_url}
                       alt={proteinLabel(item.slug!, en)}
                       fallbackIcon={PROTEIN_ICON[item.slug!] || 'burrito'}
                       className="aspect-[4/3] w-full"
+                      fit={preview ? 'icon' : 'cover'}
                     />
                     <span className="flex flex-col items-center gap-1 px-3 py-2.5">
                       <span className="text-[clamp(15px,2.6vw,19px)] font-black leading-[1.15]">
@@ -419,10 +423,11 @@ const BuilderWizardScreen: React.FC = () => {
                   className={`w-full text-left rounded-[20px] border-[3px] overflow-hidden active:scale-[0.97] transition-transform ${on ? 'border-brand-400 bg-brand-900 shadow-[0_8px_30px_rgba(168,84,42,0.25)]' : 'border-neutral-800 bg-neutral-900'}`}
                 >
                   <BuilderPhoto
-                    src={opt.image_url}
+                    src={preview ? previewEstiloIcon(opt.name) : opt.image_url}
                     alt={info ? (en ? info.en : info.es) : opt.name}
                     fallbackIcon={info?.icon || 'burrito'}
                     className="aspect-[16/9] w-full"
+                    fit={preview ? 'icon' : 'cover'}
                   />
                   <div className="p-[18px_20px_24px]">
                   {info && (
@@ -516,7 +521,8 @@ const BuilderWizardScreen: React.FC = () => {
                 <AddCard
                   key={a.id}
                   icon={null}
-                  imageUrl={a.image_url}
+                  imageUrl={preview ? previewAddonIcon(a.name) : a.image_url}
+                  iconFit={preview}
                   fallbackIcon={addonIcon(a.name)}
                   name={en && a.name_en ? a.name_en : a.name}
                   price={`+${pesos(a.price)}`}
@@ -531,7 +537,8 @@ const BuilderWizardScreen: React.FC = () => {
                 <AddCard
                   key={a.id}
                   icon={null}
-                  imageUrl={a.image_url}
+                  imageUrl={preview ? previewAddonIcon(a.name) : a.image_url}
+                  iconFit={preview}
                   fallbackIcon={addonIcon(a.name)}
                   name={en && a.name_en ? a.name_en : a.name}
                   price={`+${pesos(a.price)}`}
@@ -622,7 +629,9 @@ const AddCard: React.FC<{
    *  When set, the card wears a photo band and `icon` becomes the fallback. */
   imageUrl?: string | null;
   fallbackIcon?: BuilderIconName;
-}> = ({ icon, name, price, qty, onClick, imageUrl, fallbackIcon }) =>
+  /** Icon-preview mode: render the image contained on a glow, not full-bleed. */
+  iconFit?: boolean;
+}> = ({ icon, name, price, qty, onClick, imageUrl, fallbackIcon, iconFit }) =>
   imageUrl !== undefined ? (
     <button
       onClick={onClick}
@@ -633,7 +642,7 @@ const AddCard: React.FC<{
           ×{qty}
         </span>
       )}
-      <BuilderPhoto src={imageUrl} alt={name} fallbackIcon={fallbackIcon || 'burrito'} className="aspect-[4/3] w-full" />
+      <BuilderPhoto src={imageUrl} alt={name} fallbackIcon={fallbackIcon || 'burrito'} className="aspect-[4/3] w-full" fit={iconFit ? 'icon' : 'cover'} />
       <span className="flex flex-col items-center gap-1 px-3 py-2.5">
         <span className="text-[clamp(15px,2.6vw,19px)] font-black leading-[1.15]">{name}</span>
         <span className="text-[clamp(14px,2.4vw,17px)] font-extrabold text-brand-300">{price}</span>
