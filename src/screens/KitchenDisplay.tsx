@@ -794,6 +794,9 @@ function ItemDisplay({ item, isTvMode = false }: ItemDisplayProps) {
   const styleMods = (item.modifiers || []).filter((m) => m.modifier_group?.startsWith('Estilo'));
   const otherMods = (item.modifiers || []).filter((m) => !m.modifier_group?.startsWith('Estilo'));
   const hasModifiers = otherMods.length > 0;
+  // The item needs a style and none arrived — a stale client or bypassed
+  // prompt let it through. Shout it so the kitchen asks instead of guessing.
+  const missingStyle = !!item.requires_style && styleMods.length === 0;
   const qty = item.quantity > 1 ? `${item.quantity}× ` : '';
 
   // Edit-state derivations (migration 0063). `added_at` is null on the original
@@ -821,6 +824,11 @@ function ItemDisplay({ item, isTvMode = false }: ItemDisplayProps) {
               {mod.modifier_name}
             </span>
           ))}
+          {missingStyle && !isVoided && (
+            <span className="text-lg font-black uppercase tracking-wider px-2 py-0.5 rounded bg-cockpit-red text-white motion-safe:animate-pulse">
+              ⚠ SIN ESTILO
+            </span>
+          )}
           {isAdded && (
             <span className="text-xs font-black uppercase tracking-wider bg-cockpit-yellow text-neutral-900 px-1.5 py-0.5 rounded">
               NUEVO
@@ -888,6 +896,11 @@ function ItemDisplay({ item, isTvMode = false }: ItemDisplayProps) {
               {mod.modifier_name}
             </span>
           ))}
+          {missingStyle && !isVoided && (
+            <span className="text-sm font-black uppercase tracking-wider px-2 py-0.5 rounded bg-cockpit-red text-white motion-safe:animate-pulse">
+              ⚠ SIN ESTILO
+            </span>
+          )}
           {isAdded && (
             <span className="text-[10px] font-black uppercase tracking-wider bg-cockpit-yellow text-neutral-900 px-1.5 py-0.5 rounded">
               NUEVO

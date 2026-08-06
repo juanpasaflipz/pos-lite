@@ -1263,6 +1263,19 @@ router.get('/kitchen/active', requireAuth(), async (req, res) => {
       ? ['pending', 'confirmed', 'preparing', 'active', 'ready']
       : ['pending', 'confirmed', 'preparing', 'active'];
 
+    // Items whose recipe DEPENDS on a style choice (a required Estilo* group).
+    // If such an item reaches the kitchen without one — a stale client, a
+    // bypassed prompt, an import — the display must say "no style given"
+    // loudly rather than render a ticket that looks complete. The kitchen
+    // can't cook a burrito whose style nobody chose.
+    const styleRequiredRows = await all(`
+      SELECT DISTINCT mimg.menu_item_id
+      FROM menu_item_modifier_groups mimg
+      JOIN modifier_groups mg ON mg.id = mimg.modifier_group_id
+      WHERE mg.name LIKE 'Estilo%' AND mg.required = true AND mg.active = true
+    `);
+    const styleRequired = new Set(styleRequiredRows.map((r) => Number(r.menu_item_id)));
+
     // Single query: fetch orders + items + modifiers in one round trip.
     // Customer name resolution order: loyalty customer → kiosk/QR call-name →
     // delivery platform customer name (Uber/Rappi/DiDi). Same field powers
@@ -1274,7 +1287,7 @@ router.get('/kitchen/active', requireAuth(), async (req, res) => {
              COALESCE(lc.name, o.customer_call_name, do_row.customer_name) AS customer_name,
              dp.name AS delivery_platform,
              do_row.tracking_url AS tracking_url,
-             oi.id AS item_id, oi.item_name, oi.quantity, oi.notes, oi.combo_instance_id,
+             oi.id AS item_id, oi.menu_item_id, oi.item_name, oi.quantity, oi.notes, oi.combo_instance_id,
              oi.virtual_brand_id, vb.name AS brand_name, vb.primary_color AS brand_color,
              oi.added_at, oi.voided_at, oi.void_reason, oi.qty_changed_at, oi.original_quantity,
              mi_kds.category_id AS item_category_id,
@@ -1332,6 +1345,7 @@ router.get('/kitchen/active', requireAuth(), async (req, res) => {
       if (row.item_id && !order.items.has(row.item_id)) {
         order.items.set(row.item_id, {
           id: row.item_id,
+          requires_style: styleRequired.has(Number(row.menu_item_id)),
           item_name: row.item_name,
           quantity: row.quantity,
           notes: row.notes,

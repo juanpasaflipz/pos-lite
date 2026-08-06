@@ -81,6 +81,10 @@ export interface Discount {
 }
 
 export interface OrderItem {
+  /** kitchen/active only: the item's recipe depends on a required Estilo*
+   *  modifier group — if none of its modifiers is from one, the KDS shows a
+   *  loud SIN ESTILO warning instead of a silently-incomplete ticket. */
+  requires_style?: boolean;
   id?: number;
   order_id?: number;
   menu_item_id: number;

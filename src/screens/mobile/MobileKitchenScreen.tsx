@@ -218,6 +218,11 @@ const MobileKitchenScreen: React.FC = () => {
                               {mod.modifier_name}
                             </span>
                           ))}
+                          {!!item.requires_style && !item.modifiers?.some((m) => m.modifier_group?.startsWith('Estilo')) && (
+                            <span className="text-[11px] font-black uppercase tracking-wider bg-cockpit-red text-white px-1.5 py-0.5 rounded motion-safe:animate-pulse">
+                              ⚠ SIN ESTILO
+                            </span>
+                          )}
                         </span>
                         <span className="bg-neutral-700 text-neutral-200 px-2 py-0.5 rounded-full font-bold text-xs">
                           x{item.quantity}
