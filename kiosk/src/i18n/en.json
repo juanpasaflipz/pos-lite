@@ -194,7 +194,9 @@
       "rollbertosSub": "Rolled cheese taquitos",
       "cervezafria": "Cold Beer",
       "cervezafriaSub": "Ice-cold Mexican beer"
-    }
+    },
+    "confirmAdd": "Add it to your order?",
+    "addToOrder": "Yes, add it"
   },
   "wizard": {
     "loading": "Loading…",

@@ -675,7 +675,7 @@ const FooterBtn: React.FC<{
   <button
     onClick={onClick}
     disabled={disabled}
-    className={`w-full min-h-[56px] rounded-[14px] px-5 py-3 text-[18px] font-black text-white flex items-center gap-2.5 active:scale-[0.98] transition-transform ${
+    className={`w-full min-h-[62px] rounded-[14px] px-5 py-3 text-[clamp(19px,2.2vw,24px)] font-black text-white flex items-center gap-2.5 active:scale-[0.98] transition-transform ${
       split ? 'justify-between' : 'justify-center'
     } ${
       variant === 'ghost'
@@ -684,7 +684,7 @@ const FooterBtn: React.FC<{
     }`}
   >
     <span>{left}</span>
-    {right && <small className="text-sm font-bold opacity-80">{right}</small>}
+    {right && <small className="text-[15px] font-bold opacity-80">{right}</small>}
   </button>
 );
 

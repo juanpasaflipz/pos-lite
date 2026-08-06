@@ -248,8 +248,11 @@ const AttractScreen: React.FC = () => {
   const onFavorito = (f: Favorito) => {
     if (f.kind === 'drink') { addDrink(f); return; }
     if (f.kind === 'fixed') {
-      if (f.hasChoice) { setOverlay(f); return; }
-      addFixed(f.slug);
+      // Every fixed favorito confirms before touching the cart — the silent
+      // add-and-jump to the upsell read as "what just happened?" (owner
+      // feedback, 2026-08-06). Rollbertos confirms via its either/or; Birria
+      // and Cochinita get a plain "¿Lo agregamos?".
+      setOverlay(f);
       return;
     }
     if (f.ask) { setOverlay(f); return; }
@@ -425,6 +428,26 @@ const FavoritoOverlay: React.FC<{
           note: item ? pesos(item.price) : undefined,
           onClick: () => onFixed(favorito.slug, [o], ` — ${o.name.toLowerCase()}`),
         }))}
+      />
+    );
+  }
+
+  if (favorito.kind === 'fixed') {
+    const item = items.find((i) => i.slug === favorito.slug) || null;
+    return (
+      <AskBox
+        icons={[PRESET_ICON[favorito.id] || 'burrito']}
+        title={t('wizardAttract.confirmAdd')}
+        sub={`${t(`wizardAttract.presets.${favorito.id}`)} · ${t(`wizardAttract.presets.${favorito.id}Sub`)}`}
+        onClose={onClose}
+        buttons={[
+          {
+            key: 'add',
+            label: t('wizardAttract.addToOrder'),
+            note: item ? pesos(item.price) : undefined,
+            onClick: () => onFixed(favorito.slug, [], ''),
+          },
+        ]}
       />
     );
   }

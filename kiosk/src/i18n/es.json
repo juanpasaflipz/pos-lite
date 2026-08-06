@@ -194,7 +194,9 @@
       "rollbertosSub": "Taquitos dorados de queso",
       "cervezafria": "Cerveza Fría",
       "cervezafriaSub": "Cerveza mexicana bien fría"
-    }
+    },
+    "confirmAdd": "¿Lo agregamos a tu orden?",
+    "addToOrder": "Sí, agregar"
   },
   "wizard": {
     "loading": "Cargando…",
