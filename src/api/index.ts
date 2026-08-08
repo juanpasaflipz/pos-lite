@@ -651,6 +651,9 @@ interface CreateOrderData {
   discount?: DiscountPayload | null;
   order_fulfillment_type?: 'for_here' | 'to_go' | 'delivery';
   customer_call_name?: string;
+  /** Marketplace re-ring (Uber Eats tablet etc.): the server tags the channel,
+   *  links the delivery record, and marks the order paid-by-platform. */
+  delivery_platform?: 'uber_eats' | 'rappi' | 'didi_food';
   /** Manager waved a sold-out item through; skips the server availability guard. */
   sold_out_override?: boolean;
   // Idempotency key. Server dedupes via the unique index on

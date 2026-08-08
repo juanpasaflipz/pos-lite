@@ -147,6 +147,10 @@ const POSScreen: React.FC = () => {
   // Counter-service in MX defaults to take-away; cashier flips to "Aquí"
   // when the customer is going to eat in. Resets to to_go when cart clears.
   const [cartFulfillment, setCartFulfillment] = useState<'for_here' | 'to_go' | 'delivery'>('to_go');
+  // Marketplace re-ring channel (Uber Eats tablet etc.) — null = normal counter
+  // order. When set, checkout skips the register payment: the platform already
+  // charged the customer, the server marks the order paid-by-platform.
+  const [cartPlatform, setCartPlatform] = useState<'uber_eats' | 'rappi' | 'didi_food' | null>(null);
   // Uber Direct courier dispatch state — captured via DeliveryAddressModal when
   // cashier switches the toggle to "Delivery". Cleared whenever the cart clears.
   const [deliveryDraft, setDeliveryDraft] = useState<DeliveryDraft | null>(null);
@@ -667,6 +671,7 @@ const POSScreen: React.FC = () => {
     setCustomerCallName('');
     setCartDiscount(null);
     setCartFulfillment('to_go');
+    setCartPlatform(null);
     setDeliveryDraft(null);
     cartSubmitIdRef.current = null;
   };
@@ -738,6 +743,7 @@ const POSScreen: React.FC = () => {
       order_fulfillment_type: cartFulfillment,
       customer_call_name: callName,
       offline_temp_id: cartSubmitIdRef.current,
+      ...(cartPlatform ? { delivery_platform: cartPlatform } : {}),
       ...(soldOutOverride ? { sold_out_override: true } : {}),
     });
     await dispatchCourierIfDelivery(order.id);
@@ -1354,6 +1360,8 @@ const POSScreen: React.FC = () => {
         onSendToKitchen={handleSendToKitchen}
         fulfillment={cartFulfillment}
         onFulfillmentChange={handleFulfillmentChange}
+        deliveryPlatform={cartPlatform}
+        onDeliveryPlatformChange={setCartPlatform}
         deliveryDraft={deliveryDraft}
         onEditDelivery={() => setShowDeliveryModal(true)}
         onShowCustomerLookup={() => setShowCustomerLookup(true)}
@@ -1400,6 +1408,8 @@ const POSScreen: React.FC = () => {
             onSendToKitchen={handleSendToKitchen}
             fulfillment={cartFulfillment}
             onFulfillmentChange={handleFulfillmentChange}
+            deliveryPlatform={cartPlatform}
+            onDeliveryPlatformChange={setCartPlatform}
             onShowCustomerLookup={() => setShowCustomerLookup(true)}
             onShowTemplates={() => setShowTemplates(true)}
             onShowParkedCarts={() => setShowParkedCarts(true)}

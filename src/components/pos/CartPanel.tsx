@@ -33,6 +33,10 @@ interface CartPanelProps {
   onSendToKitchen: () => void;
   fulfillment: 'for_here' | 'to_go' | 'delivery';
   onFulfillmentChange: (next: 'for_here' | 'to_go' | 'delivery') => void;
+  /** Marketplace re-ring channel — null = counter order. When set, the cart
+   *  submits via send-to-kitchen only (platform already charged the customer). */
+  deliveryPlatform?: 'uber_eats' | 'rappi' | 'didi_food' | null;
+  onDeliveryPlatformChange?: (next: 'uber_eats' | 'rappi' | 'didi_food' | null) => void;
   deliveryDraft?: DeliveryDraft | null;
   onEditDelivery?: () => void;
   onShowCustomerLookup: () => void;
@@ -80,6 +84,8 @@ export default function CartPanel({
   onSendToKitchen,
   fulfillment,
   onFulfillmentChange,
+  deliveryPlatform = null,
+  onDeliveryPlatformChange,
   onShowCustomerLookup,
   onShowTemplates,
   onShowParkedCarts,
@@ -491,8 +497,42 @@ export default function CartPanel({
       </div>
 
       <div className="border-t border-neutral-800 p-4 space-y-3">
+        {/* Channel selector — a marketplace re-ring is transcribed from the
+            platform's tablet and was already charged there; tagging it routes
+            the order straight to the kitchen as paid-by-platform. */}
+        {onDeliveryPlatformChange && (
+          <div className="grid grid-cols-4 gap-2" role="group" aria-label={t('cart.channelLabel')}>
+            {([
+              [null, t('cart.channelCounter')],
+              ['uber_eats', 'Uber Eats'],
+              ['rappi', 'Rappi'],
+              ['didi_food', 'DiDi'],
+            ] as const).map(([value, label]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => onDeliveryPlatformChange(value)}
+                aria-pressed={deliveryPlatform === value}
+                className={`py-2 text-xs font-bold rounded-lg transition-all touch-manipulation ${
+                  deliveryPlatform === value
+                    ? 'bg-cockpit-green text-white'
+                    : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+        {deliveryPlatform && (
+          <p className="text-xs font-bold text-cockpit-in-text">
+            {t('cart.platformHint')}
+          </p>
+        )}
         {/* Fulfillment selector — kitchen needs to know if it's for here, to
-            go, or delivery. Mirrors the kiosk selector; defaults to take-away. */}
+            go, or delivery. Mirrors the kiosk selector; defaults to take-away.
+            Hidden for marketplace re-rings: the platform's courier collects. */}
+        {!deliveryPlatform && (
         <div className="grid grid-cols-3 gap-2" role="group" aria-label={t('cart.fulfillmentLabel')}>
           <button
             type="button"
@@ -532,7 +572,8 @@ export default function CartPanel({
             {t('cart.delivery')}
           </button>
         </div>
-        {fulfillment === 'delivery' && (
+        )}
+        {!deliveryPlatform && fulfillment === 'delivery' && (
           <button
             type="button"
             onClick={onEditDelivery}
@@ -556,6 +597,7 @@ export default function CartPanel({
             </div>
           </button>
         )}
+        {!deliveryPlatform && (
         <button
           onClick={onShowPaymentModal}
           disabled={cart.length === 0}
@@ -563,6 +605,7 @@ export default function CartPanel({
         >
           {t('totals.charge', { amount: formatPrice(total) })}
         </button>
+        )}
         {/* Send-to-kitchen — for dine-in tabs the customer hasn't paid yet but
             the kitchen should start cooking. Mirrors the kiosk dine-in flow. */}
         <button

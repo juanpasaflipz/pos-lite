@@ -28,6 +28,9 @@ import { adminSql, get, all, run } from '../server/db/index.js';
 // server/routes/orders.js:1034 (`GET /kitchen/active`).
 const KDS_STATUSES = ['pending', 'confirmed', 'preparing', 'active'];
 
+// @ts-ignore — route module exports the marketplace-tag helper for tests
+import { linkDeliveryPlatform } from '../server/routes/orders.js';
+
 let tenant: TestTenant;
 let employeeId: number;
 let categoryId: number;
@@ -318,5 +321,64 @@ describe('completed orders stay correctable', () => {
     const [refunds] = await adminSql`SELECT COUNT(*)::int AS n FROM refunds WHERE order_id = ${orderId}`;
     expect(order).toBeUndefined();
     expect(refunds.n).toBe(0);
+  });
+});
+
+describe('marketplace platform tag (manual re-rings)', () => {
+  // Staff transcribe an Uber Eats tablet order onto the POS; the tag must
+  // create the platform row on first use, link both directions, and mark the
+  // order paid-by-platform — the CSV settlement import is reconciliation-only.
+  it('creates the platform on first use, links both directions, marks paid', async () => {
+    const orderId = await insertDraftKioskOrder();
+    await adminSql`UPDATE orders SET status = 'active' WHERE id = ${orderId}`;
+
+    await linkDeliveryPlatform(adminSql, {
+      tenantId: tenant.id,
+      orderId,
+      slug: 'uber_eats',
+      customerName: 'UE-4821',
+    });
+
+    const [order] = await adminSql`
+      SELECT source, payment_status, payment_method, order_fulfillment_type, delivery_order_id
+      FROM orders WHERE id = ${orderId}
+    `;
+    expect(order.source).toBe('uber_eats');
+    expect(order.payment_status).toBe('paid');
+    expect(order.payment_method).toBe('uber_eats');
+    expect(order.order_fulfillment_type).toBe('delivery');
+    expect(order.delivery_order_id).not.toBeNull();
+
+    const [dorder] = await adminSql`
+      SELECT d.platform_status, d.customer_name, p.name, p.display_name, p.active
+      FROM delivery_orders d JOIN delivery_platforms p ON p.id = d.platform_id
+      WHERE d.order_id = ${orderId}
+    `;
+    expect(dorder.platform_status).toBe('received');
+    expect(dorder.customer_name).toBe('UE-4821');
+    expect(dorder.name).toBe('uber_eats');
+    expect(dorder.display_name).toBe('Uber Eats');
+    expect(dorder.active).toBe(true);
+  });
+
+  it('reactivates a deactivated platform row instead of duplicating it', async () => {
+    await adminSql`
+      UPDATE delivery_platforms SET active = false
+      WHERE tenant_id = ${tenant.id} AND name = 'uber_eats'
+    `;
+    const orderId = await insertDraftKioskOrder();
+
+    await linkDeliveryPlatform(adminSql, {
+      tenantId: tenant.id,
+      orderId,
+      slug: 'uber_eats',
+      customerName: null,
+    });
+
+    const rows = await adminSql`
+      SELECT active FROM delivery_platforms WHERE tenant_id = ${tenant.id} AND name = 'uber_eats'
+    `;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].active).toBe(true);
   });
 });

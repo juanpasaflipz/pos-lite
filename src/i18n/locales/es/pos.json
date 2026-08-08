@@ -33,6 +33,9 @@
     "toGo": "Para llevar",
     "delivery": "Domicilio",
     "fulfillmentLabel": "¿Dónde se come?",
+    "channelLabel": "Canal de la orden",
+    "channelCounter": "Mostrador",
+    "platformHint": "Orden de plataforma: ya está pagada — solo envíala a cocina.",
     "soldOutOverride": "«{{name}}» está agotado según las porciones preparadas. ¿Venderlo de todos modos?"
   },
   "delivery": {

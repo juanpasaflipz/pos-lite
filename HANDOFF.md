@@ -7,6 +7,36 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-08-08 — Claude Code — **Marketplace order tag (1.17.0) + delivery-launch comms**
+
+Juanberto's is live on Uber Eats + Rappi + DiDi Food (marketplaces, re-rung
+from their tablets) alongside kiosk/web with Uber Direct.
+
+**POS channel tag**: cart gains a Canal row (Mostrador / Uber Eats / Rappi /
+DiDi) in `CartPanel` + `CartDrawer`. Tagged orders submit via send-to-kitchen
+only — `POST /orders` with `delivery_platform` marks them **paid-by-platform**
+(`source` + `payment_method` = slug, `order_fulfillment_type='delivery'`),
+creates the `delivery_orders` row (find-or-create platform, reactivates a
+deactivated row), backlinks `orders.delivery_order_id`, and runs the
+payment-time inventory deduction (`deductInventoryForOrder` — no-op for
+two-stage). KDS pill now uses `display_name` ("Uber Eats"); escpos gained
+`uber_direct`. Tests in `order-lifecycle.test.ts`.
+
+**PROCESS CHANGE — tell whoever imports settlement CSVs**: from go-live the
+CSV import is reconciliation only. Importing sales CSVs for live-tagged
+periods double-counts revenue. Importer code untouched.
+
+**Comms state**: SMS launch broadcast ready in
+`scripts/announce-delivery-launch.mjs` (dry-run default, prod-gated,
+idempotent via `loyalty_messages type='delivery_launch'`) — NOT yet sent,
+needs Juan's copy+count go. `waCloud.js` gained `sendCloudTemplate()` +
+`updateBusinessProfile()` — both **blocked for juanbertos**: no
+`service='whatsapp'` creds exist (their customer WA is the plain Business app,
+not Cloud API). Template submission + API profile update wait on
+`/admin/wa-onboarding`; meanwhile profile text + Quick Reply go in by hand.
+
+---
+
 ## 2026-08-05 — Claude Code — **Kiosk wizard: photos instead of icons (1.16.0)**
 
 Owner request: sell with real food photography like the POS. One photo-card

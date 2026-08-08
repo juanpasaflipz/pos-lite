@@ -16,6 +16,7 @@ import {
   restoreComponentsForOrderLines,
   adjustComponentsForOrderLine,
   sellableCountsFor,
+  deductInventoryForOrder,
 } from '../helpers/inventory.js';
 
 const router = Router();
@@ -703,8 +704,51 @@ async function fetchExistingByOfflineTempId(offline_temp_id) {
  * Returns { status: 'created', body } for a new order, or
  * { status: 'duplicate', body } when offline_temp_id already exists.
  */
+// Marketplace re-rings: staff transcribe an Uber Eats / Rappi / DiDi tablet
+// order onto the POS. The platform already charged the customer, so the order
+// is born paid-by-platform; the tag is what lets the KDS ticket, the order
+// board, and the per-platform reports know the channel. The settlement CSV
+// import is reconciliation-only from here on — these live rows are the sale.
+const MANUAL_PLATFORMS = {
+  uber_eats: { display: 'Uber Eats', commission: 30 },
+  rappi: { display: 'Rappi', commission: 25 },
+  didi_food: { display: 'DiDi Food', commission: 25 },
+};
+
+export async function linkDeliveryPlatform(conn, { tenantId, orderId, slug, customerName }) {
+  const def = MANUAL_PLATFORMS[slug];
+  let [platform] = await conn.unsafe(
+    `SELECT id FROM delivery_platforms WHERE tenant_id = $1 AND name = $2`,
+    [tenantId, slug]
+  );
+  if (!platform) {
+    [platform] = await conn.unsafe(
+      `INSERT INTO delivery_platforms (tenant_id, name, display_name, commission_percent, active)
+       VALUES ($1, $2, $3, $4, true) RETURNING id`,
+      [tenantId, slug, def.display, def.commission]
+    );
+  } else {
+    // A tagged live order proves the platform is in use — resurrect a row an
+    // owner deactivated back when it only ever held settlement imports.
+    await conn.unsafe(`UPDATE delivery_platforms SET active = true WHERE id = $1 AND active = false`, [platform.id]);
+  }
+  const [deliveryOrder] = await conn.unsafe(
+    `INSERT INTO delivery_orders (tenant_id, order_id, platform_id, platform_status, customer_name)
+     VALUES ($1, $2, $3, 'received', $4) RETURNING id`,
+    [tenantId, orderId, platform.id, customerName]
+  );
+  await conn.unsafe(
+    `UPDATE orders SET delivery_order_id = $1, source = $2, order_fulfillment_type = 'delivery',
+            payment_status = 'paid', payment_method = $2, paid_at = NOW()
+     WHERE id = $3`,
+    [deliveryOrder.id, slug, orderId]
+  );
+}
+
 async function buildOrderFromRequest(req) {
   const { employee_id, items, offline_temp_id, discount: orderDiscount, order_fulfillment_type } = req.body;
+  const rawPlatform = req.body?.delivery_platform;
+  const deliveryPlatform = typeof rawPlatform === 'string' && MANUAL_PLATFORMS[rawPlatform] ? rawPlatform : null;
   // Cashier-entered "Juan", "Mesa 3", "Pickup Order" — short label that fronts the
   // KDS ticket and the admin/orders board so staff can find the order at a glance.
   // Falls back to NULL when blank so the COALESCE chain (loyalty → call_name →
@@ -1032,6 +1076,21 @@ async function buildOrderFromRequest(req) {
     `, modParams);
   }
 
+  // Marketplace re-ring: tag the channel, link the delivery record, and mark
+  // the order paid-by-platform. Runs inside the tenant transaction. Because
+  // this is the payment moment for these orders, the payment-time inventory
+  // deduction runs here too (no-op for two-stage tenants, which deducted at
+  // ring above — deductInventoryForOrder handles the mode split itself).
+  if (deliveryPlatform) {
+    await linkDeliveryPlatform(conn, {
+      tenantId,
+      orderId,
+      slug: deliveryPlatform,
+      customerName: customerCallName,
+    });
+    await deductInventoryForOrder(orderId);
+  }
+
   // Fire-and-forget: record item pairs for AI analysis
   setImmediate(() => recordOrderItemPairs(orderId, tenantId));
 
@@ -1285,7 +1344,7 @@ router.get('/kitchen/active', requireAuth(), async (req, res) => {
              o.estimated_ready_minutes, o.table_number, o.first_kds_seen_at, o.payment_status, o.paid_at, o.total,
              e.name AS employee_name,
              COALESCE(lc.name, o.customer_call_name, do_row.customer_name) AS customer_name,
-             dp.name AS delivery_platform,
+             COALESCE(dp.display_name, dp.name) AS delivery_platform,
              do_row.tracking_url AS tracking_url,
              oi.id AS item_id, oi.menu_item_id, oi.item_name, oi.quantity, oi.notes, oi.combo_instance_id,
              oi.virtual_brand_id, vb.name AS brand_name, vb.primary_color AS brand_color,

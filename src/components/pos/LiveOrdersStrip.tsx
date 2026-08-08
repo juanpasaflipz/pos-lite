@@ -85,7 +85,9 @@ function describeChannel(order: Order, t: (k: string, opts?: any) => string) {
   if (order.source === 'uber_eats') {
     return { Icon: Bike, label: t('liveStrip.uberEats'), accent: 'text-green-400' };
   }
-  if (order.source === 'uber_direct' || order.delivery_platform === 'uber_direct') {
+  // delivery_platform now arrives as the display name ("Uber Direct") — match
+  // the normalized slug so either form is recognized.
+  if (order.source === 'uber_direct' || order.delivery_platform?.toLowerCase().replace(/ /g, '_') === 'uber_direct') {
     return { Icon: Bike, label: t('liveStrip.uberDirect'), accent: 'text-cockpit-in-text' };
   }
   if (order.source === 'rappi') {

@@ -173,6 +173,7 @@ const SOURCE_LABELS = {
   didi_food: 'DIDI FOOD',
   rappi: 'RAPPI',
   uber_eats: 'UBER EATS',
+  uber_direct: 'UBER DIRECT',
   pos: 'MOSTRADOR',
   customer_qr: 'CLIENTE QR',
 };

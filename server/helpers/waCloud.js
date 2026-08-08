@@ -274,6 +274,70 @@ export async function sendCloudText(cfg, to, body) {
 }
 
 /**
+ * Send a pre-approved template message — the only message type Meta accepts
+ * OUTSIDE the 24h customer-service window, which is what makes campaigns
+ * (delivery_launch etc.) possible. `components` follows the Cloud API shape,
+ * e.g. [{ type: 'body', parameters: [{ type: 'text', text: 'Juan' }] }].
+ * Returns the wamid on success, null on failure (logged) — callers must treat
+ * null as NOT delivered and ledger accordingly.
+ */
+export async function sendCloudTemplate(cfg, to, templateName, { language = 'es_MX', components = [] } = {}) {
+  if (!isCloudConfigured(cfg) || !to || !templateName) return null;
+  try {
+    const res = await graphFetch(cfg, `/${cfg.phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: String(to).replace(/^\+/, ''),
+        type: 'template',
+        template: {
+          name: templateName,
+          language: { code: language },
+          ...(components.length ? { components } : {}),
+        },
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error('[WACloud] template send failed:', data?.error?.message || res.status);
+      return null;
+    }
+    return data?.messages?.[0]?.id || null;
+  } catch (err) {
+    console.error('[WACloud] template send error:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Update the WhatsApp Business profile (about line, description, address,
+ * websites...). Fields follow the Cloud API business-profile schema. The
+ * profile PHOTO cannot be changed here post-coexistence-onboarding (see
+ * wa-onboarding.js) — text fields can. Returns true on success.
+ */
+export async function updateBusinessProfile(cfg, fields) {
+  if (!isCloudConfigured(cfg) || !fields || Object.keys(fields).length === 0) return false;
+  try {
+    const res = await graphFetch(cfg, `/${cfg.phoneNumberId}/whatsapp_business_profile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', ...fields }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error('[WACloud] business profile update failed:', data?.error?.message || res.status);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[WACloud] business profile update error:', err.message);
+    return false;
+  }
+}
+
+/**
  * Mark an inbound message read (grey → blue ticks). Best-effort; failures are
  * silent — read receipts are cosmetic.
  */
