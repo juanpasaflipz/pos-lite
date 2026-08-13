@@ -1585,8 +1585,11 @@ export async function getEmployeePerformance(
   );
 }
 
-export async function getHourlyReport(): Promise<HourlyReport[]> {
-  return apiRequest<HourlyReport[]>('/reports/hourly');
+export async function getHourlyReport(
+  period: string,
+  opts: ReportRangeOpts = {}
+): Promise<HourlyReport[]> {
+  return apiRequest<HourlyReport[]>(`/reports/hourly?${reportQS(period, opts)}`);
 }
 
 export async function getCashCardBreakdown(period: string, opts: ReportRangeOpts = {}): Promise<CashCardBreakdown> {
@@ -1930,6 +1933,22 @@ export async function sendTestPrint(printerId: number | null): Promise<{ job_id:
   return apiRequest<{ job_id: number }>('/print-jobs/test', {
     method: 'POST',
     body: JSON.stringify({ printer_id: printerId }),
+  });
+}
+
+/** On-demand thermal print of the customer ticket (same ESC/POS layout as the
+ *  auto-printed one). Any status other than 'queued' means the bridge can't
+ *  print right now — callers fall back to window.print(). */
+export interface CustomerTicketPrintResult {
+  status: 'queued' | 'bridge_offline' | 'not_configured' | 'error';
+  job_id?: number;
+  last_seen?: string | null;
+}
+
+export async function printCustomerTicket(orderId: number): Promise<CustomerTicketPrintResult> {
+  return apiRequest<CustomerTicketPrintResult>('/print-jobs/customer-ticket', {
+    method: 'POST',
+    body: JSON.stringify({ order_id: orderId }),
   });
 }
 

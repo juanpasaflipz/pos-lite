@@ -6,7 +6,7 @@ import { Clock, Coins } from 'lucide-react';
 import { Order, CfdiInvoice, LoyaltyCustomer } from '../../types';
 import { formatPrice, TAX_LABEL } from '../../utils/currency';
 import { formatDateTime } from '../../utils/dateFormat';
-import { sendSmsReceipt, lookupLoyaltyCustomer, getLoyaltyJoinToken } from '../../api';
+import { sendSmsReceipt, lookupLoyaltyCustomer, getLoyaltyJoinToken, printCustomerTicket } from '../../api';
 import BrandLogo from '../BrandLogo';
 import CashTipModal from './CashTipModal';
 import { useBranding } from '../../context/BrandingContext';
@@ -34,6 +34,9 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
   const [foundCustomer, setFoundCustomer] = useState<LoyaltyCustomer | null>(null);
   const [loyaltyJoinToken, setLoyaltyJoinToken] = useState<string | null>(null);
   const [showCashTip, setShowCashTip] = useState(false);
+  // Thermal-first print: 'sent' flashes a confirmation after the ticket is
+  // queued on the bridge; browser print (onPrint) is only the fallback.
+  const [printState, setPrintState] = useState<'idle' | 'sending' | 'sent'>('idle');
   // Optimistic tip — bumps the displayed tip immediately after a successful
   // post-close add, without waiting for the parent to refetch the order.
   const [tipBump, setTipBump] = useState(0);
@@ -149,6 +152,27 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
       setSmsError(err instanceof Error ? err.message : 'No pudimos enviar el SMS');
     }
   }, [smsPhone, smsName, enrollLoyalty, order.id]);
+
+  // Route the print button through the print bridge so an on-demand ticket
+  // comes out identical to the auto-printed one (same ESC/POS layout, same
+  // printer). Falls back to the browser print dialog only when the bridge
+  // isn't configured/online (or the order only exists offline).
+  const handlePrint = useCallback(async () => {
+    if (printState !== 'idle') return;
+    setPrintState('sending');
+    try {
+      const result = await printCustomerTicket(order.id);
+      if (result.status === 'queued') {
+        setPrintState('sent');
+        setTimeout(() => setPrintState('idle'), 2500);
+        return;
+      }
+    } catch {
+      // Offline order / server unreachable — browser print below.
+    }
+    setPrintState('idle');
+    onPrint();
+  }, [order.id, onPrint, printState]);
 
   const handleInvoiceIssued = useCallback((_invoice: CfdiInvoice) => {
     setInvoiceIssued(true);
@@ -295,10 +319,15 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose, onPrint, li
 
           <div className="no-print p-4 space-y-2 border-t">
             <button
-              onClick={onPrint}
-              className="w-full py-3 bg-neutral-800 text-white font-bold rounded-lg hover:bg-neutral-700 transition-all"
+              onClick={handlePrint}
+              disabled={printState === 'sending'}
+              className="w-full py-3 bg-neutral-800 text-white font-bold rounded-lg hover:bg-neutral-700 transition-all disabled:opacity-60"
             >
-              {t('receipt.printReceipt')}
+              {printState === 'sending'
+                ? 'Enviando a impresora…'
+                : printState === 'sent'
+                  ? '✓ Ticket impreso'
+                  : t('receipt.printReceipt')}
             </button>
             {!showSmsForm ? (
               <button

@@ -3,7 +3,7 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import { JWT_SECRET } from '../lib/constants.js';
-import { all, get, run, adminSql, getTenantId } from '../db/index.js';
+import { all, get, run, adminSql, getTenantId, withTenant } from '../db/index.js';
 import { createPaymentIntent, createRefund, getPaymentIntent } from '../stripe.js';
 import { requireAuth } from '../middleware/auth.js';
 import { audit } from '../lib/auditLog.js';
@@ -1699,6 +1699,11 @@ router.post('/pay-together', paymentLimiter, requireAuth('pos_access'), async (r
           console.warn('pay-together invoice token failed:', tokErr.message);
         }
       }
+      // One auto customer ticket per order in the group (opt-in toggle applies,
+      // same as every other completion path). Never throws.
+      for (const s of shares) {
+        await enqueueCustomerTicket(s.order_id);
+      }
 
       const changeDue = cash_received > 0 ? Math.max(0, Number(cash_received) - combinedCharge) : 0;
       return res.json({
@@ -1887,6 +1892,10 @@ export async function settlePaymentGroupPaid(groupId, tenantId, { mpOrder = null
     try { await deductInventoryForOrder(o.id); } catch (e) {
       console.warn('settlePaymentGroupPaid inventory failed:', e.message);
     }
+    // Auto customer ticket (opt-in toggle applies) — pay-together card orders
+    // previously never printed one. Guarded by the group.status !== 'paid'
+    // early return above, so one settle = one ticket per order.
+    await enqueueCustomerTicket(o.id);
   }
 
   // One order_payments row per order, sharing the same mp_order_id.
@@ -1953,10 +1962,20 @@ router.get('/:order_id', requireAuth(), async (req, res) => {
           if (result) {
             const mapped = mapClipStatus(result.status);
             if (mapped === 'paid') {
-              await run(
-                `UPDATE orders SET payment_status = 'paid', payment_method = 'card', paid_at = NOW() WHERE id = $1`,
+              // Guarded transition (mirrors markTerminalOrderPaid): two
+              // concurrent polls must not double-run the side effects.
+              const completed = await get(
+                `UPDATE orders SET payment_status = 'paid', payment_method = 'card', paid_at = COALESCE(paid_at, NOW())
+                 WHERE id = $1 AND payment_status IS DISTINCT FROM 'paid'
+                 RETURNING id`,
                 [order.id]
               );
+              if (completed) {
+                await deductInventoryForOrder(order.id);
+                // Same auto customer ticket every other completion path gets —
+                // Clip card payments were the one paid path that never printed.
+                await enqueueCustomerTicket(order.id);
+              }
               order.payment_status = 'paid';
               order.payment_method = 'card';
             } else if (mapped === 'failed') {
@@ -2183,7 +2202,10 @@ export async function mpWebhook(req, res) {
       ) return; // already processed
 
       if (ord.payment_status === 'paid') {
-        await markTerminalOrderPaid(ord.id, ord.tenant_id);
+        // withTenant: the webhook runs before tenantMiddleware, so without it
+        // enqueueCustomerTicket sees no tenant context and silently skips the
+        // auto customer ticket whenever the webhook beats the POS status poll.
+        await withTenant(ord.tenant_id, () => markTerminalOrderPaid(ord.id, ord.tenant_id));
         return;
       }
 
@@ -2202,7 +2224,7 @@ export async function mpWebhook(req, res) {
       const mapped = mapPointOrderStatus(mpOrder);
 
       if (mapped === 'paid') {
-        await markTerminalOrderPaid(ord.id, ord.tenant_id, { mpOrder, mpAccessToken: accessToken });
+        await withTenant(ord.tenant_id, () => markTerminalOrderPaid(ord.id, ord.tenant_id, { mpOrder, mpAccessToken: accessToken }));
       } else if (mapped === 'failed') {
         // adminSql bypasses RLS — the explicit tenant_id predicate is the only isolation guard here
         await adminSql`

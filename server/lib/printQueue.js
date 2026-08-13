@@ -147,12 +147,19 @@ export async function enqueueKitchenTicket(orderId, opts = {}) {
  * payment completion.
  *
  * @param {number} orderId
+ * @param {object} [opts]
+ * @param {boolean} [opts.force] — skip the auto-print opt-in check. Used by
+ *   the on-demand reprint endpoint (POST /api/print-jobs/customer-ticket):
+ *   an explicit "Imprimir ticket" tap should print even for tenants that
+ *   don't auto-print every order.
  */
-export async function enqueueCustomerTicket(orderId) {
+export async function enqueueCustomerTicket(orderId, opts = {}) {
   try {
     const tenantId = getTenantId();
-    const enabled = await getCredential(tenantId, 'print_agent', 'auto_print_customer_ticket', '');
-    if (enabled !== 'true') return null;
+    if (!opts.force) {
+      const enabled = await getCredential(tenantId, 'print_agent', 'auto_print_customer_ticket', '');
+      if (enabled !== 'true') return null;
+    }
 
     const order = await get(`
       SELECT o.*, COALESCE(lc.name, o.customer_call_name) AS customer_name

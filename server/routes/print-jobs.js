@@ -7,7 +7,7 @@ import { all, get, run, getConn, getTenantId } from '../db/index.js';
 import { adminSql } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireAgentToken } from '../middleware/agentAuth.js';
-import { enqueueTestTicket, enqueuePingJob, getBridgeHealth } from '../lib/printQueue.js';
+import { enqueueTestTicket, enqueuePingJob, enqueueCustomerTicket, getBridgeHealth } from '../lib/printQueue.js';
 import { renderInstallScript } from '../lib/installScript.js';
 import { requirePlanFeature } from '../planLimits.js';
 
@@ -160,6 +160,38 @@ router.put('/customer-ticket-setting', requireAuth('manage_printers'), requirePl
   } catch (error) {
     console.error('[PrintJobs] Customer ticket setting update error:', error);
     res.status(500).json({ error: 'Failed to update setting' });
+  }
+});
+
+/**
+ * POST /api/print-jobs/customer-ticket
+ * Body: { order_id: number }
+ *
+ * On-demand thermal print of the customer ticket — the same ESC/POS layout
+ * the auto-print path uses on paid orders, so a reprint from ReceiptModal
+ * comes out identical to the auto-printed one instead of the paper-hungry
+ * browser rendering. Bypasses the auto-print opt-in toggle (this is an
+ * explicit request), but fails fast with a machine-readable status when no
+ * bridge can print it, so the UI can fall back to window.print().
+ */
+router.post('/customer-ticket', requireAuth('pos_access'), async (req, res) => {
+  try {
+    const orderId = Number(req.body?.order_id);
+    if (!orderId) return res.status(400).json({ error: 'order_id requerido' });
+
+    const order = await get('SELECT id, payment_status FROM orders WHERE id = $1', [orderId]);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+
+    const health = await getBridgeHealth(getTenantId());
+    if (!health.configured) return res.json({ status: 'not_configured' });
+    if (!health.online) return res.json({ status: 'bridge_offline', last_seen: health.last_seen });
+
+    const jobId = await enqueueCustomerTicket(orderId, { force: true });
+    if (!jobId) return res.json({ status: 'error' });
+    res.status(201).json({ status: 'queued', job_id: jobId });
+  } catch (error) {
+    console.error('[PrintJobs] Customer ticket print error:', error);
+    res.status(500).json({ error: 'Failed to enqueue customer ticket' });
   }
 });
 
