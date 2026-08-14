@@ -1586,7 +1586,7 @@ export async function getEmployeePerformance(
 }
 
 export async function getHourlyReport(
-  period: string,
+  period: string = 'today',
   opts: ReportRangeOpts = {}
 ): Promise<HourlyReport[]> {
   return apiRequest<HourlyReport[]>(`/reports/hourly?${reportQS(period, opts)}`);
