@@ -11,12 +11,46 @@
 import { adminSql } from '../db/index.js';
 import { audit } from '../lib/auditLog.js';
 
+// ==================== TIMEZONE ====================
+//
+// Every handler that answers a "which day / which weekday / which hour"
+// question receives the tenant's IANA timezone as `tz` (see agent/route.js).
+// It matters more than it looks: Juanberto's is UTC-6, so a 20:15 sale is
+// stored at 02:15Z the FOLLOWING day. Bucketing on the raw timestamptz
+// reported the dinner rush as a 2am rush and attributed Saturday night to
+// Sunday. Calendar boundaries must be crossed in local time, exactly as
+// server/routes/reports.js does it:
+//
+//   (created_at AT TIME ZONE ${tz})::date BETWEEN ${start} AND ${end}
+//
+// Rolling windows (`NOW() - interval '28 days'`) need no conversion — they're
+// durations, not calendar edges.
+
+/** YYYY-MM-DD for "today" in the tenant's timezone. */
+function tzToday(tz = 'UTC', offsetDays = 0) {
+  const d = new Date(Date.now() + offsetDays * 86400000);
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(d);
+}
+
+/**
+ * Day-of-week (0=Sun) for a YYYY-MM-DD string, read as a calendar date rather
+ * than an instant. `new Date('2026-03-11').getDay()` parses as UTC midnight and
+ * then answers in the *server's* zone, which is the previous day anywhere west
+ * of Greenwich.
+ */
+function dowOf(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
 // ==================== READ HANDLERS ====================
 
-async function get_sales_summary({ input, conn }) {
+async function get_sales_summary({ input, conn, tz = 'UTC' }) {
   const days = 7;
-  const start = input.start_date || new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
-  const end = input.end_date || new Date().toISOString().slice(0, 10);
+  const start = input.start_date || tzToday(tz, -days);
+  const end = input.end_date || tzToday(tz);
 
   const summary = await conn`
     SELECT
@@ -26,8 +60,7 @@ async function get_sales_summary({ input, conn }) {
       COALESCE(SUM(tip), 0) as total_tips,
       COUNT(DISTINCT employee_id) as active_employees
     FROM orders
-    WHERE created_at >= ${start}::date
-      AND created_at < (${end}::date + interval '1 day')
+    WHERE (created_at AT TIME ZONE ${tz})::date BETWEEN ${start} AND ${end}
       AND payment_status = 'paid'
   `;
 
@@ -35,8 +68,7 @@ async function get_sales_summary({ input, conn }) {
     SELECT oi.item_name, SUM(oi.quantity) as qty, SUM(oi.quantity * oi.unit_price) as revenue
     FROM order_items oi
     JOIN orders o ON o.id = oi.order_id
-    WHERE o.created_at >= ${start}::date
-      AND o.created_at < (${end}::date + interval '1 day')
+    WHERE (o.created_at AT TIME ZONE ${tz})::date BETWEEN ${start} AND ${end}
       AND o.payment_status = 'paid'
     GROUP BY oi.item_name
     ORDER BY revenue DESC
@@ -44,10 +76,9 @@ async function get_sales_summary({ input, conn }) {
   `;
 
   const busiestHours = await conn`
-    SELECT EXTRACT(HOUR FROM created_at)::int as hour, COUNT(*) as orders
+    SELECT EXTRACT(HOUR FROM created_at AT TIME ZONE ${tz})::int as hour, COUNT(*) as orders
     FROM orders
-    WHERE created_at >= ${start}::date
-      AND created_at < (${end}::date + interval '1 day')
+    WHERE (created_at AT TIME ZONE ${tz})::date BETWEEN ${start} AND ${end}
       AND payment_status = 'paid'
     GROUP BY hour
     ORDER BY orders DESC
@@ -57,8 +88,7 @@ async function get_sales_summary({ input, conn }) {
   const paymentMethods = await conn`
     SELECT payment_method, COUNT(*) as count, SUM(total) as revenue
     FROM orders
-    WHERE created_at >= ${start}::date
-      AND created_at < (${end}::date + interval '1 day')
+    WHERE (created_at AT TIME ZONE ${tz})::date BETWEEN ${start} AND ${end}
       AND payment_status = 'paid'
       AND payment_method IS NOT NULL
     GROUP BY payment_method
@@ -175,12 +205,12 @@ async function get_inventory_status({ input, conn }) {
   };
 }
 
-async function get_sales_by_day_and_hour({ input, conn }) {
+async function get_sales_by_day_and_hour({ input, conn, tz = 'UTC' }) {
   const weeks = input.weeks || 4;
 
   const byDay = await conn`
     SELECT
-      EXTRACT(DOW FROM created_at)::int as day_of_week,
+      EXTRACT(DOW FROM created_at AT TIME ZONE ${tz})::int as day_of_week,
       COUNT(*) as order_count,
       SUM(total) as revenue,
       AVG(total) as avg_ticket
@@ -193,7 +223,7 @@ async function get_sales_by_day_and_hour({ input, conn }) {
 
   const byHour = await conn`
     SELECT
-      EXTRACT(HOUR FROM created_at)::int as hour,
+      EXTRACT(HOUR FROM created_at AT TIME ZONE ${tz})::int as hour,
       COUNT(*) as order_count,
       SUM(total) as revenue
     FROM orders
@@ -314,10 +344,10 @@ async function get_customer_insights({ input, conn }) {
   return { days, ...stats[0], top_spenders: topSpenders, stamp_card_stats: redemptionRate[0] };
 }
 
-async function get_expense_summary({ input, conn }) {
-  const now = new Date();
-  const start = input.start_date || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-  const end = input.end_date || now.toISOString().slice(0, 10);
+async function get_expense_summary({ input, conn, tz = 'UTC' }) {
+  const today = tzToday(tz);
+  const start = input.start_date || `${today.slice(0, 8)}01`;
+  const end = input.end_date || today;
 
   const byCategory = await conn`
     SELECT category, SUM(amount) as total, COUNT(*) as count
@@ -330,7 +360,7 @@ async function get_expense_summary({ input, conn }) {
   const revenue = await conn`
     SELECT COALESCE(SUM(total), 0) as revenue
     FROM orders
-    WHERE created_at >= ${start}::date AND created_at < (${end}::date + interval '1 day')
+    WHERE (created_at AT TIME ZONE ${tz})::date BETWEEN ${start} AND ${end}
       AND payment_status = 'paid'
   `;
 
@@ -436,10 +466,10 @@ async function update_inventory_quantity({ input, conn, tenantId }) {
   return { success: true, item: item[0].name, old_quantity: oldQty, new_quantity: input.new_quantity, unit: item[0].unit };
 }
 
-async function create_prep_list({ input, conn }) {
-  const targetDate = input.target_date || new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+async function create_prep_list({ input, conn, tz = 'UTC' }) {
+  const targetDate = input.target_date || tzToday(tz, 1);
   const safetyFactor = input.safety_factor || 1.15;
-  const dayOfWeek = new Date(targetDate).getDay();
+  const dayOfWeek = dowOf(targetDate);
 
   // Get average sales per item for this day of week over last 4 weeks
   const forecast = await conn`
@@ -455,9 +485,9 @@ async function create_prep_list({ input, conn }) {
       JOIN orders o ON o.id = oi.order_id
       WHERE oi.menu_item_id = mi.id
         AND o.payment_status = 'paid'
-        AND EXTRACT(DOW FROM o.created_at) = ${dayOfWeek}
+        AND EXTRACT(DOW FROM o.created_at AT TIME ZONE ${tz}) = ${dayOfWeek}
         AND o.created_at >= NOW() - interval '28 days'
-      GROUP BY DATE(o.created_at)
+      GROUP BY (o.created_at AT TIME ZONE ${tz})::date
     ) daily ON true
     WHERE mi.active = true
     GROUP BY mi.id, mi.name, mc.name

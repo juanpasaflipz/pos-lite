@@ -470,7 +470,10 @@ export interface EmployeePerformanceReport {
   employee_id: number;
   employee_name: string;
   orders_processed: number;
+  /** Net of IVA and tips — sums to the Net Sales KPI. */
   total_sales: number;
+  /** What customers paid — equals orders_processed × avg_ticket. */
+  gross_sales: number;
   avg_ticket: number;
   tips_received: number;
 }
@@ -478,7 +481,10 @@ export interface EmployeePerformanceReport {
 export interface HourlyReport {
   hour: number;
   orders: number;
+  /** Net of IVA and tips — sums to the Net Sales KPI. */
   revenue: number;
+  /** What customers paid (subtotal + IVA + tip) — equals orders × avg_ticket. */
+  gross_revenue: number;
   avg_ticket: number;
 }
 

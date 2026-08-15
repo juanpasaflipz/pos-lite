@@ -137,7 +137,10 @@ router.post('/chat', requireAuth('view_dashboard'), async (req, res) => {
 
     const conn = getConn();
     const tenantId = getTenantId();
-    const toolCtx = { conn, tenantId };
+    // Tenant timezone is part of the tool context, not a detail of one query:
+    // every handler that buckets by calendar day, weekday or hour needs it, and
+    // without it a 20:15 sale in Mexico City is filed under 02:00 the next day.
+    const toolCtx = { conn, tenantId, tz: req.tenant?.timezone || 'UTC' };
 
     // Build the messages array for Claude
     let messages = [...clientMessages];
@@ -359,7 +362,9 @@ router.post('/execute', requireAuth('manage_ai'), async (req, res) => {
 
     const conn = getConn();
     const tenantId = getTenantId();
-    const result = await handler({ input, conn, tenantId });
+    const result = await handler({
+      input, conn, tenantId, tz: req.tenant?.timezone || 'UTC',
+    });
 
     return res.json({ success: true, result });
   } catch (err) {

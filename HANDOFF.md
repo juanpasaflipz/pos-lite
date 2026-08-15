@@ -7,6 +7,89 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-08-15 — Claude Code — **Hourly report honors the selected range; agent buckets in tenant time**
+
+Lands the reports WIP that `8b7b506` half-shipped. Cowork's `e5e320a` shim
+(`period = 'today'`) did its job and is now **dead weight** — `ReportsScreen`
+is the only caller and passes `period` explicitly. Worth dropping the default
+so a future caller gets a compile error instead of silently reading today;
+left in place here to keep this commit scoped.
+
+- **`GET /api/reports/hourly`** was hard-pinned to `tzToday`. It now runs
+  `resolveDateRange(req, tz)` like every other report on the screen, so
+  picking "this month" no longer shows only today under month-level KPIs.
+- **Net vs gross.** Hourly and employee-performance rows now carry both
+  bases: `revenue`/`total_sales` are net (ex-IVA, ex-tip) and sum to the Net
+  Sales KPI; `gross_revenue`/`gross_sales` are what the customer paid and
+  divide into `avg_ticket`. One column could not reconcile with both. Table
+  gained a totals footer so it adds up on screen.
+- **AI agent timezone** (`server/agent/`): handlers that answer
+  which-day/weekday/hour questions now take the tenant `tz`. At UTC-6 a 20:15
+  sale is stored 02:15Z *next day* — the dinner rush was being reported as a
+  2am rush and Saturday night attributed to Sunday.
+- All money columns cast `::float8` — postgres.js hands back NUMERIC as
+  strings, which silently breaks arithmetic on the client.
+
+Verified: `tests/reports-hourly.test.ts` (new, 11 tests) green in isolation;
+typecheck clean on both projects.
+
+⚠️ **The test branch is not a reliable gate right now.** `br-hidden-hill-ajgpffqg`
+is 0.25 CU with `suspend_timeout_seconds: 0`, so it suspends the instant it
+idles. A full 66-min suite starves it: the 2026-08-14 run failed 13 files
+with *zero* assertion errors — all `CONNECT_TIMEOUT`/`ECONNRESET`/hook
+timeouts — and 10 of 12 passed on re-run untouched. Warm the compute before
+a run and expect to re-run stragglers. `tests/sentinel.test.ts` and
+`tests/inventory-reset.test.ts` still failed on the second pass (one timeout
+plus a cascade off it); **unproven whether flake or real — nobody has
+isolated them yet.** Unrelated to this commit.
+
+---
+
+## 2026-08-13 — Cowork — **Ticket printing unified: thermal ESC/POS on every paid path (8b7b506 — pushed, deployed)**
+
+UPDATE 08-15 (Cowork): ci #164 on 8b7b506 failed at typecheck — the
+api/index.ts commit accidentally swept in Juan's uncommitted hourly-reports
+WIP signature (`getHourlyReport(period, opts)`) without the updated screens.
+Fixed with Juan's approval via the GitHub web editor: `e5e320a` on master
+gives `period` a default (`'today'`) so old callers compile; the reports WIP
+itself remains uncommitted and unaffected (its screens pass period
+explicitly). ci #165 on e5e320a: GREEN, full suite — first CI run to
+exercise the printing changes. Prod: 1.17.0+e5e320a live on juanb-s.
+⚠️ This working copy is 1 commit behind origin — `git pull` before the next
+push. Still pending: one real card charge to hardware-verify the auto
+thermal ticket, and watch inventory on Clip orders (deduction newly active).
+
+Juan reported cash orders auto-print the clean thermal customer ticket but
+card orders don't, and ReceiptModal's "Imprimir ticket" (browser
+window.print) wastes paper. Root causes + fixes, all in commit `8b7b506`:
+
+- **MP webhook**: `mpWebhook` runs before tenantMiddleware, so
+  `enqueueCustomerTicket` saw `getTenantId() === null` and silently skipped
+  the ticket whenever the webhook beat the POS status poll. Now wraps
+  `markTerminalOrderPaid` in `withTenant(ord.tenant_id, ...)`.
+- **Clip paid transition** (GET /api/payments/:order_id pull): marked paid
+  but never ran side effects. Now a guarded UPDATE (RETURNING +
+  `IS DISTINCT FROM 'paid'`) + `deductInventoryForOrder` +
+  `enqueueCustomerTicket`. ⚠️ Behavior change: Clip card orders now deduct
+  inventory (previously never did).
+- **Pay-together**: cash path + `settlePaymentGroupPaid` now enqueue one
+  toggle-gated customer ticket per order in the group.
+- **On-demand reprint**: new `POST /api/print-jobs/customer-ticket`
+  (pos_access; `enqueueCustomerTicket(orderId, {force:true})` bypasses the
+  auto-print toggle; returns not_configured/bridge_offline for fallback).
+  ReceiptModal print button is thermal-first, falls back to window.print()
+  only when the bridge can't print. Covers POSScreen + OrdersScreen.
+  PayTogetherReceiptModal (combined group receipt) still browser-print only.
+
+State: pushed and deployed; Mirror-to-GitLab green, CI red (see the
+2026-08-14 entry above — a swept-in unrelated change, not this work).
+Vitest still has not been run against these paths — Cowork VM can't run it
+(darwin-native rollup), and the push happened without it. **`npm test`
+(payment + order-lifecycle suites) is still owed.** Git tmp_obj strays
+moved to `_to_delete/git-tmp-obj/` (safe to empty).
+
+---
+
 ## 2026-08-08 — Claude Code — **Marketplace order tag (1.17.0) + delivery-launch comms**
 
 Juanberto's is live on Uber Eats + Rappi + DiDi Food (marketplaces, re-rung

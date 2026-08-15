@@ -36,6 +36,20 @@ export default function OverviewTab({
   const activeHours = hourlyData.filter(hour => hour.orders > 0 || hour.revenue > 0);
   const discountTotal = salesData?.discount_total || 0;
 
+  // Footer row so the table reconciles on screen: the net column adds up to the
+  // Net Sales KPI and the order count to the Order Count KPI, for the same range.
+  const hourlyTotals = activeHours.reduce(
+    (acc, hour) => ({
+      orders: acc.orders + Number(hour.orders || 0),
+      revenue: acc.revenue + Number(hour.revenue || 0),
+      gross_revenue: acc.gross_revenue + Number(hour.gross_revenue || 0),
+    }),
+    { orders: 0, revenue: 0, gross_revenue: 0 }
+  );
+  const hourlyAvgTicket = hourlyTotals.orders > 0
+    ? hourlyTotals.gross_revenue / hourlyTotals.orders
+    : 0;
+
   return (
     <div className="space-y-6">
       <LaborStrip />
@@ -238,13 +252,15 @@ export default function OverviewTab({
 
       {activeHours.length > 0 && (
         <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
-          <h3 className="text-xl font-bold text-white mb-4">{t('sales.overview.hourlySales')}</h3>
+          <h3 className="text-xl font-bold text-white">{t('sales.overview.hourlySales')}</h3>
+          <p className="text-sm text-neutral-400 mt-1 mb-4">{t('sales.overview.hourlySalesHint')}</p>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-neutral-800 border-b border-neutral-700">
                 <tr>
                   <th className="px-6 py-3 text-left text-sm font-semibold text-neutral-300">{t('sales.overview.columns.hour')}</th>
                   <th className="px-6 py-3 text-right text-sm font-semibold text-neutral-300">{t('sales.overview.columns.orders')}</th>
+                  <th className="px-6 py-3 text-right text-sm font-semibold text-neutral-300">{t('sales.overview.columns.netSales')}</th>
                   <th className="px-6 py-3 text-right text-sm font-semibold text-neutral-300">{t('sales.overview.columns.totalSales')}</th>
                   <th className="px-6 py-3 text-right text-sm font-semibold text-neutral-300">{t('sales.overview.columns.avgTicket')}</th>
                 </tr>
@@ -255,10 +271,20 @@ export default function OverviewTab({
                     <td className="px-6 py-4 font-medium text-white">{hourLabel(hour.hour)}</td>
                     <td className="px-6 py-4 text-right text-neutral-300">{intFmt(hour.orders)}</td>
                     <td className="px-6 py-4 text-right text-neutral-300">{fmt(hour.revenue)}</td>
+                    <td className="px-6 py-4 text-right text-neutral-300">{fmt(hour.gross_revenue)}</td>
                     <td className="px-6 py-4 text-right text-neutral-300">{fmt(hour.avg_ticket)}</td>
                   </tr>
                 ))}
               </tbody>
+              <tfoot className="bg-neutral-800/60 border-t-2 border-neutral-700">
+                <tr>
+                  <td className="px-6 py-4 font-bold text-white">{t('sales.overview.columns.total')}</td>
+                  <td className="px-6 py-4 text-right font-bold text-white">{intFmt(hourlyTotals.orders)}</td>
+                  <td className="px-6 py-4 text-right font-bold text-brand-500">{fmt(hourlyTotals.revenue)}</td>
+                  <td className="px-6 py-4 text-right font-bold text-white">{fmt(hourlyTotals.gross_revenue)}</td>
+                  <td className="px-6 py-4 text-right font-bold text-white">{fmt(hourlyAvgTicket)}</td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>
@@ -273,6 +299,7 @@ export default function OverviewTab({
                 <tr>
                   <th className="px-6 py-3 text-left text-sm font-semibold text-neutral-300">{t('sales.overview.columns.employee')}</th>
                   <th className="px-6 py-3 text-right text-sm font-semibold text-neutral-300">{t('sales.overview.columns.orders')}</th>
+                  <th className="px-6 py-3 text-right text-sm font-semibold text-neutral-300">{t('sales.overview.columns.netSales')}</th>
                   <th className="px-6 py-3 text-right text-sm font-semibold text-neutral-300">{t('sales.overview.columns.totalSales')}</th>
                   <th className="px-6 py-3 text-right text-sm font-semibold text-neutral-300">{t('sales.overview.columns.avgTicket')}</th>
                   <th className="px-6 py-3 text-right text-sm font-semibold text-neutral-300">{t('sales.overview.columns.tips')}</th>
@@ -284,6 +311,7 @@ export default function OverviewTab({
                     <td className="px-6 py-4 font-medium text-white">{emp.employee_name}</td>
                     <td className="px-6 py-4 text-right text-neutral-300">{emp.orders_processed}</td>
                     <td className="px-6 py-4 text-right text-neutral-300">{fmt(emp.total_sales)}</td>
+                    <td className="px-6 py-4 text-right text-neutral-300">{fmt(emp.gross_sales)}</td>
                     <td className="px-6 py-4 text-right text-neutral-300">{fmt(emp.avg_ticket)}</td>
                     <td className="px-6 py-4 text-right font-medium text-cockpit-in-text">{fmt(emp.tips_received)}</td>
                   </tr>

@@ -134,7 +134,7 @@ export default function ReportsScreen() {
           getSalesReport(period, opts),
           getItemSalesReport(period, itemSalesFilters, opts),
           getEmployeePerformance(period, opts),
-          getHourlyReport(),
+          getHourlyReport(period, opts),
         ]);
         setSalesData(sales);
         setItemSales(itemSalesData);

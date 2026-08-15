@@ -408,10 +408,14 @@ router.get('/employee-performance', requireAuth(), async (req, res) => {
       SELECT
         e.id as employee_id,
         e.name as employee_name,
-        COUNT(o.id) as orders_processed,
-        ROUND(SUM(o.subtotal), 2) as total_sales,
-        ROUND(AVG(o.total), 2) as avg_ticket,
-        ROUND(SUM(o.tip), 2) as tips_received
+        COUNT(o.id)::int as orders_processed,
+        -- total_sales is net (ex-IVA, ex-tip) so it reconciles with the Net
+        -- Sales KPI; gross_sales is the basis avg_ticket is computed on, so
+        -- gross_sales / orders_processed === avg_ticket.
+        COALESCE(ROUND(SUM(o.subtotal), 2), 0)::float8 as total_sales,
+        COALESCE(ROUND(SUM(o.total), 2), 0)::float8 as gross_sales,
+        COALESCE(ROUND(AVG(o.total), 2), 0)::float8 as avg_ticket,
+        COALESCE(ROUND(SUM(o.tip), 2), 0)::float8 as tips_received
       FROM employees e
       LEFT JOIN orders o ON e.id = o.employee_id AND (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2 AND o.payment_status = 'paid'
       GROUP BY e.id, e.name
@@ -425,24 +429,35 @@ router.get('/employee-performance', requireAuth(), async (req, res) => {
   }
 });
 
-// GET /api/reports/hourly - orders by hour of day
+// GET /api/reports/hourly - orders by hour of day, over the selected range
+//
+// Honors the same start_date/end_date/period params as every other report on
+// the Sales screen. It used to be hard-pinned to `tzToday`, so picking "this
+// month" left the hourly table showing only today while the KPIs above it
+// showed the month — the rows couldn't be reconciled against anything.
+//
+// Two revenue figures, because the KPI strip carries both bases and a single
+// column can't reconcile with both: `revenue` is net (subtotal, ex-IVA, ex-tip)
+// and sums to the Net Sales KPI; `gross_revenue` is what the customer actually
+// paid and satisfies gross_revenue / orders === avg_ticket per row.
 router.get('/hourly', requireAuth(), async (req, res) => {
   try {
     const tz = req.tenant?.timezone || 'UTC';
-    const today = tzToday(tz);
+    const { start: startDate, end: endDate } = resolveDateRange(req, tz);
 
     const hourly = await all(`
       SELECT
-        EXTRACT(HOUR FROM COALESCE(paid_at, created_at) AT TIME ZONE $2)::int as hour,
-        COUNT(*) as orders,
-        ROUND(SUM(subtotal), 2) as revenue,
-        ROUND(AVG(total), 2) as avg_ticket
+        EXTRACT(HOUR FROM COALESCE(paid_at, created_at) AT TIME ZONE $3)::int as hour,
+        COUNT(*)::int as orders,
+        ROUND(SUM(subtotal), 2)::float8 as revenue,
+        ROUND(SUM(total), 2)::float8 as gross_revenue,
+        ROUND(AVG(total), 2)::float8 as avg_ticket
       FROM orders
-      WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $2)::date = $1
+      WHERE (COALESCE(paid_at, created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2
         AND payment_status = 'paid'
       GROUP BY hour
       ORDER BY hour ASC
-    `, [today, tz]);
+    `, [startDate, endDate, tz]);
 
     // Fill in missing hours with 0 values
     const hourlyMap = {};
@@ -451,12 +466,19 @@ router.get('/hourly', requireAuth(), async (req, res) => {
         hour: i,
         orders: 0,
         revenue: 0,
+        gross_revenue: 0,
         avg_ticket: 0,
       };
     }
 
     hourly.forEach(row => {
-      hourlyMap[row.hour] = row;
+      hourlyMap[row.hour] = {
+        hour: row.hour,
+        orders: row.orders || 0,
+        revenue: row.revenue || 0,
+        gross_revenue: row.gross_revenue || 0,
+        avg_ticket: row.avg_ticket || 0,
+      };
     });
 
     const result = Object.values(hourlyMap);

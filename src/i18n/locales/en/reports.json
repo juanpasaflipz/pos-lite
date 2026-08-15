@@ -79,6 +79,7 @@
     },
     "overview": {
       "hourlySales": "Hourly Sales Breakdown",
+      "hourlySalesHint": "Every day in the selected period, summed and grouped by local hour. Net Sales excludes IVA and tips; Total Sales is what the customer paid.",
       "revenue": "Revenue",
       "orders": "Orders",
       "topSelling": "Top Selling Items",
@@ -116,9 +117,11 @@
         "employee": "Employee",
         "hour": "Hour",
         "orders": "Orders",
+        "netSales": "Net Sales",
         "totalSales": "Total Sales",
         "avgTicket": "Avg Ticket",
-        "tips": "Tips"
+        "tips": "Tips",
+        "total": "Total"
       }
     },
     "cashCard": {

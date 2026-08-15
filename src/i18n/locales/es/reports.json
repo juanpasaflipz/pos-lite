@@ -79,6 +79,7 @@
     },
     "overview": {
       "hourlySales": "Desglose de Ventas por Hora",
+      "hourlySalesHint": "Suma de todos los días del período seleccionado, agrupada por hora local. Ventas Netas excluye IVA y propinas; Ventas Totales es lo que pagó el cliente.",
       "revenue": "Ventas",
       "orders": "Órdenes",
       "topSelling": "Productos Más Vendidos",
@@ -116,9 +117,11 @@
         "employee": "Empleado",
         "hour": "Hora",
         "orders": "Órdenes",
+        "netSales": "Ventas Netas",
         "totalSales": "Ventas Totales",
         "avgTicket": "Ticket Prom.",
-        "tips": "Propinas"
+        "tips": "Propinas",
+        "total": "Total"
       }
     },
     "cashCard": {
