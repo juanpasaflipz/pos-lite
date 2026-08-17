@@ -1669,15 +1669,23 @@ router.post('/pay-together', paymentLimiter, requireAuth('pos_access'), async (r
            VALUES ($1, 'cash', $2, $3, 'paid')`,
           [s.order_id, s.total, s.tip_share]
         );
+        // Deliberately does NOT touch `status` or `completed_at`. Paying is not
+        // finishing: a kiosk ticket fires to the kitchen before the customer
+        // pays, so closing the order here erased it from the KDS while the food
+        // was still being cooked. Every other tender in this file leaves the
+        // order in flight — including this route's own card branch — and the
+        // kitchen completes it via ready → autoCompleteReadyOrders.
+        //
+        // Leaving status alone rather than forcing 'active' is what lets an
+        // order the kitchen already marked 'ready' stay ready instead of being
+        // shoved back onto the rail as in-progress.
         await run(
           `UPDATE orders
              SET payment_status = 'paid',
-                 status = 'completed',
                  payment_method = 'cash',
                  payment_group_id = $1,
                  tip = $2,
-                 paid_at = COALESCE(paid_at, NOW()),
-                 completed_at = COALESCE(completed_at, NOW())
+                 paid_at = COALESCE(paid_at, NOW())
            WHERE id = $3`,
           [group.id, s.tip_share, s.order_id]
         );
