@@ -84,8 +84,10 @@ const KioskDeliveryAddressScreen: React.FC = () => {
   return (
     <div className="h-full w-full bg-neutral-950 text-white flex flex-col">
       <header className="px-4 sm:px-6 py-3 sm:py-4 border-b border-neutral-800 grid grid-cols-[auto_1fr_auto] items-center gap-2 sm:gap-4 pt-safe">
+        {/* Was /fulfillment, which is now a post-fire screen that bounces
+            anyone arriving without a placed order. */}
         <button
-          onClick={() => navigate('/fulfillment')}
+          onClick={() => navigate('/menu')}
           className="h-11 sm:h-16 px-3 sm:px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 text-sm sm:text-lg font-bold touch-manipulation inline-flex items-center gap-2"
         >
           <ArrowLeft className="h-4 w-4 sm:h-6 sm:w-6" />

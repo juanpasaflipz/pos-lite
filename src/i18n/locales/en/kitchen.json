@@ -17,6 +17,7 @@
     "combo": "Combo",
     "forHere": "FOR HERE",
     "toGo": "TO GO",
+    "fulfillmentPending": "PENDING",
     "midPrepVoidBanner": "⚠ Item canceled — stop cooking"
   },
   "status": {

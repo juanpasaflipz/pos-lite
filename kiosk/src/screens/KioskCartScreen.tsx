@@ -8,13 +8,11 @@ import { useKioskCustomer } from '../context/KioskCustomerContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
 import {
   sendKioskDeliveryOrder,
-  sendKioskOrderToKitchen,
   logSuggestionEvents,
   type KioskOpenOrder,
-  type SuggestionEvent,
 } from '../lib/kioskApi';
+import { orderedSuggestionEvents } from '../lib/suggestionTelemetry';
 import CartUpsellStrip from '../components/CartUpsellStrip';
-import KioskCallNameModal from '../components/KioskCallNameModal';
 
 import { mxn as money } from '../lib/format';
 
@@ -23,21 +21,24 @@ const KioskCartScreen: React.FC = () => {
   const { t } = useTranslation();
   const { tenantId, kioskToken } = useKioskBinding();
   const { session } = useKioskCustomer();
-  const { lines, count, total, callName, fulfillmentType, delivery, incrementLine, decrementLine, removeLine, setCallName } = useKioskCart();
+  const { lines, count, total, callName, fulfillmentType, delivery, incrementLine, decrementLine, removeLine } = useKioskCart();
   const [holding, setHolding] = useState(false);
   const [holdError, setHoldError] = useState<string | null>(null);
-  const [askingName, setAskingName] = useState(false);
   const { warning } = useIdleTimer(() => navigate('/'), 120_000);
 
-  // Two submit modes — both pay-when-ordering:
-  //   - Delivery:  customer chose "A domicilio" — a draft was captured on the
-  //                address screen. Submit creates the order AND dispatches an
-  //                Uber Direct courier in one server call, then pay at terminal.
-  //   - Dine-in / Takeout: fire to kitchen, then route to /pay-existing. Para
-  //                Aquí and Para Llevar share the same submit + UI path.
+  // Two ways out of the cart:
+  //   - Delivery:  customer chose "A domicilio" and the address screen already
+  //                captured the recipient, so there's nothing left to ask.
+  //                Submit here creates the order AND dispatches an Uber Direct
+  //                courier in one server call, then pay at terminal.
+  //   - Dine-in / Takeout: hand off to /fulfillment, which fires the kitchen
+  //                ticket the moment the guest answers "¿para aquí o para
+  //                llevar?" — one tap from here, and with the packaging
+  //                instruction already on it. Nothing is on the server until
+  //                then, so the cart stays editable right up to that answer.
   const isDelivery = fulfillmentType === 'delivery';
 
-  const submitOrder = async (resolvedCallName: string | null) => {
+  const submitDeliveryOrder = async (resolvedCallName: string | null) => {
     if (!tenantId || !kioskToken || lines.length === 0 || holding) return;
     setHolding(true);
     setHoldError(null);
@@ -48,90 +49,38 @@ const KioskCartScreen: React.FC = () => {
         modifier_ids: line.modifiers.map((m) => m.id),
       }));
 
-      // Telemetry: which shown personalized suggestions actually converted to
-      // an order. Closes the shown → tapped → ordered loop that powers the
-      // suggestion-acceptance KPI (server records event_type='ordered'). The
-      // 'tapped' half is logged on the menu screen; this is the 'ordered' half.
-      // Best-effort, fire-and-forget — computed here from the known-customer
-      // session suggestions and the final cart.
-      const orderedSuggestionEvents: SuggestionEvent[] = (() => {
-        const s = session?.suggestions;
-        if (!s) return [];
-        const byId = new Map<number, { lane: SuggestionEvent['lane']; source?: string; reason?: string }>();
-        const all = [...(s.for_you || []), ...(s.popular || []), ...(s.house ? [s.house] : [])];
-        for (const it of all) {
-          if (it && !byId.has(it.menu_item_id)) byId.set(it.menu_item_id, { lane: it.lane, source: it.source, reason: it.reason });
-        }
-        const evs: SuggestionEvent[] = [];
-        for (const line of lines) {
-          const sug = byId.get(line.menu_item_id);
-          if (sug) evs.push({ menu_item_id: line.menu_item_id, lane: sug.lane, source: sug.source, event_type: 'ordered', reason: sug.reason });
-        }
-        return evs;
-      })();
       const logOrdered = () =>
-        logSuggestionEvents({ tenantId, kioskToken }, session?.customerToken ?? null, orderedSuggestionEvents);
+        logSuggestionEvents(
+          { tenantId, kioskToken },
+          session?.customerToken ?? null,
+          orderedSuggestionEvents(session, lines),
+        );
 
-      if (isDelivery) {
-        if (!delivery) {
-          setHoldError(t('cart.deliveryDataMissing'));
-          setHolding(false);
-          return;
-        }
-        const result = await sendKioskDeliveryOrder({ tenantId, kioskToken }, apiItems, {
-          customerToken: session?.customerToken ?? null,
-          customerCallName: resolvedCallName || delivery.recipientName,
-          dropoffAddress: delivery.address,
-          dropoffPhoneNumber: delivery.phone,
-          dropoffName: delivery.recipientName,
-          dropoffNotes: delivery.notes,
-          quoteId: delivery.quoteId,
-        });
-        logOrdered();
-        const openOrder = {
-          id: result.id,
-          order_number: result.order_number,
-          subtotal: result.subtotal,
-          tax: result.tax,
-          total: result.total,
-          status: result.status,
-          payment_status: result.payment_status,
-          customer_call_name: result.customer_call_name,
-          order_fulfillment_type: result.order_fulfillment_type,
-          created_at: new Date().toISOString(),
-          items: lines.map((line, idx) => ({
-            order_item_id: idx + 1,
-            menu_item_id: line.menu_item_id,
-            item_name: line.name,
-            quantity: line.quantity,
-            unit_price: line.price,
-            modifiers: line.modifiers,
-          })),
-        };
-        navigate('/pay-existing', {
-          replace: true,
-          state: { order: openOrder, delivery: result.delivery, deliveryError: result.delivery_error },
-        });
+      if (!delivery) {
+        setHoldError(t('cart.deliveryDataMissing'));
+        setHolding(false);
         return;
       }
-
-      const opts = {
+      const result = await sendKioskDeliveryOrder({ tenantId, kioskToken }, apiItems, {
         customerToken: session?.customerToken ?? null,
-        customerCallName: resolvedCallName,
-        fulfillmentType,
-      };
-      const order = await sendKioskOrderToKitchen({ tenantId, kioskToken }, apiItems, opts);
+        customerCallName: resolvedCallName || delivery.recipientName,
+        dropoffAddress: delivery.address,
+        dropoffPhoneNumber: delivery.phone,
+        dropoffName: delivery.recipientName,
+        dropoffNotes: delivery.notes,
+        quoteId: delivery.quoteId,
+      });
       logOrdered();
       const openOrder: KioskOpenOrder = {
-        id: order.id,
-        order_number: order.order_number,
-        subtotal: order.subtotal,
-        tax: order.tax,
-        total: order.total,
-        status: order.status,
-        payment_status: order.payment_status,
-        customer_call_name: order.customer_call_name,
-        order_fulfillment_type: order.order_fulfillment_type,
+        id: result.id,
+        order_number: result.order_number,
+        subtotal: result.subtotal,
+        tax: result.tax,
+        total: result.total,
+        status: result.status,
+        payment_status: result.payment_status,
+        customer_call_name: result.customer_call_name,
+        order_fulfillment_type: result.order_fulfillment_type,
         created_at: new Date().toISOString(),
         items: lines.map((line, idx) => ({
           order_item_id: idx + 1,
@@ -142,7 +91,10 @@ const KioskCartScreen: React.FC = () => {
           modifiers: line.modifiers,
         })),
       };
-      navigate('/pay-existing', { replace: true, state: { order: openOrder } });
+      navigate('/pay-existing', {
+        replace: true,
+        state: { order: openOrder, delivery: result.delivery, deliveryError: result.delivery_error },
+      });
     } catch (err) {
       setHoldError(
         err instanceof Error
@@ -155,21 +107,14 @@ const KioskCartScreen: React.FC = () => {
 
   const handlePrimary = () => {
     if (count === 0 || holding) return;
-    // Delivery captured the recipient name on the address screen — skip the
-    // call-name modal entirely.
+    // Delivery is already fully specified by the address screen, so it submits
+    // straight from here. Everything else goes on to answer "¿para aquí o para
+    // llevar?", which is where the order gets created.
     if (isDelivery) {
-      submitOrder(callName || delivery?.recipientName || null);
+      submitDeliveryOrder(callName || delivery?.recipientName || null);
       return;
     }
-    if (session) {
-      submitOrder(null);
-      return;
-    }
-    if (callName) {
-      submitOrder(callName);
-      return;
-    }
-    setAskingName(true);
+    navigate('/fulfillment');
   };
 
   return (
@@ -284,19 +229,6 @@ const KioskCartScreen: React.FC = () => {
         </p>
       </footer>
 
-      {askingName && (
-        <KioskCallNameModal
-          required
-          title={t('cart.nameTitle')}
-          subtitle={t('cart.nameSubtitle')}
-          onSkip={() => setAskingName(false)}
-          onConfirm={(name) => {
-            setCallName(name);
-            setAskingName(false);
-            submitOrder(name);
-          }}
-        />
-      )}
       {warning}
     </div>
   );

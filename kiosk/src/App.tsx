@@ -8,7 +8,6 @@ import { KioskSuggestionsProvider } from './context/KioskSuggestionsContext';
 import AttractScreen from './screens/AttractScreen';
 import BindDeviceScreen from './screens/BindDeviceScreen';
 import AdminBindScreen from './screens/AdminBindScreen';
-import KioskIdentifyScreen from './screens/KioskIdentifyScreen';
 import KioskFulfillmentScreen from './screens/KioskFulfillmentScreen';
 import KioskDeliveryAddressScreen from './screens/KioskDeliveryAddressScreen';
 import KioskMenuScreen from './screens/KioskMenuScreen';
@@ -65,7 +64,6 @@ const Routed: React.FC = () => {
       <Route path="/" element={<AttractScreen />} />
       <Route path="/fulfillment" element={<KioskFulfillmentScreen />} />
       <Route path="/delivery-address" element={<KioskDeliveryAddressScreen />} />
-      <Route path="/identify" element={<KioskIdentifyScreen />} />
       <Route path="/menu" element={<KioskMenuScreen />} />
       <Route path="/wizard" element={<BuilderWizardScreen />} />
       <Route path="/cart" element={<CartRoute />} />

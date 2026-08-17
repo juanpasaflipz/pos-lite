@@ -624,6 +624,14 @@ function OrderCard({
               <span className="bg-cockpit-system text-white px-2.5 py-1 rounded-full font-black text-sm whitespace-nowrap uppercase tracking-wide shrink-0">
                 {t('orders.forHere')}
               </span>
+            ) : !order.order_fulfillment_type ? (
+              // Kiosk fires the ticket from the cart and asks "¿para aquí o para
+              // llevar?" on the next screen, so this is unknown for a few
+              // seconds. Say so in neutral grey rather than guessing — the two
+              // real pills are a packaging instruction and must stay trustworthy.
+              <span className="bg-neutral-700 text-neutral-200 px-2.5 py-1 rounded-full font-black text-sm whitespace-nowrap uppercase tracking-wide shrink-0">
+                {t('orders.fulfillmentPending')}
+              </span>
             ) : (
               <span className="bg-cockpit-attention text-neutral-950 px-2.5 py-1 rounded-full font-black text-sm whitespace-nowrap uppercase tracking-wide shrink-0">
                 {t('orders.toGo')}
@@ -705,6 +713,10 @@ function OrderCard({
               ) : order.order_fulfillment_type === 'for_here' ? (
                 <span className="bg-cockpit-system text-white px-3 py-1.5 rounded-full font-black text-sm whitespace-nowrap uppercase tracking-wide">
                   {t('orders.forHere')}
+                </span>
+              ) : !order.order_fulfillment_type ? (
+                <span className="bg-neutral-700 text-neutral-200 px-3 py-1.5 rounded-full font-black text-sm whitespace-nowrap uppercase tracking-wide">
+                  {t('orders.fulfillmentPending')}
                 </span>
               ) : (
                 <span className="bg-cockpit-attention text-neutral-950 px-3 py-1.5 rounded-full font-black text-sm whitespace-nowrap uppercase tracking-wide">

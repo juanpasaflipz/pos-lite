@@ -18,7 +18,8 @@
   "fulfillment": {
     "howDoYouWantIt": "How do you want your order?",
     "forHere": "For here",
-    "toGo": "To go"
+    "toGo": "To go",
+    "sending": "Sending your order to the kitchen…"
   },
   "identify": {
     "whatsYourName": "What's your name?",
@@ -56,7 +57,7 @@
     "orderAndPay": "Order and pay",
     "continueToPay": "Continue to pay",
     "deliveryFootnote": "You pay at the terminal. An Uber courier brings your order.",
-    "payFootnote": "Pay at the terminal — then we send your order to the kitchen.",
+    "payFootnote": "Almost there — two quick questions, then pay at the terminal.",
     "nameTitle": "Whose name is the order under?",
     "nameSubtitle": "We use your name to call you when it's ready."
   },

@@ -1097,7 +1097,7 @@ function kioskBirthStatus(fireEarly) {
 router.post('/orders/send-to-kitchen', verifyKioskToken, requireKioskPlan, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
-    const { items, customer_token, customer_call_name, fulfillment_type } = req.body || {};
+    const { items, customer_token, customer_call_name, fulfillment_type, identify_later } = req.body || {};
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Cart is empty' });
     }
@@ -1107,9 +1107,18 @@ router.post('/orders/send-to-kitchen', verifyKioskToken, requireKioskPlan, async
       ? null
       : (typeof customer_call_name === 'string' ? customer_call_name.trim().slice(0, 40) || null : null);
 
+    // `identify_later` is the kiosk telling us it will POST /orders/:id/identify
+    // with the call-out name shortly. The kiosk now fires this call the moment
+    // the guest answers "¿para aquí o para llevar?" — one screen before the
+    // name, which is the slow step (on-screen keyboard) — so the ticket reaches
+    // the kitchen while they're still typing. Opt-in on purpose: the Android APK
+    // is frozen between rebuilds, so older kiosks keep sending the name up front
+    // and keep getting the old guard.
+    const identifyLater = identify_later === true;
+
     // Dine-in must be identifiable — the name is the bridge customers use to
     // come back and pay or add items later.
-    if (!loyaltyCustomerId && !callName) {
+    if (!identifyLater && !loyaltyCustomerId && !callName) {
       return res.status(400).json({ error: 'Customer identification or call name required' });
     }
 
@@ -1128,7 +1137,15 @@ router.post('/orders/send-to-kitchen', verifyKioskToken, requireKioskPlan, async
     const tax = Math.round((total - total / (1 + TAX_RATE)) * 100) / 100;
     const subtotal = Math.round((total - tax) * 100) / 100;
     const tenantTz = (await getTenant(tenantId))?.timezone;
-    const fulfillmentType = normalizeKioskFulfillmentType(fulfillment_type);
+    // NULL, not the 'to_go' default, when a deferring caller omits the answer.
+    // The kiosk always sends it — this is the floor, not the hot path. Falling
+    // back to the column default would put "PARA LLEVAR" on a ticket that may
+    // turn out to be dine-in, and a wrong packaging instruction is an error the
+    // line has no way to see coming. NULL at least says so; the KDS renders it
+    // as its own neutral pill.
+    const fulfillmentType = identifyLater && fulfillment_type == null
+      ? null
+      : normalizeKioskFulfillmentType(fulfillment_type);
     const fireEarly = await firesBeforePayment(tenantId);
     const { status, fireStamp } = kioskBirthStatus(fireEarly);
     const inventoryMode = await inventoryModeForTenant(tenantId);
@@ -1174,6 +1191,61 @@ router.post('/orders/send-to-kitchen', verifyKioskToken, requireKioskPlan, async
   } catch (err) {
     console.error('[kiosk/orders/send-to-kitchen] error', err);
     res.status(500).json({ error: 'Failed to send order to kitchen' });
+  }
+});
+
+// POST /api/kiosk/orders/:id/identify
+// Body: { customer_call_name?, fulfillment_type? }
+//
+// The back half of an `identify_later` order. The kiosk fires the ticket on the
+// "¿para aquí o para llevar?" tap and the name screen patches the call-out name
+// on here. Both fields are optional and only present ones are written, so the
+// forward path (name only) and the correction path (a guest stepping back to
+// change their packaging answer, fulfillment only) can't erase each other.
+//
+// Deliberately narrow: kiosk-born orders only, and only while still unpaid.
+// Once money has changed hands the name on the ticket is a receipt fact, not a
+// guest's scratchpad.
+router.post('/orders/:id/identify', verifyKioskToken, requireKioskPlan, async (req, res) => {
+  const tenantId = req.kioskTenantId;
+  const orderId = Number(req.params.id);
+  try {
+    if (!Number.isInteger(orderId) || orderId <= 0) {
+      return res.status(400).json({ error: 'Invalid order id' });
+    }
+    const { customer_call_name, fulfillment_type } = req.body || {};
+
+    const [existing] = await adminSql`
+      SELECT id, loyalty_customer_id
+      FROM orders
+      WHERE tenant_id = ${tenantId}
+        AND id = ${orderId}
+        AND source = 'customer_kiosk'
+        AND payment_status = 'unpaid'
+    `;
+    if (!existing) return res.status(404).json({ error: 'No open kiosk order to identify' });
+
+    // A loyalty-identified order carries the real customer, so the call name
+    // stays NULL — same rule the create path follows.
+    const callName = existing.loyalty_customer_id
+      ? null
+      : (typeof customer_call_name === 'string' ? customer_call_name.trim().slice(0, 40) || null : null);
+    const fulfillmentType = fulfillment_type == null
+      ? null
+      : normalizeKioskFulfillmentType(fulfillment_type);
+
+    const [order] = await adminSql`
+      UPDATE orders
+      SET customer_call_name = COALESCE(${callName}, customer_call_name),
+          order_fulfillment_type = COALESCE(${fulfillmentType}, order_fulfillment_type)
+      WHERE tenant_id = ${tenantId} AND id = ${orderId}
+      RETURNING id, order_number, subtotal, tax, total, status, payment_status,
+                customer_call_name, order_fulfillment_type
+    `;
+    res.json(order);
+  } catch (err) {
+    console.error('[kiosk/orders/identify] error', err);
+    res.status(500).json({ error: 'Failed to identify order' });
   }
 });
 

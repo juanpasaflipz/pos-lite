@@ -1,36 +1,82 @@
-import React from 'react';
+// "¿Para aquí o para llevar?" — and the moment the order becomes real.
+//
+// Both kiosk modes ask this at the END of the flow now, after the cart. Grid
+// mode used to ask it first, before the guest had seen a single item; `wizard`
+// now only picks which of the two layouts to render.
+//
+// The answer FIRES the kitchen ticket rather than merely being recorded on the
+// way to one. Two reasons it happens on this tap and not the cart's:
+//   - The kitchen starts a screen earlier than it would if we waited for the
+//     name, which is the slowest step in the flow (on-screen keyboard).
+//   - The ticket carries its packaging instruction from the first frame the
+//     line ever sees it. Firing from the cart would mean a window where the
+//     order is being cooked with "para aquí / para llevar" still unknown, and
+//     a wrong guess there is an error nobody downstream can detect.
+// The call-out name is the only thing left deferred, because a nameless ticket
+// is a state the KDS has always rendered honestly (it shows the order number).
+//
+// So this screen is the point of no return, and it is deliberately the LAST one
+// that offers a way back to the cart.
+import React, { useState } from 'react';
 import { ChevronLeft, ShoppingBag, Utensils } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useKioskBinding } from '../context/KioskBindingContext';
 import { useKioskCart, type KioskFulfillmentType } from '../context/KioskCartContext';
+import { useKioskCustomer } from '../context/KioskCustomerContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
 import LanguageToggle from '../components/LanguageToggle';
 import { BuilderIcon } from '../lib/builderIcons';
+import { identifyKioskOrder, type KioskOpenOrder } from '../lib/kioskApi';
+import { fireKioskOrder } from '../lib/placeOrder';
 
 const KioskFulfillmentScreen: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
-  const { kioskMode } = useKioskBinding();
-  const { setFulfillmentType } = useKioskCart();
+  const { tenantId, kioskToken, kioskMode } = useKioskBinding();
+  const { lines, setFulfillmentType } = useKioskCart();
+  const { session } = useKioskCustomer();
 
-  const { warning } = useIdleTimer(() => navigate('/'), 60_000);
+  // Present only when the guest came BACK here from the name screen to change
+  // their answer. The ticket already exists in that case, so the tap patches it
+  // instead of firing a second one.
+  const placed = (location.state as { order?: KioskOpenOrder } | null)?.order || null;
 
-  // Wizard mode asks this at the END of the flow, after the cart (D11), so the
-  // answer rides on the finished order and the next stop is the call-out name.
-  // Grid mode still asks it first and continues to name-only identify.
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Stretched while the ticket is in flight — the guest is waiting on us.
+  const { warning } = useIdleTimer(() => navigate('/'), busy ? 300_000 : 60_000);
+
   const wizard = kioskMode === 'wizard';
 
-  const choose = (type: KioskFulfillmentType) => {
+  const choose = async (type: KioskFulfillmentType) => {
+    if (busy || !tenantId || !kioskToken) return;
     setFulfillmentType(type);
-    if (wizard) {
-      navigate('/name');
-      return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (placed) {
+        const patched = await identifyKioskOrder({ tenantId, kioskToken }, placed.id, {
+          fulfillmentType: type,
+        });
+        navigate('/name', {
+          state: { order: { ...placed, order_fulfillment_type: patched.order_fulfillment_type } },
+        });
+        return;
+      }
+      const order = await fireKioskOrder({ tenantId, kioskToken }, lines, session, type);
+      navigate('/name', { state: { order } });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('cart.sendFailed'));
+      setBusy(false);
     }
-    // Both Para Aquí and Para Llevar: name-only identify → menu. Loyalty phone
-    // enrollment is deferred to the post-payment QR on the confirmation screen.
-    navigate('/identify');
   };
+
+  // No ticket and no cart — a reload wiped the local cart, so there is nothing
+  // to order. Back to the attract loop.
+  if (!placed && lines.length === 0) return <Navigate to="/" replace />;
 
   if (wizard) {
     return (
@@ -46,13 +92,19 @@ const KioskFulfillmentScreen: React.FC = () => {
           </div>
           <div className="flex gap-2 flex-shrink-0">
             <LanguageToggle />
-            <button
-              onClick={() => navigate('/cart')}
-              className="h-11 px-3.5 rounded-[10px] bg-neutral-800 active:bg-neutral-700 text-sm font-extrabold inline-flex items-center gap-1.5"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              {t('wizard.back')}
-            </button>
+            {/* Hidden once `placed` exists: the guest is here correcting an
+                answer on a ticket the kitchen already has, and the cart behind
+                it can no longer be edited. */}
+            {!placed && (
+              <button
+                onClick={() => navigate('/cart')}
+                disabled={busy}
+                className="h-11 px-3.5 rounded-[10px] bg-neutral-800 active:bg-neutral-700 disabled:text-neutral-500 text-sm font-extrabold inline-flex items-center gap-1.5"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                {t('wizard.back')}
+              </button>
+            )}
           </div>
         </header>
 
@@ -65,13 +117,20 @@ const KioskFulfillmentScreen: React.FC = () => {
               <button
                 key={o.key}
                 onClick={() => choose(o.key)}
-                className="min-h-[230px] rounded-2xl border-2 border-neutral-800 bg-neutral-900 p-[18px_14px] flex flex-col items-center justify-center gap-2 text-center active:scale-[0.96] transition-transform touch-manipulation"
+                disabled={busy}
+                className="min-h-[230px] rounded-2xl border-2 border-neutral-800 bg-neutral-900 disabled:opacity-50 p-[18px_14px] flex flex-col items-center justify-center gap-2 text-center active:scale-[0.96] transition-transform touch-manipulation"
               >
                 <BuilderIcon name={o.icon} className="h-[72px] w-[72px] text-brand-300" />
                 <span className="text-[clamp(20px,3.5vw,28px)] font-black leading-[1.15]">{o.label}</span>
               </button>
             ))}
           </div>
+          {busy && (
+            <p className="text-center text-neutral-400 font-bold mt-6">{t('fulfillment.sending')}</p>
+          )}
+          {error && (
+            <p className="text-center text-cockpit-out-text font-bold mt-6">{error}</p>
+          )}
         </main>
 
         {warning}
@@ -81,7 +140,23 @@ const KioskFulfillmentScreen: React.FC = () => {
 
   return (
     <div className="h-full w-full bg-neutral-950 text-white flex flex-col">
-      <main className="flex-1 px-5 py-6 sm:px-10 sm:py-10 flex flex-col items-center justify-center pt-safe pb-safe">
+      {/* This screen used to open the flow and so had nowhere to go back to.
+          Sitting after the cart — and being the last screen before the ticket
+          exists — it needs a way out that isn't waiting for the idle timer. */}
+      <header className="px-4 sm:px-6 py-3 pt-safe flex-shrink-0">
+        {!placed && (
+          <button
+            onClick={() => navigate('/cart')}
+            disabled={busy}
+            className="h-11 sm:h-14 px-3 sm:px-5 rounded-lg bg-neutral-800 active:bg-neutral-700 disabled:text-neutral-500 text-sm sm:text-lg font-bold touch-manipulation inline-flex items-center gap-2"
+          >
+            <ChevronLeft className="h-4 w-4 sm:h-6 sm:w-6" />
+            {t('common.back')}
+          </button>
+        )}
+      </header>
+
+      <main className="flex-1 px-5 pb-6 sm:px-10 sm:pb-10 flex flex-col items-center justify-center pb-safe">
         <h1 className="text-3xl sm:text-5xl xl:text-6xl font-black text-center leading-tight sm:leading-none mb-6 sm:mb-10">
           {t('fulfillment.howDoYouWantIt')}
         </h1>
@@ -92,7 +167,8 @@ const KioskFulfillmentScreen: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 w-full max-w-4xl">
           <button
             onClick={() => choose('for_here')}
-            className="min-h-[140px] sm:min-h-[360px] rounded-lg bg-brand-600 active:bg-brand-700 text-white touch-manipulation flex flex-col items-center justify-center gap-3 sm:gap-7 px-6"
+            disabled={busy}
+            className="min-h-[140px] sm:min-h-[360px] rounded-lg bg-brand-600 active:bg-brand-700 disabled:opacity-50 text-white touch-manipulation flex flex-col items-center justify-center gap-3 sm:gap-7 px-6"
           >
             <Utensils className="h-10 w-10 sm:h-24 sm:w-24" />
             <span className="text-2xl sm:text-4xl xl:text-5xl font-black leading-none text-center">{t('fulfillment.forHere')}</span>
@@ -100,12 +176,20 @@ const KioskFulfillmentScreen: React.FC = () => {
 
           <button
             onClick={() => choose('to_go')}
-            className="min-h-[140px] sm:min-h-[360px] rounded-lg bg-neutral-800 active:bg-neutral-700 text-white touch-manipulation flex flex-col items-center justify-center gap-3 sm:gap-7 px-6"
+            disabled={busy}
+            className="min-h-[140px] sm:min-h-[360px] rounded-lg bg-neutral-800 active:bg-neutral-700 disabled:opacity-50 text-white touch-manipulation flex flex-col items-center justify-center gap-3 sm:gap-7 px-6"
           >
             <ShoppingBag className="h-10 w-10 sm:h-24 sm:w-24" />
             <span className="text-2xl sm:text-4xl xl:text-5xl font-black leading-none text-center">{t('fulfillment.toGo')}</span>
           </button>
         </div>
+
+        {busy && (
+          <p className="text-center text-neutral-400 font-bold text-lg mt-8">{t('fulfillment.sending')}</p>
+        )}
+        {error && (
+          <p className="text-center text-cockpit-out-text font-bold text-lg mt-8">{error}</p>
+        )}
       </main>
       {warning}
     </div>

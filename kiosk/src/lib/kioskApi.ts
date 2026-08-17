@@ -59,7 +59,7 @@ export async function bindKioskWithAdminSecret(
   return res.json();
 }
 
-interface AuthHeaders {
+export interface AuthHeaders {
   tenantId: string;
   kioskToken: string;
 }
@@ -354,13 +354,22 @@ export interface KioskSendToKitchenResponse {
   status: string;
   payment_status: string;
   customer_call_name: string | null;
-  order_fulfillment_type: KioskFulfillmentType;
+  order_fulfillment_type: KioskFulfillmentType | null;
+}
+
+export interface SendToKitchenOpts extends HoldKioskOrderOpts {
+  /**
+   * Fire the ticket now and answer "¿para aquí o para llevar?" plus the call-out
+   * name afterwards, via identifyKioskOrder(). Both fields go to the server as
+   * unknown rather than as a default — see the KDS's neutral fulfillment pill.
+   */
+  identifyLater?: boolean;
 }
 
 export async function sendKioskOrderToKitchen(
   auth: AuthHeaders,
   items: CreateKioskOrderLine[],
-  opts: HoldKioskOrderOpts = {},
+  opts: SendToKitchenOpts = {},
 ): Promise<KioskSendToKitchenResponse> {
   const res = await authedFetch(auth, `${API_BASE}/api/kiosk/orders/send-to-kitchen`, {
     method: 'POST',
@@ -368,12 +377,40 @@ export async function sendKioskOrderToKitchen(
       items,
       customer_token: opts.customerToken || undefined,
       customer_call_name: opts.customerCallName || undefined,
-      fulfillment_type: opts.fulfillmentType || 'for_here',
+      fulfillment_type: opts.identifyLater
+        ? (opts.fulfillmentType || undefined)
+        : (opts.fulfillmentType || 'for_here'),
+      identify_later: opts.identifyLater || undefined,
     }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `Send to kitchen failed (${res.status})`);
+  }
+  return res.json();
+}
+
+/**
+ * Patches the call-out name and/or the fulfillment choice onto an order that was
+ * already fired to the kitchen. Only the fields you pass are written, so the
+ * fulfillment screen can send its answer the moment it has one without racing
+ * the name screen's authoritative call.
+ */
+export async function identifyKioskOrder(
+  auth: AuthHeaders,
+  orderId: number,
+  opts: { customerCallName?: string | null; fulfillmentType?: KioskFulfillmentType | null },
+): Promise<KioskSendToKitchenResponse> {
+  const res = await authedFetch(auth, `${API_BASE}/api/kiosk/orders/${orderId}/identify`, {
+    method: 'POST',
+    body: JSON.stringify({
+      customer_call_name: opts.customerCallName || undefined,
+      fulfillment_type: opts.fulfillmentType || undefined,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Identify failed (${res.status})`);
   }
   return res.json();
 }
@@ -461,7 +498,9 @@ export interface KioskOpenOrder {
   status: string;
   payment_status: string;
   customer_call_name: string | null;
-  order_fulfillment_type: KioskFulfillmentType;
+  // Null while the guest is between the cart (which fires the ticket) and the
+  // fulfillment screen (which answers it).
+  order_fulfillment_type: KioskFulfillmentType | null;
   created_at: string;
   items: Array<{
     order_item_id: number;

@@ -18,7 +18,8 @@
   "fulfillment": {
     "howDoYouWantIt": "¿Cómo quieres tu orden?",
     "forHere": "Para aquí",
-    "toGo": "Para llevar"
+    "toGo": "Para llevar",
+    "sending": "Enviando tu orden a la cocina…"
   },
   "identify": {
     "whatsYourName": "¿Cómo te llamas?",
@@ -56,7 +57,7 @@
     "orderAndPay": "Pedir y pagar",
     "continueToPay": "Continuar a pagar",
     "deliveryFootnote": "Cobramos en la terminal. Llega un repartidor de Uber con tu pedido.",
-    "payFootnote": "Pagas en la terminal — luego enviamos tu orden a la cocina.",
+    "payFootnote": "Ya casi — dos preguntas rápidas y pagas en la terminal.",
     "nameTitle": "¿A nombre de quién?",
     "nameSubtitle": "Usamos tu nombre para llamarte cuando esté lista."
   },

@@ -1,22 +1,30 @@
 // Call-out name capture — parity with the prototype's `rName` (v15).
 //
 // D11 puts this at the very END of the flow: cart → ¿para aquí o para llevar?
-// → this screen → payment. It is a full-screen on-screen keyboard rather than a
-// modal because the kiosk has no hardware keyboard and the tablet's own IME
-// covers half the screen on Android.
+// → this screen → payment. Both kiosk modes route through here now; grid used
+// to ask for the name up front, before the guest had seen the menu. It is a
+// full-screen on-screen keyboard rather than a modal because the kiosk has no
+// hardware keyboard and the tablet's own IME covers half the screen on Android.
 //
-// This is also where the order is actually created. Everything before it is
-// local state, so a guest who walks away at any earlier step leaves nothing
-// behind on the server.
+// The order already exists by the time this screen mounts — answering "¿para
+// aquí o para llevar?" on the previous screen fired it to the kitchen, carrying
+// its packaging instruction. The name is the one field left outstanding, and
+// it's deferred precisely because it's the one the KDS can render honestly
+// without: an unnamed ticket shows its order number.
+//
+// So this screen is downstream of the point of no return. "Atrás" returns to the
+// fulfillment question — which patches, not re-fires — and there is no route
+// back to the cart. (Delivery skips both screens; its address form already
+// collected a recipient.)
 import React, { useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useKioskBinding } from '../context/KioskBindingContext';
 import { useKioskCart } from '../context/KioskCartContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
 import LanguageToggle from '../components/LanguageToggle';
-import { sendKioskOrderToKitchen, type KioskOpenOrder } from '../lib/kioskApi';
+import { identifyKioskOrder, type KioskOpenOrder } from '../lib/kioskApi';
 import { pesos } from '../lib/builderPricing';
 
 const ROWS = ['QWERTYUIOP', 'ASDFGHJKLÑ', 'ZXCVBNM'];
@@ -25,16 +33,19 @@ const BACKSPACE = '⌫';
 
 const KioskCallNameScreen: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
   const { tenantId, kioskToken } = useKioskBinding();
-  const { lines, total, fulfillmentType, setCallName } = useKioskCart();
+  const { setCallName } = useKioskCart();
+
+  const placed = (location.state as { order?: KioskOpenOrder } | null)?.order || null;
 
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Stretched while the order is being created — the guest is standing here
-  // waiting on us, not idle.
+  // Stretched while the patch is in flight — the guest is standing here waiting
+  // on us, not idle.
   const { warning } = useIdleTimer(() => navigate('/'), busy ? 300_000 : 120_000);
 
   const press = (key: string) => {
@@ -49,40 +60,21 @@ const KioskCallNameScreen: React.FC = () => {
   const ready = name.trim().length >= 2;
 
   const confirm = async () => {
-    if (!ready || busy || !tenantId || !kioskToken || lines.length === 0) return;
+    if (!ready || busy || !placed || !tenantId || !kioskToken) return;
     const callName = name.trim();
     setBusy(true);
     setError(null);
     setCallName(callName);
     try {
-      const order = await sendKioskOrderToKitchen(
-        { tenantId, kioskToken },
-        lines.map((line) => ({
-          menu_item_id: line.menu_item_id,
-          quantity: line.quantity,
-          modifier_ids: line.modifiers.map((m) => m.id),
-        })),
-        { customerToken: null, customerCallName: callName, fulfillmentType },
-      );
+      const patched = await identifyKioskOrder({ tenantId, kioskToken }, placed.id, {
+        customerCallName: callName,
+      });
       const openOrder: KioskOpenOrder = {
-        id: order.id,
-        order_number: order.order_number,
-        subtotal: order.subtotal,
-        tax: order.tax,
-        total: order.total,
-        status: order.status,
-        payment_status: order.payment_status,
-        customer_call_name: order.customer_call_name,
-        order_fulfillment_type: order.order_fulfillment_type,
-        created_at: new Date().toISOString(),
-        items: lines.map((line, idx) => ({
-          order_item_id: idx + 1,
-          menu_item_id: line.menu_item_id,
-          item_name: line.name,
-          quantity: line.quantity,
-          unit_price: line.price,
-          modifiers: line.modifiers,
-        })),
+        ...placed,
+        status: patched.status,
+        payment_status: patched.payment_status,
+        customer_call_name: patched.customer_call_name,
+        order_fulfillment_type: patched.order_fulfillment_type,
       };
       navigate('/pay-existing', { replace: true, state: { order: openOrder } });
     } catch (err) {
@@ -90,6 +82,10 @@ const KioskCallNameScreen: React.FC = () => {
       setBusy(false);
     }
   };
+
+  // Reached without a placed order — a reload wiped the router state along with
+  // the cart. Nothing to name; back to the attract loop.
+  if (!placed) return <Navigate to="/" replace />;
 
   return (
     <div className="h-full w-full bg-neutral-950 text-neutral-50 flex flex-col">
@@ -105,7 +101,7 @@ const KioskCallNameScreen: React.FC = () => {
         <div className="flex gap-2 flex-shrink-0">
           <LanguageToggle />
           <button
-            onClick={() => navigate('/cart')}
+            onClick={() => navigate('/fulfillment', { replace: true, state: { order: placed } })}
             disabled={busy}
             className="h-11 px-3.5 rounded-[10px] bg-neutral-800 active:bg-neutral-700 disabled:text-neutral-500 text-sm font-extrabold inline-flex items-center gap-1.5"
           >
@@ -166,7 +162,18 @@ const KioskCallNameScreen: React.FC = () => {
           className="w-full min-h-[56px] rounded-[14px] px-5 py-3 text-[18px] font-black text-white bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-500 flex items-center justify-between gap-2.5 active:scale-[0.98] transition-transform"
         >
           <span>{busy ? t('wizard.processing') : t('wizard.payN')}</span>
-          <small className="text-sm font-bold opacity-80">{pesos(total)}</small>
+          {/* From the placed order, not the local cart. The order is the
+              authoritative total by now, and a reload mid-flow restores this
+              screen's router state (history.state survives) while resetting the
+              cart context — reading the cart here showed $0 against a real
+              $190 ticket.
+
+              Number() is load-bearing, not defensive: postgres.js hands back
+              NUMERIC columns as strings, so `total` is "190.00" and pesos()
+              would call .toFixed() on a string and white-screen the kiosk.
+              Every other read of these order fields wraps them the same way
+              (see KioskPayExistingScreen). */}
+          <small className="text-sm font-bold opacity-80">{pesos(Number(placed.total))}</small>
         </button>
       </footer>
 

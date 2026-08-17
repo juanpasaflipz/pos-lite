@@ -105,13 +105,16 @@ const AttractScreen: React.FC = () => {
     return () => { cancelled = true; };
   }, [kioskMode, tenantId, kioskToken]);
 
-  // Grid mode — unchanged from before Phase 2. iPad + every non-wizard device
-  // sees exactly this UI, byte-for-byte.
+  // Grid mode. Straight into the menu: "para aquí o para llevar" and the
+  // call-out name are asked at the END of the flow now (cart → fulfillment →
+  // name → pay), the same place the wizard asks them. Food first — the
+  // logistics questions mean more once there's an order to attach them to,
+  // and a guest who bails mid-menu never had to answer anything.
   if (kioskMode !== 'wizard') {
     return (
       <div className="relative h-full w-full">
         <button
-          onClick={() => navigate('/fulfillment')}
+          onClick={() => navigate('/menu')}
           className="h-full w-full bg-brand-700 flex flex-col items-center justify-center text-white touch-manipulation px-6 sm:px-8 pt-safe pb-safe"
         >
           {tenantName && (
@@ -146,8 +149,9 @@ const AttractScreen: React.FC = () => {
   // D11: NOTHING is interposed before the order. Tapping a favorito or "Arma tu
   // burrito" goes straight into the wizard — the para aquí / para llevar
   // question and the name capture both moved to the END of the flow, after the
-  // cart. /identify is out of the wizard path entirely; the post-payment
-  // loyalty QR is the loyalty touchpoint. Grid mode's routing is untouched.
+  // cart. Grid mode follows the same rule now (it opens straight on /menu); the
+  // name-only identify screen that used to gate it is gone, and the
+  // post-payment loyalty QR is the loyalty touchpoint for both.
   const en = i18n.language.startsWith('en');
   const items = menu?.items || [];
   const itemBySlug = new Map(items.map((i) => [i.slug || '', i]));
