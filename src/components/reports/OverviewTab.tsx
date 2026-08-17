@@ -1,8 +1,10 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { SalesReport, EmployeePerformanceReport, HourlyReport, ItemSalesReport } from '../../types';
+import { ChannelComparisonReport } from '../../api';
 import { AlertCircle, Filter } from 'lucide-react';
 import LaborStrip from './LaborStrip';
+import ChannelBreakdown from './ChannelBreakdown';
 
 import { formatMoney as fmt, formatInt as intFmt } from '../../utils/currency';
 const hourLabel = (hour: number) => `${String(hour).padStart(2, '0')}:00`;
@@ -19,6 +21,7 @@ interface OverviewTabProps {
   itemSales: ItemSalesReport | null;
   employeePerf: EmployeePerformanceReport[];
   hourlyData: HourlyReport[];
+  channelData: ChannelComparisonReport | null;
   itemSalesFilters: ItemSalesFilters;
   onItemSalesFiltersChange: React.Dispatch<React.SetStateAction<ItemSalesFilters>>;
 }
@@ -28,6 +31,7 @@ export default function OverviewTab({
   itemSales,
   employeePerf,
   hourlyData,
+  channelData,
   itemSalesFilters,
   onItemSalesFiltersChange,
 }: OverviewTabProps) {
@@ -82,6 +86,8 @@ export default function OverviewTab({
           <p className="text-3xl font-bold text-white mt-2">{fmt(salesData?.tip_total || 0)}</p>
         </div>
       </div>
+
+      {channelData && <ChannelBreakdown channels={channelData.channels} />}
 
       <div className="bg-neutral-900 rounded-lg border border-neutral-800">
         <div className="p-6 border-b border-neutral-800">

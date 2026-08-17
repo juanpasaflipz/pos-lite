@@ -913,28 +913,60 @@ router.get('/delivery-margins', requireAuth(), async (req, res) => {
         dp.id as platform_id,
         dp.display_name,
         dp.commission_percent,
-        COUNT(o.id) as order_count,
-        ROUND(SUM(o.subtotal), 2) as revenue,
-        ROUND(SUM(CASE WHEN o.id IS NOT NULL THEN dor.delivery_fee ELSE 0 END), 2) as total_delivery_fees,
-        ROUND(SUM(CASE WHEN o.id IS NOT NULL THEN dor.platform_commission ELSE 0 END), 2) as total_commission
+        COUNT(o.id)::int as order_count,
+        ROUND(SUM(o.subtotal), 2)::float8 as revenue,
+        ROUND(SUM(o.total), 2)::float8 as gross_revenue,
+        ROUND(SUM(CASE WHEN o.id IS NOT NULL THEN dor.delivery_fee ELSE 0 END), 2)::float8 as total_delivery_fees,
+        ROUND(SUM(CASE WHEN o.id IS NOT NULL THEN dor.platform_commission ELSE 0 END), 2)::float8 as total_commission,
+        -- Live-tagged POS re-rings (linkDeliveryPlatform) carry no commission and no
+        -- manual_batch_id; manual/CSV rows always set manual_batch_id and their zeros
+        -- are trusted (e.g. DiDi commission fully rebated during promos).
+        COUNT(o.id) FILTER (WHERE COALESCE(dor.platform_commission, 0) = 0
+          AND o.manual_batch_id IS NULL AND dp.commission_percent > 0)::int as estimated_order_count,
+        ROUND(SUM(CASE WHEN COALESCE(dor.platform_commission, 0) = 0 AND o.manual_batch_id IS NULL
+          THEN o.total * dp.commission_percent::numeric / 100 ELSE 0 END)::numeric, 2)::float8 as estimated_commission
       FROM delivery_platforms dp
       LEFT JOIN delivery_orders dor ON dp.id = dor.platform_id
       LEFT JOIN orders o ON dor.order_id = o.id
         AND (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2
         AND o.payment_status = 'paid'
       GROUP BY dp.id, dp.display_name, dp.commission_percent
+      ORDER BY dp.display_name, dp.id
+    `, [startDate, endDate, tz]);
+
+    const daily = await all(`
+      SELECT
+        (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date::text as day,
+        dp.id as platform_id,
+        dp.display_name,
+        ROUND(SUM(dor.platform_commission), 2)::float8 as commission,
+        ROUND(SUM(o.total), 2)::float8 as gross_revenue
+      FROM delivery_orders dor
+      JOIN orders o ON o.id = dor.order_id
+      JOIN delivery_platforms dp ON dp.id = dor.platform_id
+      WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2
+        AND o.payment_status = 'paid'
+      GROUP BY 1, dp.id, dp.display_name
+      ORDER BY 1
     `, [startDate, endDate, tz]);
 
     const result = platforms.map(p => {
+      const gross = p.gross_revenue || 0;
+      const commission = (p.total_commission || 0) + (p.estimated_commission || 0);
       const netRevenue = (p.revenue || 0) - (p.total_commission || 0);
       return {
         ...p,
+        // Commission is charged on what the customer paid (tax-inclusive), so the
+        // effective rate divides by gross — dividing by net overstates it by the IVA.
+        effective_commission_percent: gross > 0 ? Math.round((commission / gross) * 1000) / 10 : 0,
+        net_to_house: Math.round((gross - commission) * 100) / 100,
+        // deprecated: net-basis, kept for back-compat
         net_revenue: Math.round(netRevenue * 100) / 100,
         margin_percent: p.revenue > 0 ? Math.round((netRevenue / p.revenue) * 100) : 0,
       };
     });
 
-    res.json({ period, startDate, platforms: result });
+    res.json({ period, startDate, platforms: result, daily });
   } catch (error) {
     console.error('Error fetching delivery margins:', error);
     res.status(500).json({ error: 'Failed to fetch delivery margins' });
@@ -951,9 +983,10 @@ router.get('/channel-comparison', requireAuth(), async (req, res) => {
     const channels = await all(`
       SELECT
         COALESCE(o.source, 'pos') as channel,
-        COUNT(*) as order_count,
-        ROUND(SUM(o.subtotal), 2) as revenue,
-        ROUND(AVG(o.total), 2) as avg_ticket
+        COUNT(*)::int as order_count,
+        ROUND(SUM(o.subtotal), 2)::float8 as revenue,
+        ROUND(SUM(o.total), 2)::float8 as gross_revenue,
+        ROUND(AVG(o.total), 2)::float8 as avg_ticket
       FROM orders o
       WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2
         AND o.payment_status = 'paid'

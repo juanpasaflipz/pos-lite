@@ -65,7 +65,17 @@
       "colAvgPrice": "Avg price",
       "colEmployee": "Employee",
       "colSales": "Sales",
-      "colAvgTicket": "Avg ticket"
+      "colAvgTicket": "Avg ticket",
+      "sectionChannel": "By Channel",
+      "sectionDeliveryCommissions": "Delivery Commissions",
+      "colChannel": "Channel",
+      "colProvider": "Provider",
+      "colGross": "Gross Sales",
+      "colNet": "Net Sales",
+      "colCommission": "Commission",
+      "colEstimatedCommission": "Estimated Commission",
+      "colEffectivePct": "Effective %",
+      "colNetToHouse": "Net to House"
     },
     "kpi": {
       "totalRevenue": "Total Revenue",
@@ -121,8 +131,12 @@
         "totalSales": "Total Sales",
         "avgTicket": "Avg Ticket",
         "tips": "Tips",
-        "total": "Total"
-      }
+        "total": "Total",
+        "channel": "Channel",
+        "mix": "% of Net Sales"
+      },
+      "channelSection": "Sales by Channel",
+      "channelSectionHint": "Net Sales per channel sum to the Net Sales KPI above."
     },
     "cashCard": {
       "paymentSplit": "Payment Split",
@@ -168,7 +182,18 @@
       "commission": "Commission",
       "netRevenue": "Net Revenue",
       "noDeliveryOrders": "No delivery orders in this period",
-      "commissionWithPercent": "Commission ({{percent}}%)"
+      "commissionWithPercent": "Commission ({{percent}}%)",
+      "provider": "Provider",
+      "grossSales": "Gross Sales",
+      "netSales": "Net Sales",
+      "effectiveCommission": "Effective %",
+      "configuredPercent": "cfg. {{percent}}%",
+      "estimatedNote": "≈ Commission estimated at the platform’s configured % for {{n}} POS-tagged orders with no reconciled commission",
+      "netToHouse": "Net to House",
+      "commissionTrend": "Daily Commissions",
+      "totals": "Totals",
+      "reconciliation": "Provider Reconciliation",
+      "reconciliationHint": "Gross Sales (what the customer paid) minus commission = Net to House. Effective % is computed on Gross Sales."
     },
     "fees": {
       "dailyFeeBreakdown": "Daily Fee Breakdown",
@@ -230,7 +255,16 @@
       "count": "Count"
     },
     "freeHistoryNotice": "Free plan: reports for the last {{days}} days. Pro unlocks full history, margins and your break-even point.",
-    "upgradeCta": "Upgrade to Pro"
+    "upgradeCta": "Upgrade to Pro",
+    "channels": {
+      "pos": "In-Store",
+      "uber_eats": "Uber Eats",
+      "uber_direct": "Uber Direct",
+      "rappi": "Rappi",
+      "didi_food": "DiDi Food",
+      "customer_kiosk": "Kiosk",
+      "qr_order": "QR Menu"
+    }
   },
   "dashboard": {
     "title": "LIVE DASHBOARD",

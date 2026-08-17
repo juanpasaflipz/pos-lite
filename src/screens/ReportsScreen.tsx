@@ -17,9 +17,12 @@ import {
   getRefundSummary,
   getFinancialProjection,
   getMenuEngineering,
+  DeliveryMarginsReport,
+  ChannelComparisonReport,
 } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../utils/currency';
+import { channelLabel } from '../utils/channelLabels';
 import { formatDate, todayInTz } from '../utils/dateFormat';
 import BrandLogo from '../components/BrandLogo';
 import { usePlan } from '../context/PlanContext';
@@ -93,8 +96,8 @@ export default function ReportsScreen() {
   const [cogsData, setCogsData] = useState<COGSReport | null>(null);
   const [categoryData, setCategoryData] = useState<CategoryMargins | null>(null);
   const [marginData, setMarginData] = useState<ContributionMarginReport | null>(null);
-  const [deliveryData, setDeliveryData] = useState<any>(null);
-  const [channelData, setChannelData] = useState<any>(null);
+  const [deliveryData, setDeliveryData] = useState<DeliveryMarginsReport | null>(null);
+  const [channelData, setChannelData] = useState<ChannelComparisonReport | null>(null);
   const [feesData, setFeesData] = useState<PaymentFeeSummary | null>(null);
   const [refundData, setRefundData] = useState<RefundSummary | null>(null);
   const [financialData, setFinancialData] = useState<FinancialProjection | null>(null);
@@ -130,16 +133,18 @@ export default function ReportsScreen() {
 
       const opts = rangeOpts(period);
       if (tab === 'overview') {
-        const [sales, itemSalesData, perf, hourly] = await Promise.all([
+        const [sales, itemSalesData, perf, hourly, channels] = await Promise.all([
           getSalesReport(period, opts),
           getItemSalesReport(period, itemSalesFilters, opts),
           getEmployeePerformance(period, opts),
           getHourlyReport(period, opts),
+          getChannelComparison(period, opts).catch(() => null),
         ]);
         setSalesData(sales);
         setItemSales(itemSalesData);
         setEmployeePerf(perf);
         setHourlyData(hourly);
+        setChannelData(channels);
       } else if (tab === 'cashcard') {
         const data = await getCashCardBreakdown(period, opts);
         setCashCard(data);
@@ -195,12 +200,14 @@ export default function ReportsScreen() {
     setError(null);
     try {
       const opts = rangeOpts(period);
-      const [sales, items, employees, cashCardData, dailySeries] = await Promise.all([
+      const [sales, items, employees, cashCardData, dailySeries, channelReport, deliveryReport] = await Promise.all([
         getSalesReport(period, opts),
         getItemSalesReport(period, {}, opts),
         getEmployeePerformance(period, opts),
         getCashCardBreakdown(period, opts).catch(() => null),
         getContributionMargin(period, opts).catch(() => null),
+        getChannelComparison(period, opts).catch(() => null),
+        getDeliveryMargins(period, opts).catch(() => null),
       ]);
 
       const lines: string[] = [];
@@ -251,6 +258,52 @@ export default function ReportsScreen() {
             b.tips,
             `${b.percentage}%`,
             `${b.revenue_percentage}%`,
+          ]));
+        }
+      }
+
+      // -- Por canal --
+      const activeChannels = (channelReport?.channels || []).filter(c => c.order_count > 0);
+      if (activeChannels.length > 0) {
+        blank();
+        push(`== ${t('sales.csv.sectionChannel')} ==`);
+        push(csvRow([
+          t('sales.csv.colChannel'),
+          t('sales.csv.colOrders'),
+          t('sales.csv.colNet'),
+          t('sales.csv.colGross'),
+          t('sales.csv.colAvgTicket'),
+        ]));
+        for (const c of activeChannels) {
+          push(csvRow([channelLabel(t, c.channel), c.order_count, c.revenue, c.gross_revenue, c.avg_ticket]));
+        }
+      }
+
+      // -- Comisiones delivery --
+      const activePlatforms = (deliveryReport?.platforms || []).filter(p => p.order_count > 0);
+      if (activePlatforms.length > 0) {
+        blank();
+        push(`== ${t('sales.csv.sectionDeliveryCommissions')} ==`);
+        push(csvRow([
+          t('sales.csv.colProvider'),
+          t('sales.csv.colOrders'),
+          t('sales.csv.colGross'),
+          t('sales.csv.colNet'),
+          t('sales.csv.colCommission'),
+          t('sales.csv.colEstimatedCommission'),
+          t('sales.csv.colEffectivePct'),
+          t('sales.csv.colNetToHouse'),
+        ]));
+        for (const p of activePlatforms) {
+          push(csvRow([
+            p.display_name,
+            p.order_count,
+            p.gross_revenue,
+            p.revenue,
+            p.total_commission,
+            p.estimated_commission,
+            `${p.effective_commission_percent}%`,
+            p.net_to_house,
           ]));
         }
       }
@@ -576,6 +629,7 @@ export default function ReportsScreen() {
                 itemSales={itemSales}
                 employeePerf={employeePerf}
                 hourlyData={hourlyData}
+                channelData={channelData}
                 itemSalesFilters={itemSalesFilters}
                 onItemSalesFiltersChange={setItemSalesFilters}
               />

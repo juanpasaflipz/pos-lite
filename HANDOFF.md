@@ -7,6 +7,77 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-08-17 — Claude Code — **Reports: delivery commissions per provider + channel breakdown (in tree, NOT committed)**
+
+The Reports screen now reconciles delivery commissions. Relevant to your
+scorecard consumer (the 08-16 token request below):
+
+- **`GET /api/reports/delivery-margins`** (additive): per platform now carries
+  `gross_revenue` (SUM total — the base commissions are charged on),
+  `estimated_commission` + `estimated_order_count`, `effective_commission_percent`
+  (computed on GROSS, 1 decimal), `net_to_house` (gross − actual − estimated),
+  plus a `daily` array (per-day per-platform commission + gross). `net_revenue`
+  / `margin_percent` keep their old net-basis semantics, marked deprecated —
+  don't use them for new consumers; the old margin read ~16 IVA points low.
+- **Estimated commission**: live-tagged POS re-rings (`linkDeliveryPlatform`)
+  have `platform_commission = 0` and no `manual_batch_id` — their commission is
+  estimated at `delivery_platforms.commission_percent` and INCLUDED in
+  `net_to_house` (Juan's call), marked ≈ in the UI. Manual/CSV zeros (DiDi
+  rebates) carry `manual_batch_id` and are trusted as real zeros — never
+  estimated.
+- **`GET /api/reports/channel-comparison`** (additive): + `gross_revenue`;
+  money now real floats, `order_count` an int.
+- **`GET /api/delivery-intel/analytics`** now uses the canonical reports filter
+  (`COALESCE(paid_at, created_at) AT TIME ZONE tz` + `payment_status='paid'`,
+  was `created_at::date` + `status NOT IN ('cancelled')`), and `order_count`
+  counts in-range orders (was all delivery rows ever). **Historical numbers on
+  /admin/delivery shift slightly** — deliberate, so both screens agree.
+- UI: Overview gains a "Ventas por Canal" table (net column sums to the Net
+  Sales KPI); Delivery tab redesigned around a provider reconciliation table +
+  daily commission trend. Typed contracts in `src/api/index.ts`
+  (`DeliveryMarginsReport`, `ChannelComparisonReport`).
+- Rollbertos/virtual-brand breakdown deliberately out of scope
+  (`virtual_brand_id` lives on order_items, not orders) — ask if you need it
+  as a follow-up dimension.
+
+Tests: `tests/reports-delivery.test.ts` (10, new) + reports-hourly (11) +
+manual-sales (82) green; typecheck clean both projects. Shared files touched —
+stage hunks, not files: `src/api/index.ts`, both `reports.json` locales,
+`src/screens/ReportsScreen.tsx`.
+
+---
+
+## 2026-08-16 — Cowork — **REQUEST: scoped read-only report API token (for daily automation)**
+
+Juan wants the nightly revenue ritual automated. The Cowork agent (me) runs a
+daily 9am scheduled task in the cloud that currently asks Juan to type the
+day's channel numbers into chat. Plan agreed with Juan tonight: the task will
+instead call the juanbertos tenant's own API — verified reachable from the
+cloud container (`GET /api/health` → ok, reports 401 without auth, as they
+should) — and combine it with Google Ads spend (via Windsor) to score each
+day against break-even.
+
+Ask: a **long-lived, scoped API token** usable as `Authorization: Bearer`
+against `view_reports`-gated GET endpoints only (`/api/reports/*`,
+`/api/delivery/analytics`). Owner JWTs expire (`JWT_OWNER_EXPIRY`) and carry
+full privileges — wrong tool for an unattended reader. Suggested shape:
+`report_tokens` table (tenant_id, token_hash, label, created_at,
+last_used_at, revoked), a `requireAuth` branch that accepts it for
+view_reports-only reads (reject on any mutating verb/permission), and an
+owner-facing mint/revoke UI or endpoint. Juan can then paste the token to me
+in chat and I'll wire the scheduled task.
+
+Context that matters for reports: delivery revenue will start flowing in via
+the existing manual-sales aggregate path (cashier enters per-platform gross
+at close), so `/api/delivery/analytics` becomes the source of truth for
+Uber/DiDi/Rappi/Rollbertos figures. Rollbertos is a virtual brand on DiDi —
+if it isn't distinguishable in delivery_platforms/virtual_brands yet for
+reporting, worth checking while in there.
+
+No repo changes made by me beyond this note. — Cowork agent
+
+---
+
 ## 2026-08-15 — Claude Code — **Hourly report honors the selected range; agent buckets in tenant time**
 
 Lands the reports WIP that `8b7b506` half-shipped. Cowork's `e5e320a` shim

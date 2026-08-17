@@ -1623,12 +1623,69 @@ export async function getLiveDashboard(): Promise<LiveDashboardData> {
   return apiRequest<LiveDashboardData>('/reports/live');
 }
 
-export async function getDeliveryMargins(period: string, opts: ReportRangeOpts = {}): Promise<any> {
-  return apiRequest(`/reports/delivery-margins?${reportQS(period, opts)}`);
+export interface DeliveryPlatformMargin {
+  platform_id: number;
+  display_name: string;
+  commission_percent: number;
+  order_count: number;
+  /** Net ex-IVA (SUM subtotal) — sums to the Net Sales KPI. */
+  revenue: number;
+  /** What customers paid (SUM total) — the base commissions are charged on. */
+  gross_revenue: number;
+  total_delivery_fees: number;
+  /** Reconciled commission pesos (delivery_orders.platform_commission). */
+  total_commission: number;
+  /** Commission estimated at the configured % for live-tagged orders with no
+   * reconciled commission. Included in net_to_house; mark it ≈ in the UI. */
+  estimated_commission: number;
+  estimated_order_count: number;
+  /** (actual + estimated commission) / gross_revenue, 1 decimal. */
+  effective_commission_percent: number;
+  /** gross_revenue − actual − estimated commission. */
+  net_to_house: number;
+  /** @deprecated net-basis; kept for back-compat. */
+  net_revenue: number;
+  /** @deprecated net-basis; kept for back-compat. */
+  margin_percent: number;
 }
 
-export async function getChannelComparison(period: string, opts: ReportRangeOpts = {}): Promise<any> {
-  return apiRequest(`/reports/channel-comparison?${reportQS(period, opts)}`);
+export interface DeliveryCommissionDay {
+  day: string;
+  platform_id: number;
+  display_name: string;
+  commission: number;
+  gross_revenue: number;
+}
+
+export interface DeliveryMarginsReport {
+  period: string;
+  startDate: string;
+  platforms: DeliveryPlatformMargin[];
+  daily: DeliveryCommissionDay[];
+}
+
+export interface ChannelComparisonRow {
+  channel: string;
+  order_count: number;
+  /** Net ex-IVA (SUM subtotal). */
+  revenue: number;
+  /** What customers paid (SUM total). */
+  gross_revenue: number;
+  avg_ticket: number;
+}
+
+export interface ChannelComparisonReport {
+  period: string;
+  startDate: string;
+  channels: ChannelComparisonRow[];
+}
+
+export async function getDeliveryMargins(period: string, opts: ReportRangeOpts = {}): Promise<DeliveryMarginsReport> {
+  return apiRequest<DeliveryMarginsReport>(`/reports/delivery-margins?${reportQS(period, opts)}`);
+}
+
+export async function getChannelComparison(period: string, opts: ReportRangeOpts = {}): Promise<ChannelComparisonReport> {
+  return apiRequest<ChannelComparisonReport>(`/reports/channel-comparison?${reportQS(period, opts)}`);
 }
 
 /* ==================== Modifier Endpoints ==================== */

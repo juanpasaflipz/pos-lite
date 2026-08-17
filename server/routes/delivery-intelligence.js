@@ -20,8 +20,16 @@ router.use(requirePlanFeature('delivery'));
 router.get('/analytics', requireAuth('view_reports'), async (req, res) => {
   try {
     const { start, end } = req.query;
+    const tz = req.tenant?.timezone || 'UTC';
     const startDate = start || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
     const endDate = end || new Date().toISOString().slice(0, 10);
+
+    // Date predicate matches /api/reports/* (tenant-local business day, paid
+    // orders only) so this screen and the Reports Delivery tab tell the same
+    // story for the same range.
+    const inRange = (alias) =>
+      `(COALESCE(${alias}.paid_at, ${alias}.created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2
+        AND ${alias}.payment_status = 'paid'`;
 
     // Revenue and commission per platform
     const platformStats = await all(`
@@ -30,7 +38,7 @@ router.get('/analytics', requireAuth('view_reports'), async (req, res) => {
         dp.name,
         dp.display_name,
         dp.commission_percent,
-        COUNT(do2.id) as order_count,
+        COUNT(o.id) as order_count,
         COALESCE(SUM(o.total), 0) as gross_revenue,
         COALESCE(SUM(do2.platform_commission), 0) as total_commission,
         COALESCE(SUM(do2.delivery_fee), 0) as total_delivery_fees,
@@ -39,10 +47,10 @@ router.get('/analytics', requireAuth('view_reports'), async (req, res) => {
       FROM delivery_platforms dp
       LEFT JOIN delivery_orders do2 ON do2.platform_id = dp.id
       LEFT JOIN orders o ON o.id = do2.order_id
-        AND o.created_at::date >= $1 AND o.created_at::date <= $2
+        AND ${inRange('o')}
       GROUP BY dp.id, dp.name, dp.display_name, dp.commission_percent
       ORDER BY gross_revenue DESC
-    `, [startDate, endDate]);
+    `, [startDate, endDate, tz]);
 
     // POS vs delivery comparison
     const posStats = await get(`
@@ -50,11 +58,10 @@ router.get('/analytics', requireAuth('view_reports'), async (req, res) => {
         COUNT(*) as order_count,
         COALESCE(SUM(total), 0) as revenue,
         COALESCE(AVG(total), 0) as avg_order
-      FROM orders
+      FROM orders o
       WHERE source = 'pos'
-        AND created_at::date >= $1 AND created_at::date <= $2
-        AND status NOT IN ('cancelled')
-    `, [startDate, endDate]);
+        AND ${inRange('o')}
+    `, [startDate, endDate, tz]);
 
     // "Delivery" = has a delivery_orders row (Rappi / DiDi / Uber Eats / Uber
     // Direct). The looser `source != 'pos'` counted customer_kiosk in-house
@@ -67,23 +74,21 @@ router.get('/analytics', requireAuth('view_reports'), async (req, res) => {
         COALESCE(AVG(total), 0) as avg_order
       FROM orders o
       WHERE EXISTS (SELECT 1 FROM delivery_orders WHERE order_id = o.id)
-        AND o.created_at::date >= $1 AND o.created_at::date <= $2
-        AND o.status NOT IN ('cancelled')
-    `, [startDate, endDate]);
+        AND ${inRange('o')}
+    `, [startDate, endDate, tz]);
 
     // Daily trend
     const dailyTrend = await all(`
       SELECT
-        o.created_at::date as day,
+        (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date as day,
         o.source,
         COUNT(*) as orders,
         COALESCE(SUM(o.total), 0) as revenue
       FROM orders o
-      WHERE o.created_at::date >= $1 AND o.created_at::date <= $2
-        AND o.status NOT IN ('cancelled')
-      GROUP BY o.created_at::date, o.source
-      ORDER BY o.created_at::date
-    `, [startDate, endDate]);
+      WHERE ${inRange('o')}
+      GROUP BY 1, o.source
+      ORDER BY 1
+    `, [startDate, endDate, tz]);
 
     res.json({
       period: { start: startDate, end: endDate },

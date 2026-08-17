@@ -65,7 +65,17 @@
       "colAvgPrice": "Precio promedio",
       "colEmployee": "Empleado",
       "colSales": "Ventas",
-      "colAvgTicket": "Ticket promedio"
+      "colAvgTicket": "Ticket promedio",
+      "sectionChannel": "Por Canal",
+      "sectionDeliveryCommissions": "Comisiones Delivery",
+      "colChannel": "Canal",
+      "colProvider": "Proveedor",
+      "colGross": "Ventas Totales",
+      "colNet": "Ventas Netas",
+      "colCommission": "Comisión",
+      "colEstimatedCommission": "Comisión Estimada",
+      "colEffectivePct": "% Efectiva",
+      "colNetToHouse": "Neto a Casa"
     },
     "kpi": {
       "totalRevenue": "Ventas Totales",
@@ -121,8 +131,12 @@
         "totalSales": "Ventas Totales",
         "avgTicket": "Ticket Prom.",
         "tips": "Propinas",
-        "total": "Total"
-      }
+        "total": "Total",
+        "channel": "Canal",
+        "mix": "% de Ventas Netas"
+      },
+      "channelSection": "Ventas por Canal",
+      "channelSectionHint": "Las Ventas Netas por canal suman al KPI de Ventas Netas de arriba."
     },
     "cashCard": {
       "paymentSplit": "División de Pagos",
@@ -168,7 +182,18 @@
       "commission": "Comisión",
       "netRevenue": "Venta Neta",
       "noDeliveryOrders": "Sin órdenes de delivery en este período",
-      "commissionWithPercent": "Comisión ({{percent}}%)"
+      "commissionWithPercent": "Comisión ({{percent}}%)",
+      "provider": "Proveedor",
+      "grossSales": "Ventas Totales",
+      "netSales": "Ventas Netas",
+      "effectiveCommission": "% Efectiva",
+      "configuredPercent": "cfg. {{percent}}%",
+      "netToHouse": "Neto a Casa",
+      "estimatedNote": "≈ Comisión estimada con el % configurado de la plataforma para {{n}} órdenes marcadas en POS sin comisión conciliada",
+      "commissionTrend": "Comisiones por Día",
+      "totals": "Totales",
+      "reconciliation": "Conciliación por Proveedor",
+      "reconciliationHint": "Ventas Totales (lo que pagó el cliente) menos comisión = Neto a Casa. La % efectiva se calcula sobre Ventas Totales."
     },
     "fees": {
       "dailyFeeBreakdown": "Desglose Diario de Comisiones",
@@ -230,7 +255,16 @@
       "count": "Cantidad"
     },
     "freeHistoryNotice": "Plan gratis: reportes de los últimos {{days}} días. Con Pro tienes historial completo, márgenes y tu punto de equilibrio.",
-    "upgradeCta": "Actualizar a Pro"
+    "upgradeCta": "Actualizar a Pro",
+    "channels": {
+      "pos": "Mostrador",
+      "uber_eats": "Uber Eats",
+      "uber_direct": "Uber Direct",
+      "rappi": "Rappi",
+      "didi_food": "DiDi Food",
+      "customer_kiosk": "Kiosko",
+      "qr_order": "Menú QR"
+    }
   },
   "dashboard": {
     "title": "DASHBOARD EN VIVO",
