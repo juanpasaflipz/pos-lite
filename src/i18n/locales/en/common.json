@@ -319,6 +319,13 @@
       "ingredientsHint": "What you buy is what you sell. Stock comes down at payment.",
       "two_stageHint": "Storage and portions tracked separately. You log production, and the menu 86s itself when portions run out.",
       "confirmTwoStage": "Switch to two-stage inventory. Your current items become raw storage, and you'll be able to create portions and log production. Continue?"
+    },
+    "kioskFire": {
+      "label": "When the kitchen sees a kiosk order",
+      "onOrder": "When ordering ends",
+      "onPayment": "When it's paid",
+      "onOrderHint": "The kitchen starts while the customer pays. Buys the length of the payment, but a customer who walks away leaves food already made.",
+      "onPaymentHint": "The ticket appears only once payment clears. The kitchen never sees an unpaid order."
     }
   },
   "resetPassword": {

@@ -319,6 +319,13 @@
       "ingredientsHint": "Lo que compras es lo que vendes. El inventario baja al cobrar.",
       "two_stageHint": "Bodega y porciones por separado. Registras producción, y el menú se agota solo cuando se acaban las porciones.",
       "confirmTwoStage": "Cambiar a inventario de dos etapas. Tus artículos actuales quedan como insumos de bodega y podrás crear porciones y registrar producción. ¿Continuar?"
+    },
+    "kioskFire": {
+      "label": "Cuándo la cocina ve la orden del kiosco",
+      "onOrder": "Al terminar de ordenar",
+      "onPayment": "Al pagar",
+      "onOrderHint": "La cocina empieza mientras el cliente paga. Gana el tiempo del cobro, pero si el cliente se va sin pagar la comida ya se hizo.",
+      "onPaymentHint": "La comanda aparece solo cuando el pago se confirma. La cocina nunca ve una orden sin pagar."
     }
   },
   "resetPassword": {

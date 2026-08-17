@@ -48,13 +48,19 @@ export default function KioskHeldOrdersBanner({ onClaim, onError }: Props) {
   if (orders.length === 0) return null;
 
   const hasStranded = orders.some((o) => o.kind === 'stranded_terminal');
-  const bannerTone = hasStranded
+  // Fired-but-unpaid is louder than a plain held draft: the kitchen is already
+  // cooking it and nobody has taken the money yet.
+  const hasFired = orders.some((o) => o.kind === 'fired_unpaid');
+  const needsAttention = hasStranded || hasFired;
+  const bannerTone = needsAttention
     ? 'bg-cockpit-yellow/15 border-cockpit-yellow/50 hover:bg-cockpit-yellow/25'
     : 'bg-brand-600/15 border-brand-600/40 hover:bg-brand-600/25';
-  const headlineTone = hasStranded ? 'text-cockpit-attention-text' : 'text-brand-200';
+  const headlineTone = needsAttention ? 'text-cockpit-attention-text' : 'text-brand-200';
   const subline = hasStranded
     ? 'Una o más necesitan rescate del terminal'
-    : 'Toca para reclamar a la caja';
+    : hasFired
+      ? 'Ya están en cocina y siguen sin pagar'
+      : 'Toca para reclamar a la caja';
 
   return (
     <>
@@ -96,11 +102,12 @@ export default function KioskHeldOrdersBanner({ onClaim, onError }: Props) {
               {orders.map((order) => {
                 const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0);
                 const stranded = order.kind === 'stranded_terminal';
+                const fired = order.kind === 'fired_unpaid';
                 return (
                   <div
                     key={order.id}
                     className={`rounded-lg border p-4 flex items-center gap-4 ${
-                      stranded
+                      stranded || fired
                         ? 'bg-cockpit-yellow/40 border-cockpit-yellow/60'
                         : 'bg-neutral-800 border-neutral-700'
                     }`}
@@ -114,6 +121,12 @@ export default function KioskHeldOrdersBanner({ onClaim, onError }: Props) {
                           <span className="inline-flex items-center gap-1 rounded-full bg-cockpit-yellow/20 border border-cockpit-yellow/40 text-cockpit-attention-text text-[10px] font-black uppercase px-2 py-0.5 tracking-wide">
                             <AlertTriangle className="h-3 w-3" />
                             Terminal expiró
+                          </span>
+                        )}
+                        {fired && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-cockpit-yellow/20 border border-cockpit-yellow/40 text-cockpit-attention-text text-[10px] font-black uppercase px-2 py-0.5 tracking-wide">
+                            <AlertTriangle className="h-3 w-3" />
+                            En cocina · sin pagar
                           </span>
                         )}
                       </div>
@@ -130,14 +143,14 @@ export default function KioskHeldOrdersBanner({ onClaim, onError }: Props) {
                         onClick={() => handleClaim(order)}
                         disabled={claiming === order.id}
                         className={`mt-2 px-4 py-2 rounded-lg disabled:opacity-50 text-white text-sm font-bold min-h-[40px] ${
-                          stranded
+                          stranded || fired
                             ? 'bg-cockpit-yellow hover:bg-cockpit-yellow/90'
                             : 'bg-brand-600 hover:bg-brand-700'
                         }`}
                       >
                         {claiming === order.id
-                          ? (stranded ? 'Rescatando…' : 'Reclamando…')
-                          : (stranded ? 'Rescatar en caja' : 'Llevar a caja')}
+                          ? (stranded || fired ? 'Abriendo…' : 'Reclamando…')
+                          : (stranded ? 'Rescatar en caja' : fired ? 'Cobrar' : 'Llevar a caja')}
                       </button>
                     </div>
                   </div>

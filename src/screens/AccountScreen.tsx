@@ -25,6 +25,7 @@ interface AccountData {
   subscription_status: string | null;
   created_at: string;
   inventory_mode?: 'ingredients' | 'two_stage';
+  kiosk_fire_before_payment?: boolean;
   usage: {
     employees: { current: number; limit: number };
     menu_items: { current: number; limit: number };
@@ -86,6 +87,8 @@ export default function AccountScreen() {
   const [saveMsg, setSaveMsg] = useState('');
   const [modeSaving, setModeSaving] = useState(false);
   const [modeError, setModeError] = useState<string | null>(null);
+  const [fireSaving, setFireSaving] = useState(false);
+  const [fireError, setFireError] = useState<string | null>(null);
 
   // Password form
   const [currentPw, setCurrentPw] = useState('');
@@ -306,6 +309,20 @@ export default function AccountScreen() {
       setModeError(err.message || t('account.failedSave'));
     }
     setModeSaving(false);
+  };
+
+  const handleKioskFireChange = async (next: boolean) => {
+    setFireSaving(true);
+    setFireError(null);
+    try {
+      const result = await updateAccount({ kiosk_fire_before_payment: next });
+      setAccount(prev => prev
+        ? { ...prev, kiosk_fire_before_payment: result.kiosk_fire_before_payment ?? next }
+        : prev);
+    } catch (err: any) {
+      setFireError(err.message || t('account.failedSave'));
+    }
+    setFireSaving(false);
   };
 
   const handlePasswordChange = async (e: React.FormEvent) => {
@@ -641,6 +658,40 @@ export default function AccountScreen() {
                     {modeError && <p className="text-xs text-red-400 mt-1">{modeError}</p>}
                   </div>
                 </FeatureGate>
+
+                {/* When the kiosk hands the kitchen its ticket. Firing at
+                    "ready to pay" buys the line the length of the payment
+                    interaction; the cost is that a customer who walks away
+                    mid-payment leaves food already in progress. */}
+                <div className="border-t border-neutral-800 pt-4">
+                  <label className="block text-neutral-400 text-sm mb-1">
+                    {t('account.kioskFire.label')}
+                  </label>
+                  <div className="flex gap-2">
+                    {([true, false] as const).map(value => {
+                      const current = account.kiosk_fire_before_payment === true;
+                      return (
+                        <button
+                          key={String(value)}
+                          type="button"
+                          disabled={fireSaving || current === value}
+                          onClick={() => handleKioskFireChange(value)}
+                          className={`flex-1 min-h-[44px] px-3 rounded-lg border text-sm transition-colors disabled:opacity-100 ${
+                            current === value
+                              ? 'bg-brand-600 border-brand-500 text-white'
+                              : 'bg-neutral-800 border-neutral-700 text-neutral-300 hover:border-neutral-600'
+                          }`}
+                        >
+                          {t(`account.kioskFire.${value ? 'onOrder' : 'onPayment'}`)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-neutral-500 mt-1">
+                    {t(`account.kioskFire.${account.kiosk_fire_before_payment === true ? 'onOrderHint' : 'onPaymentHint'}`)}
+                  </p>
+                  {fireError && <p className="text-xs text-red-400 mt-1">{fireError}</p>}
+                </div>
 
                 <div className="flex items-center gap-3">
                   <button

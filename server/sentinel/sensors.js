@@ -29,6 +29,12 @@ const STUCK_TERMINAL_MINUTES = Number(process.env.SENTINEL_STUCK_TERMINAL_MINUTE
 // voids drafts; this sensor only surfaces them.
 const STALE_DRAFT_MINUTES = Number(process.env.SENTINEL_STALE_DRAFT_MINUTES) || 45;
 
+// S2b: kiosk order fired to the kitchen before payment (see migration 0106)
+// that never got paid. The pay-first lifecycle made this impossible — no
+// payment, no ticket — so firing early needs its own watcher: the food exists,
+// the money doesn't. Same "never auto-void" rule as S2; this only surfaces.
+const STALE_FIRED_UNPAID_MINUTES = Number(process.env.SENTINEL_STALE_FIRED_UNPAID_MINUTES) || 20;
+
 // S3: active orders no KDS has ever rendered.
 const KDS_BLIND_MINUTES = Number(process.env.SENTINEL_KDS_BLIND_MINUTES) || 3;
 
@@ -115,6 +121,46 @@ export const SENSORS = [
           },
         };
       });
+    },
+  },
+
+  {
+    id: 'stale_fired_unpaid_kiosk',
+    description:
+      `Kiosk order fired to the kitchen before payment (kitchen_fire_at set) still unpaid after ` +
+      `${STALE_FIRED_UNPAID_MINUTES}min. The food was made; the money never arrived — a walked-away ` +
+      `customer, a card that never took, or a cashier who never closed it out. Surfaced, never auto-voided.`,
+    async run() {
+      const rows = await adminSql`
+        SELECT o.tenant_id, o.id, o.order_number, o.total, o.payment_status,
+               o.customer_call_name, o.kitchen_fire_at, o.created_at
+        FROM orders o
+        JOIN tenants t ON t.id = o.tenant_id AND t.active = true
+        WHERE o.source = 'customer_kiosk'
+          AND o.kitchen_fire_at IS NOT NULL
+          AND o.status IN ('pending', 'active', 'ready')
+          AND o.payment_status IN ('unpaid', 'failed')
+          AND o.kitchen_fire_at < NOW() - ${STALE_FIRED_UNPAID_MINUTES} * INTERVAL '1 minute'
+          AND o.created_at > NOW() - ${LOOKBACK_HOURS} * INTERVAL '1 hour'
+      `;
+      return rows.map((r) => ({
+        tenantId: r.tenant_id,
+        dedupKey: `order:${r.id}`,
+        // A declined card is a customer who tried and failed — likelier to be
+        // recoverable at the counter, and likelier to be real lost revenue
+        // than a ticket the cashier simply hasn't rung up yet.
+        severity: r.payment_status === 'failed' ? 'high' : 'medium',
+        subjectTable: 'orders',
+        subjectId: String(r.id),
+        evidence: {
+          order_id: r.id,
+          order_number: r.order_number,
+          total: Number(r.total),
+          payment_status: r.payment_status,
+          customer_call_name: r.customer_call_name,
+          fired_at: r.kitchen_fire_at,
+        },
+      }));
     },
   },
 

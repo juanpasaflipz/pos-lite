@@ -391,6 +391,12 @@ router.get('/', async (req, res) => {
 
 // GET /api/orders/kiosk-held - orders waiting for cashier intervention:
 //   - status='draft_kiosk' → customer chose "pay at register" on the kiosk
+//   - fired-but-unpaid (kitchen_fire_at set, still 'active' and unpaid) older
+//     than a minute → tenants.kiosk_fire_before_payment is on, so the kitchen
+//     is already building this ticket while the money is still outstanding.
+//     The minute of grace is what keeps every ordinary card payment out of the
+//     banner: those clear in seconds. What's left is the cash-at-the-counter
+//     walk-up and the customer whose card wouldn't take.
 //   - payment_status='pending_terminal' older than 3 minutes → terminal flow
 //     stalled (likely terminal offline or customer walked away); cashier needs
 //     to rescue manually so the order doesn't get orphaned.
@@ -405,6 +411,8 @@ router.get('/kiosk-held', requireAuth('pos_access'), async (req, res) => {
              CASE
                WHEN o.status = 'draft_kiosk' THEN 'held'
                WHEN o.status = 'cancelled' AND o.payment_status = 'failed' THEN 'denied_charge'
+               WHEN o.kitchen_fire_at IS NOT NULL AND o.payment_status IN ('unpaid', 'failed')
+                 THEN 'fired_unpaid'
                ELSE 'stranded_terminal'
              END AS kind,
              COALESCE(c.name, o.customer_call_name) AS customer_name, c.phone AS customer_phone,
@@ -434,6 +442,13 @@ router.get('/kiosk-held', requireAuth('pos_access'), async (req, res) => {
       WHERE o.source = 'customer_kiosk'
         AND (
           o.status = 'draft_kiosk'
+          OR (
+            o.kitchen_fire_at IS NOT NULL
+            AND o.status IN ('pending', 'active')
+            AND o.payment_status IN ('unpaid', 'failed')
+            AND o.kitchen_fire_at < NOW() - INTERVAL '1 minute'
+            AND o.created_at > NOW() - INTERVAL '6 hours'
+          )
           OR (
             o.status IN ('pending', 'active')
             AND o.payment_status = 'pending_terminal'
@@ -465,6 +480,13 @@ router.get('/kiosk-held', requireAuth('pos_access'), async (req, res) => {
 // the draft to 'active' here (the original behavior) fired the KDS ticket
 // *before* payment AND duplicated it once the cashier's new order landed.
 //
+// For fired_unpaid (kiosk fired the ticket at "ready to pay" — see
+// tenants.kiosk_fire_before_payment): the kitchen is already building it, so
+// discarding is not on the table. We keep the order and clear the payment
+// state, and the client charges THIS order rather than re-ringing a cart —
+// that's what keeps the ticket the kitchen is holding and the money the
+// cashier collects on the same row.
+//
 // For stranded_terminal (card payment timed out): the order is real, already
 // on the KDS, and the customer is still expecting their food — we keep the
 // order and just clear the failed terminal state so the cashier can charge
@@ -487,12 +509,17 @@ router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
       return res.status(401).json({ error: 'Authenticated employee required' });
     }
     const existing = await get(
-      `SELECT id, status, payment_status, source FROM orders WHERE id = $1`,
+      `SELECT id, status, payment_status, source, kitchen_fire_at FROM orders WHERE id = $1`,
       [orderId],
     );
     if (!existing) return res.status(404).json({ error: 'Order not found' });
 
     const isHeld = existing.status === 'draft_kiosk';
+    const isFiredUnpaid =
+      existing.source === 'customer_kiosk'
+      && existing.kitchen_fire_at != null
+      && ['pending', 'active'].includes(existing.status)
+      && ['unpaid', 'failed'].includes(existing.payment_status);
     const isStrandedTerminal =
       existing.source === 'customer_kiosk'
       && existing.status === 'pending'
@@ -502,7 +529,7 @@ router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
       && existing.status === 'cancelled'
       && existing.payment_status === 'failed';
 
-    if (!isHeld && !isStrandedTerminal && !isDeniedCharge) {
+    if (!isHeld && !isFiredUnpaid && !isStrandedTerminal && !isDeniedCharge) {
       return res.status(409).json({ error: 'Order is not claimable from kiosk' });
     }
 
@@ -535,13 +562,29 @@ router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
     // For denied_charge we also flip status back from 'cancelled' → 'active'
     // (the kiosk poll cancelled it when MP said no, but the customer is here
     // and the order is real).
-    await run(
-      `UPDATE orders
-       SET payment_status = 'unpaid', payment_method = NULL,
-           status = 'active', employee_id = $1
-       WHERE id = $2`,
-      [employeeId, orderId],
-    );
+    //
+    // fired_unpaid keeps its employee_id. The rescues below reassign to the
+    // cashier because they're taking over a broken payment, but a fired kiosk
+    // order that gets paid at the counter is the same sale as one paid at the
+    // terminal ten seconds earlier — re-attributing it here would split
+    // identical kiosk orders across two employees in the reports depending on
+    // which tender the customer happened to pick.
+    if (isFiredUnpaid) {
+      await run(
+        `UPDATE orders
+         SET payment_status = 'unpaid', payment_method = NULL, status = 'active'
+         WHERE id = $1`,
+        [orderId],
+      );
+    } else {
+      await run(
+        `UPDATE orders
+         SET payment_status = 'unpaid', payment_method = NULL,
+             status = 'active', employee_id = $1
+         WHERE id = $2`,
+        [employeeId, orderId],
+      );
+    }
     audit({
       tenantId: req.tenant?.id || 'default',
       actorType: 'employee',
@@ -550,13 +593,15 @@ router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
       resource: 'order',
       resourceId: String(orderId),
       details: {
-        edit: isDeniedCharge ? 'rescued_from_denied_charge' : 'rescued_from_terminal',
+        edit: isFiredUnpaid ? 'claimed_fired_unpaid'
+          : isDeniedCharge ? 'rescued_from_denied_charge'
+          : 'rescued_from_terminal',
         prior_status: existing.status,
         prior_payment_status: existing.payment_status,
       },
       ip: req.ip,
     });
-    res.json({ id: orderId, status: 'active' });
+    res.json({ id: orderId, status: 'active', kind: isFiredUnpaid ? 'fired_unpaid' : 'rescued' });
   } catch (error) {
     console.error('Error claiming kiosk order:', error);
     res.status(500).json({ error: 'Failed to claim order' });

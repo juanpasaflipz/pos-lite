@@ -1,9 +1,12 @@
-// Order lifecycle tests — kiosk pay-first flow + DELETE cascade.
+// Order lifecycle tests — kiosk pay-first flow, fire-before-payment, and the
+// DELETE cascade.
 //
 // Invariants guarded here:
 //   1. Orders with status='draft_kiosk' are INVISIBLE to the KDS query.
-//      (The kiosk creates orders in this state *before* payment; the kitchen
-//      must not receive a ticket until the customer pays.)
+//      (With kiosk_fire_before_payment OFF the kiosk creates orders in this
+//      state *before* payment; the kitchen must not receive a ticket until the
+//      customer pays. With it ON the order is born 'active' instead — see the
+//      'kiosk fire-before-payment' block, which guards the other direction.)
 //   2. Promoting draft_kiosk → active (`markKioskOrderPaid` sets status='active'
 //      + payment_status='paid') makes the same order visible to the KDS query.
 //   3. DELETE FROM orders WHERE id=X fails via FK constraint if any child
@@ -114,6 +117,120 @@ describe('kiosk pay-first flow', () => {
     expect(visible).toHaveLength(1);
     expect((visible[0] as any).status).toBe('active');
     expect((visible[0] as any).payment_status).toBe('paid');
+  });
+});
+
+// Kiosk orders that go to the kitchen at "ready to pay" instead of at "paid"
+// (tenants.kiosk_fire_before_payment, migration 0106). The whole point is that
+// the ticket is on the KDS while the money is still outstanding, so what needs
+// guarding is that nothing downstream treats it like a draft it may delete.
+describe('kiosk fire-before-payment', () => {
+  // firedMinutesAgo=0 → just submitted, customer still at the terminal.
+  async function insertFiredKioskOrder(
+    firedMinutesAgo = 0,
+    paymentStatus = 'unpaid',
+  ): Promise<number> {
+    return asTenant(tenant.id, async () => {
+      const row = await get(
+        `INSERT INTO orders
+           (order_number, employee_id, status, subtotal, tax, total, payment_status,
+            source, kitchen_fire_at)
+         VALUES ($1, $2, 'active', 100, 16, 116, $3,
+            'customer_kiosk', NOW() - ($4 || ' minutes')::interval)
+         RETURNING id`,
+        [Date.now() % 1_000_000, employeeId, paymentStatus, String(firedMinutesAgo)],
+      );
+      return Number(row.id);
+    });
+  }
+
+  // Mirrors the kind/WHERE shape of GET /api/orders/kiosk-held.
+  async function heldListKind(orderId: number): Promise<string | null> {
+    const rows = await asTenant(tenant.id, () =>
+      all(
+        `SELECT o.id,
+                CASE
+                  WHEN o.status = 'draft_kiosk' THEN 'held'
+                  WHEN o.status = 'cancelled' AND o.payment_status = 'failed' THEN 'denied_charge'
+                  WHEN o.kitchen_fire_at IS NOT NULL AND o.payment_status IN ('unpaid', 'failed')
+                    THEN 'fired_unpaid'
+                  ELSE 'stranded_terminal'
+                END AS kind
+         FROM orders o
+         WHERE o.id = $1
+           AND o.source = 'customer_kiosk'
+           AND (
+             o.status = 'draft_kiosk'
+             OR (
+               o.kitchen_fire_at IS NOT NULL
+               AND o.status IN ('pending', 'active')
+               AND o.payment_status IN ('unpaid', 'failed')
+               AND o.kitchen_fire_at < NOW() - INTERVAL '1 minute'
+               AND o.created_at > NOW() - INTERVAL '6 hours'
+             )
+             OR (
+               o.status IN ('pending', 'active')
+               AND o.payment_status = 'pending_terminal'
+               AND o.created_at < NOW() - INTERVAL '3 minutes'
+             )
+             OR (
+               o.status = 'cancelled'
+               AND o.payment_status = 'failed'
+               AND o.created_at > NOW() - INTERVAL '30 minutes'
+             )
+           )`,
+        [orderId],
+      ),
+    );
+    return rows.length ? (rows[0] as any).kind : null;
+  }
+
+  it('is opt-in — a fresh tenant keeps the pay-first lifecycle', async () => {
+    // The whole feature trades "the kitchen never sees an unpaid ticket" for a
+    // head start. No tenant gets that trade made for them by a deploy.
+    const [row] = await adminSql`
+      SELECT kiosk_fire_before_payment FROM tenants WHERE id = ${tenant.id}
+    `;
+    expect(row.kiosk_fire_before_payment).toBe(false);
+  });
+
+  it('a fired order reaches the KDS while it is still unpaid', async () => {
+    const orderId = await insertFiredKioskOrder();
+
+    const visible = await asTenant(tenant.id, () =>
+      all(
+        `SELECT id, status, payment_status FROM orders WHERE status = ANY($1::text[]) AND id = $2`,
+        [KDS_STATUSES, orderId],
+      ),
+    );
+
+    expect(visible).toHaveLength(1);
+    expect((visible[0] as any).payment_status).toBe('unpaid');
+  });
+
+  it('never classifies as a discardable draft — claim must not delete cooking food', async () => {
+    const orderId = await insertFiredKioskOrder(5);
+    expect(await heldListKind(orderId)).toBe('fired_unpaid');
+    expect(await heldListKind(orderId)).not.toBe('held');
+  });
+
+  it('stays out of the cashier banner during the payment interaction', async () => {
+    // Ordinary card payments clear inside the grace minute, so the banner must
+    // not light up for every kiosk order the moment it fires.
+    expect(await heldListKind(await insertFiredKioskOrder(0))).toBeNull();
+  });
+
+  it('surfaces a declined card that left food on the line', async () => {
+    // The MP poll marks payment failed but leaves a fired order 'active' — it
+    // may not be cancelled out from under the kitchen.
+    const orderId = await insertFiredKioskOrder(2, 'failed');
+    expect(await heldListKind(orderId)).toBe('fired_unpaid');
+  });
+
+  it('drops out of the banner once paid', async () => {
+    const orderId = await insertFiredKioskOrder(5);
+    await promoteToPaid(orderId);
+    expect(await heldListKind(orderId)).toBeNull();
   });
 });
 

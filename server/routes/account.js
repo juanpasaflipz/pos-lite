@@ -34,6 +34,7 @@ router.get('/', requireOwner, async (req, res) => {
       mp_default_terminal_id: tenant.mp_default_terminal_id || null,
       mp_default_kiosk_terminal_id: tenant.mp_default_kiosk_terminal_id || null,
       inventory_mode: tenant.inventory_mode || 'ingredients',
+      kiosk_fire_before_payment: tenant.kiosk_fire_before_payment === true,
       usage: {
         employees: { current: Number(usage.employee_count), limit: limits.employees },
         menu_items: { current: Number(usage.menu_item_count), limit: limits.menuItems },
@@ -47,10 +48,10 @@ router.get('/', requireOwner, async (req, res) => {
 
 const INVENTORY_MODES = ['ingredients', 'two_stage'];
 
-// PUT /api/account — Update name/email/inventory_mode
+// PUT /api/account — Update name/email/inventory_mode/kiosk_fire_before_payment
 router.put('/', requireOwner, async (req, res) => {
   try {
-    const { name, email, inventory_mode } = req.body;
+    const { name, email, inventory_mode, kiosk_fire_before_payment } = req.body;
     const updates = {};
 
     if (name && typeof name === 'string' && name.trim()) {
@@ -83,6 +84,12 @@ router.put('/', requireOwner, async (req, res) => {
       }
       updates.inventory_mode = inventory_mode;
     }
+    if (kiosk_fire_before_payment !== undefined) {
+      if (typeof kiosk_fire_before_payment !== 'boolean') {
+        return res.status(400).json({ error: 'kiosk_fire_before_payment must be a boolean' });
+      }
+      updates.kiosk_fire_before_payment = kiosk_fire_before_payment;
+    }
 
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: 'No valid fields to update' });
@@ -95,6 +102,7 @@ router.put('/', requireOwner, async (req, res) => {
       name: tenant.name,
       email: tenant.owner_email,
       inventory_mode: tenant.inventory_mode || 'ingredients',
+      kiosk_fire_before_payment: tenant.kiosk_fire_before_payment === true,
     });
   } catch (error) {
     console.error('Account update error:', error);

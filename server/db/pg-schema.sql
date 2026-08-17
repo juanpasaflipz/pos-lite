@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   trial_ended_notified_at TIMESTAMPTZ,
   timezone TEXT NOT NULL DEFAULT 'America/Mexico_City',
   kiosk_mode TEXT DEFAULT 'grid',
+  kiosk_fire_before_payment BOOLEAN NOT NULL DEFAULT false,
   inventory_mode TEXT NOT NULL DEFAULT 'ingredients'
     CHECK (inventory_mode IN ('ingredients', 'two_stage')),
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -169,7 +170,12 @@ CREATE TABLE IF NOT EXISTS orders (
   discount_authorized_by INTEGER REFERENCES employees(id),
   customer_call_name TEXT,
   order_fulfillment_type TEXT DEFAULT 'to_go',
-  manual_batch_id INTEGER DEFAULT NULL
+  manual_batch_id INTEGER DEFAULT NULL,
+  -- Set when a kiosk order was handed to the kitchen before it was paid
+  -- (tenants.kiosk_fire_before_payment). Marks a ticket that is already being
+  -- cooked, so no downstream path may delete or cancel it out from under the
+  -- line. Migration 0106.
+  kitchen_fire_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS order_items (

@@ -84,10 +84,11 @@ const KioskPayExistingScreen: React.FC = () => {
     });
   };
 
-  // Cash path: order stays as draft_kiosk on the server. Customer walks to the
-  // cashier, who finds it in /api/orders/kiosk-held, collects cash, and claims
-  // it (promotes status → 'active'). The kitchen ticket only appears at that
-  // moment. We just acknowledge here and clear the tablet.
+  // Cash path: purely client-side — the customer walks to the cashier, who
+  // finds the order in /api/orders/kiosk-held and collects. What the cashier
+  // does with it depends on how the order was born: a draft gets claimed into
+  // their cart, while an order already fired to the kitchen gets charged where
+  // it stands. Either way we just acknowledge here and clear the tablet.
   const handleCash = () => {
     if (busy) return;
     setBusy('cash');

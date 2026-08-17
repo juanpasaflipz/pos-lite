@@ -97,11 +97,12 @@ Brand: kiosk wears Talavera Terracotta (`#A8542A`), driven by CSS variables in `
 
 ## Order lifecycle
 - Status values collapsed in migration 0066 (Phase 0b): `pending`/`confirmed`/`preparing` → `active`. Backend writes `active` only; reads still tolerate legacy values during rollout
-- **Kiosk pay-first flow** (as of 2026-06-18):
-  - Cart submit creates orders as `status='draft_kiosk'` — KDS does NOT render drafts
-  - Card payment: `/orders/:id/status` poll calls `markKioskOrderPaid()` on success, which promotes `draft_kiosk → active` (kitchen ticket prints at that moment)
-  - Cash payment: customer walks to cashier; held orders surface in `GET /api/orders/kiosk-held`; cashier `POST /api/orders/:id/claim` promotes the order
-  - Delivery: same draft pattern + Uber Direct courier dispatch is gated on payment (see `dispatchPendingCourier` in `server/routes/kiosk.js`; uses `delivery_orders.pending_dispatch JSONB` stashed at order creation)
+- **When a kiosk order reaches the kitchen** is per-tenant: `tenants.kiosk_fire_before_payment` (migration 0106, default **off** — juanbertos is the only tenant opted in, as the pilot; everyone else keeps the pay-first lifecycle until they flip it in Account settings)
+  - **On** — cart submit creates the order as `status='active'`, `payment_status='unpaid'`, `kitchen_fire_at=NOW()`. The KDS has it while the customer is still at the terminal, so the line cooks through the payment instead of after it. `kitchen_fire_at` is the marker that the food is already being made: no path may delete or cancel a row carrying it (the MP-decline branch keeps it `active`, and the cashier claim charges it instead of discarding it). Two-stage tenants take portions at creation, mirroring the born-`pending` path; `markKioskOrderPaid`'s per-line idempotency makes the payment-time deduction a no-op
+  - **Off** — the original pay-first flow (2026-06-18): orders are born `draft_kiosk`, which the KDS does not render, and `markKioskOrderPaid()` (card) or a cashier claim (cash) promotes them to `active`
+  - Cash either way: the customer walks to the cashier; the order surfaces in `GET /api/orders/kiosk-held` — as `held` (draft, claim loads the cart and drops it) or `fired_unpaid` (already cooking, claim charges that same order). Fired orders only enter the banner after a minute, so routine card payments never appear
+  - Delivery: same rule for the kitchen, but the Uber Direct courier is *always* gated on payment (see `dispatchPendingCourier` in `server/routes/kiosk.js`; uses `delivery_orders.pending_dispatch JSONB` stashed at order creation). Firing early starts the cooking, never the courier
+  - Sentinel `stale_fired_unpaid_kiosk` watches the new failure mode: food made, money never collected
 - Test cleanup: `DELETE /api/orders/:id` or `POST /api/orders/purge-unpaid` (gated by `void_orders` permission). Both cascade child rows (order_items, order_payments, refunds, etc.) before the order row. Do NOT run raw `DELETE FROM orders` without that cascade — FK constraints will block
 
 ## UI conventions
@@ -118,7 +119,7 @@ Brand: kiosk wears Talavera Terracotta (`#A8542A`), driven by CSS variables in `
 - Do not use `process.env.BASE_URL` for OAuth `redirect_uri` — use `req.get('host')`
 - Do not rely on third-party webhooks for payment status correctness — always provide a live-pull fallback
 - Do not add menu photography as an afterthought — it's the single biggest engagement lever and should be treated as content infrastructure (upload pipeline, CDN, blurhash, fallback)
-- Do not fire kiosk orders to the kitchen before payment — use the `draft_kiosk` → `active` lifecycle above
+- Do not delete, cancel, or re-ring an order with `kitchen_fire_at` set — that ticket is already being cooked. Charge the existing row (superseded the old "never fire before payment" rule on 2026-08-16; see Order lifecycle above)
 
 ## Where to look
 - Deferred work: `TODOS.md` at repo root (tracked, includes Phase 2/3 triggers)

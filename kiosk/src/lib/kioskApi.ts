@@ -339,10 +339,12 @@ export async function holdKioskOrder(
   return res.json();
 }
 
-// Kiosk pay-first flow: creates the order as status='draft_kiosk' (KDS blind).
-// The kitchen ticket only fires after payment succeeds and the poller / cashier
-// promotes the draft to 'active'. Endpoint name is legacy — the actual send-
-// to-kitchen moment lives in markKioskOrderPaid() / claim.
+// Submits the finished cart. Where it lands depends on the tenant's
+// kiosk_fire_before_payment setting (server-side, migration 0106):
+//   ON  — born 'active': the KDS shows it now and the kitchen builds it while
+//         the customer is at the terminal. The endpoint name means what it says.
+//   OFF — born 'draft_kiosk', KDS-blind until markKioskOrderPaid() or a cashier
+//         claim promotes it. Either way the customer's next stop is /pay-existing.
 export interface KioskSendToKitchenResponse {
   id: number;
   order_number: string | number;

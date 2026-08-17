@@ -612,7 +612,16 @@ export interface KioskHeldOrder {
   customer_phone: string | null;
   status: string;
   payment_status: string;
-  kind: 'held' | 'stranded_terminal';
+  /**
+   * held             — kiosk draft, not yet in the kitchen. Claim loads the
+   *                    items into the cashier's cart and DROPS the draft.
+   * fired_unpaid     — kiosk fired this to the kitchen at "ready to pay" and
+   *                    the money never landed. The food is already being made,
+   *                    so claim charges THIS order instead of re-ringing it.
+   * stranded_terminal / denied_charge — payment broke mid-flight; claim rescues
+   *                    the existing order so the cashier can charge fresh.
+   */
+  kind: 'held' | 'fired_unpaid' | 'stranded_terminal' | 'denied_charge';
   items: Array<{
     menu_item_id: number;
     item_name: string;
@@ -625,7 +634,9 @@ export async function getKioskHeldOrders(): Promise<KioskHeldOrder[]> {
   return apiRequest<KioskHeldOrder[]>('/orders/kiosk-held');
 }
 
-export async function claimKioskOrder(id: number): Promise<{ id: number; status: string }> {
+export async function claimKioskOrder(
+  id: number,
+): Promise<{ id: number; status: string; kind?: string }> {
   return apiRequest(`/orders/${id}/claim`, { method: 'POST' });
 }
 
@@ -2941,7 +2952,17 @@ export async function getAccount(): Promise<any> {
   return res.json();
 }
 
-export async function updateAccount(data: { name?: string; email?: string; inventory_mode?: InventoryMode }): Promise<{ name: string; email: string; inventory_mode?: InventoryMode }> {
+export async function updateAccount(data: {
+  name?: string;
+  email?: string;
+  inventory_mode?: InventoryMode;
+  kiosk_fire_before_payment?: boolean;
+}): Promise<{
+  name: string;
+  email: string;
+  inventory_mode?: InventoryMode;
+  kiosk_fire_before_payment?: boolean;
+}> {
   const base = FALLBACK_URLS.length ? await resolveBaseUrl() : activeBaseUrl;
   const res = await fetch(`${base}/account`, {
     method: 'PUT',

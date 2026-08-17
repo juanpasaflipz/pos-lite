@@ -751,6 +751,14 @@ const POSScreen: React.FC = () => {
   };
 
   const handleClaimKioskOrder = (order: KioskHeldOrder) => {
+    // Fired-but-unpaid: the kitchen is already building this exact ticket, so
+    // the cashier charges THAT order. Loading its items into the cart the way
+    // the held-draft path does would ring a second order for food that's
+    // already on the line.
+    if (order.kind === 'fired_unpaid') {
+      handleCobrar({ id: order.id });
+      return;
+    }
     const claimed: CartItem[] = order.items.map((item) => ({
       cart_id: generateCartId(),
       menu_item_id: item.menu_item_id,
@@ -1168,7 +1176,7 @@ const POSScreen: React.FC = () => {
   // Cobrar from the live-orders strip / unpaid drawer. Routes to the full
   // PaymentModal (MP terminal, Clip, cash w/ change, OXXO, SPEI) — same surface
   // the cart Cobrar uses — instead of the legacy mark-as-paid picker.
-  const handleCobrar = async (order: Order) => {
+  const handleCobrar = async (order: { id: number }) => {
     try {
       const fullOrder = await getOrder(order.id);
       setChargingOrder(fullOrder);

@@ -1051,18 +1051,49 @@ router.post('/orders/:id/append-items', verifyKioskToken, requireKioskPlan, asyn
   }
 });
 
-// POST /api/kiosk/orders/send-to-kitchen — create a kiosk order as a HELD draft
-// (status='draft_kiosk'). The KDS does NOT see this order yet. The kiosk routes
-// the customer to /pay-existing where one of two things promotes it:
-//   - Card on terminal: markKioskOrderPaid flips draft_kiosk → active on
-//     payment success (so the kitchen ticket appears the instant the card
-//     clears).
-//   - Cash at counter:  the customer walks to the cashier; the cashier sees
-//     the order in /api/orders/kiosk-held, takes cash, claims it via
-//     POST /api/orders/:id/claim which promotes draft_kiosk → active.
-// Either way the kitchen never sees an unpaid ticket. Unlike /hold this does
-// NOT supersede prior orders — same customer can legitimately have a paid
-// earlier order and a new pending one (second round of micheladas).
+/**
+ * Does this tenant hand kiosk tickets to the kitchen at "ready to pay" instead
+ * of at "paid"? See migration 0106 for the trade being made.
+ */
+async function firesBeforePayment(tenantId) {
+  if (!tenantId) return false;
+  const [row] = await adminSql`
+    SELECT kiosk_fire_before_payment FROM tenants WHERE id = ${tenantId}
+  `;
+  // Opt-in: anything but an explicit true keeps the pay-first lifecycle.
+  return row?.kiosk_fire_before_payment === true;
+}
+
+/**
+ * The status a freshly-submitted kiosk order is born in, plus its fire stamp.
+ *
+ * fire-before-payment ON  → 'active' + kitchen_fire_at=NOW(): the KDS picks it
+ *   up on its next 2s poll, so the line starts cooking while the customer is
+ *   still at the terminal.
+ * OFF → the original pay-first lifecycle: 'draft_kiosk', invisible to the KDS
+ *   until markKioskOrderPaid() or a cashier claim promotes it.
+ */
+function kioskBirthStatus(fireEarly) {
+  return fireEarly
+    ? { status: 'active', fireStamp: true }
+    : { status: 'draft_kiosk', fireStamp: false };
+}
+
+// POST /api/kiosk/orders/send-to-kitchen — the customer is done ordering and is
+// about to pay. What happens next depends on tenants.kiosk_fire_before_payment:
+//
+//   ON (default): the order is born status='active', payment_status='unpaid',
+//     with kitchen_fire_at stamped. The KDS shows it immediately — the kitchen
+//     builds the order during the payment interaction instead of after it. The
+//     ticket carries an unpaid badge so expo doesn't hand it over early, and
+//     kitchen_fire_at is what stops the cashier-claim and MP-failure paths from
+//     deleting or cancelling food that's already on the flat-top.
+//   OFF: the pay-first lifecycle — 'draft_kiosk', invisible to the KDS, promoted
+//     by markKioskOrderPaid (card) or a cashier claim (cash at the counter).
+//
+// Unlike /hold this does NOT supersede prior orders — same customer can
+// legitimately have a paid earlier order and a new pending one (second round
+// of micheladas).
 router.post('/orders/send-to-kitchen', verifyKioskToken, requireKioskPlan, async (req, res) => {
   const tenantId = req.kioskTenantId;
   try {
@@ -1098,21 +1129,44 @@ router.post('/orders/send-to-kitchen', verifyKioskToken, requireKioskPlan, async
     const subtotal = Math.round((total - tax) * 100) / 100;
     const tenantTz = (await getTenant(tenantId))?.timezone;
     const fulfillmentType = normalizeKioskFulfillmentType(fulfillment_type);
+    const fireEarly = await firesBeforePayment(tenantId);
+    const { status, fireStamp } = kioskBirthStatus(fireEarly);
+    const inventoryMode = await inventoryModeForTenant(tenantId);
 
     const order = await adminSql.begin(async (sql) => {
       const orderNumber = await nextOrderNumber(sql, tenantId, tenantTz);
       const [row] = await sql`
         INSERT INTO orders (
           tenant_id, order_number, employee_id, status, subtotal, tax, total,
-          payment_status, source, loyalty_customer_id, customer_call_name, order_fulfillment_type
+          payment_status, source, loyalty_customer_id, customer_call_name, order_fulfillment_type,
+          kitchen_fire_at
         )
         VALUES (
-          ${tenantId}, ${orderNumber}, ${employeeId}, 'draft_kiosk', ${subtotal}, ${tax}, ${total},
-          'unpaid', 'customer_kiosk', ${loyaltyCustomerId}, ${callName}, ${fulfillmentType}
+          ${tenantId}, ${orderNumber}, ${employeeId}, ${status}, ${subtotal}, ${tax}, ${total},
+          'unpaid', 'customer_kiosk', ${loyaltyCustomerId}, ${callName}, ${fulfillmentType},
+          CASE WHEN ${fireStamp} THEN NOW() ELSE NULL END
         )
         RETURNING id, order_number, subtotal, tax, total, status, payment_status, customer_call_name, order_fulfillment_type
       `;
-      await insertKioskOrderItems(sql, tenantId, row.id, orderItems);
+      const lines = await insertKioskOrderItems(sql, tenantId, row.id, orderItems);
+
+      // Fired early = a real ticket the kitchen will build, so it takes its
+      // portions now rather than at payment — same rule the born-'pending'
+      // POST /orders path follows. markKioskOrderPaid's per-line idempotency
+      // makes the payment-time deduction a no-op for these. Passing the
+      // transaction's `sql` is load-bearing: these routes run outside
+      // tenantMiddleware, and a helper reaching for getConn() would escape the
+      // transaction and autocommit the deduction even if the insert rolled back.
+      if (fireStamp && inventoryMode === 'two_stage') {
+        await deductComponentsForOrderLines(sql, {
+          tenantId,
+          lines: lines.map((l) => ({
+            order_item_id: l.order_item_id,
+            menu_item_id: l.menu_item_id,
+            quantity: l.quantity,
+          })),
+        });
+      }
       return row;
     });
 
@@ -1175,12 +1229,13 @@ router.post('/delivery/quote', verifyKioskToken, requireKioskPlan, async (req, r
 // Body: { items, customer_token?, customer_call_name, dropoff_address,
 //         dropoff_phone_number, dropoff_name?, dropoff_notes?, quote_id? }
 //
-// Creates an internal order as status='draft_kiosk' (no kitchen ticket) and a
-// delivery_orders row with platform_status='pending_payment' that stashes the
-// Uber dispatch payload. The courier is NOT booked yet — that happens once
-// the card terminal confirms the payment (see dispatchPendingCourier() called
-// from the /orders/:id/status poll). This keeps the merchant from paying for
-// couriers on unpaid orders.
+// Creates an internal order (fired to the kitchen or held as a draft — see
+// send-to-kitchen and tenants.kiosk_fire_before_payment) plus a delivery_orders
+// row with platform_status='pending_payment' that stashes the Uber dispatch
+// payload. The courier is NOT booked yet — that happens once the card terminal
+// confirms the payment (see dispatchPendingCourier() called from the
+// /orders/:id/status poll). Firing early starts the COOKING early; it never
+// books a courier on an unpaid order.
 //
 // Cash payment isn't supported for delivery from the kiosk: by the time the
 // customer walks to the cashier they're not at home to receive the courier.
@@ -1258,20 +1313,40 @@ router.post('/orders/send-to-delivery', verifyKioskToken, requireKioskPlan, asyn
       dropoff_notes: dropoff_notes || null,
     };
 
+    const fireEarly = await firesBeforePayment(tenantId);
+    const { status, fireStamp } = kioskBirthStatus(fireEarly);
+    const inventoryMode = await inventoryModeForTenant(tenantId);
+
     const order = await adminSql.begin(async (sql) => {
       const orderNumber = await nextOrderNumber(sql, tenantId, tenantTz);
       const [row] = await sql`
         INSERT INTO orders (
           tenant_id, order_number, employee_id, status, subtotal, tax, total,
-          payment_status, source, loyalty_customer_id, customer_call_name, order_fulfillment_type
+          payment_status, source, loyalty_customer_id, customer_call_name, order_fulfillment_type,
+          kitchen_fire_at
         )
         VALUES (
-          ${tenantId}, ${orderNumber}, ${employeeId}, 'draft_kiosk', ${subtotal}, ${tax}, ${total},
-          'unpaid', 'customer_kiosk', ${loyaltyCustomerId}, ${callName}, 'delivery'
+          ${tenantId}, ${orderNumber}, ${employeeId}, ${status}, ${subtotal}, ${tax}, ${total},
+          'unpaid', 'customer_kiosk', ${loyaltyCustomerId}, ${callName}, 'delivery',
+          CASE WHEN ${fireStamp} THEN NOW() ELSE NULL END
         )
         RETURNING id, order_number, subtotal, tax, total, status, payment_status, customer_call_name, order_fulfillment_type
       `;
-      await insertKioskOrderItems(sql, tenantId, row.id, orderItems);
+      const lines = await insertKioskOrderItems(sql, tenantId, row.id, orderItems);
+
+      // Same rule as send-to-kitchen: a fired ticket takes its portions now.
+      // The COURIER is still gated on payment (pending_dispatch below) — only
+      // the cooking starts early.
+      if (fireStamp && inventoryMode === 'two_stage') {
+        await deductComponentsForOrderLines(sql, {
+          tenantId,
+          lines: lines.map((l) => ({
+            order_item_id: l.order_item_id,
+            menu_item_id: l.menu_item_id,
+            quantity: l.quantity,
+          })),
+        });
+      }
 
       const [platform] = await sql`
         SELECT id FROM delivery_platforms WHERE tenant_id = ${tenantId} AND name = 'uber_direct'
@@ -1832,7 +1907,8 @@ router.get('/orders/:id/status', verifyKioskToken, async (req, res) => {
   const orderId = Number(req.params.id);
   try {
     const [order] = await adminSql`
-      SELECT id, order_number, total, payment_status, mp_order_id, mp_terminal_id, invoice_token
+      SELECT id, order_number, total, payment_status, mp_order_id, mp_terminal_id, invoice_token,
+             kitchen_fire_at
       FROM orders
       WHERE tenant_id = ${tenantId} AND id = ${orderId} AND source = 'customer_kiosk'
     `;
@@ -1865,8 +1941,18 @@ router.get('/orders/:id/status', verifyKioskToken, async (req, res) => {
           paymentStatus = 'paid';
           justPaid = true;
         } else if (mapped === 'failed') {
+          // A declined card cancels the order — UNLESS the kitchen is already
+          // building it. Cancelling a fired ticket yanks it off the KDS with
+          // food on the flat-top and no record the cashier can charge; the
+          // customer is still standing right there, wanting to retry or pay
+          // cash. Fired orders stay 'active' and unpaid, which is exactly the
+          // state the cashier's unpaid strip and the kiosk-held banner
+          // ('fired_unpaid') are built to surface.
+          const firedToKitchen = order.kitchen_fire_at != null;
           await adminSql`
-            UPDATE orders SET payment_status = 'failed', status = 'cancelled'
+            UPDATE orders
+            SET payment_status = 'failed',
+                status = ${firedToKitchen ? 'active' : 'cancelled'}
             WHERE tenant_id = ${tenantId} AND id = ${order.id}
           `;
           paymentStatus = 'failed';
