@@ -31,7 +31,6 @@ CREATE TABLE IF NOT EXISTS tenants (
   trial_reminder_sent_at TIMESTAMPTZ,
   trial_ended_notified_at TIMESTAMPTZ,
   timezone TEXT NOT NULL DEFAULT 'America/Mexico_City',
-  kiosk_mode TEXT DEFAULT 'grid',
   kiosk_fire_before_payment BOOLEAN NOT NULL DEFAULT false,
   inventory_mode TEXT NOT NULL DEFAULT 'ingredients'
     CHECK (inventory_mode IN ('ingredients', 'two_stage')),
@@ -885,14 +884,12 @@ CREATE TABLE IF NOT EXISTS expenses (
 );
 
 -- Kiosk device rows: created by /api/kiosk/bind when caller sends device_name.
--- kiosk_mode_override lets us flip ONE device to wizard while other devices on
--- the same tenant stay on their tenant.kiosk_mode default. See migration 0092.
+-- Naming a device is what gives it its own heartbeat row on /admin/devices.
 CREATE TABLE IF NOT EXISTS kiosk_devices (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
   name TEXT NOT NULL,
   bound_employee_id INTEGER,
-  kiosk_mode_override TEXT,
   bound_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_seen_at TIMESTAMPTZ,
   -- Build this device last reported (see POST /api/kiosk/heartbeat). Android
@@ -900,36 +897,10 @@ CREATE TABLE IF NOT EXISTS kiosk_devices (
   -- becomes visible without walking up to it.
   client_version TEXT,
   client_platform TEXT,
-  revoked_at TIMESTAMPTZ,
-  CONSTRAINT kiosk_devices_mode_override_valid
-    CHECK (kiosk_mode_override IS NULL OR kiosk_mode_override IN ('grid', 'wizard'))
+  revoked_at TIMESTAMPTZ
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ux_kiosk_devices_tenant_name_active
   ON kiosk_devices (tenant_id, name) WHERE revoked_at IS NULL;
-
--- Slug → menu_item_id map for the burrito-builder wizard. Decouples the
--- wizard's protein knobs from item names so a rename in Menu Management
--- doesn't break the flow. Populated by scripts/seed-builder-menu.mjs.
-CREATE TABLE IF NOT EXISTS kiosk_builder_map (
-  tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
-  slug TEXT NOT NULL,
-  menu_item_id INTEGER NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE,
-  PRIMARY KEY (tenant_id, slug)
-);
-
--- Curated sides / drinks for the wizard's "¿Deseas agregar algo?" step. An
--- allowlist rather than a category read: juanbertos keeps `Orden Papas` in
--- `otros` next to $299 fries entrées and a bookkeeping row, so a category
--- would pull entrées into an upsell strip. Rows are ordinary active menu
--- items and go through the normal cart path as their own lines.
-CREATE TABLE IF NOT EXISTS kiosk_addon_map (
-  tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
-  section TEXT NOT NULL,
-  menu_item_id INTEGER NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE,
-  sort_order INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (tenant_id, section, menu_item_id),
-  CONSTRAINT kiosk_addon_map_section_valid CHECK (section IN ('side', 'drink'))
-);
 
 -- ==================== Indexes ====================
 
@@ -1026,7 +997,7 @@ BEGIN
       'loyalty_messages', 'loyalty_config', 'wallet_passes', 'wallet_registrations',
       'order_templates',
       'waste_log', 'cfdi_config', 'cfdi_invoices', 'tenant_credentials', 'expenses',
-      'kiosk_devices', 'kiosk_builder_map', 'kiosk_addon_map',
+      'kiosk_devices',
       'prep_runs', 'prep_run_inputs', 'prep_run_outputs', 'portion_ledger'
     ])
   LOOP

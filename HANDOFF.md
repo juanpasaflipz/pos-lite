@@ -7,6 +7,42 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-08-19 — Claude Code — **Wizard DB objects dropped (1.21.1, migration 0107)**
+
+Follow-up to the 1.21.0 code removal below, which deliberately left the schema
+alone. Juan asked for the orphans gone, so `0107_drop_kiosk_wizard_objects.js`
+drops `kiosk_builder_map`, `kiosk_addon_map`, `tenants.kiosk_mode` and
+`kiosk_devices.kiosk_mode_override`, and deletes the Phase 1 shadow seed.
+
+**The migration is conservative on purpose** — it is one-way and there are no
+down migrations. It derives the item set from `kiosk_builder_map` before
+dropping it, and only deletes an item that is STILL `active=false` AND has no
+`order_items` history. A modifier group only goes if no surviving menu item
+points at it AND none of its options appear in `order_item_modifiers`. Order
+history is never deleted; a group whose options were ordered survives instead.
+
+That rule is load-bearing: group 989 `¿Con birria o cochinita?` is attached to
+shadow item 8991 *and* to the live `4 (cuatro) Rollbertos` / `6 (seis)
+Rollbertos`. 28 of the 29 linked groups go, 989 stays. `kiosk_addon_map` pointed
+at ordinary live items (Orden Papas, Refresco, Cerveza) — only the map dropped,
+never the items.
+
+Verified by running `up()` against **prod inside a rolled-back transaction**
+before shipping: menu_items 62→52, modifier_groups 45→17, modifiers 212→71,
+group 989 still linked to 2 live items, 18 active items and all 5 addon targets
+intact, both columns dropped — then rolled back and confirmed prod untouched.
+Then applied for real on the Neon test branch by the suite (schema_version 107).
+
+Pre-migration row snapshot (10 items / 28 groups / 141 modifiers / both maps /
+both columns) is at `~/Developer/pos-lite-backups/pre-0107-kiosk-wizard-2026-08-20.json`
+— outside the repo, not committed. Neon PITR is the real recovery path.
+
+Also deleted `scripts/seed-builder-menu.mjs` and `scripts/seed-kiosk-addons.mjs`
+(they seeded the dropped tables). The 2026-06-xx entry further down still
+mentions `seed-kiosk-addons.mjs` — that entry is history, not a live pointer.
+
+---
+
 ## 2026-08-19 — Claude Code — **Kiosk burrito-builder wizard removed (1.21.0)**
 
 Juan's call: revert to the menu Juanberto's actually uses and discard
