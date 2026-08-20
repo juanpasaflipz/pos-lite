@@ -250,7 +250,7 @@ router.get('/kiosks', requireAuth('manage_devices'), async (req, res) => {
   try {
     const rows = await all(
       `SELECT id, name, bound_at, last_seen_at, client_version, client_platform,
-              kiosk_mode_override, revoked_at
+              revoked_at
        FROM kiosk_devices
        WHERE revoked_at IS NULL
        ORDER BY last_seen_at DESC NULLS LAST, bound_at DESC`

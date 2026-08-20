@@ -1,8 +1,7 @@
 // "¿Para aquí o para llevar?" — and the moment the order becomes real.
 //
-// Both kiosk modes ask this at the END of the flow now, after the cart. Grid
-// mode used to ask it first, before the guest had seen a single item; `wizard`
-// now only picks which of the two layouts to render.
+// Asked at the END of the flow, after the cart. It used to come first, before
+// the guest had seen a single item.
 //
 // The answer FIRES the kitchen ticket rather than merely being recorded on the
 // way to one. Two reasons it happens on this tap and not the cart's:
@@ -26,7 +25,6 @@ import { useKioskCart, type KioskFulfillmentType } from '../context/KioskCartCon
 import { useKioskCustomer } from '../context/KioskCustomerContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
 import LanguageToggle from '../components/LanguageToggle';
-import { BuilderIcon } from '../lib/builderIcons';
 import { identifyKioskOrder, type KioskOpenOrder } from '../lib/kioskApi';
 import { fireKioskOrder } from '../lib/placeOrder';
 
@@ -34,7 +32,7 @@ const KioskFulfillmentScreen: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
-  const { tenantId, kioskToken, kioskMode } = useKioskBinding();
+  const { tenantId, kioskToken } = useKioskBinding();
   const { lines, setFulfillmentType } = useKioskCart();
   const { session } = useKioskCustomer();
 
@@ -48,8 +46,6 @@ const KioskFulfillmentScreen: React.FC = () => {
 
   // Stretched while the ticket is in flight — the guest is waiting on us.
   const { warning } = useIdleTimer(() => navigate('/'), busy ? 300_000 : 60_000);
-
-  const wizard = kioskMode === 'wizard';
 
   const choose = async (type: KioskFulfillmentType) => {
     if (busy || !tenantId || !kioskToken) return;
@@ -77,66 +73,6 @@ const KioskFulfillmentScreen: React.FC = () => {
   // No ticket and no cart — a reload wiped the local cart, so there is nothing
   // to order. Back to the attract loop.
   if (!placed && lines.length === 0) return <Navigate to="/" replace />;
-
-  if (wizard) {
-    return (
-      <div className="h-full w-full bg-neutral-950 text-neutral-50 flex flex-col">
-        <header className="flex items-center justify-between gap-3 px-4 py-3 pt-safe border-b border-neutral-800 flex-shrink-0">
-          <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-neutral-500 mb-0.5">
-              {t('wizard.fulfillK')}
-            </p>
-            <h1 className="text-[clamp(22px,4.5vw,40px)] font-black leading-[1.05] truncate">
-              {t('wizard.fulfillQ')}
-            </h1>
-          </div>
-          <div className="flex gap-2 flex-shrink-0">
-            <LanguageToggle />
-            {/* Hidden once `placed` exists: the guest is here correcting an
-                answer on a ticket the kitchen already has, and the cart behind
-                it can no longer be edited. */}
-            {!placed && (
-              <button
-                onClick={() => navigate('/cart')}
-                disabled={busy}
-                className="h-11 px-3.5 rounded-[10px] bg-neutral-800 active:bg-neutral-700 disabled:text-neutral-500 text-sm font-extrabold inline-flex items-center gap-1.5"
-              >
-                <ChevronLeft className="h-4 w-4" />
-                {t('wizard.back')}
-              </button>
-            )}
-          </div>
-        </header>
-
-        <main className="flex-1 min-h-0 overflow-y-auto p-4">
-          <div className="grid grid-cols-2 gap-4 max-w-[700px] mx-auto mt-[6vh]">
-            {([
-              { key: 'for_here' as const, icon: 'utensils' as const, label: t('wizard.forHere') },
-              { key: 'to_go' as const, icon: 'bag' as const, label: t('wizard.toGo') },
-            ]).map((o) => (
-              <button
-                key={o.key}
-                onClick={() => choose(o.key)}
-                disabled={busy}
-                className="min-h-[230px] rounded-2xl border-2 border-neutral-800 bg-neutral-900 disabled:opacity-50 p-[18px_14px] flex flex-col items-center justify-center gap-2 text-center active:scale-[0.96] transition-transform touch-manipulation"
-              >
-                <BuilderIcon name={o.icon} className="h-[72px] w-[72px] text-brand-300" />
-                <span className="text-[clamp(20px,3.5vw,28px)] font-black leading-[1.15]">{o.label}</span>
-              </button>
-            ))}
-          </div>
-          {busy && (
-            <p className="text-center text-neutral-400 font-bold mt-6">{t('fulfillment.sending')}</p>
-          )}
-          {error && (
-            <p className="text-center text-cockpit-out-text font-bold mt-6">{error}</p>
-          )}
-        </main>
-
-        {warning}
-      </div>
-    );
-  }
 
   return (
     <div className="h-full w-full bg-neutral-950 text-white flex flex-col">

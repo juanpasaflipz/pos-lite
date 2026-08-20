@@ -11,10 +11,7 @@
 // line cannot see. The call-out name is a label, and the KDS has always rendered
 // a nameless ticket as its order number. So the instruction is answered before
 // the ticket exists and only the label is deferred, to identifyKioskOrder().
-//
-// It lives here because there are two carts — the grid cart and the wizard
-// summary — feeding one fulfillment screen. A copy that drifts is how one kiosk
-// mode quietly stops reporting suggestion conversions.
+
 import {
   logSuggestionEvents,
   sendKioskOrderToKitchen,

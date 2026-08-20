@@ -79,10 +79,9 @@ const bindLimiter = rateLimit({
 // Issues a 30-day kiosk token that scopes subsequent requests to the matched tenant.
 //
 // If device_name is provided, upserts a kiosk_devices row and includes deviceId
-// in the token so super-admin can flip that ONE device's kiosk_mode_override
-// (Samsung pilot for the burrito-builder wizard). Bind without device_name
-// still works — the token has no deviceId and effective mode falls through to
-// tenant.kiosk_mode. Existing iPad tokens keep working unchanged.
+// in the token, which is what lets the device show up on /admin/devices with its
+// own heartbeat and build. Bind without device_name still works — the token
+// simply carries no deviceId. Existing iPad tokens keep working unchanged.
 router.post('/bind', bindLimiter, async (req, res) => {
   try {
     const { pin, device_name } = req.body || {};
@@ -385,17 +384,12 @@ async function buildKioskOrderItems(tenantId, items) {
     throw err;
   }
 
-  // Menu items normally require active=true, but builder-menu items are
-  // deliberately active=false (they're keyed via kiosk_builder_map and only
-  // exposed through the wizard flow). Widen the filter to accept either — the
-  // kiosk_builder_map membership acts as an allowlist so no other hidden item
-  // can leak into a cart. Modifier validation below still enforces that every
-  // chosen modifier belongs to a group attached to the item.
+  // Only active items are orderable. Modifier validation below still enforces
+  // that every chosen modifier belongs to a group attached to the item.
   const menuRows = await adminSql.unsafe(`
     SELECT id, name, price
     FROM menu_items
-    WHERE tenant_id = $1 AND id = ANY($2::int[])
-      AND (active = true OR id IN (SELECT menu_item_id FROM kiosk_builder_map WHERE tenant_id = $1))
+    WHERE tenant_id = $1 AND id = ANY($2::int[]) AND active = true
   `, [tenantId, menuIds]);
   const menuById = new Map(menuRows.map((row) => [Number(row.id), row]));
 
@@ -617,8 +611,8 @@ router.get('/admin/tenants', async (req, res) => {
 
 // POST /api/kiosk/admin/bind — bind kiosk via ADMIN_SECRET + chosen tenant_id
 // Body: { admin_secret, tenant_id, device_name? }  (admin_secret via X-Admin-Secret header also accepted)
-// device_name is optional but required if super-admin needs to attach a
-// per-device kiosk_mode_override later (the Samsung wizard pilot flow).
+// device_name is optional; naming a device is what gives it its own row on
+// /admin/devices so a stale build shows up there.
 router.post('/admin/bind', bindLimiter, async (req, res) => {
   if (!checkAdminSecret(req)) {
     return res.status(401).json({ error: 'Invalid admin secret' });
@@ -2353,183 +2347,6 @@ router.get('/modifier-map', verifyKioskToken, requireKioskPlan, async (req, res)
   } catch (err) {
     console.error('[kiosk/modifier-map] error', err);
     res.status(500).json({ error: 'Failed to load modifiers' });
-  }
-});
-
-// GET /api/kiosk/config — returns { mode: 'grid' | 'wizard' } for this device.
-// Effective mode = device override (if any) ?? tenant.kiosk_mode ?? 'grid'.
-// Polled by the kiosk on attract cycle so a super-admin flip propagates within
-// one cycle without requiring a rebind or APK reinstall.
-router.get('/config', verifyKioskToken, async (req, res) => {
-  const tenantId = req.kioskTenantId;
-  try {
-    let deviceOverride = null;
-    if (req.kioskDeviceId) {
-      const rows = await adminSql`
-        SELECT kiosk_mode_override FROM kiosk_devices
-        WHERE id = ${req.kioskDeviceId} AND tenant_id = ${tenantId} AND revoked_at IS NULL
-      `;
-      if (rows.length) deviceOverride = rows[0].kiosk_mode_override;
-    }
-    const [tenantRow] = await adminSql`
-      SELECT kiosk_mode FROM tenants WHERE id = ${tenantId}
-    `;
-    const tenantMode = tenantRow?.kiosk_mode || 'grid';
-    const mode = deviceOverride || tenantMode;
-    res.json({ mode, device_override: deviceOverride, tenant_mode: tenantMode });
-  } catch (err) {
-    console.error('[kiosk/config] error', err);
-    res.status(500).json({ error: 'Failed to load kiosk config' });
-  }
-});
-
-// GET /api/kiosk/builder-menu — items + groups + options for the burrito-builder
-// wizard, keyed by slug via kiosk_builder_map. Gated on effective mode = wizard
-// (matches /config resolution) so this endpoint 404s for grid-mode devices and
-// can't be scraped. Uses adminSql to bypass the active=true filter, because
-// Phase 1 seeded every builder item as active=false to keep them off grid/QR/POS.
-router.get('/builder-menu', verifyKioskToken, requireKioskPlan, async (req, res) => {
-  const tenantId = req.kioskTenantId;
-  try {
-    // Effective mode check — same logic as /config, inlined so we don't need a
-    // second network round-trip from the client.
-    let effectiveMode = 'grid';
-    if (req.kioskDeviceId) {
-      const rows = await adminSql`
-        SELECT kiosk_mode_override FROM kiosk_devices
-        WHERE id = ${req.kioskDeviceId} AND tenant_id = ${tenantId} AND revoked_at IS NULL
-      `;
-      if (rows.length && rows[0].kiosk_mode_override) effectiveMode = rows[0].kiosk_mode_override;
-    }
-    if (effectiveMode !== 'wizard') {
-      const [tenantRow] = await adminSql`SELECT kiosk_mode FROM tenants WHERE id = ${tenantId}`;
-      effectiveMode = tenantRow?.kiosk_mode || 'grid';
-    }
-    if (effectiveMode !== 'wizard') {
-      return res.status(404).json({ error: 'Builder menu not enabled for this device' });
-    }
-
-    const slugMap = await adminSql`
-      SELECT slug, menu_item_id FROM kiosk_builder_map WHERE tenant_id = ${tenantId}
-    `;
-    if (slugMap.length === 0) {
-      return res.status(404).json({ error: 'No builder items configured for this tenant' });
-    }
-    const itemIds = slugMap.map((r) => Number(r.menu_item_id));
-    const slugByItemId = new Map(slugMap.map((r) => [Number(r.menu_item_id), r.slug]));
-
-    const items = await adminSql`
-      SELECT id, name, name_en, price, description, description_en, sort_order, image_url
-      FROM menu_items
-      WHERE tenant_id = ${tenantId} AND id = ANY(${itemIds})
-      ORDER BY sort_order, id
-    `;
-
-    // Groups + options in one query, joined via menu_item_modifier_groups.
-    // The `Group__slug` naming convention from the Phase 1 seed lets the
-    // client split display name from internal slug.
-    const rows = await adminSql`
-      SELECT
-        mimg.menu_item_id,
-        mg.id AS group_id,
-        mg.name AS group_name,
-        mg.selection_type,
-        mg.required,
-        mg.min_selections,
-        mg.max_selections,
-        mg.sort_order AS group_sort,
-        m.id AS modifier_id,
-        m.name AS modifier_name,
-        m.price_adjustment,
-        m.sort_order AS modifier_sort,
-        m.image_url AS modifier_image
-      FROM menu_item_modifier_groups mimg
-      JOIN modifier_groups mg ON mg.id = mimg.modifier_group_id AND mg.tenant_id = ${tenantId}
-      JOIN modifiers m ON m.group_id = mg.id AND m.tenant_id = ${tenantId} AND m.active = true
-      WHERE mimg.tenant_id = ${tenantId} AND mg.active = true
-        AND mimg.menu_item_id = ANY(${itemIds})
-      ORDER BY mimg.menu_item_id, mg.sort_order, m.sort_order
-    `;
-
-    // Split "Estilo__asada" → { kind: 'Estilo', slug: 'asada' }
-    function splitGroupName(raw) {
-      const i = raw.indexOf('__');
-      if (i < 0) return { kind: raw, slug: null };
-      return { kind: raw.slice(0, i), slug: raw.slice(i + 2) };
-    }
-
-    const groupCache = new Map();
-    const groupsByItem = new Map();
-    for (const row of rows) {
-      const itemId = Number(row.menu_item_id);
-      if (!groupsByItem.has(itemId)) groupsByItem.set(itemId, []);
-      const cacheKey = `${itemId}:${row.group_id}`;
-      let group = groupCache.get(cacheKey);
-      if (!group) {
-        const { kind, slug } = splitGroupName(row.group_name);
-        group = {
-          id: Number(row.group_id),
-          kind,           // 'Estilo' | 'Segunda proteína' | 'Quitar' | 'Extras' | '¿Con birria o cochinita?'
-          slug,           // 'asada' | 'pollo' | ... | 'rollbertos'
-          name: row.group_name,
-          selection_type: row.selection_type,
-          required: !!row.required,
-          min_selections: row.min_selections,
-          max_selections: row.max_selections,
-          options: [],
-        };
-        groupCache.set(cacheKey, group);
-        groupsByItem.get(itemId).push(group);
-      }
-      group.options.push({
-        id: Number(row.modifier_id),
-        name: row.modifier_name,
-        price_adjustment: Number(row.price_adjustment),
-        image_url: row.modifier_image || null,
-      });
-    }
-
-    const payload = items.map((it) => ({
-      id: Number(it.id),
-      slug: slugByItemId.get(Number(it.id)) || null,
-      name: it.name,
-      name_en: it.name_en || null,
-      description: it.description || null,
-      description_en: it.description_en || null,
-      price: Number(it.price),
-      image_url: it.image_url || null,
-      groups: groupsByItem.get(Number(it.id)) || [],
-    }));
-
-    // Sides + drinks for the "¿Deseas agregar algo?" step (prototype v12, D5).
-    // Curated per tenant in kiosk_addon_map rather than read from a category —
-    // see migration 0096 for why. These are ordinary active menu items, so the
-    // client adds them as their own cart lines through the normal path; an
-    // item deactivated in Menu Management drops out here automatically.
-    const addonRows = await adminSql`
-      SELECT kam.section, kam.sort_order, mi.id, mi.name, mi.name_en, mi.price, mi.image_url
-      FROM kiosk_addon_map kam
-      JOIN menu_items mi
-        ON mi.id = kam.menu_item_id AND mi.tenant_id = kam.tenant_id AND mi.active = true
-      WHERE kam.tenant_id = ${tenantId}
-      ORDER BY kam.section, kam.sort_order, mi.name
-    `;
-    const addons = { sides: [], drinks: [] };
-    for (const row of addonRows) {
-      const bucket = row.section === 'side' ? addons.sides : addons.drinks;
-      bucket.push({
-        id: Number(row.id),
-        name: row.name,
-        name_en: row.name_en || null,
-        price: Number(row.price),
-        image_url: row.image_url || null,
-      });
-    }
-
-    res.json({ items: payload, addons });
-  } catch (err) {
-    console.error('[kiosk/builder-menu] error', err);
-    res.status(500).json({ error: 'Failed to load builder menu' });
   }
 });
 

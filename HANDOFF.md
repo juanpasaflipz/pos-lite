@@ -7,6 +7,52 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-08-19 — Claude Code — **Kiosk burrito-builder wizard removed (1.21.0)**
+
+Juan's call: revert to the menu Juanberto's actually uses and discard
+build-your-own. The tenant flip to `grid` had been done a while back, but the
+Samsung Tab S10 FE still carried `kiosk_mode_override = 'wizard'`, which wins
+over the tenant setting — so the pilot tablet was still showing "Arma tu
+burrito". Cleared that override and deleted the stale `QA parity harness` device
+row. All 9 tenants are now `grid` with zero overrides.
+
+Then stripped the feature from the code:
+
+- **Gone:** `BuilderWizardScreen`, `KioskWizardSummaryScreen`, `BuilderPhoto`,
+  `lib/builder{Icons,Meta,Preview,Pricing}`, `kiosk/public/builder-icons/`
+  (15 Freepik SVGs), `tests/kiosk-builder-pricing.test.ts`, the `/wizard` route,
+  the `CartRoute` mode branch, `kioskMode` + its 30s `/api/kiosk/config` poll.
+- **Server:** `GET /api/kiosk/config` and `GET /api/kiosk/builder-menu` deleted;
+  `PATCH /admin/tenants/:id/kiosk-devices/:deviceId` (the override setter)
+  deleted; `kiosk_mode` dropped from the tenant-patch allowlist;
+  `kiosk_mode_override` dropped from both device-listing selects and from
+  `KioskDeviceStatus` in `src/api/index.ts`.
+- **`buildKioskOrderItems` no longer widens the active filter.** It used to
+  accept `active = true OR id IN (SELECT ... kiosk_builder_map ...)`. That
+  allowlist is gone, so the 10 shadow items (8982–8991, all `active=false`) are
+  genuinely un-orderable now. This is the one edit that touched the live
+  order-creation path for every tenant.
+- **`/name` needed care** — it is live in grid mode but its copy was entirely
+  `wizard.*` keys and it imported `pesos` from `builderPricing`. Re-keyed to the
+  (previously orphaned) `callName.*` namespace and switched to the shared
+  `formatMoney`. **Visible change:** that screen's total now renders `$190.00`
+  instead of `$190`, matching the cart the guest just came from.
+- Terminal-settings lost the photos-vs-icons A/B toggle — it only ever previewed
+  wizard cards.
+
+**Left in place deliberately:** `tenants.kiosk_mode`,
+`kiosk_devices.kiosk_mode_override`, `kiosk_builder_map` (10 rows),
+`kiosk_addon_map` (5 rows), and the 10 `active=false` shadow menu items. No down
+migrations is the convention and dropping them is one-way. They are inert but
+orphaned — if you want them gone it is a deliberate follow-up, not a revert.
+`design/kiosk-builder-*.md|html` kept as the design record.
+
+Tests: full suite green (551 tests / 40 files), typecheck clean both projects.
+Shared files touched — stage hunks, not files: `src/api/index.ts`, both kiosk
+locales.
+
+---
+
 ## 2026-08-17 — Claude Code — **Reports: delivery commissions per provider + channel breakdown (in tree, NOT committed)**
 
 The Reports screen now reconciles delivery commissions. Relevant to your

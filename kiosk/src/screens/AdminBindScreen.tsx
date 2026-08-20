@@ -39,9 +39,9 @@ const AdminBindScreen: React.FC = () => {
     setError(null);
     try {
       // deviceName is optional. When provided, the server creates a
-      // kiosk_devices row and includes deviceId in the token — required for
-      // super-admin to attach a per-device kiosk_mode_override (Samsung
-      // wizard pilot). Bind without it stays backward-compatible.
+      // kiosk_devices row and includes deviceId in the token, which is what
+      // gives this device its own heartbeat and build on /admin/devices.
+      // Bind without it stays backward-compatible.
       const result = await bindKioskWithAdminSecret(secret.trim(), tenant.id, deviceName.trim() || undefined);
       bind(result);
     } catch (err) {
@@ -98,13 +98,13 @@ const AdminBindScreen: React.FC = () => {
               type="text"
               value={deviceName}
               onChange={(e) => setDeviceName(e.target.value)}
-              placeholder='e.g. "Samsung Tab S10 FE" — required if super-admin will set a per-device mode override'
+              placeholder='e.g. "Samsung Tab S10 FE" — so this device shows up by name on /admin/devices'
               maxLength={80}
               className="w-full px-4 py-3 text-lg bg-neutral-900 border-2 border-neutral-800 focus:border-brand-600 rounded-xl outline-none"
             />
             <p className="text-xs text-neutral-500 mt-2">
-              Leave blank for a generic bind. Name it if this device needs its own kiosk_mode_override
-              (e.g. wizard-mode pilot on one tablet while others stay on grid).
+              Leave blank for a generic bind. Name it so a stale build on this tablet is
+              identifiable on /admin/devices.
             </p>
           </div>
           <p className="text-neutral-400 mb-4">Pick a tenant to bind this device to:</p>

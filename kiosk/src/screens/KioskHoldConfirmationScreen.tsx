@@ -37,7 +37,7 @@ const KioskHoldConfirmationScreen: React.FC = () => {
   const { t } = useTranslation();
   const { clearCart } = useKioskCart();
   const { session, clearSession } = useKioskCustomer();
-  const { tenantId, tenantName, kioskToken, kioskMode } = useKioskBinding();
+  const { tenantId, tenantName, kioskToken } = useKioskBinding();
   const [walletUrl, setWalletUrl] = useState<string | null>(null);
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
 
@@ -137,14 +137,8 @@ const KioskHoldConfirmationScreen: React.FC = () => {
   const isCashCounter = mode === 'cash-counter';
   const showsBigOrderCard = !isAppended;
 
-  // D9 — wizard mode closes on the prototype's copy: greet by the call-out name
-  // and tell the guest to listen for it, rather than the generic "¡Gracias!".
-  const wizardPaid = kioskMode === 'wizard' && isPaid && !!state.firstName;
-
   let heading: string;
-  if (wizardPaid) {
-    heading = t('wizard.doneTitle', { n: state.firstName });
-  } else if (isPaid) {
+  if (isPaid) {
     heading = state.firstName ? t('confirm.thanksName', { name: state.firstName }) : t('confirm.thanks');
   } else if (isCashCounter) {
     heading = state.firstName ? t('confirm.goToCashierName', { name: state.firstName }) : t('confirm.goToCashier');
@@ -155,9 +149,7 @@ const KioskHoldConfirmationScreen: React.FC = () => {
   }
 
   let subheading: string;
-  if (wizardPaid) {
-    subheading = t('wizard.doneBody');
-  } else if (isPaid) {
+  if (isPaid) {
     subheading = t('confirm.paidSub');
   } else if (isCashCounter) {
     subheading = t('confirm.cashSub', { total: money.format(state.total) });
@@ -231,15 +223,13 @@ const KioskHoldConfirmationScreen: React.FC = () => {
           <div className="min-w-0">
             <p className="text-lg sm:text-xl font-black inline-flex items-center gap-2">
               <Gift className="h-5 w-5 sm:h-6 sm:w-6 text-brand-300 shrink-0" />
-              {kioskMode === 'wizard'
-                ? t('wizard.loyaltyTitle')
-                : (tenantName ? t('confirm.joinTitleTenant', { tenant: tenantName }) : t('confirm.joinTitle'))}
+              {tenantName ? t('confirm.joinTitleTenant', { tenant: tenantName }) : t('confirm.joinTitle')}
             </p>
             <p className="text-neutral-300 font-bold mt-2 text-sm sm:text-base">
-              {kioskMode === 'wizard' ? t('wizard.loyaltyBody') : t('confirm.joinScan')}
+              {t('confirm.joinScan')}
             </p>
             <p className="text-neutral-500 text-xs sm:text-sm font-bold mt-2">
-              {kioskMode === 'wizard' ? '' : t('confirm.joinAnyone')}
+              {t('confirm.joinAnyone')}
             </p>
           </div>
         </div>

@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { setKioskAuthFailureHandler, setKioskPlanLockHandler, fetchKioskConfig, type KioskMode } from '../lib/kioskApi';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { setKioskAuthFailureHandler, setKioskPlanLockHandler } from '../lib/kioskApi';
 
 interface BindingPayload {
   tenant_id: string;
@@ -26,10 +26,6 @@ interface BindingState {
   /** True when the server said the kiosk is not in the tenant's plan
    *  (403 PLAN_UPGRADE_REQUIRED). Binding is kept; UI shows unavailable. */
   planLocked: boolean;
-  /** Effective kiosk mode for THIS device (device override ?? tenant mode).
-   *  Default 'grid' before the first /api/kiosk/config response resolves, so a
-   *  slow first poll never accidentally shows the wizard on a grid device. */
-  kioskMode: KioskMode;
   clearPlanLock: () => void;
   bind: (payload: BindingPayload) => void;
   unbind: () => void;
@@ -55,8 +51,6 @@ export const KioskBindingProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [stored, setStored] = useState<BindingPayload | null>(() => readStored<BindingPayload>(BINDING_KEY));
   const [terminal, setTerminalState] = useState<TerminalPairing | null>(() => readStored<TerminalPairing>(TERMINAL_KEY));
   const [planLocked, setPlanLocked] = useState(false);
-  const [kioskMode, setKioskMode] = useState<KioskMode>('grid');
-  const configPollRef = useRef<number | null>(null);
 
   const bind = useCallback((payload: BindingPayload) => {
     localStorage.setItem(BINDING_KEY, JSON.stringify(payload));
@@ -84,41 +78,6 @@ export const KioskBindingProvider: React.FC<{ children: React.ReactNode }> = ({ 
     };
   }, []);
 
-  // Poll /api/kiosk/config every 30s so a super-admin flip (grid ↔ wizard, or
-  // set/clear a per-device override) propagates without a rebind. Skipped when
-  // there's no binding, plan-locked (endpoint would 403), or on an offline gap
-  // (silent failure — next tick retries).
-  useEffect(() => {
-    if (!stored?.tenant_id || !stored?.kiosk_token || planLocked) {
-      if (configPollRef.current !== null) {
-        clearInterval(configPollRef.current);
-        configPollRef.current = null;
-      }
-      return;
-    }
-    const auth = { tenantId: stored.tenant_id, kioskToken: stored.kiosk_token };
-    let cancelled = false;
-    const tick = async () => {
-      try {
-        const cfg = await fetchKioskConfig(auth);
-        if (!cancelled && (cfg.mode === 'grid' || cfg.mode === 'wizard')) {
-          setKioskMode(cfg.mode);
-        }
-      } catch {
-        // network/offline — keep last known mode
-      }
-    };
-    tick();
-    configPollRef.current = window.setInterval(tick, 30_000);
-    return () => {
-      cancelled = true;
-      if (configPollRef.current !== null) {
-        clearInterval(configPollRef.current);
-        configPollRef.current = null;
-      }
-    };
-  }, [stored?.tenant_id, stored?.kiosk_token, planLocked]);
-
   const setTerminal = useCallback((pairing: TerminalPairing | null) => {
     if (pairing) {
       localStorage.setItem(TERMINAL_KEY, JSON.stringify(pairing));
@@ -138,7 +97,6 @@ export const KioskBindingProvider: React.FC<{ children: React.ReactNode }> = ({ 
         terminalId: terminal?.id ?? null,
         terminalLabel: terminal?.label ?? null,
         planLocked,
-        kioskMode,
         clearPlanLock: () => setPlanLocked(false),
         bind,
         unbind,

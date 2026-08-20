@@ -4754,7 +4754,6 @@ export interface KioskDeviceStatus {
   /** Build the device last reported. Null until it heartbeats once. */
   client_version: string | null;
   client_platform: 'web' | 'android' | null;
-  kiosk_mode_override: string | null;
 }
 
 export async function listKioskDevices(): Promise<{

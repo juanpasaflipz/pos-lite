@@ -1,8 +1,8 @@
-// Call-out name capture — parity with the prototype's `rName` (v15).
+// Call-out name capture.
 //
-// D11 puts this at the very END of the flow: cart → ¿para aquí o para llevar?
-// → this screen → payment. Both kiosk modes route through here now; grid used
-// to ask for the name up front, before the guest had seen the menu. It is a
+// This sits at the very END of the flow: cart → ¿para aquí o para llevar? →
+// this screen → payment. The kiosk used to ask for the name up front, before
+// the guest had seen the menu. It is a
 // full-screen on-screen keyboard rather than a modal because the kiosk has no
 // hardware keyboard and the tablet's own IME covers half the screen on Android.
 //
@@ -25,7 +25,7 @@ import { useKioskCart } from '../context/KioskCartContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
 import LanguageToggle from '../components/LanguageToggle';
 import { identifyKioskOrder, type KioskOpenOrder } from '../lib/kioskApi';
-import { pesos } from '../lib/builderPricing';
+import { formatMoney } from '../lib/format';
 
 const ROWS = ['QWERTYUIOP', 'ASDFGHJKLÑ', 'ZXCVBNM'];
 const MAX_LEN = 18;
@@ -92,10 +92,10 @@ const KioskCallNameScreen: React.FC = () => {
       <header className="flex items-center justify-between gap-3 px-4 py-3 pt-safe border-b border-neutral-800 flex-shrink-0">
         <div className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-[0.12em] text-neutral-500 mb-0.5">
-            {t('wizard.nameK')}
+            {t('callName.kicker')}
           </p>
           <h1 className="text-[clamp(22px,4.5vw,40px)] font-black leading-[1.05] truncate">
-            {t('wizard.namePrompt')}
+            {t('callName.prompt')}
           </h1>
         </div>
         <div className="flex gap-2 flex-shrink-0">
@@ -106,14 +106,14 @@ const KioskCallNameScreen: React.FC = () => {
             className="h-11 px-3.5 rounded-[10px] bg-neutral-800 active:bg-neutral-700 disabled:text-neutral-500 text-sm font-extrabold inline-flex items-center gap-1.5"
           >
             <ChevronLeft className="h-4 w-4" />
-            {t('wizard.back')}
+            {t('common.back')}
           </button>
         </div>
       </header>
 
       <main className="flex-1 min-h-0 overflow-y-auto p-4">
         <div className="max-w-[640px] mx-auto flex flex-col gap-[18px]">
-          <p className="text-center text-neutral-400 font-bold text-sm">{t('wizard.nameHint')}</p>
+          <p className="text-center text-neutral-400 font-bold text-sm">{t('callName.hint')}</p>
 
           <div className="min-h-[76px] rounded-2xl bg-neutral-900 border-2 border-neutral-700 flex items-center justify-center px-[18px] py-3 text-[clamp(28px,6vw,44px)] font-black tracking-[0.04em]">
             {name}
@@ -139,7 +139,7 @@ const KioskCallNameScreen: React.FC = () => {
                 onClick={() => press(' ')}
                 className="flex-[3] min-h-[54px] rounded-[10px] bg-neutral-800 active:bg-brand-600 text-sm font-black tracking-[0.1em] touch-manipulation"
               >
-                {t('wizard.space')}
+                {t('callName.space')}
               </button>
               <button
                 onClick={() => press(BACKSPACE)}
@@ -161,7 +161,7 @@ const KioskCallNameScreen: React.FC = () => {
           disabled={!ready || busy}
           className="w-full min-h-[56px] rounded-[14px] px-5 py-3 text-[18px] font-black text-white bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-500 flex items-center justify-between gap-2.5 active:scale-[0.98] transition-transform"
         >
-          <span>{busy ? t('wizard.processing') : t('wizard.payN')}</span>
+          <span>{busy ? t('callName.processing') : t('callName.pay')}</span>
           {/* From the placed order, not the local cart. The order is the
               authoritative total by now, and a reload mid-flow restores this
               screen's router state (history.state survives) while resetting the
@@ -169,11 +169,11 @@ const KioskCallNameScreen: React.FC = () => {
               $190 ticket.
 
               Number() is load-bearing, not defensive: postgres.js hands back
-              NUMERIC columns as strings, so `total` is "190.00" and pesos()
-              would call .toFixed() on a string and white-screen the kiosk.
+              NUMERIC columns as strings, so `total` is "190.00" and the
+              formatter would coerce it wrong.
               Every other read of these order fields wraps them the same way
               (see KioskPayExistingScreen). */}
-          <small className="text-sm font-bold opacity-80">{pesos(Number(placed.total))}</small>
+          <small className="text-sm font-bold opacity-80">{formatMoney(Number(placed.total))}</small>
         </button>
       </footer>
 

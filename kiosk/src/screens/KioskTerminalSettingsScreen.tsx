@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Loader2, Palette, RefreshCcw, XCircle } from 'lucide-react';
+import { ArrowLeft, Check, Loader2, RefreshCcw, XCircle } from 'lucide-react';
 import { useKioskBinding } from '../context/KioskBindingContext';
-import { iconPreviewOn, setIconPreview } from '../lib/builderPreview';
 import { listKioskMpTerminals, type KioskMpTerminal } from '../lib/kioskApi';
 
 function terminalLabel(t: KioskMpTerminal): string {
@@ -24,14 +23,6 @@ const KioskTerminalSettingsScreen: React.FC = () => {
   const [terminals, setTerminals] = useState<KioskMpTerminal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Icon-preview: device-local A/B for the owner (photos vs illustrated icons).
-  const [preview, setPreview] = useState(iconPreviewOn());
-  const togglePreview = () => {
-    const next = !preview;
-    setIconPreview(next);
-    setPreview(next);
-  };
-
   const load = async () => {
     if (!tenantId || !kioskToken) return;
     setLoading(true);
@@ -156,29 +147,6 @@ const KioskTerminalSettingsScreen: React.FC = () => {
             )}
           </div>
         )}
-
-        <div className="mt-8 rounded-lg bg-neutral-900 border border-neutral-800 p-5">
-          <div className="text-sm uppercase tracking-wider text-neutral-500 font-bold mb-1">
-            Apariencia del armado (solo este kiosko)
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-lg font-bold flex items-center gap-2">
-              <Palette className="h-5 w-5 text-brand-400" />
-              {preview ? 'Iconos ilustrados (vista previa)' : 'Fotos del menú'}
-            </div>
-            <button
-              onClick={togglePreview}
-              className={`h-12 px-5 rounded-lg text-sm font-black touch-manipulation transition-colors ${
-                preview ? 'bg-brand-600 active:bg-brand-700 text-white' : 'bg-neutral-800 active:bg-neutral-700'
-              }`}
-            >
-              {preview ? 'Volver a fotos' : 'Probar iconos'}
-            </button>
-          </div>
-          <p className="text-xs text-neutral-500 mt-2">
-            Cambia solo lo que muestra esta pantalla — los demás kioskos y el menú no se tocan.
-          </p>
-        </div>
 
         <button
           onClick={() => {

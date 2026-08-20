@@ -612,12 +612,9 @@ router.patch('/tenants/:id', async (req, res) => {
     if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
 
     const allowed = ['name', 'subdomain', 'owner_email', 'plan', 'active', 'subscription_status',
-      'stripe_customer_id', 'stripe_subscription_id', 'branding_json', 'trial_ends_at', 'kiosk_mode',
+      'stripe_customer_id', 'stripe_subscription_id', 'branding_json', 'trial_ends_at',
       'inventory_mode'];
 
-    if (req.body.kiosk_mode !== undefined && !['grid', 'wizard'].includes(req.body.kiosk_mode)) {
-      return res.status(400).json({ error: "kiosk_mode must be 'grid' or 'wizard'" });
-    }
     if (req.body.inventory_mode !== undefined
         && !['ingredients', 'two_stage'].includes(req.body.inventory_mode)) {
       return res.status(400).json({ error: "inventory_mode must be 'ingredients' or 'two_stage'" });
@@ -1097,7 +1094,7 @@ router.get('/tenants/:id/kiosk-devices', async (req, res) => {
     if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
 
     const devices = await adminSql`
-      SELECT id, name, kiosk_mode_override, bound_employee_id,
+      SELECT id, name, bound_employee_id,
              bound_at, last_seen_at, client_version, client_platform, revoked_at
       FROM kiosk_devices
       WHERE tenant_id = ${tenant.id}
@@ -1107,47 +1104,6 @@ router.get('/tenants/:id/kiosk-devices', async (req, res) => {
   } catch (error) {
     console.error('Error listing kiosk devices:', error);
     res.status(500).json({ error: 'Failed to list kiosk devices' });
-  }
-});
-
-// PATCH /admin/tenants/:id/kiosk-devices/:deviceId — set kiosk_mode_override
-// Body: { kiosk_mode_override: 'grid' | 'wizard' | null }
-router.patch('/tenants/:id/kiosk-devices/:deviceId', async (req, res) => {
-  try {
-    const tenant = await getTenant(req.params.id);
-    if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
-
-    if (!('kiosk_mode_override' in (req.body || {}))) {
-      return res.status(400).json({ error: 'kiosk_mode_override is required (null clears)' });
-    }
-    const override = req.body.kiosk_mode_override;
-    if (override !== null && !['grid', 'wizard'].includes(override)) {
-      return res.status(400).json({ error: "kiosk_mode_override must be 'grid', 'wizard', or null" });
-    }
-
-    const [row] = await adminSql`
-      UPDATE kiosk_devices
-      SET kiosk_mode_override = ${override}
-      WHERE id = ${req.params.deviceId} AND tenant_id = ${tenant.id} AND revoked_at IS NULL
-      RETURNING id, name, kiosk_mode_override
-    `;
-    if (!row) return res.status(404).json({ error: 'Device not found' });
-
-    audit({
-      tenantId: tenant.id,
-      actorType: 'admin',
-      actorId: 'super-admin',
-      action: 'update',
-      resource: 'kiosk_device_override',
-      resourceId: row.id,
-      details: { device_name: row.name, kiosk_mode_override: override },
-      ip: req.ip,
-    });
-
-    res.json(row);
-  } catch (error) {
-    console.error('Error updating kiosk device override:', error);
-    res.status(500).json({ error: 'Failed to update kiosk device override' });
   }
 });
 
