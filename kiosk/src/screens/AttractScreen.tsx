@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Hand } from 'lucide-react';
+import { Hand, Star } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useKioskBinding } from '../context/KioskBindingContext';
@@ -62,6 +62,16 @@ const AttractScreen: React.FC = () => {
       <div className="absolute bottom-4 left-4 sm:bottom-8 sm:left-8 pb-safe">
         <LanguageToggle size="large" />
       </div>
+      {/* Member front door: enrolled customers check in by phone so their
+          stamp credits itself — see KioskMemberScreen. */}
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); navigate('/member'); }}
+        className="absolute bottom-4 right-4 sm:bottom-8 sm:right-8 pb-safe rounded-2xl bg-white/15 border-2 border-white/40 active:bg-white/25 px-5 py-4 sm:px-8 sm:py-5 text-white font-black text-base sm:text-xl inline-flex items-center gap-2 sm:gap-3 touch-manipulation"
+      >
+        <Star className="h-5 w-5 sm:h-6 sm:w-6" />
+        {t('attract.member')}
+      </button>
       <button
         type="button"
         aria-label="Admin"

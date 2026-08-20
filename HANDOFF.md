@@ -7,6 +7,50 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-08-20 — Claude Code — **Kiosk loyalty check-in + join pitch (1.22.0)**
+
+Frontend-only; **no server changes**. It revives `/api/kiosk/identify`, which had
+no caller at all since the welcome screen was removed — meaning `session` was
+always null and the confirmation screen's wallet-QR branch was dead code.
+
+- `/member` (new `KioskMemberScreen`) — 10-digit keypad off a "Soy del club"
+  button on the attract screen. `identify` → `setSessionFromIdentify` → the
+  session carries `customer_token`, `fireKioskOrder` already forwards it, and
+  `addStampsForOrder` credits at payment. Unknown phone with no `name` returns
+  `{found:false}` and creates nothing, so mistypes don't pollute the CRM.
+- `KioskHoldConfirmationScreen` now has two phases. Un-identified customers get
+  a full-screen join pitch (20s) before the summary; identified ones skip
+  straight to the summary and see real stamp progress. The old inline join card
+  is gone, and with it `confirm.joinTitle` / `joinTitleTenant` / `joinScan`.
+- Telemetry rides the existing suggestion-event pipe on two new lanes,
+  `loyalty_interstitial` and `member_checkin`. The server truncates `lane` to 24
+  chars — both fit. Sources: shown / have_card / not_now / timeout /
+  unavailable, and shown / found / not_found / error / guest.
+
+**Two known pilot shortcuts, deliberately not fixed:**
+
+1. The pitch hardcodes a **10-stamp card** — headline copy and a fixed 10-dot
+   row — while `stamp_cards.stamps_required` is per-tenant and the reward is
+   `reward_description`. Correct for Juanberto's, wrong for any other tenant
+   that turns the kiosk on. There is no endpoint that exposes the tenant's card
+   shape to an un-identified customer (`/api/kiosk/config` went away with the
+   wizard), so fixing it needs a server addition. The *member* progress panel
+   does read `stamp.required` and is correct.
+2. The member panel shows an optimistic **`earned + 1`**, but
+   `addStampsForOrder` grants `1 + floor(total / stamp_bonus_threshold)`
+   (default $400). A $900 order really earns 3. It under-promises, so it reads
+   as conservative rather than broken.
+
+Also: a slow `loyalty-join-url` fetch (>4s) now drops the offer entirely rather
+than showing it late, because the inline fallback card was deleted. Watch the
+`unavailable` source on the `loyalty_interstitial` lane — if it is non-trivial,
+raise `LOYALTY_FETCH_TIMEOUT_MS` or bring back a late-arrival path.
+
+**The Samsung Tab S10 FE will NOT have this** until someone runs
+`npm run android:install`. Web and iPad picked it up on the deploy.
+
+---
+
 ## 2026-08-19 — Claude Code — **Wizard DB objects dropped (1.21.1, migration 0107)**
 
 Follow-up to the 1.21.0 code removal below, which deliberately left the schema

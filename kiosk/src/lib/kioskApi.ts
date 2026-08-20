@@ -638,7 +638,10 @@ export async function fetchPopular(auth: AuthHeaders): Promise<SuggestionItem[]>
 
 export interface SuggestionEvent {
   menu_item_id?: number | null;
-  lane: SuggestionLane;
+  /** Suggestion lanes, plus the loyalty funnels — the post-payment join pitch
+   *  and the member check-in ride this same fire-and-forget pipe (the server
+   *  accepts any lane string). */
+  lane: SuggestionLane | 'loyalty_interstitial' | 'member_checkin';
   source?: string;
   event_type: 'tapped' | 'ordered';
   reason?: string;

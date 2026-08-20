@@ -13,7 +13,8 @@
   },
   "attract": {
     "orderHere": "Order here",
-    "tapToStart": "Tap to start"
+    "tapToStart": "Tap to start",
+    "member": "I'm a member"
   },
   "fulfillment": {
     "howDoYouWantIt": "How do you want your order?",
@@ -151,13 +152,20 @@
     "walletScan": "Scan with your phone's camera and add it to Apple Wallet.",
     "walletStamps": "You have {{earned}} of {{required}} stamps.",
     "walletAuto": "It updates automatically with every purchase.",
-    "joinTitle": "Already in the loyalty program?",
-    "joinTitleTenant": "Already in {{tenant}}'s loyalty program?",
-    "joinScan": "Scan with your phone's camera. We'll add this purchase's stamps and give you your digital card.",
-    "joinAnyone": "New or returning customer, it works the same.",
+    "joinAnyone": "Existing member or brand new, it works the same.",
+    "loyaltyHead1": "Your 10th burrito is",
+    "loyaltyHead2": "FREE.",
+    "loyaltyBody": "This order already counts for a stamp. Scan before you go — your card lives on your phone, no apps, no passwords.",
+    "loyaltyScanHint": "Scan with your phone camera",
+    "loyaltyHaveCard": "I have my card",
+    "loyaltyNotNow": "Not now",
     "addMore": "Add more",
     "done": "Done",
-    "autoClose": "This screen closes automatically in {{seconds}}s."
+    "autoClose": "This screen closes automatically in {{seconds}}s.",
+    "memberStampAdded": "Today's stamp added",
+    "memberStampPending": "Your stamp is added when you pay",
+    "memberRemaining": "{{remaining}} more to your free burrito.",
+    "memberCardComplete": "Card complete! Your free burrito awaits."
   },
   "idle": {
     "closesIn": "Your session will close in",
@@ -171,5 +179,23 @@
     "retry": "Retry",
     "checking": "Checking…",
     "staffNote": "Staff: the self-service kiosk is part of the Pro plan. Activate it from your POS under Account → Plan and this screen recovers on its own."
+  },
+  "member": {
+    "title": "Already have a stamp card?",
+    "subtitle": "Enter your phone and today's stamp adds itself.",
+    "continue": "Continue",
+    "checking": "Looking…",
+    "hello": "Hi, {{name}}!",
+    "progress": "You have {{earned}} of {{required}} stamps — {{remaining}} more to your free burrito.",
+    "almostThere": "You're one stamp away from your free burrito!",
+    "autoStamp": "Today's stamp adds itself when you pay.",
+    "order": "Order",
+    "notFoundTitle": "We couldn't find that number",
+    "notFoundBody": "Check the number, or continue as a guest — at the end of your order we'll give you your card with a QR.",
+    "errorTitle": "We couldn't check right now",
+    "errorBody": "Try again, or continue as a guest.",
+    "tryAgain": "Try again",
+    "orderAsGuest": "Order as guest",
+    "deleteDigit": "Delete"
   }
 }

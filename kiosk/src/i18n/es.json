@@ -13,7 +13,8 @@
   },
   "attract": {
     "orderHere": "Ordena aquí",
-    "tapToStart": "Toca para empezar"
+    "tapToStart": "Toca para empezar",
+    "member": "Soy del club"
   },
   "fulfillment": {
     "howDoYouWantIt": "¿Cómo quieres tu orden?",
@@ -151,13 +152,20 @@
     "walletScan": "Escanea con la cámara de tu teléfono y agrégala a Apple Wallet.",
     "walletStamps": "Llevas {{earned}} de {{required}} sellos.",
     "walletAuto": "Se actualiza sola con cada compra.",
-    "joinTitle": "¿Ya estás en el programa de lealtad?",
-    "joinTitleTenant": "¿Ya estás en el programa de lealtad de {{tenant}}?",
-    "joinScan": "Escanea con la cámara de tu teléfono. Sumamos los sellos de esta compra y te damos tu tarjeta digital.",
     "joinAnyone": "Ya seas cliente o nuevo, funciona igual.",
+    "loyaltyHead1": "Tu 10º burrito es",
+    "loyaltyHead2": "GRATIS.",
+    "loyaltyBody": "Este pedido ya suma un sello. Escanea antes de irte — tu tarjeta vive en tu teléfono, sin apps ni contraseñas.",
+    "loyaltyScanHint": "Escanea con la cámara de tu teléfono",
+    "loyaltyHaveCard": "Ya tengo mi tarjeta",
+    "loyaltyNotNow": "Ahora no",
     "addMore": "Agregar más",
     "done": "Listo",
-    "autoClose": "Esta pantalla se cerrará sola en {{seconds}}s."
+    "autoClose": "Esta pantalla se cerrará sola en {{seconds}}s.",
+    "memberStampAdded": "Sello de hoy agregado",
+    "memberStampPending": "Tu sello se suma al pagar",
+    "memberRemaining": "Te faltan {{remaining}} para tu burrito gratis.",
+    "memberCardComplete": "¡Tarjeta completa! Tu burrito gratis te espera."
   },
   "idle": {
     "closesIn": "Tu sesión se cerrará en",
@@ -171,5 +179,23 @@
     "retry": "Reintentar",
     "checking": "Verificando…",
     "staffNote": "Staff: el kiosco de autoservicio es parte del plan Pro. Actívalo desde tu POS en Cuenta → Plan y esta pantalla se reactiva sola."
+  },
+  "member": {
+    "title": "¿Ya tienes tarjeta de sellos?",
+    "subtitle": "Pon tu teléfono y tu sello de hoy se suma solo.",
+    "continue": "Continuar",
+    "checking": "Buscando…",
+    "hello": "¡Hola, {{name}}!",
+    "progress": "Llevas {{earned}} de {{required}} sellos — te faltan {{remaining}} para tu burrito gratis.",
+    "almostThere": "¡Estás a un sello de tu burrito gratis!",
+    "autoStamp": "Tu sello de hoy se suma solo al pagar.",
+    "order": "Ordenar",
+    "notFoundTitle": "No encontramos ese número",
+    "notFoundBody": "Revisa el número o continúa como invitado — al final de tu pedido te damos tu tarjeta con un QR.",
+    "errorTitle": "No pudimos verificar",
+    "errorBody": "Inténtalo de nuevo o continúa como invitado.",
+    "tryAgain": "Intentar de nuevo",
+    "orderAsGuest": "Ordenar como invitado",
+    "deleteDigit": "Borrar"
   }
 }
