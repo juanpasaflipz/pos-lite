@@ -145,9 +145,27 @@ function paymentSourceSql(alias = '') {
       WHEN ${p}payment_method = 'card' AND ${p}clip_payment_id IS NOT NULL THEN 'clip_terminal'
       WHEN ${p}payment_method = 'card' AND ${p}payment_intent_id IS NOT NULL THEN 'stripe_card'
       WHEN ${p}payment_method = 'card' THEN 'card'
+      WHEN ${p}payment_method = 'external_terminal' THEN 'ext_terminal_' || COALESCE(${p}external_terminal_id::text, '0')
       ELSE COALESCE(${p}payment_method, 'unknown')
     END
   `;
+}
+
+// External (non-integrated bank) terminals: the source slug is
+// 'ext_terminal_<id>' so each device gets its own bucket. Names live in
+// external_terminals — this fetches ALL rows (deactivated included: historic
+// orders still reference them) and returns { slug: display label }.
+async function externalTerminalLabels() {
+  try {
+    const rows = await all('SELECT id, name FROM external_terminals');
+    const map = {};
+    for (const r of rows) map[`ext_terminal_${r.id}`] = `Terminal ${r.name}`;
+    // Orders whose terminal row vanished (hand-deleted) fall in the 0 bucket.
+    map.ext_terminal_0 = 'External terminal';
+    return map;
+  } catch {
+    return {}; // pre-migration DBs — slugs render raw, nothing breaks
+  }
 }
 
 const PAYMENT_SOURCE_LABELS = {
@@ -522,9 +540,13 @@ router.get('/cash-card-breakdown', requireAuth(), async (req, res) => {
     const totalOrders = breakdown.reduce((sum, b) => sum + b.count, 0);
     const totalRevenue = breakdown.reduce((sum, b) => sum + b.total, 0);
 
+    const extLabels = breakdown.some(b => String(b.payment_source).startsWith('ext_terminal_'))
+      ? await externalTerminalLabels()
+      : {};
+
     const result = breakdown.map(b => ({
       ...b,
-      display_name: PAYMENT_SOURCE_LABELS[b.payment_source] || b.payment_source,
+      display_name: PAYMENT_SOURCE_LABELS[b.payment_source] || extLabels[b.payment_source] || b.payment_source,
       percentage: totalOrders > 0 ? Math.round((b.count / totalOrders) * 100) : 0,
       revenue_percentage: totalRevenue > 0 ? Math.round((b.total / totalRevenue) * 100) : 0,
     }));
@@ -867,12 +889,16 @@ router.get('/live', requireAuth(), async (req, res) => {
       ORDER BY revenue DESC
     `, [today, tz]);
 
+    const extSourceLabels = paymentSources.some(s => String(s.payment_source).startsWith('ext_terminal_'))
+      ? await externalTerminalLabels()
+      : {};
+
     const payment_sources = paymentSources.map((source) => ({
       ...source,
       count: Number(source.count) || 0,
       revenue: Number(source.revenue) || 0,
       tips: Number(source.tips) || 0,
-      display_name: PAYMENT_SOURCE_LABELS[source.payment_source] || source.payment_source,
+      display_name: PAYMENT_SOURCE_LABELS[source.payment_source] || extSourceLabels[source.payment_source] || source.payment_source,
     }));
 
     // Top 5 items today
@@ -1133,6 +1159,38 @@ router.get('/payment-fees', requireAuth('view_reports'), async (req, res) => {
         tips: Number(p.tip),
         count: 1,
       });
+    }
+
+    // 3) External (non-integrated bank) terminals — the bank never reports the
+    // real per-transaction fee, so it's ESTIMATED from the terminal's
+    // configured discount rate over the charged amount (total + tip).
+    try {
+      const extPayments = await all(`
+        SELECT o.total, o.tip,
+               to_char(COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3, 'YYYY-MM-DD') AS date_key,
+               et.name, et.fee_percent
+        FROM orders o
+        JOIN external_terminals et ON et.id = o.external_terminal_id
+        WHERE (COALESCE(o.paid_at, o.created_at) AT TIME ZONE $3)::date BETWEEN $1 AND $2
+          AND o.payment_method = 'external_terminal'
+          AND o.payment_status = 'paid'
+        ORDER BY COALESCE(o.paid_at, o.created_at) ASC
+      `, [startDate, endDate, tz]);
+
+      for (const p of extPayments) {
+        const gross = Number(p.total) + Number(p.tip || 0);
+        const fee = Math.round(gross * (Number(p.fee_percent) / 100) * 100) / 100;
+        bump(p.date_key, `Terminal ${p.name}`, {
+          revenue: gross,
+          fees: fee,
+          net: gross - fee,
+          tips: Number(p.tip || 0),
+          count: 1,
+        });
+      }
+    } catch (extErr) {
+      // Pre-migration DBs — section just won't contribute
+      console.error('Non-fatal: external terminal fee section failed:', extErr.message);
     }
 
     const round2 = (n) => Math.round(n * 100) / 100;

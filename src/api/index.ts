@@ -3444,6 +3444,58 @@ export async function clipCancelCharge(order_id: number): Promise<{ success: boo
   });
 }
 
+/* ==================== External (bank) Terminals ==================== */
+// Non-integrated bank terminals (Inbursa, BBVA, ...): no charge API — the
+// cashier keys the amount into the device; DK just records the settlement.
+
+export interface ExternalTerminalDto {
+  id: number;
+  name: string;
+  fee_percent: number;
+  active: boolean;
+}
+
+export async function getExternalTerminals(): Promise<{ terminals: ExternalTerminalDto[] }> {
+  return apiRequest('/external-terminals');
+}
+
+export async function externalTerminalCharge(
+  order_id: number,
+  terminal_id: number,
+  tip: number = 0
+): Promise<{ success: boolean; order_id: number; total: number; terminal_name: string; invoice_token: string | null }> {
+  return apiRequest('/payments/external-terminal', {
+    method: 'POST',
+    body: JSON.stringify({ order_id, terminal_id, tip }),
+  });
+}
+
+// Owner CRUD (Account screen)
+export async function getAllExternalTerminals(): Promise<{ terminals: ExternalTerminalDto[] }> {
+  return ownerApiRequest('/external-terminals/all');
+}
+
+export async function createExternalTerminal(data: { name: string; fee_percent: number }): Promise<{ terminal: ExternalTerminalDto }> {
+  return ownerApiRequest('/external-terminals', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateExternalTerminal(
+  id: number,
+  data: Partial<{ name: string; fee_percent: number; active: boolean }>
+): Promise<{ terminal: ExternalTerminalDto }> {
+  return ownerApiRequest(`/external-terminals/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deactivateExternalTerminal(id: number): Promise<{ success: boolean }> {
+  return ownerApiRequest(`/external-terminals/${id}`, { method: 'DELETE' });
+}
+
 /* ==================== Getnet Payments ==================== */
 
 export async function getGetnetStatus(): Promise<{

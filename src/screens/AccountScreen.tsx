@@ -11,6 +11,7 @@ import { usePlan } from '../context/PlanContext';
 import FeatureGate from '../components/FeatureGate';
 import { resetInventoryModeCache } from '../hooks/useInventoryMode';
 import BankConnectionCard from '../components/banking/BankConnectionCard';
+import ExternalTerminalsSetup from '../components/settings/ExternalTerminalsSetup';
 import ConnectBankButton from '../components/banking/ConnectBankButton';
 import SecurityInfoModal from '../components/banking/SecurityInfoModal';
 
@@ -934,6 +935,11 @@ export default function AccountScreen() {
                 })()}
               </div>
             )}
+
+            {/* External bank terminals (Inbursa, BBVA, ...) — manual charge on
+                the device, DK records + reports it. All plans: it's bookkeeping,
+                not an integration. */}
+            <ExternalTerminalsSetup />
 
             {/* Bank Connections — Pro+ only */}
             {isBankingPlan && (

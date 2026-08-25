@@ -10,7 +10,7 @@ import { getPlanLimits, planUpgradeError } from '../planLimits.js';
 import { isGetnetConfigured } from '../services/getnet/auth.js';
 import { getClipAuthHeader } from '../services/clip.js';
 import { getDisplayMenuSettings, setDisplayMenuSettings } from '../lib/displayMenu.js';
-import { get as dbGet } from '../db/index.js';
+import { get as dbGet, adminSql } from '../db/index.js';
 import { putObject, deletePrefix } from '../lib/storage.js';
 import { refreshTenantPasses } from '../helpers/wallet/passSync.js';
 import crypto from 'crypto';
@@ -139,6 +139,20 @@ router.get('/', async (req, res) => {
     }
   } catch { /* table may not exist on very old tenants — keep default */ }
 
+  // Non-integrated bank terminals (Inbursa, BBVA, ...). id + name only: the
+  // POS payment modal needs the buttons and POSScreen pre-creates the order
+  // when at least one exists. This endpoint is public like the rest of
+  // branding, so the fee rate stays out of it (owner-only, /external-terminals/all).
+  let externalTerminals = [];
+  try {
+    const rows = await adminSql`
+      SELECT id, name FROM external_terminals
+      WHERE tenant_id = ${tenant.id} AND active = true
+      ORDER BY id ASC
+    `;
+    externalTerminals = rows.map(r => ({ id: r.id, name: r.name }));
+  } catch { /* pre-migration DBs — no buttons, nothing breaks */ }
+
   res.json({
     primaryColor: branding.primaryColor || '#0d9488',
     logoUrl: branding.logoUrl || null,
@@ -156,6 +170,7 @@ router.get('/', async (req, res) => {
     getnetConfigured,
     getnetEnabled: !!tenant.getnet_enabled,
     clipConfigured,
+    externalTerminals,
     timezone: tenant.timezone || 'UTC',
     weekStartDow,
   });

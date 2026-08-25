@@ -133,7 +133,8 @@ export interface Order {
   total: number;
   payment_intent_id?: string;
   payment_status: 'unpaid' | 'processing' | 'paid' | 'completed' | 'failed' | 'refunded' | 'pending_oxxo' | 'pending_spei' | 'pending_terminal' | 'expired';
-  payment_method?: 'card' | 'cash' | 'split' | 'transfer' | 'oxxo' | 'spei' | 'getnet_card' | 'getnet_tap' | null;
+  payment_method?: 'card' | 'cash' | 'split' | 'transfer' | 'oxxo' | 'spei' | 'getnet_card' | 'getnet_tap' | 'external_terminal' | null;
+  external_terminal_id?: number | null;
   source?: 'pos' | 'uber_eats' | 'uber_direct' | 'rappi' | 'didi_food' | 'qr_order' | 'customer_kiosk';
   order_fulfillment_type?: 'for_here' | 'to_go' | 'delivery' | null;
   loyalty_customer_id?: number | null;
@@ -917,6 +918,16 @@ export interface ComboSlot {
   category_id: number | null;
   specific_item_id: number | null;
   sort_order: number;
+}
+
+/* External (non-integrated bank) terminal — Inbursa, BBVA, etc. The bank
+ * device has no API; DK registers it by name + agreed discount rate so manual
+ * charges can be tagged per terminal and fees estimated in reports. */
+export interface ExternalTerminal {
+  id: number;
+  name: string;
+  fee_percent: number;
+  active: boolean;
 }
 
 /* Split Payment Types */

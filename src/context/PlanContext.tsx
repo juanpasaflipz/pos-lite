@@ -30,6 +30,12 @@ export interface PlanLimits {
   cfdi: { locked: boolean };
 }
 
+/** Non-integrated bank terminal (Inbursa, BBVA, ...) registered for this tenant. */
+export interface ExternalTerminalRef {
+  id: number;
+  name: string;
+}
+
 interface PlanContextType {
   plan: PlanTier;
   limits: PlanLimits;
@@ -49,6 +55,8 @@ interface PlanContextType {
   isGetnetConfigured: boolean;
   isGetnetEnabled: boolean;
   isClipConfigured: boolean;
+  /** Active non-integrated bank terminals (empty when none registered). */
+  externalTerminals: ExternalTerminalRef[];
   isAtLimit: (resource: 'menuItems' | 'inventoryItems' | 'employees' | 'modifierGroups' | 'combos', currentCount: number) => boolean;
   isFeatureLocked: (feature: 'printers' | 'delivery' | 'permissions' | 'loyalty' | 'prepForecast' | 'inventoryTwoStage' | 'banking' | 'bankReconciliation' | 'dataExport' | 'cfdi' | 'ai' | 'kiosk' | 'qrOrdering') => boolean;
   refresh: () => Promise<void>;
@@ -90,6 +98,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   const [getnetConfigured, setGetnetConfigured] = useState(false);
   const [getnetEnabled, setGetnetEnabled] = useState(false);
   const [clipConfigured, setClipConfigured] = useState(false);
+  const [externalTerminals, setExternalTerminals] = useState<ExternalTerminalRef[]>([]);
   const [timezone, setTimezone] = useState<string>('UTC');
   // 0=Sun..6=Sat. Default Monday — matches payroll_settings.period_start_dow default.
   const [weekStartDow, setWeekStartDow] = useState<number>(1);
@@ -115,6 +124,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
         if (data.getnetConfigured !== undefined) setGetnetConfigured(data.getnetConfigured);
         if (data.getnetEnabled !== undefined) setGetnetEnabled(data.getnetEnabled);
         if (data.clipConfigured !== undefined) setClipConfigured(data.clipConfigured);
+        if (Array.isArray(data.externalTerminals)) setExternalTerminals(data.externalTerminals);
         if (typeof data.timezone === 'string' && data.timezone) setTimezone(data.timezone);
         if (typeof data.weekStartDow === 'number' && data.weekStartDow >= 0 && data.weekStartDow <= 6) {
           setWeekStartDow(data.weekStartDow);
@@ -155,7 +165,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   }, [limits]);
 
   return (
-    <PlanContext.Provider value={{ plan, limits, trialEndsAt, trialDaysLeft, isTrial, ownerEmail, mpUserId, mpDefaultTerminalId, timezone, weekStartDow, isPaid, isFree, isMpConnected, isGetnetConfigured, isGetnetEnabled, isClipConfigured, isAtLimit, isFeatureLocked, refresh: fetchPlan }}>
+    <PlanContext.Provider value={{ plan, limits, trialEndsAt, trialDaysLeft, isTrial, ownerEmail, mpUserId, mpDefaultTerminalId, timezone, weekStartDow, isPaid, isFree, isMpConnected, isGetnetConfigured, isGetnetEnabled, isClipConfigured, externalTerminals, isAtLimit, isFeatureLocked, refresh: fetchPlan }}>
       {children}
     </PlanContext.Provider>
   );

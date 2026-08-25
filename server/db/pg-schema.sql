@@ -174,7 +174,10 @@ CREATE TABLE IF NOT EXISTS orders (
   -- (tenants.kiosk_fire_before_payment). Marks a ticket that is already being
   -- cooked, so no downstream path may delete or cancel it out from under the
   -- line. Migration 0106.
-  kitchen_fire_at TIMESTAMPTZ
+  kitchen_fire_at TIMESTAMPTZ,
+  -- Which non-integrated bank terminal took the payment when payment_method =
+  -- 'external_terminal'. No FK by design. Migration 0108.
+  external_terminal_id INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS order_items (
@@ -319,6 +322,21 @@ CREATE TABLE IF NOT EXISTS order_payment_items (
   amount NUMERIC(10,2) NOT NULL,
   PRIMARY KEY(payment_id, order_item_id)
 );
+
+-- Non-integrated bank card terminals (Inbursa, BBVA, ...). Registered per
+-- tenant so the POS can tag which device took a manual card charge and
+-- reports can estimate fees from the agreed rate. Migration 0108.
+CREATE TABLE IF NOT EXISTS external_terminals (
+  id SERIAL PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT current_setting('app.tenant_id', true),
+  name TEXT NOT NULL,
+  fee_percent NUMERIC(5,2) NOT NULL DEFAULT 0 CHECK (fee_percent >= 0 AND fee_percent <= 99.99),
+  active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_external_terminals_tenant
+  ON external_terminals(tenant_id, active);
 
 -- Printers
 CREATE TABLE IF NOT EXISTS printers (
@@ -985,7 +1003,7 @@ BEGIN
       'employees', 'shifts', 'cash_drawer_sessions', 'cash_paid_outs', 'menu_categories', 'menu_items', 'orders', 'order_items',
       'inventory_items', 'menu_item_ingredients',
       'modifier_groups', 'modifiers', 'menu_item_modifier_groups', 'order_item_modifiers',
-      'combo_definitions', 'combo_slots', 'order_payments', 'order_payment_items',
+      'combo_definitions', 'combo_slots', 'order_payments', 'order_payment_items', 'external_terminals',
       'printers', 'category_printer_routes', 'print_jobs',
       'delivery_platforms', 'delivery_orders', 'delivery_markup_rules',
       'virtual_brands', 'virtual_brand_items',

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatPrice } from '../../utils/currency';
 import { usePlan } from '../../context/PlanContext';
-import { mpCharge, mpCancelCharge, clipCharge, clipCancelCharge, getPaymentStatus, getMpTerminals, getMpStatus } from '../../api';
+import { mpCharge, mpCancelCharge, clipCharge, clipCancelCharge, getPaymentStatus, getMpTerminals, getMpStatus, externalTerminalCharge } from '../../api';
+import type { ExternalTerminalRef } from '../../context/PlanContext';
 import {
   MP_TERMINAL_STORAGE_KEY,
   MpTerminal,
@@ -39,7 +40,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   getnetEnabled,
 }) => {
   const { t } = useTranslation('pos');
-  const { isMpConnected, isClipConfigured } = usePlan();
+  const { isMpConnected, isClipConfigured, externalTerminals } = usePlan();
   const [tip, setTip] = useState(0);
   const [customTip, setCustomTip] = useState('');
   const [showCustomInput, setShowCustomInput] = useState(false);
@@ -53,6 +54,13 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   const [terminalOrderId, setTerminalOrderId] = useState<number | null>(null);
   const [terminalProvider, setTerminalProvider] = useState<TerminalProvider | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // External (non-integrated bank) terminal flow — Inbursa etc. The device has
+  // no API: the cashier keys the amount in by hand, so DK shows the exact
+  // total to key and only marks the order paid on explicit confirmation.
+  const [extTerminal, setExtTerminal] = useState<ExternalTerminalRef | null>(null);
+  const [extProcessing, setExtProcessing] = useState(false);
+  const [extError, setExtError] = useState('');
 
   // Per-workstation MP terminal binding + failover
   const [terminals, setTerminals] = useState<MpTerminal[]>([]);
@@ -186,6 +194,26 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
       setTerminalError(err instanceof Error ? err.message : t('payment.terminalSendError'));
       // On MP send failure, offer the other terminal right away
       if (provider === 'mp') setFailoverAvailable(true);
+    }
+  };
+
+  // Cashier confirmed the bank terminal approved the charge — settle in DK.
+  const handleExternalTerminalConfirm = async () => {
+    if (!orderId || !extTerminal || extProcessing) return;
+    setExtProcessing(true);
+    setExtError('');
+    try {
+      await externalTerminalCharge(orderId, extTerminal.id, tip);
+      setTerminalSuccess(true);
+      setTimeout(() => {
+        if (onTerminalPaymentSuccess) {
+          onTerminalPaymentSuccess(orderId);
+        }
+        onCancel();
+      }, 1200);
+    } catch (err) {
+      setExtProcessing(false);
+      setExtError(err instanceof Error ? err.message : t('payment.extTerminalError'));
     }
   };
 
@@ -451,8 +479,38 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
             </div>
           )}
 
+          {/* External bank terminal confirm step — the cashier keys the amount
+              into the physical device, then confirms here once it approves. */}
+          {!terminalPending && extTerminal && (
+            <div className="space-y-3">
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-5 text-center space-y-2">
+                <p className="text-amber-400 font-bold text-lg">
+                  {t('payment.extTerminalInstruction', { amount: formatPrice(finalTotal), name: extTerminal.name })}
+                </p>
+                <p className="text-neutral-400 text-sm">{t('payment.extTerminalHint')}</p>
+              </div>
+              {extError && (
+                <p className="text-cockpit-out-text text-sm text-center font-medium">{extError}</p>
+              )}
+              <button
+                onClick={handleExternalTerminalConfirm}
+                disabled={extProcessing}
+                className="w-full py-4 bg-cockpit-green text-white text-xl font-bold rounded-lg hover:bg-cockpit-green/90 disabled:bg-neutral-700 disabled:text-neutral-400 transition-all touch-manipulation"
+              >
+                {extProcessing ? t('payment.processing') : t('payment.extTerminalApproved')}
+              </button>
+              <button
+                onClick={() => { setExtTerminal(null); setExtError(''); }}
+                disabled={extProcessing}
+                className="w-full py-4 bg-neutral-800 text-neutral-400 text-lg font-bold rounded-lg hover:bg-neutral-700 disabled:bg-neutral-900 transition-all"
+              >
+                {t('common:buttons.cancel')}
+              </button>
+            </div>
+          )}
+
           {/* Payment Buttons */}
-          {!terminalPending && (
+          {!terminalPending && !extTerminal && (
             <div className="space-y-3">
               {/* Mercado Pago Terminal — only for Pro+ with MP connected */}
               {isMpConnected && orderId && (
@@ -497,6 +555,19 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                   {!isOnline ? t('offline.cardUnavailable') : t('payment.sendToClipTerminal')}
                 </button>
               )}
+              {/* External bank terminals (Inbursa, ...) — manual charge on the
+                  device, DK records it. Needs an order id like MP/Clip. */}
+              {!!orderId && externalTerminals.map(term => (
+                <button
+                  key={term.id}
+                  onClick={() => { setExtTerminal(term); setExtError(''); }}
+                  disabled={isProcessing || !isOnline}
+                  className="w-full py-4 bg-indigo-600 text-white text-xl font-bold rounded-lg hover:bg-indigo-700 disabled:bg-neutral-700 disabled:text-neutral-400 transition-all touch-manipulation"
+                  title={!isOnline ? t('offline.cardUnavailable') : undefined}
+                >
+                  {!isOnline ? t('offline.cardUnavailable') : t('payment.chargeOnExtTerminal', { name: term.name })}
+                </button>
+              ))}
               {showCashInput ? (
                 <button
                   onClick={() => onCashPayment(tip, receivedNum)}

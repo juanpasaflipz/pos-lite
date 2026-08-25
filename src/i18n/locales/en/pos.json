@@ -145,7 +145,12 @@
     "payWithGetnet": "Pay with Getnet (~1.8%)",
     "payAtOxxo": "Pay at OXXO",
     "speiTransfer": "SPEI Transfer",
-    "splitBill": "Split the bill"
+    "splitBill": "Split the bill",
+    "chargeOnExtTerminal": "Charge on {{name}} terminal",
+    "extTerminalInstruction": "Charge {{amount}} on the {{name}} terminal",
+    "extTerminalHint": "Key the exact amount (tip included) into the physical terminal. Confirm here only after the terminal approves the payment.",
+    "extTerminalApproved": "Terminal approved the payment",
+    "extTerminalError": "Could not record the payment"
   },
   "receipt": {
     "orderNumber": "Order #{{number}}",

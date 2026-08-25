@@ -91,7 +91,7 @@ const POSScreen: React.FC = () => {
   const { isOnline, pendingSyncCount } = useNetworkStatus();
   const { isTablet, isPortrait } = useDeviceType();
   const showDrawerCart = isTablet && isPortrait;
-  const { plan, ownerEmail, isMpConnected, isGetnetEnabled } = usePlan();
+  const { plan, ownerEmail, isMpConnected, isGetnetEnabled, externalTerminals } = usePlan();
   const { run: withApproval, approvalModal } = useManagerApproval();
 
   // State Management
@@ -986,7 +986,9 @@ const POSScreen: React.FC = () => {
   };
 
   const openPaymentModal = async () => {
-    if (isMpConnected && cart.length > 0) {
+    // MP charges and external bank-terminal settlements both need a real order
+    // id before the modal opens; cash still creates its order on confirm.
+    if ((isMpConnected || externalTerminals.length > 0) && cart.length > 0) {
       try {
         const order = await createOrderForCheckout();
         setPreCreatedOrderId(order.id);

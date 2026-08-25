@@ -249,6 +249,77 @@ router.post('/cash', paymentLimiter, requireAuth('pos_access'), async (req, res)
   }
 });
 
+// POST /api/payments/external-terminal — settle an order charged on a
+// NON-integrated bank terminal (Inbursa, BBVA, ...; see external-terminals.js).
+// The bank device has no API: the cashier keys total+tip into it by hand and
+// only after the terminal approves taps "pago aprobado" in the POS, which
+// calls this. Mirrors /cash exactly (paid_at is the reports time-of-truth,
+// inventory deducts, CFDI token mints, customer ticket enqueues) but records
+// payment_method = 'external_terminal' + which device took it, so reports
+// split these sales per terminal and estimate fees from its fee_percent.
+router.post('/external-terminal', paymentLimiter, requireAuth('pos_access'), async (req, res) => {
+  try {
+    const { order_id, terminal_id, tip = 0 } = req.body;
+
+    if (!order_id) return res.status(400).json({ error: 'Missing order_id' });
+    if (!terminal_id) return res.status(400).json({ error: 'Missing terminal_id' });
+
+    // RLS scopes the lookup to the tenant; inactive terminals can't take new charges.
+    const terminal = await get(`
+      SELECT id, name FROM external_terminals WHERE id = $1 AND active = true
+    `, [terminal_id]);
+    if (!terminal) return res.status(404).json({ error: 'Terminal not found or inactive' });
+
+    const order = await get(`
+      SELECT id, order_number, total, payment_status
+      FROM orders
+      WHERE id = $1
+    `, [order_id]);
+
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.payment_status === 'paid') {
+      return res.status(400).json({ error: 'Order is already paid' });
+    }
+
+    const tipAmount = typeof tip === 'number' && Number.isFinite(tip) && tip >= 0 ? tip : 0;
+    const finalTotal = Number(order.total) + tipAmount;
+
+    await run(`
+      UPDATE orders
+      SET payment_status = 'paid', status = 'active',
+          payment_method = 'external_terminal', external_terminal_id = $1,
+          tip = $2, paid_at = NOW()
+      WHERE id = $3
+    `, [terminal.id, tipAmount, order_id]);
+
+    await deductInventoryForOrder(order_id);
+
+    // Auto-generate invoice token for self-service CFDI
+    let invoice_token = null;
+    try {
+      const tenantId = req.tenant?.id || 'default';
+      invoice_token = await generateInvoiceToken(tenantId, order_id, 72);
+      await run('UPDATE orders SET invoice_token = $1 WHERE id = $2', [invoice_token, order_id]);
+    } catch (tokenErr) {
+      console.error('Non-fatal: failed to generate invoice token:', tokenErr.message);
+    }
+    await enqueueCustomerTicket(order_id);
+
+    res.json({
+      success: true,
+      order_id,
+      order_number: order.order_number,
+      total: finalTotal,
+      payment_method: 'external_terminal',
+      terminal_name: terminal.name,
+      invoice_token,
+    });
+  } catch (error) {
+    console.error('Error processing external terminal payment:', error);
+    res.status(500).json({ error: 'Failed to process external terminal payment' });
+  }
+});
+
 // POST /api/payments/cash-tip-adjust - record a cash tip added after the
 // order was already closed (customer leaves cash on the table after the
 // receipt prints — common in MX dine-in).

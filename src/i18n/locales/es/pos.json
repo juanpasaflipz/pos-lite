@@ -145,7 +145,12 @@
     "payWithGetnet": "Pagar con Getnet (~1.8%)",
     "payAtOxxo": "Pagar en OXXO",
     "speiTransfer": "Transferencia SPEI",
-    "splitBill": "Dividir cuenta"
+    "splitBill": "Dividir cuenta",
+    "chargeOnExtTerminal": "Cobrar en terminal {{name}}",
+    "extTerminalInstruction": "Cobra {{amount}} en la terminal {{name}}",
+    "extTerminalHint": "Teclea el monto exacto (con propina) en la terminal física. Confirma aquí solo cuando la terminal apruebe el pago.",
+    "extTerminalApproved": "La terminal aprobó el pago",
+    "extTerminalError": "No se pudo registrar el pago"
   },
   "receipt": {
     "orderNumber": "Orden #{{number}}",
