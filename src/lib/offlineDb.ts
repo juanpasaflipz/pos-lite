@@ -18,7 +18,8 @@ export interface OfflineOrder {
   employeeId: number;
   employeeName: string;
   items: Array<{
-    menu_item_id: number;
+    /** null on open-amount lines — nothing in the menu backs them. */
+    menu_item_id: number | null;
     item_name: string;
     quantity: number;
     unit_price: number;
@@ -27,6 +28,7 @@ export interface OfflineOrder {
     selectedModifierNames?: string[];
     combo_instance_id?: string | null;
     virtual_brand_id?: number | null;
+    is_open_amount?: boolean;
   }>;
   subtotal: number;
   tax: number;

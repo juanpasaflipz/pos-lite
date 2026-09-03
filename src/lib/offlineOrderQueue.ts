@@ -83,6 +83,10 @@ export async function createOfflineOrder(
       selectedModifierNames: item.selectedModifierNames || [],
       combo_instance_id: item.combo_instance_id || null,
       virtual_brand_id: item.virtual_brand_id || null,
+      // Open-amount lines have no menu item behind them, so item_name and
+      // unit_price above are the only record of what was rung — the sync
+      // replays them verbatim (see syncEngine).
+      is_open_amount: item.is_open_amount === true,
     })),
     subtotal,
     tax,

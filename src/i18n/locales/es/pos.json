@@ -99,6 +99,17 @@
     "percentLabel": "{{value}}% descuento",
     "amountLabel": "{{value}} descuento"
   },
+  "openAmount": {
+    "button": "Monto abierto",
+    "title": "Cobrar un monto",
+    "hint": "Cobra una cantidad libre — anticipo, saldo de catering, extra fuera de menú",
+    "labelPlaceholder": "Concepto (opcional)",
+    "defaultLabel": "Monto abierto",
+    "add": "Agregar",
+    "cancel": "Cancelar",
+    "close": "Cerrar",
+    "backspace": "Borrar"
+  },
   "managerApproval": {
     "title": "Aprobación de Gerente",
     "subtitle": "Ingresa PIN de gerente",

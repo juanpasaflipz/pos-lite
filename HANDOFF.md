@@ -7,6 +7,34 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-09-03 — Claude Code — **Open-amount POS lines (migration 0109)**
+
+Cashier can now type any figure and push it at the card terminal. Rings as an
+ordinary cart line, so `Cobrar` → MP Point / Clip / external bank terminal,
+receipts, reports, refunds and CFDI all work with no new payment code.
+
+- **Migration 0109** adds `order_items.is_open_amount BOOLEAN NOT NULL DEFAULT
+  FALSE` (+ partial index). Also transcribed into `pg-schema.sql`.
+- `server/routes/orders.js` — `open_amount: true` on an item is the ONLY thing
+  that lets a client set `unit_price`; `resolveOpenAmountLine()` re-validates
+  it. A `unit_price` on a normal menu line stays inert, as before.
+- `GET /orders/kitchen/active` gained two clauses: strip open-amount lines from
+  every ticket, and drop an order that has nothing else on it. **Do not
+  "simplify" these to `menu_item_id IS NULL`** — delivery.js writes NULL for
+  unmatched marketplace items that must still be cooked. `tests/open-amount.test.ts`
+  guards exactly that.
+- UI: `src/components/pos/OpenAmountModal.tsx` (keypad + optional concepto),
+  button in `CartPanel` and `CartDrawer`, `openAmount.*` keys in es/en `pos.json`.
+- **Heads up if you are also editing `server/routes/orders.js`** — I touched the
+  item loop, the batch INSERT (13 → 14 columns) and the KDS query. Your
+  kiosk-held / `pending_terminal` work in the same file is untouched.
+- Not covered: mobile POS (`src/screens/mobile`) has its own cart context and
+  charges via Stripe intents, not the MP terminal — out of scope for this pass.
+- Not shipped: verified locally (typecheck + 14 new tests + full suite), **not
+  pushed**. Deploy window is before the store opens.
+
+---
+
 ## 2026-08-20 — Claude Code — **Kiosk loyalty check-in + join pitch (1.22.0)**
 
 Frontend-only; **no server changes**. It revives `/api/kiosk/identify`, which had

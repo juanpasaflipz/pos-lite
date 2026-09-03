@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { CartItem, LoyaltyCustomer, ComboDefinition, Discount, Order } from '../types';
 import { formatPrice, TAX_LABEL } from '../utils/currency';
 import { formatTime } from '../utils/dateFormat';
-import { Check, ClipboardList, PauseCircle, Percent, Smartphone, Trash2, User, X } from 'lucide-react';
+import { Calculator, Check, ClipboardList, PauseCircle, Percent, Smartphone, Trash2, User, X } from 'lucide-react';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -29,6 +29,7 @@ interface CartDrawerProps {
   onShowTemplates: () => void;
   onShowParkedCarts: () => void;
   onShowComboBuilder: () => void;
+  onShowOpenAmount: () => void;
   onShowSplitPayment: () => void;
   onClearCart: () => void;
   onLogout: () => void;
@@ -76,6 +77,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
   onShowTemplates,
   onShowParkedCarts,
   onShowComboBuilder,
+  onShowOpenAmount,
   onShowSplitPayment,
   onClearCart,
   onLogout,
@@ -599,14 +601,26 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
               {t('actions.splitPay')}
             </button>
           </div>
-          <button
-            onClick={onApplyCartDiscount}
-            disabled={cart.length === 0}
-            className="w-full py-2.5 bg-cockpit-yellow text-neutral-900 text-xs font-bold rounded-lg hover:bg-cockpit-yellow/90 disabled:bg-neutral-800 disabled:text-neutral-600 disabled:cursor-not-allowed transition-all touch-manipulation flex items-center justify-center gap-1.5"
-          >
-            <Percent className="w-3.5 h-3.5" />
-            {cartDiscount ? t('discount.modify') : t('discount.applyToOrder')}
-          </button>
+          <div className="flex gap-1.5">
+            {/* Never disabled — charging a bare figure with an empty cart is
+                the main use (deposit, catering balance). */}
+            <button
+              onClick={onShowOpenAmount}
+              title={t('openAmount.hint')}
+              className="flex-1 py-2.5 bg-neutral-800 text-white text-xs font-bold rounded-lg hover:bg-neutral-700 border border-neutral-700 transition-all touch-manipulation flex items-center justify-center gap-1.5"
+            >
+              <Calculator className="w-3.5 h-3.5" />
+              {t('openAmount.button')}
+            </button>
+            <button
+              onClick={onApplyCartDiscount}
+              disabled={cart.length === 0}
+              className="flex-1 py-2.5 bg-cockpit-yellow text-neutral-900 text-xs font-bold rounded-lg hover:bg-cockpit-yellow/90 disabled:bg-neutral-800 disabled:text-neutral-600 disabled:cursor-not-allowed transition-all touch-manipulation flex items-center justify-center gap-1.5"
+            >
+              <Percent className="w-3.5 h-3.5" />
+              {cartDiscount ? t('discount.modify') : t('discount.applyToOrder')}
+            </button>
+          </div>
           <button
             onClick={onClearCart}
             disabled={cart.length === 0}

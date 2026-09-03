@@ -47,6 +47,7 @@ import DeliveryAlertBanner from '../components/DeliveryAlertBanner';
 import SetupChecklistBanner from '../components/SetupChecklistBanner';
 import ModifierModal from '../components/ModifierModal';
 import ComboBuilder from '../components/ComboBuilder';
+import OpenAmountModal from '../components/pos/OpenAmountModal';
 import SplitPaymentModal from '../components/SplitPaymentModal';
 import CustomerLookupModal from '../components/CustomerLookupModal';
 import BrandLogo from '../components/BrandLogo';
@@ -113,6 +114,7 @@ const POSScreen: React.FC = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [modifierItem, setModifierItem] = useState<MenuItem | null>(null);
   const [showComboBuilder, setShowComboBuilder] = useState(false);
+  const [showOpenAmount, setShowOpenAmount] = useState(false);
   const [showSplitPayment, setShowSplitPayment] = useState(false);
   const [itemModifierCache, setItemModifierCache] = useState<Record<number, boolean>>({});
   const [requiredModifierCache, setRequiredModifierCache] = useState<Record<number, boolean>>({});
@@ -629,6 +631,25 @@ const POSScreen: React.FC = () => {
     addToast(t('toast.comboAdded'), 'success');
   };
 
+  // Open amount ("monto abierto") — a deposit, a catering balance, an off-menu
+  // extra. Rings as an ordinary cart line so Cobrar → terminal, receipts,
+  // reports and refunds all work untouched; the server drops it from the KDS
+  // because there is no food behind it.
+  const handleAddOpenAmount = (amount: number, label: string) => {
+    setCart((prev) => [
+      ...prev,
+      {
+        cart_id: generateCartId(),
+        menu_item_id: null,
+        item_name: label || t('openAmount.defaultLabel'),
+        quantity: 1,
+        unit_price: amount,
+        is_open_amount: true,
+      },
+    ]);
+    setShowOpenAmount(false);
+  };
+
   const removeFromCart = (cartId: string) => {
     setCart((prev) => {
       const item = prev.find((ci) => ci.cart_id === cartId);
@@ -945,6 +966,11 @@ const POSScreen: React.FC = () => {
     modifiers: item.selectedModifierIds || [],
     combo_instance_id: item.combo_instance_id || null,
     virtual_brand_id: item.virtual_brand_id || null,
+    // Open-amount lines are the one case where the client sets the price, so
+    // the flag and the price travel together and the server re-validates both.
+    ...(item.is_open_amount
+      ? { open_amount: true, item_name: item.item_name, unit_price: item.unit_price }
+      : {}),
     discount: item.discount
       ? {
           type: item.discount.type,
@@ -1378,6 +1404,7 @@ const POSScreen: React.FC = () => {
         onShowTemplates={() => setShowTemplates(true)}
         onShowParkedCarts={() => setShowParkedCarts(true)}
         onShowComboBuilder={() => setShowComboBuilder(true)}
+        onShowOpenAmount={() => setShowOpenAmount(true)}
         onShowSplitPayment={() => setShowSplitPayment(true)}
         onClearCart={clearCart}
         onLogout={handleLogout}
@@ -1424,6 +1451,7 @@ const POSScreen: React.FC = () => {
             onShowTemplates={() => setShowTemplates(true)}
             onShowParkedCarts={() => setShowParkedCarts(true)}
             onShowComboBuilder={() => setShowComboBuilder(true)}
+            onShowOpenAmount={() => setShowOpenAmount(true)}
             onShowSplitPayment={() => setShowSplitPayment(true)}
             onClearCart={clearCart}
             onLogout={handleLogout}
@@ -1562,6 +1590,13 @@ const POSScreen: React.FC = () => {
         <ComboBuilder
           onAddCombo={handleAddCombo}
           onClose={() => setShowComboBuilder(false)}
+        />
+      )}
+
+      {showOpenAmount && (
+        <OpenAmountModal
+          onClose={() => setShowOpenAmount(false)}
+          onConfirm={handleAddOpenAmount}
         />
       )}
 

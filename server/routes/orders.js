@@ -59,6 +59,38 @@ const orderCreateLimiter = rateLimit({
 
 const TAX_RATE = 0.16; // 16% IVA (Mexico) — prices already include tax
 
+// Open-amount lines (migration 0109). The cashier types the figure, so the
+// price arrives from the client instead of menu_items — the one place in this
+// file where that is true. Everything about the line is therefore validated
+// here rather than trusted: an unbounded client-supplied price would let a
+// typo (or a bad actor) push an absurd figure at the card terminal.
+const OPEN_AMOUNT_MAX = 999999.99;
+const OPEN_AMOUNT_DEFAULT_NAME = 'Monto abierto';
+
+export const isOpenAmountLine = (item) => item?.open_amount === true;
+
+// Returns { item_name, unit_price } or throws a 400. Rounds to centavos so the
+// order total, the terminal intent and the receipt can never disagree by a
+// float epsilon.
+export function resolveOpenAmountLine(item) {
+  const price = Number(item?.unit_price);
+  if (!Number.isFinite(price) || price <= 0) {
+    const err = new Error('Open-amount lines need a unit_price greater than 0');
+    err.status = 400;
+    throw err;
+  }
+  if (price > OPEN_AMOUNT_MAX) {
+    const err = new Error(`Open-amount lines cap at $${OPEN_AMOUNT_MAX}`);
+    err.status = 400;
+    throw err;
+  }
+  const rawName = typeof item.item_name === 'string' ? item.item_name.trim() : '';
+  return {
+    item_name: rawName ? rawName.slice(0, 60) : OPEN_AMOUNT_DEFAULT_NAME,
+    unit_price: Math.round(price * 100) / 100,
+  };
+}
+
 async function notifyKioskOrderReady(orderId, restaurantName = 'us') {
   try {
     const smsEnabled = await getConfigValue('sms_enabled', 'true');
@@ -685,6 +717,7 @@ router.get('/:id', async (req, res) => {
 
     const items = await all(`
       SELECT oi.id, oi.order_id, oi.menu_item_id, oi.item_name, oi.quantity, oi.unit_price, oi.notes, oi.combo_instance_id,
+             oi.is_open_amount,
              oi.discount_amount, oi.discount_type, oi.discount_reason, oi.discount_authorized_by,
              oi.added_at, oi.voided_at, oi.void_reason, oi.qty_changed_at, oi.original_quantity,
              oim.id AS mod_id, oim.modifier_id, oim.modifier_name, oim.price_adjustment
@@ -701,6 +734,7 @@ router.get('/:id', async (req, res) => {
           id: row.id, order_id: row.order_id, menu_item_id: row.menu_item_id,
           item_name: row.item_name, quantity: row.quantity, unit_price: row.unit_price,
           notes: row.notes, combo_instance_id: row.combo_instance_id,
+          is_open_amount: row.is_open_amount,
           discount_amount: row.discount_amount, discount_type: row.discount_type,
           discount_reason: row.discount_reason, discount_authorized_by: row.discount_authorized_by,
           added_at: row.added_at, voided_at: row.voided_at, void_reason: row.void_reason,
@@ -821,7 +855,7 @@ async function buildOrderFromRequest(req) {
   // Validate item quantities
   for (const item of items) {
     if (!item.quantity || item.quantity <= 0) {
-      const err = new Error(`Invalid quantity for item ${item.menu_item_id}. Quantity must be greater than 0.`);
+      const err = new Error(`Invalid quantity for item ${item.menu_item_id ?? item.item_name ?? 'open amount'}. Quantity must be greater than 0.`);
       err.status = 400;
       throw err;
     }
@@ -843,9 +877,12 @@ async function buildOrderFromRequest(req) {
   // and resolve them in three queries up front. Replaces an N+1 inside the
   // per-item loop that, for an 8-item × 4-modifier order, ran 41+ sequential
   // SELECTs inside the held tenant connection.
-  const menuItemIds = [...new Set(items.map((i) => i.menu_item_id))];
-  const modifierIds = [...new Set(items.flatMap((i) => i.modifiers || []))];
-  const brandPairs = items.filter((i) => i.virtual_brand_id);
+  // Open-amount lines resolve against nothing — no menu item, no modifiers, no
+  // brand override — so they are kept out of all three prefetches.
+  const pricedItems = items.filter((i) => !isOpenAmountLine(i));
+  const menuItemIds = [...new Set(pricedItems.map((i) => i.menu_item_id))];
+  const modifierIds = [...new Set(pricedItems.flatMap((i) => i.modifiers || []))];
+  const brandPairs = pricedItems.filter((i) => i.virtual_brand_id);
 
   const menuItemRows = menuItemIds.length
     ? await all('SELECT id, name, price FROM menu_items WHERE id = ANY($1::int[])', [menuItemIds])
@@ -873,6 +910,33 @@ async function buildOrderFromRequest(req) {
   }
 
   for (const item of items) {
+    // Open amount: the cashier typed the price and (optionally) the label.
+    // Rings as a plain line with menu_item_id NULL — no recipe, no inventory,
+    // no KDS. Handled before the menu lookup because there is nothing to look
+    // up; discounts are deliberately not offered on it (typing a smaller
+    // number is the same thing, without an approval to consume).
+    if (isOpenAmountLine(item)) {
+      const open = resolveOpenAmountLine(item);
+      itemsTotal += open.unit_price * item.quantity;
+      orderItems.push({
+        menu_item_id: null,
+        item_name: open.item_name,
+        quantity: item.quantity,
+        unit_price: open.unit_price,
+        notes: item.notes || null,
+        combo_instance_id: null,
+        modifiers: [],
+        virtual_brand_id: null,
+        discount_amount: 0,
+        discount_type: null,
+        discount_reason: null,
+        is_open_amount: true,
+        _lineHasDiscount: false,
+        _discount: null,
+      });
+      continue;
+    }
+
     const menuItem = menuItemMap.get(item.menu_item_id);
     if (!menuItem) {
       const err = new Error(`Menu item ${item.menu_item_id} not found`);
@@ -934,6 +998,7 @@ async function buildOrderFromRequest(req) {
       discount_amount: lineDiscountAmount,
       discount_type: lineDiscountType,
       discount_reason: lineDiscountReason,
+      is_open_amount: false,
       _lineHasDiscount: lineDiscountAmount > 0,
       // Kept so each line can be authorized against its OWN approval below.
       _discount: item.discount || null,
@@ -1023,7 +1088,9 @@ async function buildOrderFromRequest(req) {
   }
 
   // Calculate estimated prep time
-  const itemMenuIds = orderItems.map(i => i.menu_item_id);
+  // Open-amount lines carry no menu_item_id and no prep time — dropped so the
+  // int[] cast never sees a NULL element.
+  const itemMenuIds = orderItems.map(i => i.menu_item_id).filter((id) => id != null);
   const prepEstimate = await estimatePrepTime(conn, itemMenuIds, req.tenant?.id);
   await conn.unsafe(
     `UPDATE orders SET estimated_ready_minutes = $1 WHERE id = $2`,
@@ -1032,10 +1099,10 @@ async function buildOrderFromRequest(req) {
 
   // Batch insert all order items (1 query instead of N)
   const tenantId = req.tenant?.id || null;
-  const itemColCount = 13;
+  const itemColCount = 14;
   const itemValues = orderItems.map((_, i) => {
     const o = i * itemColCount;
-    return `($${o+1},$${o+2},$${o+3},$${o+4},$${o+5},$${o+6},$${o+7},$${o+8},$${o+9},$${o+10},$${o+11},$${o+12},$${o+13})`;
+    return `($${o+1},$${o+2},$${o+3},$${o+4},$${o+5},$${o+6},$${o+7},$${o+8},$${o+9},$${o+10},$${o+11},$${o+12},$${o+13},$${o+14})`;
   }).join(',');
   const itemParams = orderItems.flatMap(item => [
     tenantId, orderId, item.menu_item_id, item.item_name,
@@ -1044,13 +1111,15 @@ async function buildOrderFromRequest(req) {
     item.discount_type,
     item.discount_reason,
     item._lineHasDiscount ? (item._authorizedBy ?? null) : null,
+    item.is_open_amount === true,
   ]);
 
   const insertedItems = await conn.unsafe(`
     INSERT INTO order_items (
       tenant_id, order_id, menu_item_id, item_name, quantity, unit_price,
       notes, combo_instance_id, virtual_brand_id,
-      discount_amount, discount_type, discount_reason, discount_authorized_by
+      discount_amount, discount_type, discount_reason, discount_authorized_by,
+      is_open_amount
     )
     VALUES ${itemValues}
     RETURNING id
@@ -1405,6 +1474,9 @@ router.get('/kitchen/active', requireAuth(), async (req, res) => {
         -- Drop voided items from KDS after 90s so kitchen sees the strike
         -- briefly then it disappears, instead of cluttering forever.
         AND (oi.voided_at IS NULL OR oi.voided_at > NOW() - INTERVAL '90 seconds')
+        -- Open-amount lines are money, not food (migration 0109). A deposit or
+        -- a catering balance on the ticket is noise the line can't act on.
+        AND NOT oi.is_open_amount
       -- category_id powers the KDS Todo/Cocina/Bar station filter (client maps
       -- category_id → role via ai_category_roles).
       LEFT JOIN menu_items mi_kds ON mi_kds.id = oi.menu_item_id
@@ -1416,6 +1488,16 @@ router.get('/kitchen/active', requireAuth(), async (req, res) => {
       LEFT JOIN modifiers m_kds ON m_kds.id = oim.modifier_id
       LEFT JOIN modifier_groups mg_kds ON mg_kds.id = m_kds.group_id
       WHERE o.status = ANY($1::text[])
+        -- ...and drop the order outright when open-amount lines are ALL it has:
+        -- a pure quick-charge has nothing to cook, so an empty ticket on the
+        -- rail would just be a card the kitchen has to bump to clear. Written
+        -- as "has an open line AND has no other line" rather than "has any
+        -- normal line" on purpose — an order with zero items at all keeps
+        -- rendering exactly as it did before this clause existed.
+        AND NOT (
+          EXISTS (SELECT 1 FROM order_items x WHERE x.order_id = o.id AND x.is_open_amount)
+          AND NOT EXISTS (SELECT 1 FROM order_items x WHERE x.order_id = o.id AND NOT x.is_open_amount)
+        )
       ORDER BY o.created_at ASC, oi.id ASC
     `, [statuses]);
 

@@ -122,6 +122,9 @@ export class SyncEngine {
         modifiers: item.modifiers || [],
         combo_instance_id: item.combo_instance_id || null,
         virtual_brand_id: item.virtual_brand_id || null,
+        ...(item.is_open_amount
+          ? { open_amount: true, item_name: item.item_name, unit_price: item.unit_price }
+          : {}),
       })),
       offline_temp_id: order.tempId,
       tip: order.tip,

@@ -189,6 +189,11 @@ CREATE TABLE IF NOT EXISTS order_items (
   quantity INTEGER NOT NULL,
   unit_price NUMERIC(10,2) NOT NULL,
   notes TEXT,
+  -- migration 0109: the cashier typed this price rather than the menu setting
+  -- it. Money, not food — the KDS drops these lines. Distinct from a plain
+  -- NULL menu_item_id, which delivery.js writes for unmatched marketplace
+  -- items that DO have to be cooked.
+  is_open_amount BOOLEAN NOT NULL DEFAULT FALSE,
   combo_instance_id TEXT DEFAULT NULL,
   virtual_brand_id INTEGER DEFAULT NULL,
   discount_amount NUMERIC(10,2) DEFAULT 0,
@@ -933,6 +938,7 @@ CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(tenant_id, status);
 CREATE INDEX IF NOT EXISTS idx_orders_employee ON orders(tenant_id, employee_id);
 CREATE INDEX IF NOT EXISTS idx_order_items_tenant ON order_items(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(tenant_id, order_id);
+CREATE INDEX IF NOT EXISTS idx_order_items_open_amount ON order_items(tenant_id, order_id) WHERE is_open_amount;
 CREATE INDEX IF NOT EXISTS idx_inventory_items_tenant ON inventory_items(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_modifier_groups_tenant ON modifier_groups(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_modifiers_tenant ON modifiers(tenant_id);

@@ -99,6 +99,17 @@
     "percentLabel": "{{value}}% off",
     "amountLabel": "{{value}} off"
   },
+  "openAmount": {
+    "button": "Open amount",
+    "title": "Charge an amount",
+    "hint": "Charge any figure — deposit, catering balance, off-menu extra",
+    "labelPlaceholder": "Description (optional)",
+    "defaultLabel": "Open amount",
+    "add": "Add",
+    "cancel": "Cancel",
+    "close": "Close",
+    "backspace": "Backspace"
+  },
   "managerApproval": {
     "title": "Manager Approval",
     "subtitle": "Enter manager PIN",

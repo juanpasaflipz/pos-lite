@@ -92,6 +92,9 @@ export interface OrderItem {
   quantity: number;
   unit_price: number;
   notes?: string;
+  /** Cashier typed this price instead of the menu setting it (migration 0109).
+   *  Money, not food: menu_item_id is NULL and the KDS never renders it. */
+  is_open_amount?: boolean;
   combo_instance_id?: string | null;
   /** Menu category of this item — powers the KDS Todo/Cocina/Bar station filter. */
   category_id?: number | null;
@@ -112,8 +115,13 @@ export interface OrderItem {
   original_quantity?: number | null;
 }
 
-export interface CartItem extends OrderItem {
+// menu_item_id is widened to nullable here, not on OrderItem, to keep the blast
+// radius on the cart: an open-amount line has no menu item behind it, and the
+// compiler should force every cart reader to say what it does about that.
+export interface CartItem extends Omit<OrderItem, 'menu_item_id'> {
   cart_id: string;
+  /** null on open-amount lines — nothing in the menu backs them. */
+  menu_item_id: number | null;
   menuItem?: MenuItem;
   selectedModifierIds?: number[];
   selectedModifierNames?: string[];
