@@ -150,7 +150,16 @@ app.use(express.json({
 
 app.use(express.static(path.join(__dirname, '../dist')));
 app.use('/kiosk', express.static(path.join(__dirname, '../dist-kiosk')));
-app.use('/uploads', express.static(path.join(__dirname, '../data/uploads')));
+app.use('/uploads', express.static(path.join(__dirname, '../data/uploads'), {
+  // Menu photos are rendered by the Android kiosk, whose origin is the bundled
+  // https://localhost — helmet's default CORP same-origin makes the WebView
+  // refuse them. Loosen it for menu photos only; everything else keeps it.
+  setHeaders(res, filePath) {
+    if (/[\\/]menu[\\/]/.test(filePath)) {
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    }
+  },
+}));
 
 // ==================== Health Check ====================
 
