@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatPrice } from '../../utils/currency';
 import { usePlan } from '../../context/PlanContext';
-import { mpCharge, mpCancelCharge, clipCharge, clipCancelCharge, getPaymentStatus, getMpTerminals, getMpStatus, externalTerminalCharge } from '../../api';
+import { mpCharge, mpCancelCharge, clipCharge, clipCancelCharge, getClipDevices, getClipStatus, getPaymentStatus, getMpTerminals, getMpStatus, externalTerminalCharge } from '../../api';
+import type { ClipDevice } from '../../api';
 import type { ExternalTerminalRef } from '../../context/PlanContext';
 import {
   MP_TERMINAL_STORAGE_KEY,
@@ -10,6 +11,12 @@ import {
   terminalDisplayName,
   pickBoundTerminal,
 } from '../../lib/mpTerminal';
+import {
+  readBoundClipTerminalId,
+  writeBoundClipTerminalId,
+  pickBoundClipTerminal,
+  isClipDeviceOnline,
+} from '../../lib/clipTerminal';
 
 type TerminalProvider = 'mp' | 'clip';
 
@@ -71,6 +78,35 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   const [failoverAvailable, setFailoverAvailable] = useState(false);
   const [failoverBusy, setFailoverBusy] = useState(false);
   const failoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Per-workstation Clip reader binding (serial number)
+  const [clipDevices, setClipDevices] = useState<ClipDevice[]>([]);
+  const [boundClipId, setBoundClipId] = useState<string>(() => readBoundClipTerminalId());
+  const [switchBusy, setSwitchBusy] = useState(false);
+
+  useEffect(() => {
+    if (!isClipConfigured || !orderId) return;
+    let cancelled = false;
+    (async () => {
+      const [devicesRes, statusRes] = await Promise.allSettled([getClipDevices(), getClipStatus()]);
+      if (cancelled) return;
+      const tenantDefault = statusRes.status === 'fulfilled' ? statusRes.value.default_terminal_id : null;
+      if (devicesRes.status === 'fulfilled') {
+        const list = devicesRes.value.devices;
+        setClipDevices(list);
+        setBoundClipId(prev => pickBoundClipTerminal(list, prev, tenantDefault) || prev);
+      } else {
+        // Device list unavailable — still charge on the remembered/default reader.
+        setBoundClipId(prev => prev || tenantDefault || '');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isClipConfigured, orderId]);
+
+  const handleClipTerminalSelect = (serial: string) => {
+    setBoundClipId(serial);
+    writeBoundClipTerminalId(serial);
+  };
 
   useEffect(() => {
     if (!isMpConnected || !orderId) return;
@@ -177,14 +213,25 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     setTerminalProvider(provider);
     setTerminalPending(true);
     setTerminalError('');
-    const targetTerminal = terminalId || boundTerminalId || undefined;
     try {
       if (provider === 'mp') {
+        const targetTerminal = terminalId || boundTerminalId || undefined;
         const result = await mpCharge(orderId, targetTerminal, tip);
         setActiveTerminalId(result.terminal_id || targetTerminal || null);
         startFailoverTimer();
       } else {
-        await clipCharge(orderId);
+        const targetReader = terminalId || boundClipId;
+        if (!targetReader) {
+          setTerminalPending(false);
+          setTerminalProvider(null);
+          setTerminalError(t('payment.clipPickTerminal'));
+          return;
+        }
+        const result = await clipCharge(orderId, targetReader, tip);
+        setActiveTerminalId(result.terminal_id || targetReader);
+        startFailoverTimer();
+        // The previous Clip intent on this order had already cleared — the
+        // poller below picks up the paid state and closes the modal.
       }
       setTerminalOrderId(orderId);
       startPolling(orderId);
@@ -194,6 +241,61 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
       setTerminalError(err instanceof Error ? err.message : t('payment.terminalSendError'));
       // On MP send failure, offer the other terminal right away
       if (provider === 'mp') setFailoverAvailable(true);
+    }
+  };
+
+  /**
+   * Withdraw the in-flight charge from its terminal. Resolves to:
+   *  - 'cancelled' — nothing was charged; the order is free for another charge
+   *  - 'paid'      — the card cleared first; the poller will close the modal
+   *  - 'stuck'     — the reader already has it (Clip); must be cancelled on the device
+   */
+  const withdrawCurrentCharge = async (): Promise<'cancelled' | 'paid' | 'stuck'> => {
+    if (!terminalOrderId || !terminalProvider) return 'cancelled';
+    try {
+      const res = terminalProvider === 'mp'
+        ? await mpCancelCharge(terminalOrderId, activeTerminalId || undefined)
+        : await clipCancelCharge(terminalOrderId);
+      return res.paid ? 'paid' : 'cancelled';
+    } catch (err) {
+      const code = (err as { code?: string })?.code;
+      if (code === 'clip_in_progress') return 'stuck';
+      // Unknown failure: only proceed if the order is provably not paid.
+      const recheck = await getPaymentStatus(terminalOrderId).catch(() => null);
+      if (recheck?.payment_status === 'paid') return 'paid';
+      if (recheck && recheck.payment_status !== 'pending_terminal') return 'cancelled';
+      throw err;
+    }
+  };
+
+  // Move an in-flight charge to the other provider (MP <-> Clip). The cancel
+  // must succeed first — two live intents could charge the customer twice.
+  const handleSwitchProvider = async (target: TerminalProvider) => {
+    if (!orderId || switchBusy) return;
+    setSwitchBusy(true);
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = null;
+    stopFailoverTimer();
+    try {
+      const outcome = await withdrawCurrentCharge();
+      if (outcome === 'paid') {
+        startPolling(orderId);
+        return;
+      }
+      if (outcome === 'stuck') {
+        setTerminalError(t('payment.clipInProgress'));
+        startPolling(orderId);
+        return;
+      }
+      setTerminalError('');
+      setFailoverAvailable(false);
+      setActiveTerminalId(null);
+      await handleTerminalPayment(target);
+    } catch (err) {
+      setTerminalError(err instanceof Error ? err.message : t('payment.terminalSendError'));
+      startPolling(orderId);
+    } finally {
+      setSwitchBusy(false);
     }
   };
 
@@ -222,14 +324,27 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     pollRef.current = null;
     stopFailoverTimer();
     if (terminalOrderId && terminalProvider) {
+      let outcome: 'cancelled' | 'paid' | 'stuck' = 'cancelled';
       try {
-        if (terminalProvider === 'mp') {
-          await mpCancelCharge(terminalOrderId, activeTerminalId || undefined);
-        } else {
-          await clipCancelCharge(terminalOrderId);
+        outcome = await withdrawCurrentCharge();
+      } catch (err) {
+        if (terminalProvider === 'clip') {
+          // Clip unreachable: keep waiting rather than free an order that may
+          // still be charged on the reader.
+          setTerminalError(err instanceof Error ? err.message : t('payment.terminalSendError'));
+          startPolling(terminalOrderId);
+          return;
         }
-      } catch {
-        // Best effort
+        // MP: best effort, as before
+      }
+      if (outcome === 'paid') {
+        startPolling(terminalOrderId);
+        return;
+      }
+      if (outcome === 'stuck') {
+        setTerminalError(t('payment.clipInProgress'));
+        startPolling(terminalOrderId);
+        return;
       }
     }
     setTerminalPending(false);
@@ -429,16 +544,44 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
             </div>
           )}
 
-          {/* Terminal Waiting State */}
+          {/* Terminal Waiting State — tinted by provider so the cashier sees
+              at a glance which device the customer should use. */}
           {terminalPending && (
-            <div className="bg-[#009ee3]/10 border border-[#009ee3]/30 rounded-lg p-5 text-center space-y-3">
+            <div
+              className={`rounded-lg p-5 text-center space-y-3 border ${
+                terminalProvider === 'clip'
+                  ? 'bg-[#FF5A1F]/10 border-[#FF5A1F]/30'
+                  : 'bg-[#009ee3]/10 border-[#009ee3]/30'
+              }`}
+            >
               <div className="flex items-center justify-center gap-2">
-                <div className="w-3 h-3 bg-[#009ee3] rounded-full animate-pulse" />
-                <p className="text-[#009ee3] font-bold text-lg">{t('payment.terminalWaiting')}</p>
+                <div className={`w-3 h-3 rounded-full animate-pulse ${terminalProvider === 'clip' ? 'bg-[#FF5A1F]' : 'bg-[#009ee3]'}`} />
+                <p className={`font-bold text-lg ${terminalProvider === 'clip' ? 'text-[#FF5A1F]' : 'text-[#009ee3]'}`}>
+                  {terminalProvider === 'clip' ? t('payment.waitingOnClip') : t('payment.waitingOnMP')}
+                </p>
               </div>
               <p className="text-neutral-400 text-sm">
                 {t('payment.terminalReaderPrompt')}
               </p>
+              {/* Cross-provider switch — available at any moment while waiting */}
+              {((terminalProvider === 'mp' && isClipConfigured) || (terminalProvider === 'clip' && isMpConnected)) && (
+                <div className="pt-2 border-t border-neutral-700/60 space-y-2">
+                  <p className="text-neutral-400 text-xs">{t('payment.switchTerminalHint')}</p>
+                  <button
+                    onClick={() => handleSwitchProvider(terminalProvider === 'mp' ? 'clip' : 'mp')}
+                    disabled={switchBusy || failoverBusy}
+                    className={`w-full py-3 text-white font-bold rounded-lg disabled:bg-neutral-700 disabled:text-neutral-400 transition-all touch-manipulation ${
+                      terminalProvider === 'mp'
+                        ? 'bg-[#FF5A1F] hover:bg-[#e64e16]'
+                        : 'bg-[#009ee3] hover:bg-[#0082c0]'
+                    }`}
+                  >
+                    {switchBusy
+                      ? t('payment.processing')
+                      : terminalProvider === 'mp' ? t('payment.switchToClip') : t('payment.switchToMP')}
+                  </button>
+                </div>
+              )}
               {failoverAvailable && otherTerminal && terminalProvider === 'mp' && (
                 <div className="pt-2 border-t border-[#009ee3]/20 space-y-2">
                   <p className="text-neutral-400 text-sm">{t('payment.terminalNotResponding')}</p>
@@ -546,14 +689,40 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
               )}
               {/* Clip Terminal — only when Clip credentials are configured */}
               {isClipConfigured && orderId && (
-                <button
-                  onClick={() => handleTerminalPayment('clip')}
-                  disabled={isProcessing || !isOnline}
-                  className="w-full py-4 bg-[#FF5A1F] text-white text-xl font-bold rounded-lg hover:bg-[#e64e16] disabled:bg-neutral-700 disabled:text-neutral-400 transition-all touch-manipulation"
-                  title={!isOnline ? t('offline.cardUnavailable') : undefined}
-                >
-                  {!isOnline ? t('offline.cardUnavailable') : t('payment.sendToClipTerminal')}
-                </button>
+                <div className="space-y-2">
+                  {/* Per-workstation reader binding — remembered on this device */}
+                  {clipDevices.length > 1 && (
+                    <div className="flex items-center gap-2">
+                      <label className="text-neutral-400 text-sm whitespace-nowrap">
+                        {t('payment.clipTerminalLabel')}
+                      </label>
+                      <select
+                        value={boundClipId}
+                        onChange={(e) => handleClipTerminalSelect(e.target.value)}
+                        className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg py-2 px-3 text-sm text-white focus:outline-none focus:border-[#FF5A1F]"
+                      >
+                        {clipDevices.map(device => (
+                          <option key={device.serial_number} value={device.serial_number}>
+                            {device.serial_number} · {isClipDeviceOnline(device) ? t('payment.clipOnline') : t('payment.clipOffline')}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  {clipDevices.length === 1 && !isClipDeviceOnline(clipDevices[0]) && (
+                    <p className="text-amber-400 text-xs text-center">
+                      {t('payment.clipTerminalLabel')} {clipDevices[0].serial_number} · {t('payment.clipOffline')}
+                    </p>
+                  )}
+                  <button
+                    onClick={() => handleTerminalPayment('clip')}
+                    disabled={isProcessing || !isOnline}
+                    className="w-full py-4 bg-[#FF5A1F] text-white text-xl font-bold rounded-lg hover:bg-[#e64e16] disabled:bg-neutral-700 disabled:text-neutral-400 transition-all touch-manipulation"
+                    title={!isOnline ? t('offline.cardUnavailable') : undefined}
+                  >
+                    {!isOnline ? t('offline.cardUnavailable') : t('payment.sendToClipTerminal')}
+                  </button>
+                </div>
               )}
               {/* External bank terminals (Inbursa, ...) — manual charge on the
                   device, DK records it. Needs an order id like MP/Clip. */}

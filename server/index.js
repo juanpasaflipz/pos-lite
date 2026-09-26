@@ -22,7 +22,7 @@ import { startSentinelSweep, stopSentinelSweep } from './sentinel/sweep.js';
 // Core
 import menuRoutes from './routes/menu.js';
 import ordersRoutes from './routes/orders.js';
-import paymentsRoutes, { mpOAuthCallback, mpWebhook } from './routes/payments.js';
+import paymentsRoutes, { mpOAuthCallback, mpWebhook, clipWebhook } from './routes/payments.js';
 import paymentGroupsRoutes from './routes/payment-groups.js';
 import externalTerminalsRoutes from './routes/external-terminals.js';
 import inventoryRoutes from './routes/inventory.js';
@@ -236,6 +236,7 @@ app.use('/api/kiosk', kioskRoutes);
 // Payment webhooks (before tenant middleware — cross-tenant)
 app.get('/api/payments/mp/callback', mpOAuthCallback);
 app.post('/api/payments/mp/webhook', mpWebhook);
+app.post('/api/payments/clip/webhook', clipWebhook);
 app.use('/webhooks/getnet', getnetWebhook);
 
 // Twilio inbound (WhatsApp voice ops — uses urlencoded body, no tenant)

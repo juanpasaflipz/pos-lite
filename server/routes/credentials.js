@@ -34,7 +34,12 @@ const SERVICE_SCHEMA = {
     fields: [
       { key: 'api_key', label: 'API Key', secret: false },
       { key: 'secret_key', label: 'Secret Key', secret: true },
-      { key: 'default_terminal_id', label: 'PinPad / Terminal ID', secret: false },
+      // Pre-selects a reader on workstations that never picked one; each
+      // POS still pairs its own reader from the payment screen.
+      { key: 'default_terminal_id', label: 'Número de serie del lector (opcional)', secret: false },
+      // Agreed rate incl. IVA, e.g. 4.176 — only used when Clip's API doesn't
+      // report a net amount, to estimate fees in reports.
+      { key: 'fee_percent', label: 'Comisión % con IVA (para reportes)', secret: false },
     ],
   },
   twilio: {

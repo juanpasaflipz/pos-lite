@@ -35,11 +35,15 @@ import { getTenantBySubdomain } from '../tenants.js';
 import { refundPayment as getnetRefundPayment } from '../services/getnet/payments.js';
 import {
   getClipAuthHeader,
-  getClipDefaultTerminalId,
+  getClipSettings,
   createPinPadPayment as clipCreatePinPadPayment,
-  getPaymentStatus as clipGetPaymentStatus,
+  getPinPadPayment as clipGetPinPadPayment,
   cancelPinPadPayment as clipCancelPinPadPayment,
+  listPinPadDevices as clipListPinPadDevices,
   mapStatus as mapClipStatus,
+  isKnownStatus as isKnownClipStatus,
+  summarizeClipPayment,
+  ClipApiError,
 } from '../services/clip.js';
 
 const router = Router();
@@ -51,6 +55,9 @@ const router = Router();
 // cached mapped status.
 const mpStatusCache = new Map(); // order_id -> { ts, mapped }
 const MP_STATUS_CACHE_MS = 5000;
+// Same throttle for Clip PinPad pulls (keyed by pinpad_request_id).
+const clipStatusCache = new Map(); // pinpad_request_id -> { ts, mapped }
+const CLIP_STATUS_CACHE_MS = 3000;
 
 // Rate limiting: 20 payment creation attempts per IP per 15 minutes
 const paymentLimiter = rateLimit({
@@ -1092,7 +1099,7 @@ function requirePro(req, res, next) {
   next();
 }
 
-async function markTerminalOrderPaid(orderId, tenantId = 'default', { mpOrder = null, mpAccessToken = null } = {}) {
+async function markTerminalOrderPaid(orderId, tenantId = 'default', { mpOrder = null, mpAccessToken = null, clipPayment = null } = {}) {
   const completed = await get(
     `UPDATE orders
      SET payment_status = 'paid',
@@ -1129,6 +1136,13 @@ async function markTerminalOrderPaid(orderId, tenantId = 'default', { mpOrder = 
       console.warn('MP order_payments insert failed (non-fatal):', feeErr.message);
     }
   }
+  if (clipPayment) {
+    try {
+      await recordClipTerminalPayment(orderId, tenantId, clipPayment);
+    } catch (feeErr) {
+      console.warn('Clip order_payments insert failed (non-fatal):', feeErr.message);
+    }
+  }
 
   let invoice_token = null;
   try {
@@ -1163,8 +1177,25 @@ async function markTerminalOrderPaid(orderId, tenantId = 'default', { mpOrder = 
  */
 export async function findActiveTerminalLock(
   tenantId,
-  { excludeOrderId = null, terminalId = null } = {}
+  { excludeOrderId = null, terminalId = null, clipTerminalId = null } = {}
 ) {
+  // Clip readers are addressed by serial number and only ever take
+  // order-level charges (no Clip splits), so the lock is just "another order
+  // is waiting on this same reader".
+  if (clipTerminalId) {
+    const clipRows = await adminSql`
+      SELECT order_number, source, id
+      FROM orders
+      WHERE tenant_id = ${tenantId}
+        AND payment_status = 'pending_terminal'
+        AND clip_terminal_id = ${clipTerminalId}
+        AND created_at > NOW() - INTERVAL '3 minutes'
+        AND id != ${excludeOrderId ?? -1}
+      ORDER BY created_at DESC LIMIT 1
+    `;
+    return clipRows[0] || null;
+  }
+
   const orderRows = terminalId
     ? (excludeOrderId
         ? await adminSql`
@@ -1286,6 +1317,115 @@ export async function recordMpTerminalPayment(orderId, tenantId, mpOrder, mpAcce
   );
 }
 
+/**
+ * Idempotently insert an order_payments row for a completed Clip PinPad
+ * payment. Same shape as the MP row so FeesTab can read both. Any tip that
+ * exceeds what the cashier entered is folded back onto orders.tip.
+ */
+export async function recordClipTerminalPayment(orderId, tenantId, clipPayment) {
+  const existing = await get(
+    `SELECT id FROM order_payments WHERE order_id = $1 AND payment_method = 'clip_terminal'`,
+    [orderId]
+  );
+  if (existing) return;
+
+  const orderRow = await get('SELECT total, tip FROM orders WHERE id = $1', [orderId]);
+  const { fee_percent } = await getClipSettings(tenantId);
+  const summary = summarizeClipPayment(clipPayment, {
+    orderTotal: Number(orderRow?.total || 0),
+    feePercent: fee_percent,
+  });
+
+  if (summary.tip > Number(orderRow?.tip || 0)) {
+    await run('UPDATE orders SET tip = $1 WHERE id = $2', [summary.tip, orderId]);
+  }
+
+  await run(
+    `INSERT INTO order_payments
+       (tenant_id, order_id, payment_method, amount, tip, payment_intent_id, status, processor_fee, processor_net, processor_response)
+     VALUES ($1, $2, 'clip_terminal', $3, $4, $5, 'paid', $6, $7, $8)`,
+    [
+      tenantId,
+      orderId,
+      summary.bill,
+      summary.tip,
+      clipPayment?.pinpad_request_id ?? null,
+      summary.fee,
+      summary.net,
+      JSON.stringify({ fee_source: summary.feeSource, card: summary.card, clip: clipPayment }),
+    ]
+  );
+}
+
+/**
+ * Read a Clip PinPad intent and settle the order accordingly. Shared by the
+ * POS status poll, the cancel race-guard and the webhook.
+ *
+ * Must run inside the order's tenant context (RLS). Returns the mapped state
+ * ('paid' | 'failed' | 'pending') or null when Clip isn't reachable/configured.
+ */
+async function syncClipOrder(order, tenantId, { useCache = true } = {}) {
+  const requestId = order.clip_payment_id;
+  if (!requestId) return null;
+
+  if (useCache) {
+    const cached = clipStatusCache.get(requestId);
+    if (cached && Date.now() - cached.ts < CLIP_STATUS_CACHE_MS) return cached.mapped;
+  }
+
+  const authHeader = await getClipAuthHeader(tenantId);
+  if (!authHeader) return null;
+
+  const payment = await clipGetPinPadPayment(authHeader, requestId);
+  // 404: Clip no longer knows the intent (deleted before pickup). Nothing
+  // was charged, so it's safe to treat as failed.
+  const mapped = payment ? mapClipStatus(payment) : 'failed';
+  if (payment && !isKnownClipStatus(payment)) {
+    console.warn(`Clip: undocumented PinPad status "${payment.status}" for ${requestId} — treating as pending`);
+  }
+
+  if (mapped === 'paid') {
+    await markTerminalOrderPaid(order.id, tenantId, { clipPayment: payment });
+    clipStatusCache.delete(requestId);
+  } else if (mapped === 'failed') {
+    await run(
+      `UPDATE orders SET payment_status = 'failed'
+        WHERE id = $1 AND clip_payment_id = $2 AND payment_status = 'pending_terminal'`,
+      [order.id, requestId]
+    );
+    clipStatusCache.delete(requestId);
+  } else {
+    clipStatusCache.set(requestId, { ts: Date.now(), mapped });
+  }
+  return mapped;
+}
+
+/** Map a Clip API failure to a cashier-readable response. */
+function clipErrorResponse(err, fallback) {
+  if (err instanceof ClipApiError) {
+    if (err.status === 401 || err.status === 403) {
+      return { status: 400, payload: { error: 'Credenciales de Clip inválidas. Revísalas en Integraciones.', code: 'clip_auth' } };
+    }
+    // Both mean the reader can't take a new intent right now. Per Clip's
+    // Health Check doc, ERR10_04 also fires while the reader is mid-charge
+    // (tip screen → card processing), not only when it's off or the app is
+    // closed.
+    if (err.code === 'PINPAD_TERMINAL_TIMEOUT_EXCEPTION' || err.code === 'ERR10_04') {
+      return {
+        status: 409,
+        payload: {
+          error: 'La terminal Clip no está disponible: puede estar apagada, sin WiFi, con la app Clip PinPad cerrada o terminando otro cobro.',
+          code: 'clip_terminal_offline',
+        },
+      };
+    }
+    if (err.status === 400) {
+      return { status: 400, payload: { error: err.clipMessage || fallback, code: err.code || 'clip_rejected' } };
+    }
+  }
+  return { status: 502, payload: { error: fallback, code: 'clip_unavailable' } };
+}
+
 // GET /api/payments/mp/connect — initiate MP OAuth flow
 router.get('/mp/connect', requireAuth('pos_access'), requirePro, async (req, res) => {
   const mpCreds = await getServiceCredentials(req.tenant.id, 'mercadopago', {
@@ -1396,9 +1536,16 @@ router.post('/mp/charge', requireAuth('pos_access'), requirePro, async (req, res
     const { order_id, terminal_id, tip = 0 } = req.body;
     if (!order_id) return res.status(400).json({ error: 'Missing order_id' });
 
-    const order = await get('SELECT id, total, order_number, payment_status FROM orders WHERE id = $1', [order_id]);
+    const order = await get('SELECT id, total, order_number, payment_status, clip_payment_id FROM orders WHERE id = $1', [order_id]);
     if (!order) return res.status(404).json({ error: 'Order not found' });
     if (order.payment_status === 'paid') return res.status(400).json({ error: 'Order is already paid' });
+    if (order.payment_status === 'pending_terminal' && order.clip_payment_id) {
+      return res.status(409).json({
+        error: 'Este pedido está esperando en la terminal Clip. Cancélalo ahí antes de cobrar con Mercado Pago.',
+        code: 'other_terminal_pending',
+        provider: 'clip',
+      });
+    }
 
     const tenant = await getTenant(req.tenant.id);
     if (!tenant?.mp_access_token) {
@@ -1458,7 +1605,10 @@ router.post('/mp/charge', requireAuth('pos_access'), requirePro, async (req, res
     }
 
     await run(
-      `UPDATE orders SET mp_order_id = $1, payment_status = 'pending_terminal', tip = $2, mp_terminal_id = $3 WHERE id = $4`,
+      `UPDATE orders
+          SET mp_order_id = $1, payment_status = 'pending_terminal', tip = $2, mp_terminal_id = $3,
+              clip_payment_id = NULL, clip_terminal_id = NULL
+        WHERE id = $4`,
       [mpOrder.id, tipAmount, termId, order.id]
     );
 
@@ -1546,15 +1696,23 @@ router.get('/mp/status', requireAuth('pos_access'), async (req, res) => {
 });
 
 // ==================== Clip PinPad Terminal ====================
+//
+// Clip runs side by side with MP Point: the cashier picks the provider per
+// charge and can switch mid-charge (cancel on one, send to the other). The
+// invariant that keeps that safe: an order is only ever pending on ONE
+// provider. Each charge route refuses while the other provider's intent is
+// live, and clears the other provider's stale ids when it takes over, so
+// reports (which classify by mp_order_id / clip_payment_id) never see both.
 
 // GET /api/payments/clip/status — tenant Clip configuration status
 router.get('/clip/status', requireAuth('pos_access'), async (req, res) => {
   try {
     const authHeader = await getClipAuthHeader(req.tenant.id);
-    const terminalId = await getClipDefaultTerminalId(req.tenant.id);
+    const settings = await getClipSettings(req.tenant.id);
     res.json({
       configured: !!authHeader,
-      default_terminal_id: terminalId,
+      default_terminal_id: settings.default_terminal_id,
+      fee_percent: settings.fee_percent,
     });
   } catch (error) {
     console.error('Clip status error:', error);
@@ -1562,53 +1720,117 @@ router.get('/clip/status', requireAuth('pos_access'), async (req, res) => {
   }
 });
 
-// POST /api/payments/clip/charge — create a PinPad payment intent
+// GET /api/payments/clip/devices — the merchant's PinPad readers + connectivity
+router.get('/clip/devices', requireAuth('pos_access'), async (req, res) => {
+  try {
+    const authHeader = await getClipAuthHeader(req.tenant.id);
+    if (!authHeader) return res.status(400).json({ error: 'Clip not configured', code: 'clip_not_configured' });
+    const devices = await clipListPinPadDevices(authHeader);
+    res.json({ devices });
+  } catch (error) {
+    console.error('Clip devices error:', error.message);
+    const { status, payload } = clipErrorResponse(error, 'No se pudo obtener la lista de terminales Clip');
+    res.status(status).json(payload);
+  }
+});
+
+// POST /api/payments/clip/charge — push the order total (+ tip) to a reader
 router.post('/clip/charge', paymentLimiter, requireAuth('pos_access'), async (req, res) => {
   try {
-    const { order_id, terminal_id } = req.body;
+    const { order_id, terminal_id, tip = 0 } = req.body;
     if (!order_id) return res.status(400).json({ error: 'Missing order_id' });
 
     const order = await get(
-      'SELECT id, total, order_number, payment_status FROM orders WHERE id = $1',
+      `SELECT id, total, order_number, payment_status, mp_order_id, clip_payment_id, clip_terminal_id
+         FROM orders WHERE id = $1`,
       [order_id]
     );
     if (!order) return res.status(404).json({ error: 'Order not found' });
     if (order.payment_status === 'paid') {
       return res.status(400).json({ error: 'Order is already paid' });
     }
+    if (order.payment_status === 'pending_terminal' && order.mp_order_id) {
+      return res.status(409).json({
+        error: 'Este pedido está esperando en la terminal de Mercado Pago. Cancélalo ahí antes de cobrar con Clip.',
+        code: 'other_terminal_pending',
+        provider: 'mp',
+      });
+    }
 
     const authHeader = await getClipAuthHeader(req.tenant.id);
     if (!authHeader) {
-      return res.status(400).json({ error: 'Clip not configured' });
+      return res.status(400).json({ error: 'Clip not configured', code: 'clip_not_configured' });
     }
 
-    const termId = terminal_id || (await getClipDefaultTerminalId(req.tenant.id));
-    if (!termId) return res.status(400).json({ error: 'No Clip terminal selected' });
+    const termId = typeof terminal_id === 'string' ? terminal_id.trim() : '';
+    if (!termId) return res.status(400).json({ error: 'Pair this workstation to a terminal first', code: 'terminal_unpaired' });
 
-    const externalRef = `${req.tenant.id}-${order.id}`;
-    const { payment_id } = await clipCreatePinPadPayment(authHeader, {
-      amount: Number(order.total),
-      externalRef,
-      terminalId: termId,
+    const lock = await findActiveTerminalLock(req.tenant.id, {
+      excludeOrderId: order.id,
+      clipTerminalId: termId,
+    });
+    if (lock) return res.status(409).json(terminalBusyResponse(lock));
+
+    // Re-send on an order already waiting on Clip: settle or retire the old
+    // intent first so the customer can never be charged twice.
+    if (order.payment_status === 'pending_terminal' && order.clip_payment_id) {
+      const state = await syncClipOrder(order, req.tenant.id, { useCache: false });
+      if (state === 'paid') return res.json({ success: true, paid: true });
+      if (state !== 'failed') {
+        const result = await clipCancelPinPadPayment(authHeader, order.clip_payment_id);
+        if (!result.cancelled) {
+          const recheck = await syncClipOrder(order, req.tenant.id, { useCache: false });
+          if (recheck === 'paid') return res.json({ success: true, paid: true });
+          if (recheck !== 'failed') {
+            return res.status(409).json({
+              error: 'La terminal Clip ya tomó el cobro anterior. Termínalo o cancélalo en la terminal.',
+              code: 'clip_in_progress',
+            });
+          }
+        }
+      }
+    }
+
+    const tipAmount = Number.isFinite(Number(tip)) && Number(tip) > 0 ? Number(tip) : 0;
+    const billAmount = Number(order.total);
+    if (!(billAmount > 0)) return res.status(400).json({ error: 'El total debe ser mayor a $0', code: 'amount_invalid' });
+
+    // Clip notifies this URL on status changes (unsigned — the handler only
+    // uses the id to re-read the payment). Clip can't reach http/localhost.
+    const origin = `${req.protocol}://${req.get('host')}`;
+    const webhookUrl = origin.startsWith('https://') ? `${origin}/api/payments/clip/webhook` : undefined;
+
+    const { pinpad_request_id } = await clipCreatePinPadPayment(authHeader, {
+      amount: billAmount,
+      tipAmount,
+      reference: `${req.tenant.id}-${order.id}-${Date.now()}`,
+      serialNumber: termId,
+      webhookUrl,
     });
 
     await run(
       `UPDATE orders
          SET clip_payment_id = $1,
              clip_terminal_id = $2,
-             payment_status = 'pending_terminal'
-       WHERE id = $3`,
-      [payment_id, termId, order.id]
+             payment_status = 'pending_terminal',
+             tip = $3,
+             mp_order_id = NULL,
+             mp_terminal_id = NULL
+       WHERE id = $4`,
+      [pinpad_request_id, termId, tipAmount, order.id]
     );
 
-    res.json({ success: true, clip_payment_id: payment_id });
+    res.json({ success: true, clip_payment_id: pinpad_request_id, terminal_id: termId });
   } catch (error) {
-    console.error('Clip charge error:', error);
-    res.status(500).json({ error: 'Failed to create Clip terminal payment' });
+    console.error('Clip charge error:', error.message);
+    const { status, payload } = clipErrorResponse(error, 'No se pudo enviar el cobro a la terminal Clip');
+    res.status(status).json(payload);
   }
 });
 
-// POST /api/payments/clip/cancel — cancel a pending PinPad payment
+// POST /api/payments/clip/cancel — withdraw a pending PinPad intent.
+// Only resets the order to unpaid when Clip confirms nothing was charged;
+// otherwise the order stays pending and the poll/webhook settles it.
 router.post('/clip/cancel', requireAuth('pos_access'), async (req, res) => {
   try {
     const { order_id } = req.body;
@@ -1619,30 +1841,55 @@ router.post('/clip/cancel', requireAuth('pos_access'), async (req, res) => {
       [order_id]
     );
     if (!order) return res.status(404).json({ error: 'Order not found' });
-    if (order.payment_status !== 'pending_terminal') {
+    if (order.payment_status === 'paid') {
+      return res.json({ success: true, cancelled: false, paid: true });
+    }
+    if (!order.clip_payment_id || !['pending_terminal', 'failed'].includes(order.payment_status)) {
       return res.status(400).json({ error: 'Order is not pending terminal payment' });
     }
 
-    const authHeader = await getClipAuthHeader(req.tenant.id);
-    if (authHeader && order.clip_payment_id) {
-      try {
-        await clipCancelPinPadPayment(authHeader, order.clip_payment_id);
-      } catch (cancelErr) {
-        console.warn('Clip cancel warning:', cancelErr.message);
-      }
-    }
-
-    await run(
+    const releaseOrder = () => run(
       `UPDATE orders
-         SET payment_status = 'unpaid', clip_payment_id = NULL, clip_terminal_id = NULL
-       WHERE id = $1`,
-      [order.id]
+          SET payment_status = 'unpaid', clip_payment_id = NULL, clip_terminal_id = NULL
+        WHERE id = $1 AND clip_payment_id = $2 AND payment_status IN ('pending_terminal', 'failed')`,
+      [order.id, order.clip_payment_id]
     );
 
-    res.json({ success: true });
+    const authHeader = await getClipAuthHeader(req.tenant.id);
+    if (!authHeader) {
+      return res.status(400).json({ error: 'Clip not configured', code: 'clip_not_configured' });
+    }
+
+    // Race guard: the card may have cleared just as the cashier tapped cancel.
+    const before = await syncClipOrder(order, req.tenant.id, { useCache: false });
+    if (before === 'paid') return res.json({ success: true, cancelled: false, paid: true });
+    if (before === 'failed') {
+      await releaseOrder();
+      return res.json({ success: true, cancelled: true });
+    }
+
+    const result = await clipCancelPinPadPayment(authHeader, order.clip_payment_id);
+    if (result.cancelled) {
+      clipStatusCache.delete(order.clip_payment_id);
+      await releaseOrder();
+      return res.json({ success: true, cancelled: true });
+    }
+
+    // Clip refused: the reader already has the intent. Re-read once more.
+    const after = await syncClipOrder(order, req.tenant.id, { useCache: false });
+    if (after === 'paid') return res.json({ success: true, cancelled: false, paid: true });
+    if (after === 'failed') {
+      await releaseOrder();
+      return res.json({ success: true, cancelled: true });
+    }
+    return res.status(409).json({
+      error: 'La terminal Clip ya tomó el cobro. Cancélalo en la terminal (o cierra la app Clip PinPad) y vuelve a intentar.',
+      code: 'clip_in_progress',
+    });
   } catch (error) {
-    console.error('Clip cancel error:', error);
-    res.status(500).json({ error: 'Failed to cancel Clip terminal payment' });
+    console.error('Clip cancel error:', error.message);
+    const { status, payload } = clipErrorResponse(error, 'No se pudo cancelar el cobro en Clip');
+    res.status(status).json(payload);
   }
 });
 
@@ -2032,39 +2279,16 @@ router.get('/:order_id', requireAuth(), async (req, res) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    // Clip PinPad live status pull: webhooks aren't required for correctness.
+    // Clip PinPad live status pull: the webhook is an accelerator, the poll
+    // is what guarantees correctness. Throttled per intent in syncClipOrder.
     if (order.payment_status === 'pending_terminal' && order.clip_payment_id && req.tenant?.id) {
       try {
-        const authHeader = await getClipAuthHeader(req.tenant.id);
-        if (authHeader) {
-          const result = await clipGetPaymentStatus(authHeader, order.clip_payment_id);
-          if (result) {
-            const mapped = mapClipStatus(result.status);
-            if (mapped === 'paid') {
-              // Guarded transition (mirrors markTerminalOrderPaid): two
-              // concurrent polls must not double-run the side effects.
-              const completed = await get(
-                `UPDATE orders SET payment_status = 'paid', payment_method = 'card', paid_at = COALESCE(paid_at, NOW())
-                 WHERE id = $1 AND payment_status IS DISTINCT FROM 'paid'
-                 RETURNING id`,
-                [order.id]
-              );
-              if (completed) {
-                await deductInventoryForOrder(order.id);
-                // Same auto customer ticket every other completion path gets —
-                // Clip card payments were the one paid path that never printed.
-                await enqueueCustomerTicket(order.id);
-              }
-              order.payment_status = 'paid';
-              order.payment_method = 'card';
-            } else if (mapped === 'failed') {
-              await run(
-                `UPDATE orders SET payment_status = 'failed' WHERE id = $1`,
-                [order.id]
-              );
-              order.payment_status = 'failed';
-            }
-          }
+        const mapped = await syncClipOrder(order, req.tenant.id);
+        if (mapped === 'paid') {
+          order.payment_status = 'paid';
+          order.payment_method = 'card';
+        } else if (mapped === 'failed') {
+          order.payment_status = 'failed';
         }
       } catch (clipErr) {
         console.warn('Clip live status pull failed:', clipErr.message);
@@ -2315,6 +2539,34 @@ export async function mpWebhook(req, res) {
     }
   } catch (error) {
     console.error('MP webhook processing error:', error);
+  }
+}
+
+// ==================== Clip Webhook (mounted before tenant middleware) ====================
+//
+// Clip's PinPad webhook is `{ id, origin, event_type }` with no signature, so
+// the body is only a hint: we look the id up among OUR pending orders and
+// re-read the payment from Clip with that tenant's credentials. A forged call
+// can at most make us re-check a real pending intent early.
+export async function clipWebhook(req, res) {
+  res.sendStatus(200);
+
+  try {
+    const id = req.body?.id;
+    if (typeof id !== 'string' || !id.startsWith('pinpad-') || id.length > 100) return;
+
+    const rows = await adminSql`
+      SELECT id, tenant_id, clip_payment_id, payment_status
+      FROM orders
+      WHERE clip_payment_id = ${id}
+      LIMIT 1
+    `;
+    const ord = rows[0];
+    if (!ord || ord.payment_status !== 'pending_terminal') return;
+
+    await withTenant(ord.tenant_id, () => syncClipOrder(ord, ord.tenant_id, { useCache: false }));
+  } catch (error) {
+    console.error('Clip webhook processing error:', error.message);
   }
 }
 

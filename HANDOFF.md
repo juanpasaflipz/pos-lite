@@ -7,6 +7,57 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-09-26 — Claude Code — **Clip PinPad integration made real + MP⇄Clip switching**
+
+Juanberto's is adding a **Clip Ultra** alongside Mercado Pago Point. The old
+Clip code was written before Clip's docs were read and was wrong on the wire
+(amount in cents → would have asked the reader for 100× the total; wrong field
+names; status read from a non-PinPad host). Rewritten against
+developer.clip.mx PinPad API. **No migration** — reuses `orders.clip_payment_id`
+(now holds `pinpad_request_id`) and `orders.clip_terminal_id` (reader serial).
+
+- `server/services/clip.js` — rewritten. `ClipApiError` carries Clip's `code`.
+  `cancelPinPadPayment` returns `{cancelled:false}` on Clip's 400 (reader already
+  took the intent) instead of throwing or pretending success.
+- `server/routes/payments.js`:
+  - `/clip/charge` now needs an explicit `terminal_id` (reader serial) →
+    `terminal_unpaired` like MP; takes `tip`; uses `findActiveTerminalLock`
+    (new `clipTerminalId` option); sends `webhook_url` when https.
+  - `/clip/cancel` only resets to unpaid when Clip confirms nothing was
+    charged; otherwise 409 `clip_in_progress` and the order stays pending.
+  - Paid transition now goes through `markTerminalOrderPaid` (was a hand-rolled
+    subset: no `status='preparing'`, no invoice token) + new
+    `recordClipTerminalPayment` → `order_payments` row `payment_method='clip_terminal'`.
+  - **One-provider invariant:** `/mp/charge` and `/clip/charge` 409
+    `other_terminal_pending` while the other provider's intent is live, and
+    each clears the other's ids when it takes over (reports classify by
+    `mp_order_id` first — a stale one would mislabel a Clip sale).
+  - `clipWebhook` mounted pre-tenant at `/api/payments/clip/webhook`. Clip's
+    webhook is unsigned; handler only uses `id` to re-read from Clip.
+- POS `PaymentModal`: per-workstation Clip reader picker (`dk_clip_terminal_id`,
+  `src/lib/clipTerminal.ts`) with online/offline from `/clip/devices`; while a
+  charge is pending there is always a "Cambiar a Clip / Mercado Pago" button
+  (cancel-then-send, aborts if the cancel can't be confirmed).
+- Credentials: Clip gained `fee_percent` (used only when Clip returns no
+  `net_amount`, which its own docs example does). FeesTab includes Clip.
+- Tests: `tests/clip-terminal.test.ts` (19, mocked fetch, no DB needed).
+  Full DB suite NOT run — this clone has no `.env.test`.
+
+**Not covered:** Clip on splits / Cobrar Juntas / kiosk; Clip refunds (no API —
+done in the Clip app); Sentinel `unstick_terminal_payment` still MP-only (it
+aborts on Clip orders, which is safe). The MP cancel route still marks unpaid
+even if MP's cancel call fails — pre-existing, worth the same treatment.
+
+**Blocked on the owner before first live charge:** Clip KYC, production API
+key+secret from dashboard.clip.mx → Developers, and email sdk@payclip.com with
+the Ultra's serial to install the Clip PinPad APK. PinPad API is production-only
+(no sandbox) — first test with small real charges and watch logs for
+`undocumented PinPad status`.
+
+Not committed / not pushed.
+
+---
+
 ## 2026-09-03 — Claude Code — **Open-amount POS lines (migration 0109)**
 
 Cashier can now type any figure and push it at the card terminal. Rings as an

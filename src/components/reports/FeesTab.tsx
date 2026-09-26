@@ -12,6 +12,7 @@ interface FeesTabProps {
 
 const PROCESSOR_LABELS: Record<string, string> = {
   mp_terminal: 'Mercado Pago Terminal',
+  clip_terminal: 'Clip Terminal',
   stripe: 'Stripe',
 };
 

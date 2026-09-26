@@ -1134,7 +1134,9 @@ router.get('/payment-fees', requireAuth('view_reports'), async (req, res) => {
       }
     }
 
-    // 2) MP Terminal (and any future processor) — fees stored locally in order_payments.
+    // 2) MP Terminal + Clip PinPad — fees stored locally in order_payments.
+    // Clip rows carry an estimated fee (tenant rate) when Clip's API gives no
+    // net amount, and a NULL fee when no rate is configured.
     const localPayments = await all(`
       SELECT payment_method,
              COALESCE(amount, 0)         AS amount,
@@ -1145,7 +1147,7 @@ router.get('/payment-fees', requireAuth('view_reports'), async (req, res) => {
       FROM order_payments
       WHERE (created_at AT TIME ZONE $3)::date BETWEEN $1 AND $2
         AND status = 'paid'
-        AND payment_method = 'mp_terminal'
+        AND payment_method IN ('mp_terminal', 'clip_terminal')
       ORDER BY created_at ASC
     `, [startDate, endDate, tz]);
 

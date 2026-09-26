@@ -3335,7 +3335,7 @@ export async function mpCharge(order_id: number, terminal_id?: string, tip: numb
   });
 }
 
-export async function mpCancelCharge(order_id: number, terminal_id?: string): Promise<{ success: boolean }> {
+export async function mpCancelCharge(order_id: number, terminal_id?: string): Promise<{ success: boolean; cancelled?: boolean; paid?: boolean }> {
   return apiRequest('/payments/mp/cancel', {
     method: 'POST',
     body: JSON.stringify({ order_id, terminal_id }),
@@ -3426,18 +3426,38 @@ export async function getPaymentGroup(payment_group_id: number): Promise<Payment
 
 /* ==================== Clip PinPad Terminal ==================== */
 
-export async function getClipStatus(): Promise<{ configured: boolean; default_terminal_id: string | null }> {
+export async function getClipStatus(): Promise<{ configured: boolean; default_terminal_id: string | null; fee_percent: number | null }> {
   return apiRequest('/payments/clip/status');
 }
 
-export async function clipCharge(order_id: number, terminal_id?: string): Promise<{ success: boolean; clip_payment_id: string }> {
+export interface ClipDevice {
+  serial_number: string;
+  /** active = online now; inactive/expired = no heartbeat; unknown = PinPad feature off */
+  status: 'active' | 'inactive' | 'expired' | 'unknown' | string;
+  updated_at: string | null;
+}
+
+export async function getClipDevices(): Promise<{ devices: ClipDevice[] }> {
+  return apiRequest('/payments/clip/devices');
+}
+
+export async function clipCharge(
+  order_id: number,
+  terminal_id: string | undefined,
+  tip: number = 0,
+): Promise<{ success: boolean; clip_payment_id?: string; terminal_id?: string; paid?: boolean }> {
   return apiRequest('/payments/clip/charge', {
     method: 'POST',
-    body: JSON.stringify({ order_id, terminal_id }),
+    body: JSON.stringify({ order_id, terminal_id, tip }),
   });
 }
 
-export async function clipCancelCharge(order_id: number): Promise<{ success: boolean }> {
+/**
+ * Withdraw a pending Clip charge. `paid: true` means the card cleared before
+ * the cancel landed; a 409 `clip_in_progress` means the reader already has
+ * the charge and it must be cancelled on the device.
+ */
+export async function clipCancelCharge(order_id: number): Promise<{ success: boolean; cancelled?: boolean; paid?: boolean }> {
   return apiRequest('/payments/clip/cancel', {
     method: 'POST',
     body: JSON.stringify({ order_id }),
