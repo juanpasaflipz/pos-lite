@@ -2,6 +2,17 @@ import { noteKioskServerVersion } from './kioskUpdate';
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) || '';
 
+/**
+ * Resolve a stored image URL for <img src>. Uploaded menu photos are saved as
+ * server-relative paths (`/uploads/<tenant>/...`); in the Android APK the page
+ * origin is the bundled `https://localhost`, so they must be anchored to the
+ * API host like every fetch. Absolute and data: URLs pass through untouched.
+ */
+export function assetUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  return url.startsWith('/') && !url.startsWith('//') ? `${API_BASE}${url}` : url;
+}
+
 interface BindResponse {
   tenant_id: string;
   tenant_name: string;

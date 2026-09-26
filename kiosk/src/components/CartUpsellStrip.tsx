@@ -5,7 +5,7 @@ import { useKioskCart } from '../context/KioskCartContext';
 import { useKioskCustomer } from '../context/KioskCustomerContext';
 import { useKioskSuggestions } from '../context/KioskSuggestionsContext';
 import KioskModifierModal from './KioskModifierModal';
-import type { KioskMenuItem, KioskModifier, SuggestionItem } from '../lib/kioskApi';
+import { assetUrl, type KioskMenuItem, type KioskModifier, type SuggestionItem } from '../lib/kioskApi';
 
 import { mxn as money } from '../lib/format';
 const MAX_CARDS = 6;
@@ -104,7 +104,7 @@ const CartUpsellStrip: React.FC = () => {
             >
               <div className="h-24 w-full bg-gradient-to-br from-brand-600 to-brand-900 flex items-center justify-center overflow-hidden">
                 {s.image_url ? (
-                  <img src={s.image_url} alt={s.name} className="h-full w-full object-cover" />
+                  <img src={assetUrl(s.image_url) ?? undefined} alt={s.name} className="h-full w-full object-cover" />
                 ) : (
                   <span className="text-3xl font-black text-white/80">
                     {s.name.trim().charAt(0).toUpperCase() || '·'}

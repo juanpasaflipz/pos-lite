@@ -9,6 +9,7 @@ import { useKioskSuggestions } from '../context/KioskSuggestionsContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
 import {
   fetchMenu,
+  assetUrl,
   localizeMenuItem,
   logSuggestionEvents,
   type KioskMenuCategory,
@@ -316,7 +317,7 @@ const KioskMenuScreen: React.FC = () => {
                   <div className="aspect-[4/3] w-full bg-gradient-to-br from-neutral-800 to-neutral-900 flex items-center justify-center overflow-hidden">
                     {item.image_url ? (
                       <img
-                        src={item.image_url}
+                        src={assetUrl(item.image_url) ?? undefined}
                         alt={localizeMenuItem(item, i18n.language).name}
                         loading="lazy"
                         className="h-full w-full object-cover"

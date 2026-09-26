@@ -1,10 +1,11 @@
 import React, { useCallback, useState } from 'react';
 import { Check, Flame, Plus, RefreshCw, Sparkles, Store } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type {
-  KioskSuggestions,
-  RepeatOrderSuggestion,
-  SuggestionItem,
+import {
+  assetUrl,
+  type KioskSuggestions,
+  type RepeatOrderSuggestion,
+  type SuggestionItem,
 } from '../lib/kioskApi';
 
 import { mxn as money } from '../lib/format';
@@ -24,7 +25,7 @@ const Thumb: React.FC<{ url: string | null; name: string; className?: string }> 
   className = '',
 }) => {
   if (url) {
-    return <img src={url} alt={name} className={`object-cover ${className}`} />;
+    return <img src={assetUrl(url) ?? undefined} alt={name} className={`object-cover ${className}`} />;
   }
   return (
     <div
