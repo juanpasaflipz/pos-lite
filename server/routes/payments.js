@@ -1312,7 +1312,9 @@ export async function recordMpTerminalPayment(orderId, tenantId, mpOrder, mpAcce
       mpOrder?.id ?? null,
       fees.fee,
       fees.net,
-      fees.raw ? JSON.stringify(fees.raw) : null,
+      // Pass the object: run() binds it as jsonb and postgres.js serializes it.
+      // JSON.stringify here double-encoded every row into a JSON string.
+      fees.raw ?? null,
     ]
   );
 }
@@ -1352,7 +1354,7 @@ export async function recordClipTerminalPayment(orderId, tenantId, clipPayment) 
       clipPayment?.pinpad_request_id ?? null,
       summary.fee,
       summary.net,
-      JSON.stringify({ fee_source: summary.feeSource, card: summary.card, clip: clipPayment }),
+      { fee_source: summary.feeSource, card: summary.card, clip: clipPayment },
     ]
   );
 }
@@ -2252,7 +2254,7 @@ export async function settlePaymentGroupPaid(groupId, tenantId, { mpOrder = null
             mpOrder.id,
             feeCredit,
             netCredit,
-            o.id === largest.id && fees.raw ? JSON.stringify(fees.raw) : null,
+            o.id === largest.id && fees.raw ? fees.raw : null,
           ]
         );
       }

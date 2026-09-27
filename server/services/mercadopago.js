@@ -331,9 +331,14 @@ export async function extractMpFees(accessToken, mpOrder) {
     return { fee, net: amount - fee, raw: payment };
   }
 
-  if (payment.id && accessToken) {
+  // Orders-API payments carry an Orders id (`PAY01…`) that /v1/payments
+  // 404s on; the classic numeric payment id that holds fee_details is in
+  // `reference_id`. Using `payment.id` here left processor_fee NULL on every
+  // Point payment since the Orders API migration (verified 2026-09-26).
+  const lookupId = payment.reference_id || payment.id;
+  if (lookupId && accessToken) {
     try {
-      const detail = await getPayment(accessToken, payment.id);
+      const detail = await getPayment(accessToken, lookupId);
       const fee = sumFees(detail?.fee_details);
       const amount = Number(detail?.transaction_amount ?? payment.amount ?? 0);
       const net =
