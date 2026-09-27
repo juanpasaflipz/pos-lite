@@ -39,6 +39,7 @@ import {
   getPointOrder,
   getTerminals as mpGetTerminals,
   mapPointOrderStatus,
+  cancelPointOrder,
   MP_POINT_MIN_AMOUNT,
   parseMpError,
 } from '../services/mercadopago.js';
@@ -588,6 +589,76 @@ async function markKioskOrderPaid(orderId, tenantId) {
   await awardKioskOrderStamps(orderId, tenantId);
 
   return invoiceToken;
+}
+
+/**
+ * Settle or withdraw a kiosk order's card charge before a cashier claim acts
+ * on the order.
+ *
+ * Why: a pay-first kiosk order waiting on the MP terminal is still
+ * status='draft_kiosk', so it shows in the cashier's kiosk-held banner as an
+ * ordinary "pay at register" draft. Claiming it used to delete the row while
+ * the charge was still live on the terminal; the customer tapped seconds
+ * later and MP approved a payment for an order that no longer existed (orphans
+ * on 2026-08-03, 09-01, 09-05). Claims must now go through here first.
+ *
+ * @returns {Promise<'none'|'paid'|'withdrawn'|'in_progress'>}
+ *   none        — no terminal charge outstanding; claim as before
+ *   paid        — the card already cleared; order settled here, do NOT re-ring
+ *   withdrawn   — charge cancelled on the terminal (or already dead); safe to claim
+ *   in_progress — couldn't confirm the charge is dead; refuse the claim
+ */
+export async function resolveKioskTerminalCharge(orderId, tenantId) {
+  const [order] = await adminSql`
+    SELECT id, payment_status, mp_order_id, mp_terminal_id
+    FROM orders
+    WHERE tenant_id = ${tenantId} AND id = ${orderId}
+  `;
+  if (!order || order.payment_status !== 'pending_terminal' || !order.mp_order_id) return 'none';
+
+  const tenant = await getTenant(tenantId);
+  // Can't ask MP → can't prove the charge is dead.
+  if (!tenant?.mp_access_token) return 'in_progress';
+  const accessToken = await ensureFreshToken(tenant, adminSql);
+  const terminal = order.mp_terminal_id || tenant.mp_default_terminal_id;
+
+  let mpOrder = await getPointOrder(accessToken, order.mp_order_id, terminal);
+  let state = mapPointOrderStatus(mpOrder);
+
+  if (state === 'pending') {
+    let cancelled = false;
+    try {
+      await cancelPointOrder(accessToken, terminal, order.mp_order_id);
+      cancelled = true;
+    } catch (err) {
+      // MP refuses to cancel an intent the terminal is already processing.
+      console.warn('[kiosk/claim] MP cancel refused:', err.message);
+    }
+    // Re-read either way: the card may have cleared between the two calls.
+    mpOrder = await getPointOrder(accessToken, order.mp_order_id, terminal);
+    state = mapPointOrderStatus(mpOrder);
+    if (state === 'pending') return cancelled ? 'withdrawn' : 'in_progress';
+  }
+
+  if (state === 'paid') {
+    // Same settlement the kiosk status poll runs (fees row, promote + stamps,
+    // courier). Guarded on still-pending so a racing poll doesn't run it twice.
+    const [still] = await adminSql`
+      SELECT payment_status FROM orders WHERE tenant_id = ${tenantId} AND id = ${orderId}
+    `;
+    if (still?.payment_status === 'pending_terminal') {
+      try {
+        await recordMpTerminalPayment(orderId, tenantId, mpOrder, accessToken);
+      } catch (err) {
+        console.error('[kiosk/claim] mp terminal reconcile failed', err);
+      }
+      await markKioskOrderPaid(orderId, tenantId);
+      await dispatchPendingCourier(orderId, tenantId);
+    }
+    return 'paid';
+  }
+
+  return 'withdrawn';
 }
 
 // GET /api/kiosk/admin/tenants — list tenants (super-admin only, used in bind flow)

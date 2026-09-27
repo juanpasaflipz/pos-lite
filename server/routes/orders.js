@@ -7,6 +7,7 @@ import { adminSql } from '../db/index.js';
 const recordOrderItemPairs = () => {};
 import { requireAuth, verifyApprovalToken } from '../middleware/auth.js';
 import { audit } from '../lib/auditLog.js';
+import { resolveKioskTerminalCharge } from './kiosk.js';
 import { sendReceiptMessage, sendReceiptLoyaltyMessage, sendOrderReadyMessage } from '../helpers/twilio.js';
 import { findOrCreateCustomer, addStampsForOrder, getConfigValue } from '../helpers/loyalty.js';
 import { tzDate } from '../lib/tz.js';
@@ -552,9 +553,11 @@ router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
       && existing.kitchen_fire_at != null
       && ['pending', 'active'].includes(existing.status)
       && ['unpaid', 'failed'].includes(existing.payment_status);
+    // 'active' too: the kiosk-held list surfaces stranded terminals in either
+    // status, and orders are written 'active' since the status collapse.
     const isStrandedTerminal =
       existing.source === 'customer_kiosk'
-      && existing.status === 'pending'
+      && ['pending', 'active'].includes(existing.status)
       && existing.payment_status === 'pending_terminal';
     const isDeniedCharge =
       existing.source === 'customer_kiosk'
@@ -563,6 +566,39 @@ router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
 
     if (!isHeld && !isFiredUnpaid && !isStrandedTerminal && !isDeniedCharge) {
       return res.status(409).json({ error: 'Order is not claimable from kiosk' });
+    }
+
+    // A charge still out on the terminal must be settled or withdrawn before
+    // the claim deletes or rescues the order — otherwise the customer can tap
+    // after the claim and MP approves a payment for a deleted order.
+    if (existing.payment_status === 'pending_terminal') {
+      const tenantId = req.tenant?.id || 'default';
+      let outcome;
+      try {
+        outcome = await resolveKioskTerminalCharge(orderId, tenantId);
+      } catch (err) {
+        console.error('[claim] terminal charge check failed:', err.message);
+        outcome = 'in_progress';
+      }
+      if (outcome === 'paid') {
+        audit({
+          tenantId,
+          actorType: 'employee',
+          actorId: String(employeeId),
+          action: 'update',
+          resource: 'order',
+          resourceId: String(orderId),
+          details: { edit: 'claim_found_paid_on_terminal', prior_status: existing.status },
+          ip: req.ip,
+        });
+        return res.json({ id: orderId, status: 'paid', kind: 'already_paid' });
+      }
+      if (outcome === 'in_progress') {
+        return res.status(409).json({
+          error: 'Este pedido tiene un cobro en curso en la terminal. Espera a que termine o cancélalo en la terminal y vuelve a intentar.',
+          code: 'terminal_charge_in_progress',
+        });
+      }
     }
 
     if (isHeld) {

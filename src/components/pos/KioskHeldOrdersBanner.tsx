@@ -33,10 +33,16 @@ export default function KioskHeldOrdersBanner({ onClaim, onError }: Props) {
     if (claiming) return;
     setClaiming(order.id);
     try {
-      await claimKioskOrder(order.id);
-      onClaim(order);
+      const result = await claimKioskOrder(order.id);
       setOrders((prev) => prev.filter((o) => o.id !== order.id));
       setShowList(false);
+      if (result.status === 'paid') {
+        // The customer's card cleared on the terminal before the claim — the
+        // server settled the order. Loading it into the cart would charge twice.
+        onError?.(`La orden #${order.order_number} ya se pagó con tarjeta en la terminal. No la cobres de nuevo.`);
+        return;
+      }
+      onClaim(order);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'No se pudo reclamar la orden';
       onError?.(message);
