@@ -13,7 +13,7 @@
     "build:client": "vite build",
     "build:kiosk": "vite build --config vite.kiosk.config.ts",
     "android:sync": "node scripts/gen-version.mjs && npm run build:kiosk && cap sync android",
-    "android:apk": "npm run android:sync && JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\" ./android/gradlew -p ./android assembleDebug && echo \"\\nAPK: $(pwd)/android/app/build/outputs/apk/debug/app-debug.apk\"",
+    "android:apk": "npm run android:sync && JAVA_HOME=\"/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home\" ./android/gradlew -p ./android assembleDebug && echo \"\\nAPK: $(pwd)/android/app/build/outputs/apk/debug/app-debug.apk\"",
     "android:install": "npm run android:apk && adb install -r ./android/app/build/outputs/apk/debug/app-debug.apk",
     "start": "NODE_ENV=production node server/index.js",
     "test": "vitest run",

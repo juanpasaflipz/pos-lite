@@ -58,7 +58,7 @@ The kiosk is its own app with three delivery targets:
 - **Web** — served from the same backend at `<tenant>.desktop.kitchen/kiosk` after `npm run build` ships both bundles
 - **iPad** — thin SwiftUI WebView shell wrapping the live web URL. Web changes propagate automatically; no Xcode rebuild needed
 - **Android (Capacitor 7 APK)** — bundles the web assets at build time, so it's *frozen* between rebuilds:
-  - `npm run android:apk` — builds the APK (output path printed at the end). Hardcodes `JAVA_HOME` to Android Studio's bundled JBR 21; system Zulu 17 fails Capacitor 7
+  - `npm run android:apk` — builds the APK (output path printed at the end). Hardcodes `JAVA_HOME` to Homebrew's `openjdk@21` (`brew install openjdk@21`); system Zulu 17 fails Capacitor 7 and brew's default `openjdk` (25) is too new for Gradle 8.13
   - `npm run android:install` — builds and `adb install -r`s onto the connected tablet. `adb` must be on PATH (`~/Library/Android/sdk/platform-tools`)
   - Pilot device: Samsung Tab S10 FE (`R5GYC32RBKV`)
 
