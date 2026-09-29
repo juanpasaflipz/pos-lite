@@ -43,6 +43,7 @@ import {
   mapStatus as mapClipStatus,
   isKnownStatus as isKnownClipStatus,
   summarizeClipPayment,
+  stripNulChars,
   ClipApiError,
 } from '../services/clip.js';
 
@@ -1354,7 +1355,7 @@ export async function recordClipTerminalPayment(orderId, tenantId, clipPayment) 
       clipPayment?.pinpad_request_id ?? null,
       summary.fee,
       summary.net,
-      { fee_source: summary.feeSource, card: summary.card, clip: clipPayment },
+      stripNulChars({ fee_source: summary.feeSource, card: summary.card, clip: clipPayment }),
     ]
   );
 }

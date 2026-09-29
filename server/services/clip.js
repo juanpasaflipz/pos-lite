@@ -225,7 +225,7 @@ export function isKnownStatus(payment) {
   return [
     'COMPLETED', 'APPROVED', 'PAID',
     'FAILED', 'DECLINED', 'REJECTED', 'ERROR', 'CANCELLED', 'CANCELED', 'TIMEOUT_CANCELED', 'EXPIRED', 'DELETED',
-    'PENDING', 'IN_PROGRESS', 'PROCESSING', 'CREATED',
+    'PENDING', 'IN_PROGRESS', 'IN_PROCESS', 'PROCESSING', 'CREATED',
   ].includes(s);
 }
 
@@ -278,6 +278,21 @@ export function summarizeClipPayment(payment, { orderTotal, feePercent = null })
         }
       : null,
   };
+}
+
+/**
+ * Deep-copy a Clip payload with NUL characters removed from every string.
+ * Clip pads a missing cardholder name with NULs (seen live on a tapped card,
+ * 2026-09-29: `payment_method.card.name` = 12 × U+0000) and Postgres JSONB
+ * rejects U+0000 outright, which failed the order_payments insert.
+ */
+export function stripNulChars(value) {
+  if (typeof value === 'string') return value.replace(/\u0000/g, '');
+  if (Array.isArray(value)) return value.map(stripNulChars);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, stripNulChars(v)]));
+  }
+  return value;
 }
 
 function toNumber(v) {

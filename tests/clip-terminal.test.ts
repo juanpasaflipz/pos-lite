@@ -22,6 +22,7 @@ import {
   mapStatus,
   isKnownStatus,
   summarizeClipPayment,
+  stripNulChars,
   ClipApiError,
 } from '../server/services/clip.js';
 
@@ -201,6 +202,7 @@ describe('mapStatus', () => {
   it('PENDING and anything undocumented stay pending — never failed', () => {
     expect(mapStatus({ status: 'PENDING' })).toBe('pending');
     expect(mapStatus({ status: 'SOMETHING_NEW' })).toBe('pending');
+    expect(mapStatus({ status: 'IN_PROCESS' })).toBe('pending');
     expect(mapStatus({})).toBe('pending');
     expect(mapStatus(null)).toBe('pending');
   });
@@ -272,5 +274,21 @@ describe('summarizeClipPayment: bill / tip / fee split', () => {
     const s = summarizeClipPayment(noTipField, { orderTotal: 200, feePercent: null });
     expect(s.tip).toBe(20);
     expect(s.bill).toBe(200);
+  });
+});
+
+describe('stripNulChars: Postgres JSONB rejects U+0000', () => {
+  it('removes NULs from nested strings (nameless tapped card) and keeps everything else', () => {
+    const payment = {
+      status: 'APPROVED',
+      amount: '49.00',
+      detail: { results: [{ payment_method: { id: 'visa', card: { name: '\u0000'.repeat(12), last_digits: '4242' } } }] },
+    };
+    const clean = stripNulChars(payment);
+    expect(clean.detail.results[0].payment_method.card).toEqual({ name: '', last_digits: '4242' });
+    expect(clean.amount).toBe('49.00');
+    expect(JSON.stringify(clean)).not.toContain('\\u0000');
+    // Input is not mutated
+    expect(payment.detail.results[0].payment_method.card.name).toHaveLength(12);
   });
 });
