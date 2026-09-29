@@ -37,8 +37,8 @@ const SERVICE_SCHEMA = {
       // Pre-selects a reader on workstations that never picked one; each
       // POS still pairs its own reader from the payment screen.
       { key: 'default_terminal_id', label: 'Número de serie del lector (opcional)', secret: false },
-      // Agreed rate incl. IVA, e.g. 4.176 — only used when Clip's API doesn't
-      // report a net amount, to estimate fees in reports.
+      // Agreed rate incl. IVA, e.g. 4.176 — Clip fees in reports are estimated
+      // from this; the PinPad API exposes no per-transaction fee.
       { key: 'fee_percent', label: 'Comisión % con IVA (para reportes)', secret: false },
     ],
   },

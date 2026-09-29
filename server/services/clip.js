@@ -199,10 +199,12 @@ export async function listPinPadDevices(authHeader) {
  * Normalize a Clip PinPad payment into our taxonomy:
  * 'paid' | 'failed' | 'pending'.
  *
- * Clip only documents COMPLETED / PENDING / FAILED as examples, so anything
- * unrecognised is treated as still pending (never paid, never failed) and
- * logged by the caller — a wrong 'failed' would free the order for a second
- * charge while the first may still settle.
+ * Final statuses per Clip support (sdk@payclip.com, 2026-09-28): Approved,
+ * Canceled, Rejected, and TIMEOUT_CANCELED (kiosk mode only). The docs'
+ * examples also show COMPLETED / PENDING / FAILED. Anything unrecognised is
+ * treated as still pending (never paid, never failed) and logged by the
+ * caller — a wrong 'failed' would free the order for a second charge while the
+ * first may still settle.
  */
 export function mapStatus(payment) {
   const raw = typeof payment === 'string' ? payment : payment?.status;
@@ -211,7 +213,8 @@ export function mapStatus(payment) {
   if (s === 'COMPLETED' || s === 'APPROVED' || s === 'PAID') return 'paid';
   if (
     s === 'FAILED' || s === 'DECLINED' || s === 'REJECTED' || s === 'ERROR' ||
-    s === 'CANCELLED' || s === 'CANCELED' || s === 'EXPIRED' || s === 'DELETED'
+    s === 'CANCELLED' || s === 'CANCELED' || s === 'TIMEOUT_CANCELED' ||
+    s === 'EXPIRED' || s === 'DELETED'
   ) return 'failed';
   return 'pending';
 }
@@ -221,7 +224,7 @@ export function isKnownStatus(payment) {
   const s = String(payment?.status || '').toUpperCase();
   return [
     'COMPLETED', 'APPROVED', 'PAID',
-    'FAILED', 'DECLINED', 'REJECTED', 'ERROR', 'CANCELLED', 'CANCELED', 'EXPIRED', 'DELETED',
+    'FAILED', 'DECLINED', 'REJECTED', 'ERROR', 'CANCELLED', 'CANCELED', 'TIMEOUT_CANCELED', 'EXPIRED', 'DELETED',
     'PENDING', 'IN_PROGRESS', 'PROCESSING', 'CREATED',
   ].includes(s);
 }
@@ -229,11 +232,12 @@ export function isKnownStatus(payment) {
 /**
  * Split a completed Clip payment into bill / tip / fee for order_payments.
  *
- * Fee: Clip's detail exposes `net_amount` per transaction, but its own
- * documented example returns 0, so a net is only trusted when it's positive
- * and below the paid amount. Otherwise the fee is estimated from the
- * tenant's configured rate (like non-integrated bank terminals), or left
- * null when no rate is set — never guessed.
+ * Fee: ESTIMATED from the tenant's configured rate (like non-integrated bank
+ * terminals), or left null when no rate is set — never guessed. The PinPad
+ * detail's `net_amount` is NOT net of fees: Clip support confirmed
+ * (2026-09-28) it is sale + tip. The real per-transaction fee is only exposed
+ * by Clip's Deposits API, and only for payouts to an external CLABE (not a
+ * Clip digital account).
  *
  * @param {object} payment      Clip GET /payment response
  * @param {object} ctx
@@ -250,13 +254,9 @@ export function summarizeClipPayment(payment, { orderTotal, feePercent = null })
   const tip = roundMoney(Math.max(0, toNumber(payment?.tip_amount) ?? (gross - requested)));
   const bill = roundMoney(gross - tip);
 
-  const net = approved.reduce((sum, r) => sum + (toNumber(r.net_amount) ?? 0), 0);
   let fee = null;
   let feeSource = null;
-  if (net > 0 && net < gross) {
-    fee = roundMoney(gross - net);
-    feeSource = 'clip_net_amount';
-  } else if (feePercent != null) {
+  if (feePercent != null) {
     fee = roundMoney(gross * (feePercent / 100));
     feeSource = 'estimated_fee_percent';
   }

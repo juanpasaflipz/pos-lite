@@ -185,10 +185,17 @@ describe('mapStatus', () => {
     expect(mapStatus({ status: 'COMPLETED' })).toBe('paid');
   });
 
-  it('FAILED / CANCELED → failed', () => {
+  it('Approved (Clip support\'s spelling) → paid', () => {
+    expect(mapStatus({ status: 'Approved' })).toBe('paid');
+  });
+
+  it('FAILED / CANCELED / Rejected / TIMEOUT_CANCELED → failed', () => {
     expect(mapStatus({ status: 'FAILED' })).toBe('failed');
     expect(mapStatus({ status: 'CANCELED' })).toBe('failed');
     expect(mapStatus({ status: 'cancelled' })).toBe('failed');
+    expect(mapStatus({ status: 'Rejected' })).toBe('failed');
+    // Kiosk-mode timeout — must not leave the order waiting forever.
+    expect(mapStatus({ status: 'TIMEOUT_CANCELED' })).toBe('failed');
   });
 
   it('PENDING and anything undocumented stay pending — never failed', () => {
@@ -230,7 +237,7 @@ describe('summarizeClipPayment: bill / tip / fee split', () => {
     },
   };
 
-  it('uses the configured rate when Clip reports net_amount 0 (as in its own example)', () => {
+  it('estimates the fee from the configured rate', () => {
     const s = summarizeClipPayment(completed, { orderTotal: 200, feePercent: 4.176 });
     expect(s).toMatchObject({
       gross: 220,
@@ -243,17 +250,18 @@ describe('summarizeClipPayment: bill / tip / fee split', () => {
     });
   });
 
-  it('trusts a positive net_amount over the configured rate', () => {
+  it('never derives a fee from net_amount — Clip says it is sale + tip, not net of fees', () => {
     const withNet = {
       ...completed,
       detail: { results: [{ ...completed.detail.results[0], net_amount: 210.5 }] },
     };
     const s = summarizeClipPayment(withNet, { orderTotal: 200, feePercent: 4.176 });
-    expect(s.fee).toBe(9.5);
-    expect(s.feeSource).toBe('clip_net_amount');
+    expect(s.fee).toBe(9.19);
+    expect(s.feeSource).toBe('estimated_fee_percent');
+    expect(summarizeClipPayment(withNet, { orderTotal: 200, feePercent: null }).fee).toBeNull();
   });
 
-  it('leaves the fee null when there is no net and no configured rate — never guesses', () => {
+  it('leaves the fee null when no rate is configured — never guesses', () => {
     const s = summarizeClipPayment(completed, { orderTotal: 200, feePercent: null });
     expect(s.fee).toBeNull();
     expect(s.net).toBeNull();
