@@ -8,6 +8,7 @@ import { useKioskCustomer } from '../context/KioskCustomerContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
 import {
   chargeExistingKioskOrderOnTerminal,
+  chargeKioskOrderOnClip,
   fetchKioskOrderStatus,
   type KioskOpenOrder,
 } from '../lib/kioskApi';
@@ -34,7 +35,7 @@ const KioskPayExistingScreen: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
-  const { tenantId, kioskToken, terminalId } = useKioskBinding();
+  const { tenantId, kioskToken, terminalId, terminalProvider } = useKioskBinding();
   const { clearCart } = useKioskCart();
   const { clearSession, session } = useKioskCustomer();
 
@@ -111,7 +112,11 @@ const KioskPayExistingScreen: React.FC = () => {
     setError(null);
     setMessage(t('pay.sendingToTerminal'));
     try {
-      await chargeExistingKioskOrderOnTerminal(auth, order.id, terminalId);
+      if (terminalProvider === 'clip') {
+        await chargeKioskOrderOnClip(auth, order.id, terminalId);
+      } else {
+        await chargeExistingKioskOrderOnTerminal(auth, order.id, terminalId);
+      }
       setMessage(t('pay.payAtTerminal'));
 
       for (let i = 0; i < POLL_MAX_ITERATIONS; i += 1) {

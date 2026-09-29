@@ -1403,7 +1403,7 @@ async function syncClipOrder(order, tenantId, { useCache = true } = {}) {
 }
 
 /** Map a Clip API failure to a cashier-readable response. */
-function clipErrorResponse(err, fallback) {
+export function clipErrorResponse(err, fallback) {
   if (err instanceof ClipApiError) {
     if (err.status === 401 || err.status === 403) {
       return { status: 400, payload: { error: 'Credenciales de Clip inválidas. Revísalas en Integraciones.', code: 'clip_auth' } };
@@ -2558,13 +2558,23 @@ export async function clipWebhook(req, res) {
     if (typeof id !== 'string' || !id.startsWith('pinpad-') || id.length > 100) return;
 
     const rows = await adminSql`
-      SELECT id, tenant_id, clip_payment_id, payment_status
+      SELECT id, tenant_id, clip_payment_id, payment_status, source
       FROM orders
       WHERE clip_payment_id = ${id}
       LIMIT 1
     `;
     const ord = rows[0];
     if (!ord || ord.payment_status !== 'pending_terminal') return;
+
+    // Kiosk orders settle through the kiosk path (draft promotion, stamps,
+    // courier) — markTerminalOrderPaid is the POS settle. Imported lazily:
+    // kiosk.js already imports this module.
+    if (ord.source === 'customer_kiosk') {
+      const { syncKioskClipCharge, dispatchPendingCourier } = await import('./kiosk.js');
+      const synced = await syncKioskClipCharge(ord.id, ord.tenant_id);
+      if (synced?.mapped === 'paid') await dispatchPendingCourier(ord.id, ord.tenant_id);
+      return;
+    }
 
     await withTenant(ord.tenant_id, () => syncClipOrder(ord, ord.tenant_id, { useCache: false }));
   } catch (error) {

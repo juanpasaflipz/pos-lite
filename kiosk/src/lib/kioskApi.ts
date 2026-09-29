@@ -464,6 +464,39 @@ export async function chargeExistingKioskOrderOnTerminal(
   return res.json();
 }
 
+// Clip PinPad — same pairing rule as MP: the kiosk sends its own reader serial.
+export async function chargeKioskOrderOnClip(
+  auth: AuthHeaders,
+  orderId: number,
+  terminalId: string | null,
+): Promise<{ success: true; payment_status: string; paid?: boolean }> {
+  const res = await authedFetch(auth, `${API_BASE}/api/kiosk/orders/${orderId}/clip-charge`, {
+    method: 'POST',
+    body: JSON.stringify({ terminal_id: terminalId || undefined }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Terminal charge failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export interface KioskClipDevice {
+  serial_number: string;
+  /** active = online; expired = no heartbeat in 20s; unknown = PinPad off */
+  status: string;
+  updated_at: string | null;
+}
+
+export async function listKioskClipDevices(auth: AuthHeaders): Promise<{ devices: KioskClipDevice[] }> {
+  const res = await authedFetch(auth, `${API_BASE}/api/kiosk/clip/devices`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Terminal list failed (${res.status})`);
+  }
+  return res.json();
+}
+
 export interface KioskMpTerminal {
   id: string;
   external_pos_id: string | null;

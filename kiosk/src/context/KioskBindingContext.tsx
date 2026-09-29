@@ -8,12 +8,15 @@ interface BindingPayload {
   device_id?: string;
 }
 
-// Each kiosk device can pair to its own MP Point terminal so two kiosks at the
-// counter don't race to the same device. Stored on this device only — separate
-// from `mp_default_terminal_id` (tenant-wide fallback for un-paired kiosks).
+// Each kiosk device pairs to its own card terminal (MP Point or Clip PinPad) so
+// two kiosks at the counter don't race to the same device. Stored on this
+// device only. Pairings saved before Clip existed have no provider → 'mp'.
+export type TerminalProvider = 'mp' | 'clip';
+
 interface TerminalPairing {
   id: string;
   label: string;
+  provider?: TerminalProvider;
 }
 
 interface BindingState {
@@ -23,6 +26,7 @@ interface BindingState {
   deviceId: string | null;
   terminalId: string | null;
   terminalLabel: string | null;
+  terminalProvider: TerminalProvider | null;
   /** True when the server said the kiosk is not in the tenant's plan
    *  (403 PLAN_UPGRADE_REQUIRED). Binding is kept; UI shows unavailable. */
   planLocked: boolean;
@@ -96,6 +100,7 @@ export const KioskBindingProvider: React.FC<{ children: React.ReactNode }> = ({ 
         deviceId: stored?.device_id ?? null,
         terminalId: terminal?.id ?? null,
         terminalLabel: terminal?.label ?? null,
+        terminalProvider: terminal ? (terminal.provider ?? 'mp') : null,
         planLocked,
         clearPlanLock: () => setPlanLocked(false),
         bind,

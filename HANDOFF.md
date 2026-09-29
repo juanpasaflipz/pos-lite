@@ -7,6 +7,20 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-09-29 — Claude Code — **Kiosk can charge on Clip** (uncommitted)
+
+- Kiosk pairing is now provider-aware (`kiosk-terminal-v1` gains `provider`;
+  old pairings read as `'mp'`). Terminal-settings screen lists MP + Clip.
+- Server: `GET /api/kiosk/clip/devices`, `POST /api/kiosk/orders/:id/clip-charge`.
+  Kiosk Clip orders settle via `syncKioskClipCharge` → `markKioskOrderPaid`
+  (status poll AND Clip webhook — the webhook now routes `customer_kiosk`
+  orders there instead of `markTerminalOrderPaid`). `resolveKioskTerminalCharge`
+  (cashier claim) handles Clip. Draft-supersede guard also checks `clip_payment_id`.
+- Kiosk MP charge now 409s while a Clip intent is live, and clears Clip ids.
+- Android APK needs `npm run android:install` to get this.
+
+---
+
 ## 2026-09-26 — Claude Code — **Clip PinPad integration made real + MP⇄Clip switching**
 
 Juanberto's is adding a **Clip Ultra** alongside Mercado Pago Point. The old

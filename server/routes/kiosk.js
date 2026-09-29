@@ -43,7 +43,21 @@ import {
   MP_POINT_MIN_AMOUNT,
   parseMpError,
 } from '../services/mercadopago.js';
-import { recordMpTerminalPayment, findActiveTerminalLock } from './payments.js';
+import {
+  recordMpTerminalPayment,
+  recordClipTerminalPayment,
+  findActiveTerminalLock,
+  clipErrorResponse,
+} from './payments.js';
+import {
+  getClipAuthHeader,
+  createPinPadPayment as clipCreatePinPadPayment,
+  getPinPadPayment as clipGetPinPadPayment,
+  cancelPinPadPayment as clipCancelPinPadPayment,
+  listPinPadDevices as clipListPinPadDevices,
+  mapStatus as mapClipStatus,
+  isKnownStatus as isKnownClipStatus,
+} from '../services/clip.js';
 import {
   createQuote as uberDirectCreateQuote,
   createDelivery as uberDirectCreateDelivery,
@@ -610,11 +624,13 @@ async function markKioskOrderPaid(orderId, tenantId) {
  */
 export async function resolveKioskTerminalCharge(orderId, tenantId) {
   const [order] = await adminSql`
-    SELECT id, payment_status, mp_order_id, mp_terminal_id
+    SELECT id, payment_status, mp_order_id, mp_terminal_id, clip_payment_id
     FROM orders
     WHERE tenant_id = ${tenantId} AND id = ${orderId}
   `;
-  if (!order || order.payment_status !== 'pending_terminal' || !order.mp_order_id) return 'none';
+  if (!order || order.payment_status !== 'pending_terminal') return 'none';
+  if (order.clip_payment_id) return resolveKioskClipCharge(order, tenantId);
+  if (!order.mp_order_id) return 'none';
 
   const tenant = await getTenant(tenantId);
   // Can't ask MP → can't prove the charge is dead.
@@ -655,6 +671,108 @@ export async function resolveKioskTerminalCharge(orderId, tenantId) {
       await markKioskOrderPaid(orderId, tenantId);
       await dispatchPendingCourier(orderId, tenantId);
     }
+    return 'paid';
+  }
+
+  return 'withdrawn';
+}
+
+// ==================== Clip PinPad (kiosk) ====================
+//
+// Kiosk orders settle through markKioskOrderPaid (draft promotion, two-stage
+// portions, stamps), never payments.js's markTerminalOrderPaid — so every Clip
+// path that can see a kiosk order (status poll, webhook, cashier claim) comes
+// through here.
+
+/**
+ * Read a kiosk order's Clip intent. 404 means Clip dropped the intent before
+ * the reader picked it up — nothing was charged, so it maps to 'failed'.
+ * @returns {Promise<{ mapped: 'paid'|'failed'|'pending', payment: object|null } | null>}
+ *   null when Clip isn't configured (can't prove anything either way)
+ */
+async function readKioskClipCharge(order, tenantId) {
+  const authHeader = await getClipAuthHeader(tenantId);
+  if (!authHeader) return null;
+  const payment = await clipGetPinPadPayment(authHeader, order.clip_payment_id);
+  if (payment && !isKnownClipStatus(payment)) {
+    console.warn(`[kiosk/clip] undocumented PinPad status "${payment.status}" for ${order.clip_payment_id} — treating as pending`);
+  }
+  return { mapped: payment ? mapClipStatus(payment) : 'failed', payment };
+}
+
+/**
+ * Settle a kiosk order whose Clip charge cleared. The status poll and the
+ * webhook can both get here for the same intent, so the pending → paid flip is
+ * claimed atomically and only the winner records the payment and promotes.
+ */
+async function settleKioskClipPaid(order, tenantId, payment) {
+  const [won] = await adminSql`
+    UPDATE orders SET payment_status = 'paid'
+    WHERE tenant_id = ${tenantId} AND id = ${order.id}
+      AND clip_payment_id = ${order.clip_payment_id}
+      AND payment_status = 'pending_terminal'
+    RETURNING id
+  `;
+  if (!won) return null;
+  try {
+    await withTenant(tenantId, () => recordClipTerminalPayment(order.id, tenantId, payment));
+  } catch (err) {
+    console.error('[kiosk/clip] payment record failed', err);
+  }
+  return markKioskOrderPaid(order.id, tenantId);
+}
+
+/**
+ * Poll/webhook step: read the intent and apply it. A decline follows the MP
+ * rule — cancel the order unless the kitchen is already cooking it.
+ * @returns {Promise<{ mapped: string, invoiceToken: string|null } | null>}
+ */
+export async function syncKioskClipCharge(orderId, tenantId) {
+  const [order] = await adminSql`
+    SELECT id, payment_status, clip_payment_id, kitchen_fire_at
+    FROM orders
+    WHERE tenant_id = ${tenantId} AND id = ${orderId} AND source = 'customer_kiosk'
+  `;
+  if (!order?.clip_payment_id || order.payment_status !== 'pending_terminal') return null;
+
+  const read = await readKioskClipCharge(order, tenantId);
+  if (!read) return null;
+
+  let invoiceToken = null;
+  if (read.mapped === 'paid') {
+    invoiceToken = await settleKioskClipPaid(order, tenantId, read.payment);
+  } else if (read.mapped === 'failed') {
+    const firedToKitchen = order.kitchen_fire_at != null;
+    await adminSql`
+      UPDATE orders
+      SET payment_status = 'failed',
+          status = ${firedToKitchen ? 'active' : 'cancelled'}
+      WHERE tenant_id = ${tenantId} AND id = ${order.id}
+        AND clip_payment_id = ${order.clip_payment_id}
+        AND payment_status = 'pending_terminal'
+    `;
+  }
+  return { mapped: read.mapped, invoiceToken };
+}
+
+/** Clip half of resolveKioskTerminalCharge — same contract. */
+async function resolveKioskClipCharge(order, tenantId) {
+  let read = await readKioskClipCharge(order, tenantId);
+  if (!read) return 'in_progress';
+
+  if (read.mapped === 'pending') {
+    const authHeader = await getClipAuthHeader(tenantId);
+    // Clip refuses (cancelled:false) once the reader has picked the intent up.
+    const { cancelled } = await clipCancelPinPadPayment(authHeader, order.clip_payment_id);
+    // Re-read either way: the card may have cleared between the two calls.
+    read = await readKioskClipCharge(order, tenantId);
+    if (!read) return 'in_progress';
+    if (read.mapped === 'pending') return cancelled ? 'withdrawn' : 'in_progress';
+  }
+
+  if (read.mapped === 'paid') {
+    await settleKioskClipPaid(order, tenantId, read.payment);
+    await dispatchPendingCourier(order.id, tenantId);
     return 'paid';
   }
 
@@ -916,6 +1034,7 @@ router.post('/orders/hold', verifyKioskToken, requireKioskPlan, async (req, res)
       const safeToSupersede = sql`
         o.status = 'draft_kiosk'
           AND o.mp_order_id IS NULL
+          AND o.clip_payment_id IS NULL
           AND o.payment_status NOT IN ('pending_terminal', 'paid')
       `;
 
@@ -1978,12 +2097,15 @@ router.post('/orders/:id/mp-charge', verifyKioskToken, async (req, res) => {
   const orderId = Number(req.params.id);
   try {
     const [order] = await adminSql`
-      SELECT id, order_number, total, payment_status
+      SELECT id, order_number, total, payment_status, clip_payment_id
       FROM orders
       WHERE tenant_id = ${tenantId} AND id = ${orderId} AND source = 'customer_kiosk'
     `;
     if (!order) return res.status(404).json({ error: 'Order not found' });
     if (order.payment_status === 'paid') return res.status(400).json({ error: 'Order is already paid' });
+    if (order.payment_status === 'pending_terminal' && order.clip_payment_id) {
+      return res.status(409).json({ error: 'Este pedido está esperando en la terminal Clip.', code: 'other_terminal_pending', provider: 'clip' });
+    }
 
     const tenant = await getTenant(tenantId);
     if (tenant?.plan !== 'pro') return res.status(403).json({ error: 'Mercado Pago Point requires Pro' });
@@ -2025,6 +2147,8 @@ router.post('/orders/:id/mp-charge', verifyKioskToken, async (req, res) => {
       UPDATE orders
       SET mp_order_id = ${mpOrder.id},
           mp_terminal_id = ${termId},
+          clip_payment_id = NULL,
+          clip_terminal_id = NULL,
           payment_status = 'pending_terminal',
           payment_method = 'card'
       WHERE tenant_id = ${tenantId} AND id = ${order.id}
@@ -2038,14 +2162,106 @@ router.post('/orders/:id/mp-charge', verifyKioskToken, async (req, res) => {
   }
 });
 
+// GET /api/kiosk/clip/devices — the tenant's Clip PinPad readers, for pairing
+// this kiosk from the terminal-settings screen. Same per-device rule as MP: no
+// tenant default, an unpaired kiosk can't charge.
+router.get('/clip/devices', verifyKioskToken, async (req, res) => {
+  try {
+    const authHeader = await getClipAuthHeader(req.kioskTenantId);
+    if (!authHeader) return res.status(400).json({ error: 'Clip no está configurado', code: 'clip_not_configured' });
+    const devices = await clipListPinPadDevices(authHeader);
+    res.json({ devices });
+  } catch (err) {
+    console.error('[kiosk/clip/devices] error', err.message);
+    const { status, payload } = clipErrorResponse(err, 'No se pudo obtener la lista de terminales Clip');
+    res.status(status).json(payload);
+  }
+});
+
+// POST /api/kiosk/orders/:id/clip-charge — push a kiosk order to this kiosk's
+// Clip reader. Body: { terminal_id } (reader serial). Settled by the status
+// poll / webhook via syncKioskClipCharge.
+router.post('/orders/:id/clip-charge', verifyKioskToken, async (req, res) => {
+  const tenantId = req.kioskTenantId;
+  const orderId = Number(req.params.id);
+  try {
+    const [order] = await adminSql`
+      SELECT id, order_number, total, payment_status, mp_order_id, clip_payment_id
+      FROM orders
+      WHERE tenant_id = ${tenantId} AND id = ${orderId} AND source = 'customer_kiosk'
+    `;
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.payment_status === 'paid') return res.status(400).json({ error: 'Order is already paid' });
+    if (order.payment_status === 'pending_terminal' && order.mp_order_id) {
+      return res.status(409).json({ error: 'Este pedido está esperando en la terminal de Mercado Pago.', code: 'other_terminal_pending', provider: 'mp' });
+    }
+
+    const authHeader = await getClipAuthHeader(tenantId);
+    if (!authHeader) return res.status(400).json({ error: 'Clip no está configurado', code: 'clip_not_configured' });
+
+    const termId = typeof req.body?.terminal_id === 'string' ? req.body.terminal_id.trim() : '';
+    if (!termId) return res.status(400).json({ error: 'Pair this kiosk to a terminal first', code: 'terminal_unpaired' });
+
+    const lock = await findActiveTerminalLock(tenantId, { excludeOrderId: order.id, clipTerminalId: termId });
+    if (lock) {
+      return res.status(409).json({
+        error: `Terminal en uso — orden #${lock.order_number} en proceso. Inténtalo en unos segundos.`,
+        code: 'terminal_busy',
+        current_order_number: String(lock.order_number),
+      });
+    }
+
+    // Re-send on an order already waiting on Clip: settle or retire the old
+    // intent first so the customer can never be charged twice.
+    if (order.payment_status === 'pending_terminal' && order.clip_payment_id) {
+      const outcome = await resolveKioskTerminalCharge(order.id, tenantId);
+      if (outcome === 'paid') return res.json({ success: true, paid: true, payment_status: 'paid' });
+      if (outcome === 'in_progress') {
+        return res.status(409).json({ error: 'La terminal ya tiene tu cobro. Termínalo en la terminal.', code: 'clip_in_progress' });
+      }
+    }
+
+    const amount = Number(order.total);
+    if (!(amount > 0)) return res.status(400).json({ error: 'El total debe ser mayor a $0', code: 'amount_invalid' });
+
+    // Clip can't reach http/localhost, so only send the webhook from real hosts.
+    const origin = `${req.protocol}://${req.get('host')}`;
+    const webhookUrl = origin.startsWith('https://') ? `${origin}/api/payments/clip/webhook` : undefined;
+
+    const { pinpad_request_id } = await clipCreatePinPadPayment(authHeader, {
+      amount,
+      reference: `${tenantId}-${order.id}-${Date.now()}`,
+      serialNumber: termId,
+      webhookUrl,
+    });
+
+    await adminSql`
+      UPDATE orders
+      SET clip_payment_id = ${pinpad_request_id},
+          clip_terminal_id = ${termId},
+          mp_order_id = NULL,
+          mp_terminal_id = NULL,
+          payment_status = 'pending_terminal',
+          payment_method = 'card'
+      WHERE tenant_id = ${tenantId} AND id = ${order.id}
+    `;
+
+    res.json({ success: true, clip_payment_id: pinpad_request_id, payment_status: 'pending_terminal' });
+  } catch (err) {
+    console.error('[kiosk/clip-charge] error', err.message);
+    const { status, payload } = clipErrorResponse(err, 'No se pudo enviar el cobro a la terminal Clip');
+    res.status(status).json(payload);
+  }
+});
+
 // GET /api/kiosk/orders/:id/status — poll payment state for kiosk order
 router.get('/orders/:id/status', verifyKioskToken, async (req, res) => {
   const tenantId = req.kioskTenantId;
   const orderId = Number(req.params.id);
   try {
     const [order] = await adminSql`
-      SELECT id, order_number, total, payment_status, mp_order_id, mp_terminal_id, invoice_token,
-             kitchen_fire_at
+      SELECT id, order_number, total, payment_status, mp_order_id, mp_terminal_id, clip_payment_id,
+             invoice_token, kitchen_fire_at
       FROM orders
       WHERE tenant_id = ${tenantId} AND id = ${orderId} AND source = 'customer_kiosk'
     `;
@@ -2055,7 +2271,18 @@ router.get('/orders/:id/status', verifyKioskToken, async (req, res) => {
     let invoiceToken = order.invoice_token || null;
     let justPaid = false;
 
-    if (paymentStatus === 'pending_terminal' && order.mp_order_id) {
+    if (paymentStatus === 'pending_terminal' && order.clip_payment_id) {
+      const synced = await syncKioskClipCharge(order.id, tenantId);
+      if (synced?.mapped === 'paid') {
+        // null when the webhook won the settle race — read the token it wrote.
+        const [row] = await adminSql`SELECT invoice_token FROM orders WHERE tenant_id = ${tenantId} AND id = ${order.id}`;
+        invoiceToken = synced.invoiceToken || row?.invoice_token || null;
+        paymentStatus = 'paid';
+        justPaid = true;
+      } else if (synced?.mapped === 'failed') {
+        paymentStatus = 'failed';
+      }
+    } else if (paymentStatus === 'pending_terminal' && order.mp_order_id) {
       const tenant = await getTenant(tenantId);
       if (tenant?.mp_access_token) {
         const accessToken = await ensureFreshToken(tenant, adminSql);
