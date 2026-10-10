@@ -72,8 +72,10 @@ describe('createPinPadPayment: request shape', () => {
     expect(body.serial_number_pos).toBe('P8220724000042');
     expect(body.reference).toBe('ten-42-1');
     expect(body.webhook_url).toBe('https://juanbertos.desktop.kitchen/api/payments/clip/webhook');
-    // A second tip screen on the reader would let the customer tip twice.
+    // A tip was already picked at the POS: a reader tip screen would let the
+    // customer tip twice.
     expect(body.preferences.is_tip_enabled).toBe(false);
+    expect(body.preferences.tip_options).toBeUndefined();
     // Legacy guessed field names must be gone.
     expect(body.pinpad_id).toBeUndefined();
     expect(body.external_reference).toBeUndefined();
@@ -86,6 +88,16 @@ describe('createPinPadPayment: request shape', () => {
     expect(body.amount).toBe(100);
     expect('tip_amount' in body).toBe(false);
     expect('webhook_url' in body).toBe(false);
+  });
+
+  it('shows the reader tip screen with 10/15/20% when no tip was picked at the POS', async () => {
+    const fetchMock = mockFetch(200, { pinpad_request_id: 'pinpad-x' });
+    await createPinPadPayment(AUTH, { amount: 150, tipAmount: 0, reference: 'r', serialNumber: 'S1' });
+    const body = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body));
+    expect(body.preferences.is_tip_enabled).toBe(true);
+    // Clip accepts 1–3 integer percentages between 1 and 100.
+    expect(body.preferences.tip_options).toEqual([10, 15, 20]);
+    expect('tip_amount' in body).toBe(false);
   });
 
   it('surfaces the offline-reader error code from a 400', async () => {

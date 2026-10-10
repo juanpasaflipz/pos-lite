@@ -10,6 +10,8 @@
  *     (email sdk@payclip.com with the reader's serial number) + KYC done.
  *   - The reader is addressed by its serial number (`serial_number_pos`).
  *   - `amount` / `tip_amount` are decimal pesos, NOT cents.
+ *   - `preferences.is_tip_enabled` + `preferences.tip_options` (1–3 integer
+ *     percentages, 1–100) drive the reader's own tip screen.
  *   - Cancel only works while the reader has not picked the intent up yet;
  *     after that Clip answers 400 PAYMENT_REQUEST_ISSUE and the charge can
  *     only be stopped on the device itself.
@@ -27,6 +29,11 @@ import { getServiceCredentials } from '../helpers/tenantCredentials.js';
 import { fetchWithTimeout } from '../lib/http.js';
 
 const CLIP_PINPAD = 'https://api.payclip.io/f2f/pinpad/v1';
+
+// Percentages offered on the reader's tip screen. Clip allows 1–3 whole
+// numbers between 1 and 100 (`preferences.tip_options`); these match the POS
+// tip buttons.
+const READER_TIP_OPTIONS = [10, 15, 20];
 
 /** Error carrying Clip's HTTP status + `code` so routes can branch on them. */
 export class ClipApiError extends Error {
@@ -88,21 +95,27 @@ export async function getClipSettings(tenantId) {
  * @param {string} authHeader  pre-built Basic auth header
  * @param {object} args
  * @param {number} args.amount       decimal MXN bill amount (e.g. 123.45)
- * @param {number} [args.tipAmount]  decimal MXN tip chosen at the POS
+ * @param {number} [args.tipAmount]  decimal MXN tip chosen at the POS; when 0
+ *                                   the reader shows its own tip screen instead
  * @param {string} args.reference    our correlation id
  * @param {string} args.serialNumber reader serial number (serial_number_pos)
  * @param {string} [args.webhookUrl] https URL Clip should notify on status change
  * @returns {Promise<{ pinpad_request_id: string, raw: object }>}
  */
 export async function createPinPadPayment(authHeader, { amount, tipAmount = 0, reference, serialNumber, webhookUrl }) {
+  // The reader's tip screen is the customer's only tip prompt when nobody
+  // picked one at the POS. Once a tip is already in tip_amount the screen
+  // stays off, or the customer could tip twice. The tip they choose on the
+  // reader comes back in GET /payment `tip_amount` and recordClipTerminalPayment
+  // folds it onto orders.tip, the same way MP terminal tips are reconciled.
+  const hasPosTip = tipAmount > 0;
   const body = {
     amount: roundMoney(amount),
     reference,
     serial_number_pos: serialNumber,
     preferences: {
-      // The tip is chosen on the POS before charging; a second tip screen on
-      // the reader would let the customer tip twice.
-      is_tip_enabled: false,
+      is_tip_enabled: !hasPosTip,
+      ...(hasPosTip ? {} : { tip_options: READER_TIP_OPTIONS }),
       // One POS charge = one card transaction, so amount_paid maps cleanly
       // onto the order. Splits are done in DK, not on the reader.
       is_split_payment_enabled: false,
