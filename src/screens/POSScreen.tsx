@@ -786,6 +786,10 @@ const POSScreen: React.FC = () => {
       item_name: item.item_name,
       quantity: item.quantity,
       unit_price: Number(item.unit_price),
+      // The stored unit price already includes these modifiers. Preserve the
+      // IDs for checkout and names for the cart without adding their price again.
+      selectedModifierIds: (item.modifiers || []).map((modifier) => modifier.id),
+      selectedModifierNames: (item.modifiers || []).map((modifier) => modifier.name),
     }));
     setCart(claimed);
     setCartDiscount(null);

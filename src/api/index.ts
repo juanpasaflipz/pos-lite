@@ -627,6 +627,11 @@ export interface KioskHeldOrder {
     item_name: string;
     quantity: number;
     unit_price: number;
+    modifiers?: Array<{
+      id: number;
+      name: string;
+      price_adjustment: number;
+    }>;
   }>;
 }
 

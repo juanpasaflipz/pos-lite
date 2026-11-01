@@ -382,9 +382,14 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, onRefund, refresh
                   {items.length > 0 ? (
                     <ul className="space-y-0.5">
                       {visibleItems.map((it, idx) => (
-                        <li key={it.id ?? idx} className="text-xs text-neutral-200 leading-snug truncate">
+                        <li key={it.id ?? idx} className="text-xs text-neutral-200 leading-snug">
                           <span className="font-black text-white tabular-nums">{it.quantity}×</span>{' '}
                           <span className="font-semibold">{it.item_name}</span>
+                          {it.modifiers?.map((modifier, modifierIdx) => (
+                            <div key={modifierIdx} className="pl-3 text-brand-300 break-words">
+                              + {modifier.modifier_name}
+                            </div>
+                          ))}
                         </li>
                       ))}
                       {overflow > 0 && (
