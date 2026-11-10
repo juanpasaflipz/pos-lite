@@ -7,6 +7,24 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-11-10 — Claude (cloud session) — **CI red since 1.25.3: test fix + `npm audit fix` (PR, not merged)**
+
+- CI on master failed 6 runs in a row (09-26 → 11-01), always the same 3 tests
+  in `tests/kiosk-claim-guard.test.ts`. Test bug, not a prod bug: the MP token
+  was set with a raw UPDATE after `createTenant` had warmed the 60s
+  `tenantCache`, so `resolveKioskTerminalCharge` saw no token → `in_progress`.
+  Now goes through `updateTenant` (same pattern as `kiosk-identify.test.ts`).
+- `npm audit fix` (lockfile only, no majors): prod vulnerabilities 19 → 8,
+  criticals 2 → 0. `multer` 2.1.1 → 2.5.0 is the one to eyeball — upload routes.
+  `@capacitor/android` 7.6.5 → 7.6.10 only reaches the tablet on the next
+  `npm run android:install`.
+- Still open, need major bumps: `sharp` (0.35), `vite` (8), `vitest` (5),
+  `passkit-generator`/`joi`. Dependabot alerts are off. Repo is **public**.
+- Verified here: typecheck + build. DB suite NOT run locally (no `.env.test`
+  in the cloud session) — the PR's CI run is the proof.
+
+---
+
 ## 2026-09-29 — Claude Code — **Kiosk can charge on Clip** (uncommitted)
 
 - Kiosk pairing is now provider-aware (`kiosk-terminal-v1` gains `provider`;
