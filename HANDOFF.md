@@ -7,6 +7,42 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-11-10 — Claude (cloud session) — **Kiosk + Clip: an approval after a decline is no longer lost (1.28.1, PR)**
+
+Live incident, order 20261110013 (juanbertos, 13:15): card declined on the Clip
+reader, guest paid with an AMEX on the reader, Clip approved — order stayed
+"sin cobrar". The kitchen had it (fire-before-payment) and the guest left with
+his food; only the payment record was missing. **Not caused by 1.28.0** — a
+decline was treated as final everywhere:
+
+- the kiosk poll marks the order `failed` and stops polling;
+- `/orders/:id/status`, `syncKioskClipCharge`, the Clip webhook and
+  `resolveKioskTerminalCharge` all read Clip only while `pending_terminal`.
+
+Fix (server only, no migration — tablets need nothing):
+
+- `CLIP_RECHECK_STATUSES = pending_terminal | failed | unpaid` in
+  `server/routes/kiosk.js`. A kiosk order in any of those that still carries a
+  `clip_payment_id` gets its intent re-read; approved → settled through the
+  normal `settleKioskClipPaid` (atomic claim, so no double settle).
+- Wired into: the status poll, the webhook (kiosk orders only — POS orders keep
+  the `pending_terminal` gate), the kiosk's clip-charge retry (returns
+  `paid: true` instead of opening a second charge), and the cashier claim
+  (`already_paid` instead of charging again).
+- **New sweep** `server/lib/kioskClipLateApprovals.js` (60s, 3h lookback,
+  prod-gated like the others): the backstop that needs nobody to tap anything.
+  It should settle order 013 by itself on the first run after deploy.
+- A 'cancelled' pay-first order whose intent turns out approved is revived to
+  `active` (markKioskOrderPaid already did that) — money in, food owed.
+- Tests: `tests/kiosk-clip-late-approval.test.ts` (10, Clip mocked).
+
+**Not done — same weakness on Mercado Pago.** `mapPointOrderStatus` reads only
+`transactions.payments[0]`, and a `failed` MP order is never re-read either.
+Whether the Point reader lets a guest retry on the same order is unverified;
+worth the same treatment once someone can test on the device.
+
+---
+
 ## 2026-11-10 — Claude (cloud session) — **Kiosk lean checkout: cart → pay (1.28.0, PR, not merged)**
 
 Juan's request: the kiosk flow was too long. `Menu → Cart → ¿aquí/llevar? →

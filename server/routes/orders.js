@@ -542,7 +542,7 @@ router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
       return res.status(401).json({ error: 'Authenticated employee required' });
     }
     const existing = await get(
-      `SELECT id, status, payment_status, source, kitchen_fire_at FROM orders WHERE id = $1`,
+      `SELECT id, status, payment_status, source, kitchen_fire_at, clip_payment_id FROM orders WHERE id = $1`,
       [orderId],
     );
     if (!existing) return res.status(404).json({ error: 'Order not found' });
@@ -571,7 +571,16 @@ router.post('/:id/claim', requireAuth('pos_access'), async (req, res) => {
     // A charge still out on the terminal must be settled or withdrawn before
     // the claim deletes or rescues the order — otherwise the customer can tap
     // after the claim and MP approves a payment for a deleted order.
-    if (existing.payment_status === 'pending_terminal') {
+    //
+    // Same check for a Clip intent we already gave up on ('failed' / reset to
+    // 'unpaid'): a decline isn't final at Clip, so the guest may have paid it
+    // with another card on the reader. Without this the cashier charges an
+    // order the reader already collected for.
+    const mayHaveLateClipApproval =
+      existing.source === 'customer_kiosk'
+      && existing.clip_payment_id != null
+      && ['failed', 'unpaid'].includes(existing.payment_status);
+    if (existing.payment_status === 'pending_terminal' || mayHaveLateClipApproval) {
       const tenantId = req.tenant?.id || 'default';
       let outcome;
       try {

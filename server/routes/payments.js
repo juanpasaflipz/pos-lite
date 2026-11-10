@@ -2565,11 +2565,15 @@ export async function clipWebhook(req, res) {
       LIMIT 1
     `;
     const ord = rows[0];
-    if (!ord || ord.payment_status !== 'pending_terminal') return;
+    if (!ord) return;
 
     // Kiosk orders settle through the kiosk path (draft promotion, stamps,
     // courier) — markTerminalOrderPaid is the POS settle. Imported lazily:
     // kiosk.js already imports this module.
+    //
+    // Not gated on 'pending_terminal': an approval can arrive after the kiosk
+    // poll already wrote the order off as failed (declined card, then another
+    // card on the reader). syncKioskClipCharge decides which states it reads.
     if (ord.source === 'customer_kiosk') {
       const { syncKioskClipCharge, dispatchPendingCourier } = await import('./kiosk.js');
       const synced = await syncKioskClipCharge(ord.id, ord.tenant_id);
@@ -2577,6 +2581,7 @@ export async function clipWebhook(req, res) {
       return;
     }
 
+    if (ord.payment_status !== 'pending_terminal') return;
     await withTenant(ord.tenant_id, () => syncClipOrder(ord, ord.tenant_id, { useCache: false }));
   } catch (error) {
     console.error('Clip webhook processing error:', error.message);
