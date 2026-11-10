@@ -628,7 +628,12 @@ export async function resolveKioskTerminalCharge(orderId, tenantId) {
     FROM orders
     WHERE tenant_id = ${tenantId} AND id = ${orderId}
   `;
-  if (!order || order.payment_status !== 'pending_terminal') return 'none';
+  if (!order) return 'none';
+  if (order.payment_status !== 'pending_terminal') {
+    // Not waiting on a terminal any more — but a Clip intent we gave up on can
+    // still have been approved afterwards (see CLIP_RECHECK_STATUSES).
+    return hasRecheckableClipIntent(order) ? settleLateKioskClipApproval(order, tenantId) : 'none';
+  }
   if (order.clip_payment_id) return resolveKioskClipCharge(order, tenantId);
   if (!order.mp_order_id) return 'none';
 
@@ -685,6 +690,48 @@ export async function resolveKioskTerminalCharge(orderId, tenantId) {
 // through here.
 
 /**
+ * Payment states in which a kiosk order's Clip intent is still worth reading.
+ *
+ * 'pending_terminal' is the obvious one. The other two exist because a Clip
+ * intent can be approved AFTER we stopped watching it:
+ *   - 'failed'  — the reader reported a decline, we marked the order failed,
+ *                 and the guest then paid with another card on the reader.
+ *   - 'unpaid'  — a cashier claim reset the order to charge it fresh while the
+ *                 old intent was still (or later became) approved.
+ * In both the money is at Clip and the order said "sin cobrar" forever
+ * (order 20261110013, 2026-11-10: declined card, AMEX approved on the reader,
+ * order never marked paid). Never 'paid' or 'refunded' — those are settled.
+ */
+const CLIP_RECHECK_STATUSES = ['pending_terminal', 'failed', 'unpaid'];
+
+function hasRecheckableClipIntent(order) {
+  return !!order?.clip_payment_id && CLIP_RECHECK_STATUSES.includes(order.payment_status);
+}
+
+/**
+ * An order we stopped waiting on (failed / reset to unpaid) whose Clip intent
+ * may have been approved since. Reads Clip once: approved → settle exactly as
+ * the status poll would have; anything else → leave the order alone.
+ * Never cancels the intent and never changes a non-paid outcome, so callers
+ * that get 'none' behave exactly as they did before this check existed.
+ * @returns {Promise<'paid'|'none'>}
+ */
+async function settleLateKioskClipApproval(order, tenantId) {
+  let read;
+  try {
+    read = await readKioskClipCharge(order, tenantId);
+  } catch (err) {
+    console.warn(`[kiosk/clip] late-approval check failed for order ${order.id}:`, err.message);
+    return 'none';
+  }
+  if (read?.mapped !== 'paid') return 'none';
+  console.warn(`[kiosk/clip] late approval: order ${order.id} was '${order.payment_status}' but Clip intent ${order.clip_payment_id} is approved — settling`);
+  await settleKioskClipPaid(order, tenantId, read.payment);
+  await dispatchPendingCourier(order.id, tenantId);
+  return 'paid';
+}
+
+/**
  * Read a kiosk order's Clip intent. 404 means Clip dropped the intent before
  * the reader picked it up — nothing was charged, so it maps to 'failed'.
  * @returns {Promise<{ mapped: 'paid'|'failed'|'pending', payment: object|null } | null>}
@@ -710,7 +757,7 @@ async function settleKioskClipPaid(order, tenantId, payment) {
     UPDATE orders SET payment_status = 'paid'
     WHERE tenant_id = ${tenantId} AND id = ${order.id}
       AND clip_payment_id = ${order.clip_payment_id}
-      AND payment_status = 'pending_terminal'
+      AND payment_status IN ${adminSql(CLIP_RECHECK_STATUSES)}
     RETURNING id
   `;
   if (!won) return null;
@@ -733,10 +780,13 @@ export async function syncKioskClipCharge(orderId, tenantId) {
     FROM orders
     WHERE tenant_id = ${tenantId} AND id = ${orderId} AND source = 'customer_kiosk'
   `;
-  if (!order?.clip_payment_id || order.payment_status !== 'pending_terminal') return null;
+  if (!hasRecheckableClipIntent(order)) return null;
 
   const read = await readKioskClipCharge(order, tenantId);
   if (!read) return null;
+  if (read.mapped === 'paid' && order.payment_status !== 'pending_terminal') {
+    console.warn(`[kiosk/clip] late approval: order ${order.id} was '${order.payment_status}' but Clip intent ${order.clip_payment_id} is approved — settling`);
+  }
 
   let invoiceToken = null;
   if (read.mapped === 'paid') {
@@ -2213,7 +2263,9 @@ router.post('/orders/:id/clip-charge', verifyKioskToken, async (req, res) => {
 
     // Re-send on an order already waiting on Clip: settle or retire the old
     // intent first so the customer can never be charged twice.
-    if (order.payment_status === 'pending_terminal' && order.clip_payment_id) {
+    // Also covers an intent we already wrote off as failed: the guest may have
+    // paid it on the reader with another card before tapping "retry" here.
+    if (hasRecheckableClipIntent(order)) {
       const outcome = await resolveKioskTerminalCharge(order.id, tenantId);
       if (outcome === 'paid') return res.json({ success: true, paid: true, payment_status: 'paid' });
       if (outcome === 'in_progress') {
@@ -2271,7 +2323,9 @@ router.get('/orders/:id/status', verifyKioskToken, async (req, res) => {
     let invoiceToken = order.invoice_token || null;
     let justPaid = false;
 
-    if (paymentStatus === 'pending_terminal' && order.clip_payment_id) {
+    // 'failed' too: a decline is not final at Clip — the guest can pay the same
+    // intent with another card on the reader, and this poll must notice.
+    if ((paymentStatus === 'pending_terminal' || paymentStatus === 'failed') && order.clip_payment_id) {
       const synced = await syncKioskClipCharge(order.id, tenantId);
       if (synced?.mapped === 'paid') {
         // null when the webhook won the settle race — read the token it wrote.

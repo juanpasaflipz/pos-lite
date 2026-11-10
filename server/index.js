@@ -10,6 +10,7 @@ import { initDb, adminSql, shutdown as shutdownDb } from './db/index.js';
 import { initMigrations, runMigrations } from './db/migrate.js';
 import { tenantMiddleware } from './middleware/tenant.js';
 import { startAutoCompleteSweep, stopAutoCompleteSweep } from './lib/autoCompleteReadyOrders.js';
+import { startKioskClipLateApprovalSweep, stopKioskClipLateApprovalSweep } from './lib/kioskClipLateApprovals.js';
 import { startRewardReminderSweep, stopRewardReminderSweep } from './lib/rewardRedemptionReminders.js';
 import { startWinbackSweep, stopWinbackSweep } from './lib/winbackReminders.js';
 import { startPostOrderReviewSweep, stopPostOrderReviewSweep } from './lib/postOrderReviewReminders.js';
@@ -427,6 +428,7 @@ async function gracefulShutdown(signal) {
   }
 
   stopAutoCompleteSweep();
+  stopKioskClipLateApprovalSweep();
   stopRewardReminderSweep();
   stopWinbackSweep();
   stopPostOrderReviewSweep();
@@ -464,6 +466,7 @@ process.on('SIGINT', () => shutdownWithTimeout('SIGINT'));
     });
 
     startAutoCompleteSweep();
+    startKioskClipLateApprovalSweep();
     startRewardReminderSweep();
     startWinbackSweep();
     startPostOrderReviewSweep();
