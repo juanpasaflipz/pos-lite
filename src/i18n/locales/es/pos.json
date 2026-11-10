@@ -643,7 +643,9 @@
     "edit": "Editar",
     "noShowBadge": "Posible no-show",
     "noShowHint": "Más de 90 min sin pagar — revisa si el cliente se fue",
-    "total": "Total"
+    "total": "Total",
+    "print": "Imprimir ticket",
+    "printUnavailable": "No se pudo imprimir el ticket #{{number}}. Revisa que la impresora esté encendida y conectada, o imprímelo desde Órdenes."
   },
   "mobileOrders": {
     "title": "Órdenes",

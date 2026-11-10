@@ -643,7 +643,9 @@
     "edit": "Edit",
     "noShowBadge": "No-show?",
     "noShowHint": "90+ min unpaid — check if customer left",
-    "total": "Total"
+    "total": "Total",
+    "print": "Print ticket",
+    "printUnavailable": "Couldn’t print ticket #{{number}}. Check the printer is on and connected, or print it from Orders."
   },
   "mobileOrders": {
     "title": "Orders",
