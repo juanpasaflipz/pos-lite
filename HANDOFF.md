@@ -7,6 +7,31 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
+## 2026-11-10 — Claude (cloud session) — **Kiosk lean checkout: cart → pay (1.28.0, PR, not merged)**
+
+Juan's request: the kiosk flow was too long. `Menu → Cart → ¿aquí/llevar? →
+Name keyboard → Pay` is now `Menu → Cart → Pay`.
+
+- `KioskCartScreen` carries the para aquí / para llevar buttons and an optional
+  name (new `components/CallNameKeyboard.tsx`, a sheet over the cart — still our
+  own keyboard, the Android IME would cover Pagar). `KioskFulfillmentScreen`,
+  `KioskCallNameScreen` and their routes are deleted.
+- Juan's three calls: fulfillment has **no default** (Pagar locked until
+  tapped), name is **optional** (blank → KDS shows `#order_number`), cart keeps
+  its own screen (not merged into the menu).
+- **Behaviour change for fire-before-payment tenants (juanbertos):** the ticket
+  now reaches the kitchen on the Pagar tap, with name + packaging already on
+  it, instead of on the fulfillment tap one screen earlier.
+- **No server change.** `/orders/:id/identify` is now unused by the web kiosk
+  but must stay: the Samsung APK is frozen on the old flow until
+  `npm run android:install`.
+- Verified: typecheck, build, and the real cart screen driven in headless
+  Chrome with the API mocked (request body carries `fulfillment_type` +
+  `customer_call_name`; blank name omits it). NOT verified on the tablet or
+  against a real terminal charge.
+
+---
+
 ## 2026-11-10 — Claude (cloud session) — **CI red since 1.25.3: test fix + `npm audit fix` + KDS quantity badge (PR #9, not merged)**
 
 - CI on master failed 6 runs in a row (09-26 → 11-01), always the same 3 tests

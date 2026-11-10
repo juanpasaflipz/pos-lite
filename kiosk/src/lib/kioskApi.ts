@@ -288,9 +288,12 @@ export interface KioskSendToKitchenResponse {
 
 export interface SendToKitchenOpts extends HoldKioskOrderOpts {
   /**
-   * Fire the ticket now and answer "¿para aquí o para llevar?" plus the call-out
-   * name afterwards, via identifyKioskOrder(). Both fields go to the server as
-   * unknown rather than as a default — see the KDS's neutral fulfillment pill.
+   * Skip the server's "name required" guard. The cart screen (1.28.0) sends the
+   * fulfillment answer and the optional call-out name in this same call, so a
+   * blank name is the only thing left unknown. Frozen Android APKs on the older
+   * flow still send neither and patch both via identifyKioskOrder(); an omitted
+   * fulfillment is stored as unknown, never as a default — see the KDS's
+   * neutral fulfillment pill.
    */
   identifyLater?: boolean;
 }
