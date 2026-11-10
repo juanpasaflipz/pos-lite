@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Minus, Plus, Trash2, Truck, Utensils } from 'lucide-react';
+import { ArrowLeft, CreditCard, Minus, Pencil, Plus, ShoppingBag, Trash2, Truck, Utensils } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useKioskBinding } from '../context/KioskBindingContext';
-import { useKioskCart } from '../context/KioskCartContext';
+import { useKioskCart, type KioskFulfillmentType } from '../context/KioskCartContext';
 import { useKioskCustomer } from '../context/KioskCustomerContext';
 import { useIdleTimer } from '../hooks/useIdleTimer';
 import {
@@ -13,6 +13,8 @@ import {
 } from '../lib/kioskApi';
 import { orderedSuggestionEvents } from '../lib/suggestionTelemetry';
 import CartUpsellStrip from '../components/CartUpsellStrip';
+import CallNameKeyboard from '../components/CallNameKeyboard';
+import { fireKioskOrder } from '../lib/placeOrder';
 
 import { mxn as money } from '../lib/format';
 
@@ -21,22 +23,55 @@ const KioskCartScreen: React.FC = () => {
   const { t } = useTranslation();
   const { tenantId, kioskToken } = useKioskBinding();
   const { session } = useKioskCustomer();
-  const { lines, count, total, callName, fulfillmentType, delivery, incrementLine, decrementLine, removeLine } = useKioskCart();
+  const {
+    lines, count, total, callName, fulfillmentType, delivery,
+    incrementLine, decrementLine, removeLine, setCallName, setFulfillmentType,
+  } = useKioskCart();
   const [holding, setHolding] = useState(false);
   const [holdError, setHoldError] = useState<string | null>(null);
-  const { warning } = useIdleTimer(() => navigate('/'), 120_000);
+  const [nameOpen, setNameOpen] = useState(false);
+  // Stretched while the order is in flight — the guest is waiting on us.
+  const { warning } = useIdleTimer(() => navigate('/'), holding ? 300_000 : 120_000);
 
   // Two ways out of the cart:
   //   - Delivery:  customer chose "A domicilio" and the address screen already
   //                captured the recipient, so there's nothing left to ask.
   //                Submit here creates the order AND dispatches an Uber Direct
   //                courier in one server call, then pay at terminal.
-  //   - Dine-in / Takeout: hand off to /fulfillment, which fires the kitchen
-  //                ticket the moment the guest answers "¿para aquí o para
-  //                llevar?" — one tap from here, and with the packaging
-  //                instruction already on it. Nothing is on the server until
-  //                then, so the cart stays editable right up to that answer.
+  //   - Dine-in / Takeout: this screen asks "¿para aquí o para llevar?" and
+  //                the optional call-out name itself (they used to be two more
+  //                screens). Pagar creates the order with both and goes straight
+  //                to payment. Nothing is on the server until that tap, so the
+  //                cart stays editable right up to it.
+  //
+  // The fulfillment answer is never defaulted: a wrong packaging instruction is
+  // an error the line cannot see, so Pagar stays locked until the guest picks.
+  // The name is a label the KDS renders as the order number when absent, so it
+  // is optional — and a club member is already identified, so they aren't asked.
   const isDelivery = fulfillmentType === 'delivery';
+  const chosenFulfillment: KioskFulfillmentType | null =
+    fulfillmentType === 'for_here' || fulfillmentType === 'to_go' ? fulfillmentType : null;
+  const asksName = !isDelivery && !session?.customerToken;
+  const canSubmit = count > 0 && !holding && (isDelivery || chosenFulfillment !== null);
+
+  const submitOrder = async () => {
+    if (!tenantId || !kioskToken || lines.length === 0 || holding || !chosenFulfillment) return;
+    setHolding(true);
+    setHoldError(null);
+    try {
+      const order = await fireKioskOrder(
+        { tenantId, kioskToken },
+        lines,
+        session,
+        chosenFulfillment,
+        asksName ? callName : null,
+      );
+      navigate('/pay-existing', { replace: true, state: { order } });
+    } catch (err) {
+      setHoldError(err instanceof Error ? err.message : t('cart.sendFailed'));
+      setHolding(false);
+    }
+  };
 
   const submitDeliveryOrder = async (resolvedCallName: string | null) => {
     if (!tenantId || !kioskToken || lines.length === 0 || holding) return;
@@ -106,15 +141,33 @@ const KioskCartScreen: React.FC = () => {
   };
 
   const handlePrimary = () => {
-    if (count === 0 || holding) return;
-    // Delivery is already fully specified by the address screen, so it submits
-    // straight from here. Everything else goes on to answer "¿para aquí o para
-    // llevar?", which is where the order gets created.
+    if (!canSubmit) return;
+    // Delivery is already fully specified by the address screen. Everything
+    // else was answered on this screen.
     if (isDelivery) {
       submitDeliveryOrder(callName || delivery?.recipientName || null);
       return;
     }
-    navigate('/fulfillment');
+    submitOrder();
+  };
+
+  const fulfillmentButton = (type: 'for_here' | 'to_go', Icon: typeof Utensils, label: string) => {
+    const selected = chosenFulfillment === type;
+    return (
+      <button
+        onClick={() => setFulfillmentType(type)}
+        disabled={holding}
+        aria-pressed={selected}
+        className={`min-h-16 sm:min-h-20 rounded-lg px-3 text-lg sm:text-2xl font-black touch-manipulation inline-flex items-center justify-center gap-2 sm:gap-3 border-2 disabled:opacity-60 ${
+          selected
+            ? 'bg-brand-600 border-brand-300 text-white'
+            : 'bg-neutral-800 border-neutral-700 active:bg-neutral-700 text-neutral-100'
+        }`}
+      >
+        <Icon className="h-5 w-5 sm:h-7 sm:w-7 flex-shrink-0" />
+        {label}
+      </button>
+    );
   };
 
   return (
@@ -211,16 +264,53 @@ const KioskCartScreen: React.FC = () => {
             <p className="text-xl font-black text-cockpit-in-text">{money.format(delivery.quoteFee || 0)}</p>
           </div>
         )}
+        {!isDelivery && count > 0 && (
+          <div className={`grid grid-cols-1 gap-3 ${asksName ? 'lg:grid-cols-[3fr_2fr]' : ''}`}>
+            <div>
+              <p className={`text-sm sm:text-base font-black uppercase tracking-wide mb-1.5 ${chosenFulfillment ? 'text-neutral-400' : 'text-cockpit-attention-text'}`}>
+                {t('fulfillment.howDoYouWantIt')}
+              </p>
+              <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                {fulfillmentButton('for_here', Utensils, t('fulfillment.forHere'))}
+                {fulfillmentButton('to_go', ShoppingBag, t('fulfillment.toGo'))}
+              </div>
+            </div>
+            {asksName && (
+              <div>
+                <p className="text-sm sm:text-base font-black uppercase tracking-wide mb-1.5 text-neutral-400">
+                  {t('cart.nameOptional')}
+                </p>
+                <button
+                  onClick={() => setNameOpen(true)}
+                  disabled={holding}
+                  className="w-full min-h-16 sm:min-h-20 rounded-lg px-4 bg-neutral-900 border-2 border-neutral-700 active:bg-neutral-800 disabled:opacity-60 touch-manipulation flex items-center justify-between gap-3 text-left"
+                >
+                  <span className={`text-lg sm:text-2xl font-black truncate ${callName ? 'text-white' : 'text-neutral-500'}`}>
+                    {callName || t('common.yourName')}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-sm sm:text-base font-bold text-neutral-400 flex-shrink-0">
+                    <Pencil className="h-4 w-4 sm:h-5 sm:w-5" />
+                    {callName ? t('cart.nameChange') : ''}
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         <button
-          disabled={count === 0 || holding}
+          disabled={!canSubmit}
           onClick={handlePrimary}
           className="w-full min-h-16 sm:min-h-20 bg-brand-600 active:bg-brand-700 disabled:bg-neutral-800 disabled:text-neutral-500 rounded-lg py-3 sm:py-4 px-4 sm:px-6 text-xl sm:text-3xl font-black touch-manipulation flex items-center justify-between gap-4"
         >
           <span className="inline-flex items-center gap-3">
-            {isDelivery ? <Truck className="h-5 w-5 sm:h-7 sm:w-7" /> : <Utensils className="h-5 w-5 sm:h-7 sm:w-7" />}
+            {isDelivery ? <Truck className="h-5 w-5 sm:h-7 sm:w-7" /> : <CreditCard className="h-5 w-5 sm:h-7 sm:w-7" />}
             {holding
-              ? (isDelivery ? t('cart.requestingCourier') : t('cart.oneMoment'))
-              : (isDelivery ? t('cart.orderAndPay') : t('cart.continueToPay'))}
+              ? (isDelivery ? t('cart.requestingCourier') : t('fulfillment.sending'))
+              : isDelivery
+                ? t('cart.orderAndPay')
+                : chosenFulfillment || count === 0
+                  ? t('cart.pay')
+                  : t('cart.chooseFulfillment')}
           </span>
           <span>{money.format(total + (isDelivery ? (delivery?.quoteFee || 0) : 0))}</span>
         </button>
@@ -229,6 +319,16 @@ const KioskCartScreen: React.FC = () => {
         </p>
       </footer>
 
+      {nameOpen && (
+        <CallNameKeyboard
+          initial={callName || ''}
+          onClose={() => setNameOpen(false)}
+          onDone={(name) => {
+            setCallName(name || null);
+            setNameOpen(false);
+          }}
+        />
+      )}
       {warning}
     </div>
   );

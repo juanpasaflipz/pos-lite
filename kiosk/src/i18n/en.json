@@ -17,7 +17,7 @@
     "member": "I'm a member"
   },
   "fulfillment": {
-    "howDoYouWantIt": "How do you want your order?",
+    "howDoYouWantIt": "For here or to go?",
     "forHere": "For here",
     "toGo": "To go",
     "sending": "Sending your order to the kitchen…"
@@ -56,19 +56,20 @@
     "requestingCourier": "Requesting a courier…",
     "oneMoment": "One moment…",
     "orderAndPay": "Order and pay",
-    "continueToPay": "Continue to pay",
     "deliveryFootnote": "You pay at the terminal. An Uber courier brings your order.",
-    "payFootnote": "Almost there — two quick questions, then pay at the terminal.",
+    "payFootnote": "You pay at the terminal or the counter on the next step.",
     "nameTitle": "Whose name is the order under?",
-    "nameSubtitle": "We use your name to call you when it's ready."
+    "pay": "Pay",
+    "chooseFulfillment": "Choose: for here or to go",
+    "nameOptional": "Your name (optional)",
+    "nameChange": "Change"
   },
   "callName": {
-    "kicker": "Last step",
-    "prompt": "What name should we call out?",
-    "hint": "We’ll call this name when your order is ready",
+    "hint": "We call your name when it’s ready. With no name, we call your order number.",
     "space": "SPACE",
-    "pay": "Confirm & pay",
-    "processing": "Processing payment…"
+    "done": "Done",
+    "noName": "Continue without a name",
+    "erase": "Erase"
   },
   "modifier": {
     "required": "Required",

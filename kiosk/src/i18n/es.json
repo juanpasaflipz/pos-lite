@@ -17,7 +17,7 @@
     "member": "Soy del club"
   },
   "fulfillment": {
-    "howDoYouWantIt": "¿Cómo quieres tu orden?",
+    "howDoYouWantIt": "¿Para aquí o para llevar?",
     "forHere": "Para aquí",
     "toGo": "Para llevar",
     "sending": "Enviando tu orden a la cocina…"
@@ -56,19 +56,20 @@
     "requestingCourier": "Pidiendo repartidor…",
     "oneMoment": "Un momento…",
     "orderAndPay": "Pedir y pagar",
-    "continueToPay": "Continuar a pagar",
     "deliveryFootnote": "Cobramos en la terminal. Llega un repartidor de Uber con tu pedido.",
-    "payFootnote": "Ya casi — dos preguntas rápidas y pagas en la terminal.",
+    "payFootnote": "Pagas en la terminal o en caja en el siguiente paso.",
     "nameTitle": "¿A nombre de quién?",
-    "nameSubtitle": "Usamos tu nombre para llamarte cuando esté lista."
+    "pay": "Pagar",
+    "chooseFulfillment": "Elige: para aquí o para llevar",
+    "nameOptional": "Tu nombre (opcional)",
+    "nameChange": "Cambiar"
   },
   "callName": {
-    "kicker": "Último paso",
-    "prompt": "¿A qué nombre llamamos tu orden?",
-    "hint": "Con este nombre te llamaremos cuando esté lista",
+    "hint": "Te llamamos por tu nombre cuando esté lista. Si no pones nombre, te llamamos por tu número de orden.",
     "space": "ESPACIO",
-    "pay": "Confirmar y pagar",
-    "processing": "Procesando pago…"
+    "done": "Listo",
+    "noName": "Continuar sin nombre",
+    "erase": "Borrar"
   },
   "modifier": {
     "required": "Requerido",
