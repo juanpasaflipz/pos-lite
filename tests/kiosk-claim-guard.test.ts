@@ -39,6 +39,8 @@ import {
 import { adminSql, get } from '../server/db/index.js';
 // @ts-ignore
 import { resolveKioskTerminalCharge } from '../server/routes/kiosk.js';
+// @ts-ignore
+import { updateTenant } from '../server/tenants.js';
 
 const PENDING = { id: 'ORD_TEST', status: 'at_terminal', transactions: { payments: [{ status: 'pending' }] } };
 const PAID = {
@@ -75,11 +77,13 @@ async function orderState(id: number) {
 
 beforeAll(async () => {
   tenant = await createTestTenant('kclaim');
-  await adminSql`
-    UPDATE tenants
-    SET mp_access_token = 'test-token', mp_token_expires_at = NOW() + INTERVAL '1 day'
-    WHERE id = ${tenant.id}
-  `;
+  // Go through updateTenant rather than a raw UPDATE — createTenant already
+  // warmed the 60s tenantCache without a token, and resolveKioskTerminalCharge
+  // reads the tenant through that cache (a stale read returns 'in_progress').
+  await updateTenant(tenant.id, {
+    mp_access_token: 'test-token',
+    mp_token_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
+  });
   await asTenant(tenant.id, async () => {
     const emp = await get(
       `INSERT INTO employees (name, pin, role) VALUES ('Kiosk', '8888', 'cashier') RETURNING id`,
