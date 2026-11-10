@@ -809,7 +809,6 @@ function ItemDisplay({ item, isTvMode = false }: ItemDisplayProps) {
   // The item needs a style and none arrived — a stale client or bypassed
   // prompt let it through. Shout it so the kitchen asks instead of guessing.
   const missingStyle = !!item.requires_style && styleMods.length === 0;
-  const qty = item.quantity > 1 ? `${item.quantity}× ` : '';
 
   // Edit-state derivations (migration 0063). `added_at` is null on the original
   // ticket items, so its presence alone marks an append. Same for qty change.
@@ -823,10 +822,12 @@ function ItemDisplay({ item, isTvMode = false }: ItemDisplayProps) {
 
   if (isTvMode) {
     return (
-      <div className={`leading-tight ${isVoided ? 'opacity-60' : ''}`}>
+      <div className={`flex items-start gap-2.5 leading-tight ${isVoided ? 'opacity-60' : ''}`}>
+        <QuantityBadge quantity={item.quantity} isVoided={isVoided} isTvMode />
+        <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 flex-wrap">
           <span className={`text-2xl font-black tracking-tight ${isVoided ? 'line-through text-cockpit-red' : 'text-white'}`}>
-            <span className="text-cockpit-yellow">{qty}</span>{item.item_name}
+            {item.item_name}
           </span>
           {styleMods.map((mod, i) => (
             <span
@@ -876,18 +877,21 @@ function ItemDisplay({ item, isTvMode = false }: ItemDisplayProps) {
             ↳ {item.void_reason}
           </div>
         )}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className={`rounded-lg p-3 border ${
+    <div className={`flex items-start gap-3 rounded-lg p-3 border ${
       isVoided
         ? 'bg-cockpit-red/10 border-cockpit-red/40'
         : isAdded
           ? 'bg-cockpit-yellow/10 border-cockpit-yellow/40'
           : 'bg-neutral-800/50 border-neutral-700'
     }`}>
+      <QuantityBadge quantity={item.quantity} isVoided={isVoided} />
+      <div className="flex-1 min-w-0">
       <div className="flex items-start justify-between gap-3 mb-1">
         <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
           {item.brand_color && (
@@ -897,7 +901,7 @@ function ItemDisplay({ item, isTvMode = false }: ItemDisplayProps) {
               title={item.brand_name || ''}
             />
           )}
-          <span className={`text-lg font-semibold ${isVoided ? 'line-through text-neutral-400' : 'text-white'}`}>
+          <span className={`text-xl font-bold ${isVoided ? 'line-through text-neutral-400' : 'text-white'}`}>
             {item.item_name}
           </span>
           {styleMods.map((mod, i) => (
@@ -923,15 +927,12 @@ function ItemDisplay({ item, isTvMode = false }: ItemDisplayProps) {
               VOID
             </span>
           )}
-        </div>
-        <span className="bg-neutral-700 text-neutral-200 px-3 py-1 rounded-full font-bold text-base min-w-fit">
-          x{item.quantity}
           {isQtyChanged && (
-            <span className="ml-1 text-xs text-cockpit-blue">
-              (was {item.original_quantity})
+            <span className="text-xs font-black uppercase bg-cockpit-blue text-white px-1.5 py-0.5 rounded">
+              {qtyDelta > 0 ? `+${qtyDelta}` : qtyDelta} (was {item.original_quantity})
             </span>
           )}
-        </span>
+        </div>
       </div>
       {item.brand_name && (
         <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: item.brand_color || '#888' }}>
@@ -960,6 +961,41 @@ function ItemDisplay({ item, isTvMode = false }: ItemDisplayProps) {
           Motivo de void: {item.void_reason}
         </p>
       )}
+      </div>
     </div>
+  );
+}
+
+/**
+ * The count the line has to make, as the first and loudest thing on the row.
+ * It used to be a small grey pill at the far right (or inline text on the TV
+ * layout) and the kitchen kept making one of a 3× line. More than one is a
+ * filled yellow block; a single is the same block, muted, so the column stays
+ * aligned and a bright block always means "make several".
+ */
+function QuantityBadge({
+  quantity,
+  isVoided,
+  isTvMode = false,
+}: {
+  quantity: number;
+  isVoided: boolean;
+  isTvMode?: boolean;
+}) {
+  const isMultiple = quantity > 1;
+  const size = isTvMode ? 'min-w-11 h-11 px-1.5 text-3xl' : 'min-w-14 h-14 px-2 text-4xl';
+  const tone = isVoided
+    ? 'bg-neutral-800 text-neutral-500 line-through border border-neutral-700'
+    : isMultiple
+      ? 'bg-cockpit-yellow text-black ring-2 ring-cockpit-yellow/40'
+      : 'bg-neutral-800 text-neutral-300 border border-neutral-600';
+  return (
+    <span
+      className={`flex-shrink-0 inline-flex items-baseline justify-center rounded-lg font-black tabular-nums leading-none ${size} ${tone}`}
+      aria-label={`${quantity}×`}
+    >
+      <span className="self-center">{quantity}</span>
+      <span className={`self-center ${isTvMode ? 'text-lg' : 'text-xl'} ${isMultiple && !isVoided ? 'opacity-70' : 'opacity-50'}`}>×</span>
+    </span>
   );
 }
