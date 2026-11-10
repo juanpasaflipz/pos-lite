@@ -12,9 +12,10 @@ import {
   User,
   ChevronRight,
   Pencil,
+  Printer,
   MapPin,
 } from 'lucide-react';
-import { getKitchenOrders, updateOrderStatus } from '../../api';
+import { getKitchenOrders, printCustomerTicket, updateOrderStatus } from '../../api';
 import { Order } from '../../types';
 import { formatPrice } from '../../utils/currency';
 import { getTimeTier, isPaid, isProbableNoShow, type TimeTier } from '../../lib/orderUrgency';
@@ -122,6 +123,8 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, onRefund, refresh
   const [actionId, setActionId] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+  const [printing, setPrinting] = useState<{ id: number; state: 'sending' | 'sent' } | null>(null);
+  const [printError, setPrintError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchOrders = useCallback(async () => {
@@ -209,6 +212,31 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, onRefund, refresh
     }
     return { preparing, ready, unpaid };
   }, [orders]);
+
+  // Thermal ticket through the print bridge — the same ESC/POS ticket the
+  // auto-print and the receipt modal produce. There is no browser-print
+  // fallback here (no receipt is rendered on this screen), so a bridge that
+  // can't print is reported instead.
+  const handlePrint = async (order: Order) => {
+    if (printing?.state === 'sending') return;
+    setPrinting({ id: order.id, state: 'sending' });
+    setPrintError(null);
+    let queued = false;
+    try {
+      const result = await printCustomerTicket(order.id);
+      queued = result.status === 'queued';
+    } catch {
+      // Server unreachable — reported below.
+    }
+    if (queued) {
+      setPrinting({ id: order.id, state: 'sent' });
+      setTimeout(() => setPrinting((p) => (p?.id === order.id ? null : p)), 2500);
+      return;
+    }
+    setPrinting(null);
+    setPrintError(t('liveStrip.printUnavailable', { number: order.order_number }));
+    setTimeout(() => setPrintError(null), 6000);
+  };
 
   const handleAdvance = async (order: Order) => {
     const step = nextStatus(order.status);
@@ -431,6 +459,23 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, onRefund, refresh
                   >
                     <Pencil className="w-4 h-4" />
                   </button>
+                  {/* Reprint the customer ticket without leaving the POS — the
+                      only other way was Órdenes → open the order → Imprimir. */}
+                  <button
+                    onClick={() => handlePrint(order)}
+                    disabled={printing?.id === order.id && printing.state === 'sending'}
+                    className={`px-2 py-2 rounded-md transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center disabled:opacity-60 ${
+                      printing?.id === order.id && printing.state === 'sent'
+                        ? 'bg-cockpit-green text-white'
+                        : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200'
+                    }`}
+                    aria-label={t('liveStrip.print', 'Imprimir ticket')}
+                    title={t('liveStrip.print', 'Imprimir ticket')}
+                  >
+                    {printing?.id === order.id && printing.state === 'sent'
+                      ? <Check className="w-4 h-4" />
+                      : <Printer className="w-4 h-4" />}
+                  </button>
                   {!paid && (
                     <button
                       onClick={() => onCharge(order)}
@@ -458,6 +503,14 @@ export default function LiveOrdersStrip({ onViewAll, onCharge, onRefund, refresh
           })}
         </div>
       </div>
+
+      {/* Says why nothing came out of the printer. A failed print that only
+          turned an icon red would be easy to miss mid-rush. */}
+      {printError && (
+        <p role="alert" className="px-3 pt-2 text-xs font-bold text-cockpit-out-text">
+          {printError}
+        </p>
+      )}
 
       <OrderEditModal
         isOpen={editingOrder !== null}
