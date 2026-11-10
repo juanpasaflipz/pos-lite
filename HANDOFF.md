@@ -7,7 +7,7 @@ See "Agent handoff" section in CLAUDE.md.
 
 ---
 
-## 2026-11-10 — Claude (cloud session) — **CI red since 1.25.3: test fix + `npm audit fix` (PR, not merged)**
+## 2026-11-10 — Claude (cloud session) — **CI red since 1.25.3: test fix + `npm audit fix` + KDS quantity badge (PR #9, not merged)**
 
 - CI on master failed 6 runs in a row (09-26 → 11-01), always the same 3 tests
   in `tests/kiosk-claim-guard.test.ts`. Test bug, not a prod bug: the MP token
@@ -22,6 +22,13 @@ See "Agent handoff" section in CLAUDE.md.
   `passkit-generator`/`joi`. Dependabot alerts are off. Repo is **public**.
 - Verified here: typecheck + build. DB suite NOT run locally (no `.env.test`
   in the cloud session) — the PR's CI run is the proof.
+- **KDS quantity is now the loudest thing on the line** (same PR, Juan's
+  request: the kitchen kept making one of a 3× line). `QuantityBadge` in
+  `src/screens/KitchenDisplay.tsx` leads every item in both layouts — filled
+  yellow for 2+, muted for 1 — replacing the grey `x3` pill (tablet) and the
+  inline `3× ` text (TV). Digit is `text-black`, not `text-neutral-900`:
+  neutrals are theme variables and invert on the light theme. Frontend only;
+  not seen on the real kitchen screen yet.
 
 ---
 
